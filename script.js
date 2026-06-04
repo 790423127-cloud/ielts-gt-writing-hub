@@ -202,9 +202,24 @@ async function buildResponseError(response) {
   if (payload?.status) parts.push(`status: ${payload.status}`);
   if (payload?.suggestion) parts.push(`suggestion: ${payload.suggestion}`);
   const detail = payload?.detail ?? fallbackText;
-  if (detail) parts.push(`detail: ${truncateDetail(detail)}`);
-  if (payload?.rawPreview) parts.push(`rawPreview: ${truncateDetail(payload.rawPreview)}`);
-  return parts.join(" | ");
+  if (detail) parts.push(`detail: ${truncateDetail(detail, 320)}`);
+  return {
+    message: parts.join(" | "),
+    detail: truncateDetail(detail),
+    rawPreview: truncateDetail(payload?.rawPreview)
+  };
+}
+
+function renderErrorDetails(errorInfo) {
+  if (!errorInfo?.detail && !errorInfo?.rawPreview) return;
+  const detailBlock = errorInfo.detail ? `<h4>Detail</h4><pre>${escapeHtml(errorInfo.detail)}</pre>` : "";
+  const rawBlock = errorInfo.rawPreview ? `<h4>Raw Preview</h4><pre>${escapeHtml(errorInfo.rawPreview)}</pre>` : "";
+  els.gradingResults.innerHTML = `
+    <details class="error-details">
+      <summary>查看详细错误</summary>
+      ${detailBlock}
+      ${rawBlock}
+    </details>`;
 }
 
 function renderZhToggle(text) {
@@ -286,7 +301,11 @@ async function startGrading() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(gradingPayload())
     });
-    if (!response.ok) throw new Error(await buildResponseError(response));
+    if (!response.ok) {
+      const errorInfo = await buildResponseError(response);
+      renderErrorDetails(errorInfo);
+      throw new Error(errorInfo.message);
+    }
     const result = await response.json();
     renderGradingResult(result);
     setGradingStatus("批改完成", "done");
@@ -357,6 +376,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   els.gradingResults.innerHTML = `
+    ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断反馈。建议补充作文后重新批改。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
     <section class="grading-section">
       <h4>Overall estimated band</h4>
