@@ -4,146 +4,10 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_PROVIDER = "deepseek";
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
-
-const stringArraySchema = {
-  type: "array",
-  items: { type: "string" },
-  maxItems: 5
-};
-
-const criterionSchema = {
-  type: "object",
-  properties: {
-    band: { type: "number", minimum: 0, maximum: 9 },
-    feedback: { type: "string" },
-    feedbackZh: { type: "string" },
-    howToImprove: { type: "string" },
-    howToImproveZh: { type: "string" }
-  },
-  required: ["band", "feedback", "feedbackZh", "howToImprove", "howToImproveZh"],
-  propertyOrdering: ["band", "feedback", "feedbackZh", "howToImprove", "howToImproveZh"]
-};
-
-const IELTS_FEEDBACK_SCHEMA = {
-  type: "object",
-  properties: {
-    overallBand: { type: "number", minimum: 0, maximum: 9 },
-    estimatedLevel: { type: "string" },
-    criteria: {
-      type: "object",
-      properties: {
-        "Task Achievement": criterionSchema,
-        "Task Response": criterionSchema,
-        "Coherence and Cohesion": criterionSchema,
-        "Lexical Resource": criterionSchema,
-        "Grammatical Range and Accuracy": criterionSchema
-      },
-      required: ["Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
-      propertyOrdering: [
-        "Task Achievement",
-        "Task Response",
-        "Coherence and Cohesion",
-        "Lexical Resource",
-        "Grammatical Range and Accuracy"
-      ]
-    },
-    strengths: stringArraySchema,
-    mainProblems: stringArraySchema,
-    grammarErrors: {
-      type: "array",
-      maxItems: 5,
-      items: {
-        type: "object",
-        properties: {
-          type: { type: "string" },
-          original: { type: "string" },
-          corrected: { type: "string" },
-          explanation: { type: "string" },
-          explanationZh: { type: "string" }
-        },
-        required: ["type", "original", "corrected", "explanation", "explanationZh"],
-        propertyOrdering: ["type", "original", "corrected", "explanation", "explanationZh"]
-      }
-    },
-    sentenceCorrections: {
-      type: "array",
-      maxItems: 5,
-      items: {
-        type: "object",
-        properties: {
-          original: { type: "string" },
-          corrected: { type: "string" },
-          reason: { type: "string" },
-          reasonZh: { type: "string" }
-        },
-        required: ["original", "corrected", "reason", "reasonZh"],
-        propertyOrdering: ["original", "corrected", "reason", "reasonZh"]
-      }
-    },
-    taskAchievementAdvice: stringArraySchema,
-    coherenceAdvice: stringArraySchema,
-    lexicalAdvice: stringArraySchema,
-    grammarAdvice: stringArraySchema,
-    band5FixPlan: stringArraySchema,
-    band6UpgradePlan: stringArraySchema,
-    band7UpgradePlan: stringArraySchema,
-    modelAnswerOutline: { type: "string" },
-    revisedEssayBand5: { type: "string" },
-    revisedEssayBand6: { type: "string" },
-    revisedEssayBand7: { type: "string" },
-    revisionNotes: stringArraySchema,
-    revisionNotesZh: stringArraySchema,
-    disclaimer: { type: "string" }
-  },
-  required: [
-    "overallBand",
-    "estimatedLevel",
-    "criteria",
-    "strengths",
-    "mainProblems",
-    "grammarErrors",
-    "sentenceCorrections",
-    "taskAchievementAdvice",
-    "coherenceAdvice",
-    "lexicalAdvice",
-    "grammarAdvice",
-    "band5FixPlan",
-    "band6UpgradePlan",
-    "band7UpgradePlan",
-    "modelAnswerOutline",
-    "revisedEssayBand5",
-    "revisedEssayBand6",
-    "revisedEssayBand7",
-    "revisionNotes",
-    "revisionNotesZh",
-    "disclaimer"
-  ],
-  propertyOrdering: [
-    "overallBand",
-    "estimatedLevel",
-    "criteria",
-    "strengths",
-    "mainProblems",
-    "grammarErrors",
-    "sentenceCorrections",
-    "taskAchievementAdvice",
-    "coherenceAdvice",
-    "lexicalAdvice",
-    "grammarAdvice",
-    "band5FixPlan",
-    "band6UpgradePlan",
-    "band7UpgradePlan",
-    "modelAnswerOutline",
-    "revisedEssayBand5",
-    "revisedEssayBand6",
-    "revisedEssayBand7",
-    "revisionNotes",
-    "revisionNotesZh",
-    "disclaimer"
-  ]
-};
 
 function corsHeaders(req) {
   const origin = req.headers.origin;
@@ -172,6 +36,16 @@ async function readJsonBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+function normalizeMode(mode) {
+  return ["quick", "full", "revision"].includes(mode) ? mode : "quick";
+}
+
+function maxTokensForMode(mode) {
+  if (mode === "quick") return 1800;
+  if (mode === "full") return 3200;
+  return 6000;
+}
+
 function buildSystemPrompt() {
   return [
     "You are an IELTS General Training Writing examiner and writing coach.",
@@ -184,16 +58,14 @@ function buildSystemPrompt() {
     "Sentence corrections and grammar errors must be based only on sentences that appear in the user's essay.",
     "Do not invent user sentences.",
     "Return only one valid JSON object.",
-    "Return strict JSON only.",
-    "Do not return markdown.",
-    "Do not wrap the JSON in ```json or any code fence.",
+    "Do not return markdown or code fences.",
     "Do not include explanatory preface or closing comments.",
     "All required keys must exist.",
     "If a section has no content, return an empty array [] or an empty string \"\".",
     "Use short, compact feedback.",
     "Do not write long paragraphs inside arrays.",
     "Every array must have at most 5 items.",
-    "grammarErrors, sentenceCorrections, strengths, mainProblems, band5FixPlan, band6UpgradePlan, and band7UpgradePlan must each have at most 5 items.",
+    "grammarErrors and sentenceCorrections must each have at most 5 items.",
     "Provide brief Chinese helper notes only in feedbackZh, howToImproveZh, explanationZh, reasonZh, and revisionNotesZh.",
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
@@ -272,20 +144,18 @@ function buildExpectedJsonShape(task) {
   };
 }
 
-function buildPrompt(body) {
-  const mode = body.mode || "quick";
-  const isRevisionMode = mode === "revision" || body.includeRevision;
+function buildUserPrompt(body) {
+  const mode = normalizeMode(body.mode);
+  const isRevisionMode = mode === "revision";
   const revisionInstruction = isRevisionMode
-    ? "Revision mode: return revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
-    : "Quick and full modes: do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
+    ? "Grade + Revision mode: generate revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
+    : "Quick Check and Full IELTS Grading modes: do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
   const underMinimumInstruction = body.isUnderMinimum
     ? `The essay is below the IELTS target word count (${body.wordCount}/${body.targetWordCount}). Still grade normally. If this is Task 1, mention the word count issue in Task Achievement and mainProblems. If this is Task 2, mention the word count issue in Task Response and mainProblems because idea development and argument depth may be affected.`
     : "The essay meets or exceeds the target word count.";
 
   return [
-    buildSystemPrompt(),
-    "",
-    "Return exactly one JSON object matching this shape. Keep the same keys:",
+    "Return exactly one JSON object matching this shape and keep the same keys:",
     JSON.stringify(buildExpectedJsonShape(body.task), null, 2),
     "",
     "Mode instructions:",
@@ -314,12 +184,6 @@ function buildPrompt(body) {
       rubric: body.rubric
     }, null, 2)
   ].join("\n");
-}
-
-function extractGeminiText(data) {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts.map((part) => part.text || "").join("").trim();
 }
 
 function stripCodeFence(text) {
@@ -362,16 +226,14 @@ function extractFirstJsonObject(text) {
       depth += 1;
     } else if (char === "}") {
       depth -= 1;
-      if (depth === 0 && start !== -1) {
-        return cleaned.slice(start, i + 1);
-      }
+      if (depth === 0 && start !== -1) return cleaned.slice(start, i + 1);
     }
   }
 
   return cleaned;
 }
 
-function parseJsonFromGemini(text) {
+function parseJsonFromProvider(text) {
   const candidate = extractFirstJsonObject(text);
   try {
     return JSON.parse(candidate);
@@ -381,48 +243,47 @@ function parseJsonFromGemini(text) {
   }
 }
 
-function buildRepairPrompt(rawText) {
+function buildRepairPrompt(rawText, task) {
   return [
-    "Convert the following text into one valid JSON object matching the required IELTS feedback schema. Return JSON only. Do not add markdown, explanations, or code fences. If a field is missing, add it with an empty array [] or empty string \"\" as appropriate.",
-    "All required keys must exist.",
-    "If a section has no content, return an empty array [] or empty string \"\".",
+    "Convert the following text into one valid JSON object matching the required IELTS feedback schema.",
+    "Return JSON only. Do not add markdown, explanations, or code fences.",
+    "If a field is missing, add it with an empty array [] or empty string \"\" as appropriate.",
     "Do not use trailing commas. Do not use comments inside JSON.",
     "",
-    "Required schema:",
-    JSON.stringify(IELTS_FEEDBACK_SCHEMA, null, 2),
+    "Required JSON shape:",
+    JSON.stringify(buildExpectedJsonShape(task), null, 2),
     "",
     "Text to repair:",
     String(rawText || "").slice(0, 12000)
   ].join("\n");
 }
 
-async function callGemini({ apiKey, model, prompt, maxOutputTokens, temperature = 0.2 }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const response = await fetch(url, {
+function extractDeepSeekText(data) {
+  return data?.choices?.[0]?.message?.content?.trim() || "";
+}
+
+async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2 }) {
+  const response = await fetch(DEEPSEEK_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
       ],
-      generationConfig: {
-        temperature,
-        responseMimeType: "application/json",
-        responseSchema: IELTS_FEEDBACK_SCHEMA,
-        maxOutputTokens
-      }
+      temperature,
+      response_format: { type: "json_object" },
+      max_tokens: maxTokens
     })
   });
 
   const raw = await response.text();
   if (!response.ok) {
-    const error = new Error("Gemini API request failed.");
+    const error = new Error("DeepSeek API request failed.");
     error.status = response.status;
     error.raw = raw;
     throw error;
@@ -436,14 +297,60 @@ async function callGemini({ apiKey, model, prompt, maxOutputTokens, temperature 
     throw error;
   }
 
-  const outputText = extractGeminiText(data);
+  const outputText = extractDeepSeekText(data);
   if (!outputText) {
-    const error = new Error("Gemini returned an empty response.");
+    const error = new Error("DeepSeek returned an empty response.");
     error.raw = raw;
     throw error;
   }
 
   return outputText;
+}
+
+function sendProviderError(req, res, error) {
+  if (error.message !== "DeepSeek API request failed.") return false;
+
+  if (error.status === 429) {
+    sendJson(req, res, 429, {
+      error: "AI provider quota exceeded.",
+      provider: "deepseek",
+      status: 429,
+      suggestion: "Please wait, reduce usage, or check DeepSeek balance."
+    });
+    return true;
+  }
+
+  if (error.status >= 500 && error.status <= 599) {
+    sendJson(req, res, 502, {
+      error: "AI provider temporarily unavailable.",
+      provider: "deepseek",
+      status: error.status,
+      suggestion: "Please try again later."
+    });
+    return true;
+  }
+
+  sendJson(req, res, 502, {
+    error: "AI provider request failed.",
+    provider: "deepseek",
+    status: error.status,
+    detail: String(error.raw || "").slice(0, 1500)
+  });
+  return true;
+}
+
+function normalizeResultForMode(result, mode) {
+  const normalized = result && typeof result === "object" ? result : {};
+  normalized.disclaimer = normalized.disclaimer || DISCLAIMER;
+  normalized.revisionNotesZh = normalized.revisionNotesZh || [];
+
+  if (mode !== "revision") {
+    normalized.revisedEssayBand5 = "";
+    normalized.revisedEssayBand6 = "";
+    normalized.revisedEssayBand7 = "";
+  }
+
+  return normalized;
 }
 
 module.exports = async function handler(req, res) {
@@ -459,9 +366,18 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const provider = (process.env.AI_PROVIDER || DEFAULT_PROVIDER).toLowerCase();
+  if (provider !== "deepseek") {
+    sendJson(req, res, 400, { error: "Unsupported AI_PROVIDER. Set AI_PROVIDER=deepseek.", provider });
+    return;
+  }
+
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    sendJson(req, res, 500, { error: "GEMINI_API_KEY is not configured on the server." });
+    sendJson(req, res, 500, {
+      error: "Provider API key is not configured.",
+      provider: "deepseek"
+    });
     return;
   }
 
@@ -483,35 +399,39 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const mode = normalizeMode(body.mode);
+  const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
+  const maxTokens = maxTokensForMode(mode);
 
   try {
-    const mode = body.mode || "quick";
-    const maxOutputTokens = mode === "quick" ? 1800 : mode === "full" ? 3200 : 6000;
-    const outputText = await callGemini({
+    const outputText = await callDeepSeek({
       apiKey,
       model,
-      prompt: buildPrompt(body),
-      maxOutputTokens,
+      systemPrompt: buildSystemPrompt(),
+      userPrompt: buildUserPrompt({ ...body, mode }),
+      maxTokens,
       temperature: 0.2
     });
 
     let result;
     try {
-      result = parseJsonFromGemini(outputText);
+      result = parseJsonFromProvider(outputText);
     } catch (firstParseError) {
       try {
-        const repairedText = await callGemini({
+        const repairedText = await callDeepSeek({
           apiKey,
           model,
-          prompt: buildRepairPrompt(outputText),
-          maxOutputTokens,
+          systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
+          userPrompt: buildRepairPrompt(outputText, body.task),
+          maxTokens,
           temperature: 0.1
         });
-        result = parseJsonFromGemini(repairedText);
+        result = parseJsonFromProvider(repairedText);
       } catch (repairError) {
+        if (sendProviderError(req, res, repairError)) return;
         sendJson(req, res, 502, {
-          error: "Gemini returned non-JSON output.",
+          error: "DeepSeek returned non-JSON output.",
+          provider: "deepseek",
           detail: repairError.message || firstParseError.message,
           rawPreview: String(outputText || "").slice(0, 1500)
         });
@@ -519,17 +439,13 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    result.disclaimer = result.disclaimer || DISCLAIMER;
-    sendJson(req, res, 200, result);
+    sendJson(req, res, 200, normalizeResultForMode(result, mode));
   } catch (error) {
-    if (error.message === "Gemini API request failed.") {
-      sendJson(req, res, 502, {
-        error: "Gemini API request failed.",
-        status: error.status,
-        detail: error.raw
-      });
-      return;
-    }
-    sendJson(req, res, 500, { error: "Server error while grading IELTS writing.", detail: error.message });
+    if (sendProviderError(req, res, error)) return;
+    sendJson(req, res, 500, {
+      error: "Server error while grading IELTS writing.",
+      provider: "deepseek",
+      detail: error.message
+    });
   }
 };
