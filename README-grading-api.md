@@ -4,6 +4,8 @@ This repository includes a Vercel Serverless Function for IELTS General Training
 
 The recommended grading backend now uses the DeepSeek API. The GitHub Pages frontend does not call DeepSeek directly and must not contain any API key.
 
+The scoring logic is calibrated against IELTS public band descriptor principles, but the score remains AI-estimated and unofficial.
+
 ## Files
 
 - `api/grade-ielts.js`: POST API for IELTS grading and revision.
@@ -78,6 +80,8 @@ The API returns strict JSON with:
 
 - `overallBand`
 - `estimatedLevel`
+- `lowBandDiagnostics`
+- `scoreCalibration`
 - `criteria`
 - `strengths`
 - `mainProblems`
@@ -94,6 +98,7 @@ The API returns strict JSON with:
 - `revisedEssayBand5`
 - `revisedEssayBand6`
 - `revisedEssayBand7`
+- `revisedEssayMeta`
 - `revisionNotes`
 - `revisionNotesZh`
 - `disclaimer`
