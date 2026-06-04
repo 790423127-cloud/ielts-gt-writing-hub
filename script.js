@@ -198,7 +198,9 @@ async function buildResponseError(response) {
 
   const parts = [`HTTP ${response.status}`];
   if (payload?.error) parts.push(`error: ${payload.error}`);
+  if (payload?.provider) parts.push(`provider: ${payload.provider}`);
   if (payload?.status) parts.push(`status: ${payload.status}`);
+  if (payload?.suggestion) parts.push(`suggestion: ${payload.suggestion}`);
   const detail = payload?.detail ?? fallbackText;
   if (detail) parts.push(`detail: ${truncateDetail(detail)}`);
   if (payload?.rawPreview) parts.push(`rawPreview: ${truncateDetail(payload.rawPreview)}`);
