@@ -46,10 +46,10 @@ function isVeryShortEssay(body) {
 }
 
 function maxTokensForMode(mode, veryShort) {
-  if (veryShort) return 1800;
-  if (mode === "quick") return 2500;
-  if (mode === "full") return 4200;
-  return 7000;
+  if (veryShort) return 1200;
+  if (mode === "quick") return 1500;
+  if (mode === "full") return 3200;
+  return 6500;
 }
 
 function countWordsServer(text) {
@@ -238,6 +238,7 @@ function buildSystemPrompt(veryShort = false) {
     "If Task 1 misses bullet points, the revision must cover all three bullet points and revisionNotes should say what was added. If Task 2 has no position, the revision must add a clear position.",
     "modelAnswerOutline must be an outline only: structure, paragraph content, simple expressions, bullet point arrangement for Task 1, or position/examples for Task 2. Do not write a full essay in the outline.",
     "Return only one valid JSON object.",
+    "Return valid json only. Do not use markdown. Do not use code fences. Do not add text outside json.",
     "Do not return markdown or code fences.",
     "Do not include explanatory preface or closing comments.",
     "All required keys must exist.",
@@ -389,10 +390,45 @@ function buildExpectedJsonShape(task) {
   };
 }
 
+function buildQuickJsonShape(task) {
+  const firstCriterion = firstCriterionName(task);
+  return {
+    overallBand: 5,
+    estimatedLevel: "Band 5.0",
+    actualWordCount: 0,
+    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: task === "Task 1" ? 150 : 250,
+    wordCountStatus: task === "Task 1" ? "meets_task1_minimum" : "meets_task2_minimum",
+    taskRequirementAnalysis: task === "Task 1"
+      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    criteria: {
+      [firstCriterion]: { band: 5, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: 5, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Lexical Resource": { band: 5, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: 5, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+    },
+    strengths: [],
+    mainProblems: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+    lowBandDiagnostics: { isBlank: false, wordCount20OrFewer: false, mostlyNonEnglish: false, mostlyCopiedFromPrompt: false, mostlyMemorised: false, whollyUnrelated: false, barelyRelated: false, littleRelevantMessage: false, noClearPositionTask2: false, noBulletPointCoverageTask1: false, meaningMostlyBlocked: false, recommendedLowBandRange: "", reason: "" },
+    highBandDiagnostics: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, recommendedHighBandRange: "", reason: "" },
+    revisedEssayMeta: { band5Target: "", band6Target: "", band7Target: "", revisionLimited: false, revisionLimitReason: "" },
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    disclaimer: DISCLAIMER
+  };
+}
+
 function buildUserPrompt(body, veryShort) {
   const mode = normalizeMode(body.mode);
   const effectiveMode = veryShort ? "quick" : mode;
   const isRevisionMode = effectiveMode === "revision";
+  const expectedShape = effectiveMode === "quick" ? buildQuickJsonShape(body.task) : buildExpectedJsonShape(body.task);
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
   const revisionInstruction = isRevisionMode
@@ -403,11 +439,13 @@ function buildUserPrompt(body, veryShort) {
     : "The essay meets or exceeds the target word count.";
 
   return [
+    "Return valid json only. Do not use markdown. Do not use code fences. Do not add text outside json.",
+    "Small valid json example: {\"overallBand\":5,\"estimatedLevel\":\"Band 5.0\",\"strengths\":[],\"mainProblems\":[],\"disclaimer\":\"This is an AI-generated estimated score and revision, not an official IELTS score.\"}",
     "Return exactly one JSON object matching this shape and keep the same keys:",
-    JSON.stringify(buildExpectedJsonShape(body.task), null, 2),
+    JSON.stringify(expectedShape, null, effectiveMode === "quick" ? 0 : 2),
     "",
     "Mode instructions:",
-    "- quick: shortest feedback, no revised essays, compact arrays only.",
+    "- quick: shortest feedback, no revised essays, strengths max 2, mainProblems max 3, grammarErrors max 2, sentenceCorrections max 2, no long Chinese explanations.",
     "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
     "- revision: include all three revised essays, but keep all non-essay feedback compact.",
     veryShort ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "",
@@ -430,6 +468,8 @@ function buildUserPrompt(body, veryShort) {
       questionPrompt: body.questionPrompt,
       promptText: body.questionPrompt,
       taskType: body.task === "Task 1" ? "task1" : "task2",
+      task1BulletPoints: body.task1BulletPoints || [],
+      task2Instruction: body.task2Instruction || "",
       gradingMode: effectiveMode,
       actualWordCount: body.wordCount,
       wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
@@ -467,7 +507,7 @@ function defaultRevisedEssayMeta(limited = false, reason = "") {
   };
 }
 
-function buildFallbackFeedback(body, reason) {
+function buildFallbackFeedbackLegacy(body, reason) {
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
   const firstCriterion = firstCriterionName(body.task);
@@ -576,6 +616,171 @@ function buildFallbackFeedback(body, reason) {
   };
 }
 
+function wordCountStatusFor(task, words) {
+  if (task === "Task 1") {
+    if (words >= 150) return "meets_task1_minimum";
+    return words < 80 ? "very_short_task1" : "under_task1_minimum";
+  }
+  if (words >= 250) return "meets_task2_minimum";
+  return words < 150 ? "very_short_task2" : "under_task2_minimum";
+}
+
+function buildFallbackTaskRequirement(body) {
+  if (body.task === "Task 1") {
+    const bullets = Array.isArray(body.task1BulletPoints) ? body.task1BulletPoints : [];
+    return {
+      taskType: "task1",
+      taskPurpose: body.questionTitle || "Write a General Training Task 1 letter that answers the selected prompt.",
+      recipient: "",
+      relationship: "",
+      requiredTone: "",
+      letterType: "",
+      bulletPoints: bullets.map((item) => ({ requirement: String(item), covered: false, evidence: "" })),
+      missingRequirements: [],
+      taskMatchSummary: "AI output failed, so only a basic task analysis is available."
+    };
+  }
+  return {
+    taskType: "task2",
+    questionType: "",
+    topic: body.questionTitle || "",
+    requiredPosition: "",
+    requiredParts: [],
+    positionPresent: false,
+    mainIdeasRelevant: false,
+    missingRequirements: [],
+    taskMatchSummary: "AI output failed, so only a basic task analysis is available."
+  };
+}
+
+function buildFallbackFeedback(body, reason) {
+  const diagnostics = buildLowBandDiagnostics(body);
+  const cap = capFromDiagnostics(body, diagnostics);
+  const firstCriterion = firstCriterionName(body.task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = body.task === "Task 1" ? 150 : 250;
+  const normalLength = words >= threshold;
+  let band = normalLength ? 5 : 3;
+  let bandReason = normalLength
+    ? "AI output failed, so only a basic diagnostic is available. This fallback is not a full IELTS score."
+    : "The response is underlength or limited and cannot support a higher diagnostic score.";
+
+  if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
+    band = 0;
+    bandReason = diagnostics.reason || "There is no rateable English attempt.";
+  } else if (diagnostics.mostlyCopiedFromPrompt || words <= 20) {
+    band = 1;
+    bandReason = "The response has almost no rateable original writing.";
+  } else if ((body.task === "Task 1" && words < 50) || (body.task === "Task 2" && words < 80)) {
+    band = 2.5;
+    bandReason = "The response is extremely short and misses most task requirements.";
+  } else if ((body.task === "Task 1" && words < 80) || (body.task === "Task 2" && words < 150)) {
+    band = 3.5;
+    bandReason = "The response is significantly underlength and only partly communicates a relevant message.";
+  } else if (!normalLength && cap.cap !== null) {
+    band = Math.min(4, cap.cap);
+    bandReason = cap.reason;
+  }
+
+  const criterionBand = roundHalf(band);
+  const noRateable = criterionBand === 0;
+  const revisionLimited = !normalLength && (criterionBand <= 3.5 || diagnostics.littleRelevantMessage);
+  const firstFeedback = normalLength && !noRateable
+    ? "AI output failed, so this fallback gives only a basic diagnostic. The response is not being marked as too short."
+    : (noRateable ? "There is no rateable English response to assess for this task." : "The response is too short or limited and does not fully answer the task.");
+  const firstFeedbackZh = normalLength && !noRateable
+    ? "AI输出失败，这只是基础诊断，不代表字数过短。"
+    : (noRateable ? "没有可评分的英文作答。" : "作文过短或内容有限，未充分完成题目。");
+  const capApplied = !normalLength || noRateable || Boolean(diagnostics.recommendedLowBandRange);
+
+  return {
+    overallBand: criterionBand,
+    estimatedLevel: `Band ${formatBand(criterionBand)}`,
+    actualWordCount: words,
+    taskTypeDetected: body.task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: wordCountStatusFor(body.task, words),
+    taskRequirementAnalysis: buildFallbackTaskRequirement(body),
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "AI output failed before a full task-match check could be completed.", warning: "" },
+    lowBandDiagnostics: diagnostics,
+    highBandDiagnostics: {
+      fullyAddressesTask: false,
+      clearProgression: false,
+      wellDevelopedIdeas: false,
+      wideAccurateVocabulary: false,
+      flexibleGrammar: false,
+      fewErrors: false,
+      recommendedHighBandRange: "",
+      reason: "AI output failed, so high-band evidence could not be fully evaluated."
+    },
+    scoreCalibration: {
+      strictness: "strict",
+      capApplied,
+      capReason: capApplied ? bandReason : "",
+      whyNotHigher: normalLength
+        ? "The AI provider did not return complete feedback, so a higher diagnostic score cannot be confirmed from fallback alone."
+        : "The answer is underlength, misses key task requirements, or provides too little rateable evidence.",
+      whyNotLower: noRateable
+        ? "Band 0 is already the lowest score."
+        : "There is at least some rateable English response unless Band 0 has been applied.",
+      evidence: [`Word count: ${words}.`, bandReason, diagnostics.reason].filter(Boolean).slice(0, 5)
+    },
+    criteria: {
+      [firstCriterion]: {
+        band: criterionBand,
+        feedback: firstFeedback,
+        feedbackZh: firstFeedbackZh,
+        howToImprove: normalLength ? "Retry grading later for full task-specific feedback." : "Write a fuller response and cover all bullet points or develop your main ideas.",
+        howToImproveZh: normalLength ? "稍后重试以获取完整批改。" : "补充内容，覆盖要点或展开观点。"
+      },
+      "Coherence and Cohesion": {
+        band: criterionBand,
+        feedback: normalLength ? "Organisation could not be fully assessed because the AI output was incomplete." : "There is not enough text to show clear organisation.",
+        feedbackZh: normalLength ? "AI输出不完整，结构只能基础判断。" : "内容太少，结构不清。",
+        howToImprove: "Use clear paragraphs and simple logical links.",
+        howToImproveZh: "分段清楚，连接自然。"
+      },
+      "Lexical Resource": {
+        band: criterionBand,
+        feedback: normalLength ? "Vocabulary could not be fully assessed because the AI output was incomplete." : "Vocabulary range is very limited.",
+        feedbackZh: normalLength ? "AI输出不完整，词汇只能基础判断。" : "词汇范围有限。",
+        howToImprove: "Use accurate topic vocabulary.",
+        howToImproveZh: "使用准确话题词。"
+      },
+      "Grammatical Range and Accuracy": {
+        band: criterionBand,
+        feedback: normalLength ? "Grammar could not be fully assessed because the AI output was incomplete." : "There is not enough language to assess grammar fully.",
+        feedbackZh: normalLength ? "AI输出不完整，语法只能基础判断。" : "语言太少，难完整评估。",
+        howToImprove: "Write complete sentences and check verb forms.",
+        howToImproveZh: "写完整句并检查动词。"
+      }
+    },
+    strengths: normalLength && !noRateable ? ["A response was provided for the selected task."] : (noRateable ? [] : ["You attempted to respond to the task."]),
+    mainProblems: normalLength && !noRateable
+      ? ["AI output failed, so only basic diagnostic feedback is available."]
+      : ["The essay is below the recommended word count.", "Several task points or ideas may be missing."],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    taskAchievementAdvice: normalLength ? ["Retry for full task-specific feedback."] : ["Add enough detail to answer the task properly."],
+    coherenceAdvice: ["Use clear paragraphs."],
+    lexicalAdvice: ["Use more topic vocabulary."],
+    grammarAdvice: ["Write complete sentences."],
+    band5FixPlan: normalLength ? ["Retry grading for a full Band 5 improvement plan."] : ["Write at least the recommended word count.", "Cover all bullet points or develop two clear ideas."],
+    band6UpgradePlan: normalLength ? [] : ["Add supporting details and examples."],
+    band7UpgradePlan: normalLength ? [] : ["Use more precise vocabulary and varied sentence structures."],
+    modelAnswerOutline: normalLength ? "AI output failed, so no full outline is available in this fallback." : "Write a fuller answer with an opening, clear body points, and a suitable closing.",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    revisedEssayMeta: defaultRevisedEssayMeta(revisionLimited, revisionLimited ? "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions." : ""),
+    revisionNotes: normalLength ? ["AI output failed, so revised essays were not generated."] : ["The response was underlength, so only a basic diagnostic score is provided."],
+    revisionNotesZh: normalLength ? ["AI输出不完整，暂未生成修改版。"] : ["作文较短，因此这里只提供基础诊断。"],
+    disclaimer: DISCLAIMER,
+    fallback: true,
+    fallbackReason: reason || "DeepSeek returned incomplete JSON."
+  };
+}
+
 function stripCodeFence(text) {
   return String(text || "")
     .trim()
@@ -648,11 +853,48 @@ function buildRepairPrompt(rawText, task) {
   ].join("\n");
 }
 
+function buildEmptyRetryPrompt(body, mode) {
+  const shape = mode === "revision" ? buildExpectedJsonShape(body.task) : buildQuickJsonShape(body.task);
+  return [
+    "Return valid json only. Do not use markdown. Do not use code fences. Do not add text outside json.",
+    "The previous provider response was empty. Produce one compact valid json object for this IELTS grading request.",
+    mode === "revision" ? "Revision mode may include revised essays if the original is long enough." : "Do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.",
+    "Keep arrays short and values concise.",
+    "Required JSON shape:",
+    JSON.stringify(shape),
+    "Request data:",
+    JSON.stringify({
+      task: body.task,
+      questionTitle: body.questionTitle,
+      questionPrompt: body.questionPrompt,
+      essay: body.essay,
+      actualWordCount: body.wordCount,
+      wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
+      gradingMode: mode
+    })
+  ].join("\n");
+}
+
+
 function extractDeepSeekText(data) {
   return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2 }) {
+function logProviderEvent(event) {
+  console.log(JSON.stringify({
+    provider: "deepseek",
+    model: event.model,
+    taskType: event.taskType,
+    gradingMode: event.gradingMode,
+    actualWordCount: event.actualWordCount,
+    responseStatus: event.responseStatus,
+    contentEmpty: Boolean(event.contentEmpty),
+    fallbackUsed: Boolean(event.fallbackUsed),
+    contentLength: Number(event.contentLength || 0)
+  }));
+}
+
+async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.1, meta = {} }) {
   const response = await fetch(DEEPSEEK_URL, {
     method: "POST",
     headers: {
@@ -667,12 +909,14 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
       ],
       temperature,
       response_format: { type: "json_object" },
+      stream: false,
       max_tokens: maxTokens
     })
   });
 
   const raw = await response.text();
   if (!response.ok) {
+    logProviderEvent({ ...meta, model, responseStatus: response.status, contentEmpty: true, contentLength: 0, fallbackUsed: false });
     const error = new Error("DeepSeek API request failed.");
     error.status = response.status;
     error.raw = raw;
@@ -683,13 +927,17 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
   try {
     data = JSON.parse(raw);
   } catch (error) {
+    logProviderEvent({ ...meta, model, responseStatus: response.status, contentEmpty: true, contentLength: 0, fallbackUsed: false });
     error.raw = raw;
     throw error;
   }
 
   const outputText = extractDeepSeekText(data);
+  logProviderEvent({ ...meta, model, responseStatus: response.status, contentEmpty: !outputText, contentLength: outputText.length, fallbackUsed: false });
   if (!outputText) {
     const error = new Error("DeepSeek returned an empty response.");
+    error.code = "EMPTY_PROVIDER_RESPONSE";
+    error.status = response.status;
     error.raw = raw;
     throw error;
   }
@@ -993,33 +1241,72 @@ module.exports = async function handler(req, res) {
   const effectiveMode = veryShort ? "quick" : mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
+  const logMeta = {
+    taskType: body.task === "Task 1" ? "task1" : "task2",
+    gradingMode: effectiveMode,
+    actualWordCount: body.wordCount
+  };
 
   try {
-    const outputText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: buildSystemPrompt(veryShort),
-      userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
-      maxTokens,
-      temperature: 0.2
-    });
+    let outputText;
+    try {
+      outputText = await callDeepSeek({
+        apiKey,
+        model,
+        systemPrompt: buildSystemPrompt(veryShort),
+        userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
+        maxTokens,
+        temperature: 0.1,
+        meta: logMeta
+      });
+    } catch (firstCallError) {
+      if (sendProviderError(req, res, firstCallError)) return;
+      if (effectiveMode === "quick") {
+        logProviderEvent({ ...logMeta, model, responseStatus: firstCallError.status || 200, contentEmpty: true, contentLength: 0, fallbackUsed: true });
+        sendJson(req, res, 200, buildFallbackFeedback(body, firstCallError.message || "DeepSeek returned an empty response."));
+        return;
+      }
+      try {
+        outputText = await callDeepSeek({
+          apiKey,
+          model,
+          systemPrompt: "Return valid json only. Do not use markdown. Do not use code fences. Do not add text outside json.",
+          userPrompt: buildEmptyRetryPrompt(body, effectiveMode),
+          maxTokens: Math.min(maxTokens, effectiveMode === "revision" ? 3500 : 2200),
+          temperature: 0.1,
+          meta: { ...logMeta, gradingMode: `${effectiveMode}-empty-retry` }
+        });
+      } catch (retryError) {
+        if (sendProviderError(req, res, retryError)) return;
+        logProviderEvent({ ...logMeta, model, responseStatus: retryError.status || 200, contentEmpty: true, contentLength: 0, fallbackUsed: true });
+        sendJson(req, res, 200, buildFallbackFeedback(body, retryError.message || "DeepSeek returned an empty response."));
+        return;
+      }
+    }
 
     let result;
     try {
       result = parseJsonFromProvider(outputText);
     } catch (firstParseError) {
+      if (effectiveMode === "quick") {
+        logProviderEvent({ ...logMeta, model, responseStatus: 200, contentEmpty: false, contentLength: outputText.length, fallbackUsed: true });
+        sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned non-JSON output."));
+        return;
+      }
       try {
         const repairedText = await callDeepSeek({
           apiKey,
           model,
-          systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
+          systemPrompt: "You repair malformed JSON. Return valid json only. Do not use markdown. Do not use code fences. Do not add text outside json.",
           userPrompt: buildRepairPrompt(outputText, body.task),
           maxTokens,
-          temperature: 0.1
+          temperature: 0.1,
+          meta: { ...logMeta, gradingMode: `${effectiveMode}-repair` }
         });
         result = parseJsonFromProvider(repairedText);
       } catch (repairError) {
         if (sendProviderError(req, res, repairError)) return;
+        logProviderEvent({ ...logMeta, model, responseStatus: repairError.status || 200, contentEmpty: repairError.code === "EMPTY_PROVIDER_RESPONSE", contentLength: 0, fallbackUsed: true });
         sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned incomplete JSON."));
         return;
       }
@@ -1028,10 +1315,6 @@ module.exports = async function handler(req, res) {
     sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort, body));
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
-    sendJson(req, res, 500, {
-      error: "Server error while grading IELTS writing.",
-      provider: "deepseek",
-      detail: error.message
-    });
+    sendJson(req, res, 200, buildFallbackFeedback(body, error.message || "DeepSeek returned incomplete JSON."));
   }
 };
