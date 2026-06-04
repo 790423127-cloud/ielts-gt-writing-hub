@@ -1,0 +1,9 @@
+#phraseGroups{max-height:560px;overflow:auto;padding-right:4px}
+.helper-dock .phrase-group{padding:0;background:var(--card)}
+.phrase-group summary{min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;cursor:pointer;list-style:none;font-weight:800}
+.phrase-group summary::-webkit-details-marker{display:none}
+.phrase-count{display:inline-flex;min-height:26px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:0 8px;color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
+.phrase-buttons{border-top:1px solid var(--line);padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.phrase-buttons .phrase-btn{min-height:36px;padding:7px 9px;font-size:14px;line-height:1.35}
+.phrase-buttons .phrase-btn+.phrase-btn{margin-top:0}
+@media(max-width:760px){#phraseGroups{max-height:460px}.phrase-buttons{grid-template-columns:1fr}}
