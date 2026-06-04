@@ -177,6 +177,33 @@ function setGradingStatus(text, state = "") {
   els.gradingStatus.dataset.state = state;
 }
 
+function truncateDetail(value, limit = 1500) {
+  const text = String(value ?? "").trim();
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+async function buildResponseError(response) {
+  let payload = null;
+  let fallbackText = "";
+
+  try {
+    payload = await response.clone().json();
+  } catch {
+    try {
+      fallbackText = await response.text();
+    } catch {
+      fallbackText = "";
+    }
+  }
+
+  const parts = [`HTTP ${response.status}`];
+  if (payload?.error) parts.push(`error: ${payload.error}`);
+  if (payload?.status) parts.push(`status: ${payload.status}`);
+  const detail = payload?.detail ?? fallbackText;
+  if (detail) parts.push(`detail: ${truncateDetail(detail)}`);
+  return parts.join(" | ");
+}
+
 function resetGradingPanel() {
   setGradingStatus("等待批改");
   els.gradingResults.innerHTML = "";
@@ -233,7 +260,7 @@ async function startGrading() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(gradingPayload())
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await buildResponseError(response));
     const result = await response.json();
     renderGradingResult(result);
     setGradingStatus("批改完成", "done");
