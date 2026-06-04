@@ -241,7 +241,30 @@ function renderErrorDetails(errorInfo) {
 function renderZhToggle(text) {
   const value = String(text || "").trim();
   if (!value) return "";
-  return `<button class="secondary zh-toggle" type="button">显示中文解释</button><div class="zh-note hidden">${escapeHtml(value)}</div>`;
+  return `<button class="secondary translation-toggle zh-toggle" type="button" aria-expanded="false">中文解释</button><div class="translation-panel zh-note hidden">${escapeHtml(value)}</div>`;
+}
+
+function hasTranslationValue(value) {
+  if (Array.isArray(value)) return value.some((item) => String(item || "").trim());
+  return String(value || "").trim().length > 0;
+}
+
+function renderTextWithTranslation(englishText, chineseText, options = {}) {
+  const text = String(englishText ?? "").trim();
+  const fallback = options.fallback || "";
+  const tagName = options.tag || "p";
+  const className = options.className ? ` class="${options.className}"` : "";
+  const englishHtml = text ? `<${tagName}${className}>${escapeHtml(text)}</${tagName}>` : (fallback ? `<${tagName} class="muted">${escapeHtml(fallback)}</${tagName}>` : "");
+  if (options.noTranslate || !hasTranslationValue(chineseText)) return englishHtml;
+  const zhText = Array.isArray(chineseText) ? chineseText.filter(Boolean).join("\n") : chineseText;
+  return `<div class="translation-inline">${englishHtml}${renderZhToggle(zhText)}</div>`;
+}
+
+function renderListWithTranslations(items, translations, fallbackText) {
+  const list = Array.isArray(items) ? items : [];
+  const zhList = Array.isArray(translations) ? translations : [];
+  if (!list.length) return `<p class="muted">${escapeHtml(fallbackText || "No content is available.")}</p>`;
+  return `<ul>${list.map((item, index) => `<li>${renderTextWithTranslation(item, zhList[index], { tag: "span" })}</li>`).join("")}</ul>`;
 }
 
 function bindZhToggles(scope) {
@@ -250,7 +273,8 @@ function bindZhToggles(scope) {
       const note = button.nextElementSibling;
       if (!note) return;
       const isHidden = note.classList.toggle("hidden");
-      button.textContent = isHidden ? "显示中文解释" : "收起中文解释";
+      button.setAttribute("aria-expanded", String(!isHidden));
+      button.textContent = isHidden ? "中文解释" : "收起中文";
     });
   });
 }
@@ -286,6 +310,8 @@ function gradingPayload() {
     isUnderMinimum: wordCount < targetWordCount,
     mode,
     gradingMode: mode,
+    outputLanguage: "en",
+    locale: "en",
     includeRevision,
     revisionTargets: includeRevision ? ["band5", "band6", "band7"] : [],
     rubric: {
@@ -345,33 +371,32 @@ function renderCriteria(criteria = {}) {
     <div class="criteria-item">
       <span>${escapeHtml(name)}</span>
       <strong>Band ${escapeHtml(item?.band ?? "-")}</strong>
-      <p>${escapeHtml(item?.feedback || "")}</p>
-      ${item?.howToImprove ? `<p class="improve"><strong>How to improve:</strong> ${escapeHtml(item.howToImprove)}</p>` : ""}
-      ${renderZhToggle([item?.feedbackZh, item?.howToImproveZh].filter(Boolean).join("\n"))}
+      ${renderTextWithTranslation(item?.feedback || "", item?.feedbackZh, { fallback: "No feedback is available." })}
+      ${item?.howToImprove ? renderTextWithTranslation(`How to improve: ${item.howToImprove}`, item?.howToImproveZh, { className: "improve" }) : ""}
     </div>`).join("")}</div>`;
 }
 
-function renderScoreCalibration(calibration) {
-  if (!calibration || typeof calibration !== "object") return "";
+function renderScoreCalibration(calibration, calibrationZh = {}) {
+  if (!calibration || typeof calibration !== "object") return `<details class="calibration-details"><summary>评分校准说明</summary><div class="calibration-body"><p class="muted">No detailed score calibration is available.</p></div></details>`;
   return `<details class="calibration-details">
     <summary>评分校准说明</summary>
     <div class="calibration-body">
       <p><strong>是否应用限分规则：</strong>${boolText(calibration.capApplied)}</p>
-      <p><strong>限分原因：</strong>${escapeHtml(calibration.capReason || "无")}</p>
-      <p><strong>为什么不能更高：</strong>${escapeHtml(calibration.whyNotHigher || "暂无说明")}</p>
-      <p><strong>为什么没有更低：</strong>${escapeHtml(calibration.whyNotLower || "暂无说明")}</p>
-      <div><strong>评分证据：</strong>${listHtml(calibration.evidence)}</div>
+      <div><strong>限分原因：</strong>${renderTextWithTranslation(calibration.capReason || "No cap was applied.", calibrationZh.capReasonZh, { tag: "span" })}</div>
+      <div><strong>为什么不能更高：</strong>${renderTextWithTranslation(calibration.whyNotHigher || "No detailed score calibration is available.", calibrationZh.whyNotHigherZh, { tag: "span" })}</div>
+      <div><strong>为什么没有更低：</strong>${renderTextWithTranslation(calibration.whyNotLower || "No detailed score calibration is available.", calibrationZh.whyNotLowerZh, { tag: "span" })}</div>
+      <div><strong>评分证据：</strong>${renderListWithTranslations(calibration.evidence, calibrationZh.evidenceZh, "No detailed score calibration is available.")}</div>
     </div>
   </details>`;
 }
 
-function renderLowBandDiagnostics(diagnostics) {
-  if (!diagnostics || typeof diagnostics !== "object") return "";
+function renderLowBandDiagnostics(diagnostics, diagnosticsZh = {}) {
+  if (!diagnostics || typeof diagnostics !== "object") return `<details class="calibration-details"><summary>低分段判断依据</summary><div class="calibration-body"><p class="muted">No low-band trigger was detected.</p></div></details>`;
   return `<details class="calibration-details">
     <summary>低分段判断依据</summary>
     <div class="calibration-body compact-facts">
       <p><strong>建议低分范围：</strong>${escapeHtml(diagnostics.recommendedLowBandRange || "无明显低分段限制")}</p>
-      <p><strong>原因：</strong>${escapeHtml(diagnostics.reason || "暂无")}</p>
+      <div><strong>原因：</strong>${renderTextWithTranslation(diagnostics.reason || "No low-band trigger was detected.", diagnosticsZh.reasonZh, { tag: "span" })}</div>
       <p><strong>20词或更少：</strong>${boolText(diagnostics.wordCount20OrFewer)}</p>
       <p><strong>疑似大量复制题目：</strong>${boolText(diagnostics.mostlyCopiedFromPrompt)}</p>
       <p><strong>相关信息很少：</strong>${boolText(diagnostics.littleRelevantMessage)}</p>
@@ -381,11 +406,13 @@ function renderLowBandDiagnostics(diagnostics) {
 }
 
 
-function renderTaskRequirementAnalysis(analysis = {}, match = {}) {
-  if (!analysis || typeof analysis !== "object") return "";
+function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {}) {
+  if (!analysis || typeof analysis !== "object") return `<details class="calibration-details"><summary>题目要求分析</summary><div class="calibration-body"><p class="muted">No detailed task analysis is available for this response.</p></div></details>`;
   const isTask1 = analysis.taskType === "task1" || selected?.task === "Task 1";
   const bullets = Array.isArray(analysis.bulletPoints) ? analysis.bulletPoints : [];
+  const bulletsZh = Array.isArray(analysisZh.bulletPointsZh) ? analysisZh.bulletPointsZh : [];
   const parts = Array.isArray(analysis.requiredParts) ? analysis.requiredParts : [];
+  const partsZh = Array.isArray(analysisZh.requiredPartsZh) ? analysisZh.requiredPartsZh : [];
   return `<details class="calibration-details">
     <summary>题目要求分析</summary>
     <div class="calibration-body">
@@ -393,30 +420,31 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}) {
       ${isTask1 ? `
         <p><strong>收信人：</strong>${escapeHtml(analysis.recipient || "未返回")}</p>
         <p><strong>关系：</strong>${escapeHtml(analysis.relationship || "未返回")}</p>
-        <p><strong>语气：</strong>${escapeHtml(analysis.requiredTone || "未返回")}</p>
-        <p><strong>信件类型：</strong>${escapeHtml(analysis.letterType || "未返回")}</p>
-        <div><strong>Bullet points：</strong>${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item.requirement || "")} ${item.covered ? "✓" : "✗"} ${item.evidence ? `- ${escapeHtml(item.evidence)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">暂无 bullet point 分析</p>`}</div>
+        <div><strong>语气：</strong>${renderTextWithTranslation(analysis.requiredTone || "Not returned.", analysisZh.requiredToneZh, { tag: "span" })}</div>
+        <div><strong>信件类型：</strong>${renderTextWithTranslation(analysis.letterType || "Not returned.", analysisZh.letterTypeZh, { tag: "span" })}</div>
+        <div><strong>写作目的：</strong>${renderTextWithTranslation(analysis.taskPurpose || "No detailed task analysis is available for this response.", analysisZh.taskPurposeZh, { tag: "span" })}</div>
+        <div><strong>Bullet points：</strong>${bullets.length ? `<ul>${bullets.map((item, index) => `<li>${renderTextWithTranslation(`${item.requirement || ""} ${item.covered ? "✓" : "✗"} ${item.evidence ? `- ${item.evidence}` : ""}`, bulletsZh[index] || item.evidenceZh || item.reasonZh, { tag: "span" })}</li>`).join("")}</ul>` : `<p class="muted">No detailed task analysis is available for this response.</p>`}</div>
       ` : `
-        <p><strong>题目类型：</strong>${escapeHtml(analysis.questionType || "未返回")}</p>
+        <div><strong>题目类型：</strong>${renderTextWithTranslation(analysis.questionType || "Not returned.", analysisZh.questionTypeZh, { tag: "span" })}</div>
         <p><strong>话题：</strong>${escapeHtml(analysis.topic || "未返回")}</p>
-        <p><strong>是否需要明确立场：</strong>${escapeHtml(analysis.requiredPosition || "未返回")}</p>
+        <div><strong>是否需要明确立场：</strong>${renderTextWithTranslation(analysis.requiredPosition || "Not returned.", analysisZh.requiredPositionZh, { tag: "span" })}</div>
         <p><strong>立场是否出现：</strong>${boolText(analysis.positionPresent)}</p>
-        <div><strong>必须回答的部分：</strong>${parts.length ? listHtml(parts) : `<p class="muted">暂无 required parts 分析</p>`}</div>
+        <div><strong>必须回答的部分：</strong>${parts.length ? renderListWithTranslations(parts, partsZh, "No detailed task analysis is available for this response.") : `<p class="muted">No detailed task analysis is available for this response.</p>`}</div>
       `}
       <div><strong>缺失要求：</strong>${listHtml(analysis.missingRequirements)}</div>
-      <p><strong>匹配检查：</strong>${escapeHtml(match.reason || analysis.taskMatchSummary || "暂无")}</p>
+      <div><strong>匹配检查：</strong>${renderTextWithTranslation(match.reason || analysis.taskMatchSummary || "No detailed task analysis is available for this response.", analysisZh.taskMatchSummaryZh, { tag: "span" })}</div>
       ${match.warning ? `<p class="ai-warning">${escapeHtml(match.warning)}</p>` : ""}
     </div>
   </details>`;
 }
 
-function renderHighBandDiagnostics(diagnostics) {
-  if (!diagnostics || typeof diagnostics !== "object") return "";
+function renderHighBandDiagnostics(diagnostics, diagnosticsZh = {}) {
+  if (!diagnostics || typeof diagnostics !== "object") return `<details class="calibration-details"><summary>高分判断依据</summary><div class="calibration-body"><p class="muted">No high-band evidence was confirmed.</p></div></details>`;
   return `<details class="calibration-details">
     <summary>高分判断依据</summary>
     <div class="calibration-body compact-facts">
       <p><strong>建议高分范围：</strong>${escapeHtml(diagnostics.recommendedHighBandRange || "暂无")}</p>
-      <p><strong>原因：</strong>${escapeHtml(diagnostics.reason || "暂无")}</p>
+      <div><strong>原因：</strong>${renderTextWithTranslation(diagnostics.reason || "No high-band evidence was confirmed.", diagnosticsZh.reasonZh, { tag: "span" })}</div>
       <p><strong>完整回应题目：</strong>${boolText(diagnostics.fullyAddressesTask)}</p>
       <p><strong>结构推进清楚：</strong>${boolText(diagnostics.clearProgression)}</p>
       <p><strong>观点/内容展开充分：</strong>${boolText(diagnostics.wellDevelopedIdeas)}</p>
@@ -594,21 +622,21 @@ function renderGradingResult(result = {}) {
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
-    ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck)}
-    ${renderScoreCalibration(result.scoreCalibration)}
-    ${renderLowBandDiagnostics(result.lowBandDiagnostics)}
-    ${renderHighBandDiagnostics(result.highBandDiagnostics)}
+    ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
+    ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}
+    ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
+    ${renderHighBandDiagnostics(result.highBandDiagnostics, result.highBandDiagnosticsZh)}
     <section class="grading-section">
       <h4>Overall estimated band</h4>
-      <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div><span>${escapeHtml(result.estimatedLevel || "")}</span></div>
+      <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
     </section>
     <section class="grading-section">
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
     </section>
     <section class="grading-section two-mini">
-      <div><h4>Strengths</h4>${listHtml(result.strengths)}</div>
-      <div><h4>Main Problems</h4>${listHtml(result.mainProblems)}</div>
+      <div><h4>Strengths</h4>${renderListWithTranslations(result.strengths, result.strengthsZh, "No strengths were returned for this response.")}</div>
+      <div><h4>Main Problems</h4>${renderListWithTranslations(result.mainProblems, result.mainProblemsZh, "No main problems were returned for this response.")}</div>
     </section>
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}

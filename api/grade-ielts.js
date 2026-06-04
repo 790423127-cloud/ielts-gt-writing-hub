@@ -20,30 +20,11 @@ function isChineseLocale(locale) {
 }
 
 function emptyForLocaleZh(value, locale) {
-  if (isChineseLocale(locale)) return value;
-  return Array.isArray(value) ? [] : "";
+  return value;
 }
 
 function localizeResultForOutput(result, locale) {
-  if (isChineseLocale(locale) || !result || typeof result !== "object") return result;
-  const seen = new WeakSet();
-  const scrub = (value, key = "") => {
-    if (Array.isArray(value)) {
-      if (/Zh$/.test(key)) return [];
-      return value.map((item) => scrub(item));
-    }
-    if (value && typeof value === "object") {
-      if (seen.has(value)) return value;
-      seen.add(value);
-      Object.keys(value).forEach((childKey) => {
-        value[childKey] = scrub(value[childKey], childKey);
-      });
-      return value;
-    }
-    if (/Zh$/.test(key)) return "";
-    return value;
-  };
-  return scrub(result);
+  return result;
 }
 
 function lowWordCountReason(body) {
@@ -226,7 +207,7 @@ function capFromDiagnostics(body, diagnostics) {
 function buildSystemPrompt(veryShort = false, locale = "en") {
   const outputLanguageInstruction = isChineseLocale(locale)
     ? "Output language request: English feedback may include brief Chinese helper notes only in fields ending with Zh. Do not translate whole essays."
-    : "Output language request: English only. All user-visible strings must be English. Leave every field ending with Zh empty. Do not output Chinese.";
+    : "Output language request: main feedback must be English. Also include brief hidden Chinese helper notes only in fields ending with Zh so the front end can reveal them on demand. Do not put Chinese inside normal English feedback fields.";
   const rules = [
     outputLanguageInstruction,
     "You are a strict IELTS Writing examiner and writing coach.",
@@ -314,7 +295,9 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Do not write long paragraphs inside arrays.",
     "Every array must have at most 5 items.",
     "grammarErrors and sentenceCorrections must each have at most 5 items.",
-    isChineseLocale(locale) ? "Provide brief Chinese helper notes only in feedbackZh, howToImproveZh, explanationZh, reasonZh, and revisionNotesZh." : "For English output, set feedbackZh, howToImproveZh, explanationZh, reasonZh, revisionNotesZh, summaryZh, and other *Zh fields to empty strings or empty arrays.",
+    "Provide brief Chinese helper notes in *Zh fields only. Chinese helper notes should explain feedback only; do not translate the full essay, original sentences, corrected sentences, model answers, or revised essays.",
+    "For taskRequirementAnalysisZh, scoreCalibrationZh, lowBandDiagnosticsZh, highBandDiagnosticsZh, strengthsZh, and mainProblemsZh, write short Chinese explanations of the feedback only.",
+    "Keep Chinese helper notes short. Do not let Chinese helper notes replace the English feedback.",
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
     "Do not use comments inside JSON."
@@ -348,6 +331,7 @@ function buildExpectedJsonShape(task, locale = "en") {
     taskRequirementAnalysis: task === "Task 1"
       ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
       : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    taskRequirementAnalysisZh: { taskPurposeZh: emptyForLocaleZh("", locale), requiredToneZh: emptyForLocaleZh("", locale), letterTypeZh: emptyForLocaleZh("", locale), taskMatchSummaryZh: emptyForLocaleZh("", locale), bulletPointsZh: emptyForLocaleZh([], locale), requiredPartsZh: emptyForLocaleZh([], locale) },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
     highBandDiagnostics: {
       fullyAddressesTask: false,
@@ -377,6 +361,8 @@ function buildExpectedJsonShape(task, locale = "en") {
       recommendedLowBandRange: "",
       reason: ""
     },
+    lowBandDiagnosticsZh: { reasonZh: emptyForLocaleZh("简短低分原因解释", locale) },
+    highBandDiagnosticsZh: { reasonZh: emptyForLocaleZh("简短高分证据解释", locale) },
     scoreCalibration: {
       strictness: "strict",
       capApplied: false,
@@ -385,6 +371,7 @@ function buildExpectedJsonShape(task, locale = "en") {
       whyNotLower: "...",
       evidence: ["..."]
     },
+    scoreCalibrationZh: { capReasonZh: emptyForLocaleZh("简短限分原因解释", locale), whyNotHigherZh: emptyForLocaleZh("简短说明为什么不能更高", locale), whyNotLowerZh: emptyForLocaleZh("简短说明为什么没有更低", locale), evidenceZh: emptyForLocaleZh(["简短证据解释"], locale) },
     criteria: {
       [firstCriterion]: {
         band: 0,
@@ -416,7 +403,9 @@ function buildExpectedJsonShape(task, locale = "en") {
       }
     },
     strengths: ["..."],
+    strengthsZh: emptyForLocaleZh(["简短优点解释"], locale),
     mainProblems: ["..."],
+    mainProblemsZh: emptyForLocaleZh(["简短问题解释"], locale),
     grammarErrors: [
       {
         type: "tense / article / subject-verb agreement / word form / sentence structure / punctuation / other",
@@ -542,7 +531,7 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     underMinimumInstruction,
     body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 0 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
-    isChineseLocale(locale) ? "Use brief Chinese helper notes only for local understanding. Do not translate the whole essay or revised essays." : "Use English only. Do not include Chinese in any user-visible field. Leave all *Zh fields empty.",
+    "Use English for the main feedback. Use brief Chinese helper notes only in *Zh fields for local understanding. Do not translate the whole essay or revised essays.",
     "Local low-band diagnostics from the server are provided below. Use them as strong evidence, but still assess the actual writing.",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }, null, 2),
     "If capSuggestion.cap is not null, apply that as an upper cap unless the essay is clearly worse, and explain it in scoreCalibration.",
@@ -730,11 +719,13 @@ function buildFallbackFeedback(body, reason, locale = "en") {
     wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
     wordCountStatus: body.task === "Task 1" ? (words >= 150 ? "meets_task1_minimum" : (words < 80 ? "very_short_task1" : "under_task1_minimum")) : (words >= 250 ? "meets_task2_minimum" : (words < 150 ? "very_short_task2" : "under_task2_minimum")),
     taskRequirementAnalysis: buildFallbackTaskRequirementAnalysis(body, reason, locale),
+    taskRequirementAnalysisZh: { taskPurposeZh: emptyForLocaleZh("题目要求已传入，但 fallback 无法完整分析。", locale), requiredToneZh: emptyForLocaleZh(body.task === "Task 1" ? "语气需根据收信人判断。" : "", locale), letterTypeZh: emptyForLocaleZh(body.task === "Task 1" ? "信件类型需结合题目判断。" : "", locale), taskMatchSummaryZh: emptyForLocaleZh("当前是基础诊断，建议重试获取完整题目分析。", locale), bulletPointsZh: emptyForLocaleZh([], locale), requiredPartsZh: emptyForLocaleZh([], locale) },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No mismatch was detected before fallback was used.", warning: "" },
     highBandDiagnostics: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: normalLength ? "Fallback mode cannot confirm high-band evidence. Retry for full high-band diagnostics." : "The response is too short or limited for high-band evidence." },
     overallBand: criterionBand,
     estimatedLevel: normalLength ? `Band ${formatBand(criterionBand)} fallback estimate` : `Band ${formatBand(criterionBand)}`,
     lowBandDiagnostics: diagnostics,
+    lowBandDiagnosticsZh: { reasonZh: emptyForLocaleZh(diagnostics.reason || "没有明显低分触发项。", locale) },
     scoreCalibration: {
       strictness: "strict",
       capApplied: !normalLength || Boolean(diagnostics.recommendedLowBandRange),
@@ -782,6 +773,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
       }
     },
     strengths: noRateable ? [] : ["You attempted to respond to the task."],
+    strengthsZh: emptyForLocaleZh(noRateable ? [] : ["你尝试回应题目。"], locale),
     mainProblems: normalLength
       ? ["AI feedback was incomplete, so this is only a temporary fallback estimate.", "Retry to receive detailed task, grammar, and revision feedback."]
       : ["The essay is far below the recommended word count.", "Several task points or ideas are missing."],
@@ -1177,8 +1169,14 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.lowBandDiagnostics = sanitizeLowBandDiagnosticsForTask(modelDiagnostics, diagnostics, body || {});
   ensureCriteria(normalized, body?.task);
   normalized.disclaimer = normalized.disclaimer || DISCLAIMER;
+  normalized.scoreCalibrationZh = normalized.scoreCalibrationZh && typeof normalized.scoreCalibrationZh === "object" ? normalized.scoreCalibrationZh : {};
+  normalized.lowBandDiagnosticsZh = normalized.lowBandDiagnosticsZh && typeof normalized.lowBandDiagnosticsZh === "object" ? normalized.lowBandDiagnosticsZh : {};
+  normalized.highBandDiagnosticsZh = normalized.highBandDiagnosticsZh && typeof normalized.highBandDiagnosticsZh === "object" ? normalized.highBandDiagnosticsZh : {};
+  normalized.taskRequirementAnalysisZh = normalized.taskRequirementAnalysisZh && typeof normalized.taskRequirementAnalysisZh === "object" ? normalized.taskRequirementAnalysisZh : {};
   normalized.strengths = ensureArray(normalized.strengths).slice(0, 5);
+  normalized.strengthsZh = ensureArray(normalized.strengthsZh).slice(0, 5);
   normalized.mainProblems = ensureArray(normalized.mainProblems).slice(0, 5);
+  normalized.mainProblemsZh = ensureArray(normalized.mainProblemsZh).slice(0, 5);
   normalized.grammarErrors = ensureArray(normalized.grammarErrors).slice(0, 5);
   normalized.sentenceCorrections = ensureArray(normalized.sentenceCorrections).slice(0, 5);
   normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
