@@ -47,7 +47,7 @@ function isVeryShortEssay(body) {
 
 function maxTokensForMode(mode, veryShort) {
   if (veryShort) return 1200;
-  if (mode === "quick") return 1600;
+  if (mode === "quick") return 2200;
   if (mode === "full") return 3500;
   return 6500;
 }
@@ -481,13 +481,13 @@ function buildQuickExpectedJsonShape(task) {
       recommendedHighBandRange: "",
       reason: ""
     },
-    overallBand: 6,
-    estimatedLevel: "Band 6.0",
+    overallBand: 0,
+    estimatedLevel: "",
     criteria: {
-      [firstCriterion]: { band: 6, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: 6, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Lexical Resource": { band: 6, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: 6, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      [firstCriterion]: { band: 0, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: 0, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Lexical Resource": { band: 0, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: 0, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
     },
     strengths: [],
     mainProblems: [],
@@ -898,24 +898,30 @@ function extractDeepSeekText(data) {
   return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2 }) {
+async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = true }) {
+  const payload = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ],
+    temperature,
+    stream: false,
+    max_tokens: maxTokens
+  };
+
+  // DeepSeek JSON mode can occasionally return empty content on long/strict prompts.
+  // Keep JSON mode for the first attempt, but allow a non-JSON-mode retry with the same
+  // "return JSON only" prompt. This is usually more stable than immediately falling back.
+  if (jsonMode) payload.response_format = { type: "json_object" };
+
   const response = await fetch(DEEPSEEK_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature,
-      response_format: { type: "json_object" },
-      stream: false,
-      max_tokens: maxTokens
-    })
+    body: JSON.stringify(payload)
   });
 
   const raw = await response.text();
@@ -942,6 +948,21 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
   }
 
   return outputText;
+}
+
+async function callCompactFallbackGrader({ apiKey, model, body }) {
+  // Last chance before deterministic fallback: ask the model for the compact Quick schema
+  // without provider JSON mode. This avoids many empty-response and truncated-JSON failures.
+  const text = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildQuickSystemPrompt(),
+    userPrompt: buildQuickUserPrompt({ ...body, mode: "quick" }),
+    maxTokens: 2200,
+    temperature: 0.1,
+    jsonMode: false
+  });
+  return parseJsonFromProvider(text);
 }
 
 function sendProviderError(req, res, error) {
@@ -1331,36 +1352,56 @@ module.exports = async function handler(req, res) {
 
   try {
     const isQuickMode = effectiveMode === "quick";
-    const outputText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: isQuickMode ? buildQuickSystemPrompt() : buildSystemPrompt(veryShort),
-      userPrompt: isQuickMode ? buildQuickUserPrompt({ ...body, mode: effectiveMode }) : buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
-      maxTokens,
-      temperature: 0.1
-    });
-
     let result;
+    let outputText = "";
+
     try {
+      outputText = await callDeepSeek({
+        apiKey,
+        model,
+        systemPrompt: isQuickMode ? buildQuickSystemPrompt() : buildSystemPrompt(veryShort),
+        userPrompt: isQuickMode ? buildQuickUserPrompt({ ...body, mode: effectiveMode }) : buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
+        maxTokens,
+        temperature: 0.1,
+        jsonMode: true
+      });
       result = parseJsonFromProvider(outputText);
-    } catch (firstParseError) {
-      if (effectiveMode === "quick") {
-        sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned malformed JSON in Quick Check."));
-        return;
-      }
-      try {
-        const repairedText = await callDeepSeek({
-          apiKey,
-          model,
-          systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
-          userPrompt: buildRepairPrompt(outputText, body.task),
-          maxTokens,
-          temperature: 0.1
-        });
-        result = parseJsonFromProvider(repairedText);
-      } catch (repairError) {
-        if (sendProviderError(req, res, repairError)) return;
-        sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned incomplete JSON."));
+    } catch (primaryError) {
+      if (sendProviderError(req, res, primaryError)) return;
+
+      // For Quick Check, do not jump straight to fallback. Retry once with a compact
+      // prompt and JSON mode disabled. This fixes most "AI returned incomplete" cases.
+      if (effectiveMode === "quick" || /empty response|Unexpected end|JSON|malformed/i.test(primaryError.message || "")) {
+        try {
+          result = await callCompactFallbackGrader({ apiKey, model, body });
+        } catch (compactError) {
+          if (sendProviderError(req, res, compactError)) return;
+
+          // Full/Revision get one repair attempt from the original text if available.
+          if (effectiveMode !== "quick" && outputText) {
+            try {
+              const repairedText = await callDeepSeek({
+                apiKey,
+                model,
+                systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
+                userPrompt: buildRepairPrompt(outputText, body.task),
+                maxTokens: Math.min(maxTokens, 3000),
+                temperature: 0.1,
+                jsonMode: false
+              });
+              result = parseJsonFromProvider(repairedText);
+            } catch (repairError) {
+              if (sendProviderError(req, res, repairError)) return;
+              sendJson(req, res, 200, buildFallbackFeedback(body, `DeepSeek output incomplete after retry: ${compactError.message || repairError.message}`));
+              return;
+            }
+          } else {
+            sendJson(req, res, 200, buildFallbackFeedback(body, `DeepSeek output incomplete after compact retry: ${compactError.message || primaryError.message}`));
+            return;
+          }
+        }
+      } else {
+        sendJson(req, res, 200, buildFallbackFeedback(body, primaryError.message || "DeepSeek returned incomplete output."));
         return;
       }
     }
