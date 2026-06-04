@@ -2,42 +2,45 @@
 
 This repository includes a Vercel Serverless Function for IELTS General Training Writing feedback.
 
+The grading backend now uses the Gemini API. The GitHub Pages frontend does not call Gemini directly and must not contain any API key.
+
 ## Files
 
 - `api/grade-ielts.js`: POST API for IELTS grading and revision.
-- `vercel.json`: Vercel function runtime config.
+- `vercel.json`: Vercel function config.
 - `package.json`: minimal Node project metadata.
 
 ## Environment Variables
 
-Set this variable in Vercel:
+Set this required variable in Vercel:
 
 ```text
-OPENAI_API_KEY=your_openai_api_key
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
 Optional:
 
 ```text
-OPENAI_MODEL=gpt-4.1-mini
+GEMINI_MODEL=gemini-2.5-flash
 ```
+
+If `GEMINI_MODEL` is not set, the API defaults to `gemini-2.5-flash`.
 
 Do not put API keys in `index.html`, `script.js`, `style.css`, or any GitHub Pages public file.
 
 ## Deploy to Vercel
 
-1. Open Vercel and import the GitHub repository.
-2. Keep the default project settings.
-3. Add `OPENAI_API_KEY` in Project Settings -> Environment Variables.
-4. Deploy the project.
-5. After deployment, copy the API URL:
+1. Open Vercel and import this GitHub repository.
+2. Add `GEMINI_API_KEY` in Project Settings -> Environment Variables.
+3. Deploy or redeploy the project.
+4. After deployment, copy the API URL:
 
 ```text
 https://your-vercel-project.vercel.app/api/grade-ielts
 ```
 
-6. Open the GitHub Pages site.
-7. Paste that URL into `Grading API Endpoint`.
+5. Open the GitHub Pages site.
+6. Paste that URL into `Grading API Endpoint`.
 
 ## Request Body
 
