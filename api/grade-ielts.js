@@ -7,6 +7,134 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
+const stringArraySchema = {
+  type: "array",
+  items: { type: "string" }
+};
+
+const criterionSchema = {
+  type: "object",
+  properties: {
+    band: { type: "number", minimum: 0, maximum: 9 },
+    feedback: { type: "string" },
+    howToImprove: { type: "string" }
+  },
+  required: ["band", "feedback", "howToImprove"],
+  propertyOrdering: ["band", "feedback", "howToImprove"]
+};
+
+const IELTS_FEEDBACK_SCHEMA = {
+  type: "object",
+  properties: {
+    overallBand: { type: "number", minimum: 0, maximum: 9 },
+    estimatedLevel: { type: "string" },
+    criteria: {
+      type: "object",
+      properties: {
+        "Task Achievement": criterionSchema,
+        "Task Response": criterionSchema,
+        "Coherence and Cohesion": criterionSchema,
+        "Lexical Resource": criterionSchema,
+        "Grammatical Range and Accuracy": criterionSchema
+      },
+      required: ["Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
+      propertyOrdering: [
+        "Task Achievement",
+        "Task Response",
+        "Coherence and Cohesion",
+        "Lexical Resource",
+        "Grammatical Range and Accuracy"
+      ]
+    },
+    strengths: stringArraySchema,
+    mainProblems: stringArraySchema,
+    grammarErrors: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          original: { type: "string" },
+          corrected: { type: "string" },
+          explanation: { type: "string" }
+        },
+        required: ["type", "original", "corrected", "explanation"],
+        propertyOrdering: ["type", "original", "corrected", "explanation"]
+      }
+    },
+    sentenceCorrections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          original: { type: "string" },
+          corrected: { type: "string" },
+          reason: { type: "string" }
+        },
+        required: ["original", "corrected", "reason"],
+        propertyOrdering: ["original", "corrected", "reason"]
+      }
+    },
+    taskAchievementAdvice: stringArraySchema,
+    coherenceAdvice: stringArraySchema,
+    lexicalAdvice: stringArraySchema,
+    grammarAdvice: stringArraySchema,
+    band5FixPlan: stringArraySchema,
+    band6UpgradePlan: stringArraySchema,
+    band7UpgradePlan: stringArraySchema,
+    modelAnswerOutline: { type: "string" },
+    revisedEssayBand5: { type: "string" },
+    revisedEssayBand6: { type: "string" },
+    revisedEssayBand7: { type: "string" },
+    revisionNotes: stringArraySchema,
+    disclaimer: { type: "string" }
+  },
+  required: [
+    "overallBand",
+    "estimatedLevel",
+    "criteria",
+    "strengths",
+    "mainProblems",
+    "grammarErrors",
+    "sentenceCorrections",
+    "taskAchievementAdvice",
+    "coherenceAdvice",
+    "lexicalAdvice",
+    "grammarAdvice",
+    "band5FixPlan",
+    "band6UpgradePlan",
+    "band7UpgradePlan",
+    "modelAnswerOutline",
+    "revisedEssayBand5",
+    "revisedEssayBand6",
+    "revisedEssayBand7",
+    "revisionNotes",
+    "disclaimer"
+  ],
+  propertyOrdering: [
+    "overallBand",
+    "estimatedLevel",
+    "criteria",
+    "strengths",
+    "mainProblems",
+    "grammarErrors",
+    "sentenceCorrections",
+    "taskAchievementAdvice",
+    "coherenceAdvice",
+    "lexicalAdvice",
+    "grammarAdvice",
+    "band5FixPlan",
+    "band6UpgradePlan",
+    "band7UpgradePlan",
+    "modelAnswerOutline",
+    "revisedEssayBand5",
+    "revisedEssayBand6",
+    "revisedEssayBand7",
+    "revisionNotes",
+    "disclaimer"
+  ]
+};
+
 function corsHeaders(req) {
   const origin = req.headers.origin;
   const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://790423127-cloud.github.io";
@@ -45,10 +173,15 @@ function buildSystemPrompt() {
     "Focus on task fulfilment, bullet point coverage for Task 1, position clarity for Task 2, paragraphing, cohesion, vocabulary accuracy, grammar, sentence structure, spelling, punctuation, Chinese-influenced English, off-topic content, and underdeveloped ideas.",
     "Sentence corrections and grammar errors must be based only on sentences that appear in the user's essay.",
     "Do not invent user sentences.",
+    "Return only one valid JSON object.",
     "Return strict JSON only.",
     "Do not return markdown.",
     "Do not wrap the JSON in ```json or any code fence.",
-    "Do not include explanatory preface or closing comments."
+    "Do not include explanatory preface or closing comments.",
+    "All required keys must exist.",
+    "If a section has no content, return an empty array [] or an empty string \"\".",
+    "Do not use trailing commas.",
+    "Do not use comments inside JSON."
   ].join(" ");
 }
 
@@ -163,18 +296,121 @@ function stripCodeFence(text) {
     .trim();
 }
 
-function parseJsonFromGemini(text) {
+function extractFirstJsonObject(text) {
   const cleaned = stripCodeFence(text);
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1));
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const char = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
     }
-    throw new Error("Gemini returned non-JSON output.");
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        return cleaned.slice(start, i + 1);
+      }
+    }
   }
+
+  return cleaned;
+}
+
+function parseJsonFromGemini(text) {
+  const candidate = extractFirstJsonObject(text);
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    error.rawCandidate = candidate;
+    throw error;
+  }
+}
+
+function buildRepairPrompt(rawText) {
+  return [
+    "Convert the following text into one valid JSON object matching the required IELTS feedback schema.",
+    "Return JSON only. Do not add markdown or explanations.",
+    "All required keys must exist.",
+    "If a section has no content, return an empty array [] or empty string \"\".",
+    "Do not use trailing commas. Do not use comments inside JSON.",
+    "",
+    "Required schema:",
+    JSON.stringify(IELTS_FEEDBACK_SCHEMA, null, 2),
+    "",
+    "Text to repair:",
+    String(rawText || "").slice(0, 12000)
+  ].join("\n");
+}
+
+async function callGemini({ apiKey, model, prompt, maxOutputTokens }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        responseSchema: IELTS_FEEDBACK_SCHEMA,
+        maxOutputTokens
+      }
+    })
+  });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    const error = new Error("Gemini API request failed.");
+    error.status = response.status;
+    error.raw = raw;
+    throw error;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (error) {
+    error.raw = raw;
+    throw error;
+  }
+
+  const outputText = extractGeminiText(data);
+  if (!outputText) {
+    const error = new Error("Gemini returned an empty response.");
+    error.raw = raw;
+    throw error;
+  }
+
+  return outputText;
 }
 
 module.exports = async function handler(req, res) {
@@ -215,68 +451,49 @@ module.exports = async function handler(req, res) {
   }
 
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {
-    const geminiResponse = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: buildPrompt(body) }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-          maxOutputTokens: (body.mode || "quick") === "quick" ? 2800 : 6500
-        }
-      })
+    const maxOutputTokens = (body.mode || "quick") === "quick" ? 2800 : 6500;
+    const outputText = await callGemini({
+      apiKey,
+      model,
+      prompt: buildPrompt(body),
+      maxOutputTokens
     });
-
-    const raw = await geminiResponse.text();
-    if (!geminiResponse.ok) {
-      sendJson(req, res, 502, {
-        error: "Gemini API request failed.",
-        status: geminiResponse.status,
-        detail: raw
-      });
-      return;
-    }
-
-    let geminiData;
-    try {
-      geminiData = JSON.parse(raw);
-    } catch (error) {
-      sendJson(req, res, 502, { error: "Gemini returned an invalid API response.", detail: error.message });
-      return;
-    }
-
-    const outputText = extractGeminiText(geminiData);
-    if (!outputText) {
-      sendJson(req, res, 502, { error: "Gemini returned an empty response." });
-      return;
-    }
 
     let result;
     try {
       result = parseJsonFromGemini(outputText);
-    } catch (error) {
-      sendJson(req, res, 502, {
-        error: "Gemini returned non-JSON output.",
-        detail: error.message
-      });
-      return;
+    } catch (firstParseError) {
+      try {
+        const repairedText = await callGemini({
+          apiKey,
+          model,
+          prompt: buildRepairPrompt(outputText),
+          maxOutputTokens
+        });
+        result = parseJsonFromGemini(repairedText);
+      } catch (repairError) {
+        sendJson(req, res, 502, {
+          error: "Gemini returned non-JSON output.",
+          detail: repairError.message || firstParseError.message,
+          rawPreview: String(outputText || "").slice(0, 1500)
+        });
+        return;
+      }
     }
 
     result.disclaimer = result.disclaimer || DISCLAIMER;
     sendJson(req, res, 200, result);
   } catch (error) {
+    if (error.message === "Gemini API request failed.") {
+      sendJson(req, res, 502, {
+        error: "Gemini API request failed.",
+        status: error.status,
+        detail: error.raw
+      });
+      return;
+    }
     sendJson(req, res, 500, { error: "Server error while grading IELTS writing.", detail: error.message });
   }
 };
