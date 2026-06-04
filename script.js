@@ -1,3 +1,4 @@
+(() => {
 const DATA = window.IELTS_GT_DATA;
 const prompts = DATA.prompts;
 let selected = null;
@@ -189,3 +190,5 @@ function init() {
 }
 
 init();
+
+})();
