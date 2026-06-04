@@ -201,7 +201,25 @@ async function buildResponseError(response) {
   if (payload?.status) parts.push(`status: ${payload.status}`);
   const detail = payload?.detail ?? fallbackText;
   if (detail) parts.push(`detail: ${truncateDetail(detail)}`);
+  if (payload?.rawPreview) parts.push(`rawPreview: ${truncateDetail(payload.rawPreview)}`);
   return parts.join(" | ");
+}
+
+function renderZhToggle(text) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  return `<button class="secondary zh-toggle" type="button">显示中文解释</button><div class="zh-note hidden">${escapeHtml(value)}</div>`;
+}
+
+function bindZhToggles(scope) {
+  scope.querySelectorAll(".zh-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+      const note = button.nextElementSibling;
+      if (!note) return;
+      const isHidden = note.classList.toggle("hidden");
+      button.textContent = isHidden ? "显示中文解释" : "收起中文解释";
+    });
+  });
 }
 
 function resetGradingPanel() {
@@ -216,6 +234,8 @@ function gradingPayload() {
   const essay = els.essayInput.value.trim();
   const wordCount = countWords(essay);
   const mode = els.gradingModeSelect.value || "quick";
+  const targetWordCount = selected.recommendedWords;
+  const includeRevision = mode === "revision";
   return {
     task: selected.task,
     book: selected.book,
@@ -224,9 +244,11 @@ function gradingPayload() {
     questionPrompt: selected.prompt,
     essay,
     wordCount,
+    targetWordCount,
+    isUnderMinimum: wordCount < targetWordCount,
     mode,
-    includeRevision: mode === "revision",
-    revisionTargets: ["band5", "band6", "band7"],
+    includeRevision,
+    revisionTargets: includeRevision ? ["band5", "band6", "band7"] : [],
     rubric: {
       task1: ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
       task2: ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
@@ -244,14 +266,16 @@ async function startGrading() {
   const essay = els.essayInput.value.trim();
   if (!essay) { setGradingStatus("请先输入作文。", "error"); return; }
   const wordCount = countWords(essay);
+  const isUnderMinimum = wordCount < selected.recommendedWords;
   if (wordCount < selected.recommendedWords) {
-    setGradingStatus(`当前 ${wordCount} words，未达到最低 ${selected.recommendedWords} words，暂不提交批改。`, "error");
-    return;
+    setGradingStatus("当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。", "error");
   }
 
   setGradingStatus("批改中", "loading");
   els.gradeBtn.disabled = true;
-  els.gradingResults.innerHTML = "";
+  els.gradingResults.innerHTML = isUnderMinimum
+    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。</p>`
+    : "";
   els.revisionCompareArea.classList.add("hidden");
 
   try {
@@ -280,6 +304,7 @@ function renderCriteria(criteria = {}) {
       <strong>Band ${escapeHtml(item?.band ?? "-")}</strong>
       <p>${escapeHtml(item?.feedback || "")}</p>
       ${item?.howToImprove ? `<p class="improve"><strong>How to improve:</strong> ${escapeHtml(item.howToImprove)}</p>` : ""}
+      ${renderZhToggle([item?.feedbackZh, item?.howToImproveZh].filter(Boolean).join("\n"))}
     </div>`).join("")}</div>`;
 }
 
@@ -291,6 +316,7 @@ function renderGrammarErrors(items = []) {
       <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
       <p><strong>Corrected:</strong> ${escapeHtml(item.corrected || "")}</p>
       <p><strong>Explanation:</strong> ${escapeHtml(item.explanation || "")}</p>
+      ${renderZhToggle(item.explanationZh)}
     </div>`).join("")}</div>`;
 }
 
@@ -301,6 +327,7 @@ function renderSentenceCorrections(items = []) {
       <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
       <p><strong>Corrected:</strong> ${escapeHtml(item.corrected || "")}</p>
       <p><strong>Reason:</strong> ${escapeHtml(item.reason || "")}</p>
+      ${renderZhToggle(item.reasonZh)}
     </div>`).join("")}</div>`;
 }
 
@@ -322,6 +349,7 @@ function renderGradingResult(result = {}) {
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
   const band7 = result.revisedEssayBand7 || "";
+  const revisionNotesZh = Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh;
   els.gradingResults.dataset.band5 = band5;
   els.gradingResults.dataset.band6 = band6;
   els.gradingResults.dataset.band7 = band7;
@@ -370,10 +398,12 @@ function renderGradingResult(result = {}) {
       ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
       <h4>Revision Notes</h4>
       ${listHtml(result.revisionNotes)}
+      ${revisionNotesZh ? `<h4>修改重点中文说明</h4>${renderZhToggle(revisionNotesZh)}` : ""}
     </section>`;
   els.gradingResults.querySelectorAll("[data-revision-action]").forEach((button) => {
     button.addEventListener("click", () => handleRevisionAction(button.dataset.revisionAction, button.dataset.target));
   });
+  bindZhToggles(els.gradingResults);
 }
 
 async function copyText(text) {
