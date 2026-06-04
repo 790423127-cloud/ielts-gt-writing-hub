@@ -63,3 +63,39 @@
 .revision-compare>div{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
 .revision-compare h4{margin:0;padding:12px;border-bottom:1px solid var(--line);background:var(--soft)}
 @media(max-width:760px){.criteria-grid,.two-mini,.advice-grid,.revision-compare,.compact-facts{grid-template-columns:1fr}}
+
+
+/* IELTS AI grading enhancement panels */
+.high-band-details,.task-requirement-details,.error-analysis-details,.sentence-corrections-details,.priority-details,.task-specific-details{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--soft);
+  overflow:hidden;
+  margin-top:10px;
+}
+.high-band-details summary,.task-requirement-details summary,.error-analysis-details summary,.sentence-corrections-details summary,.priority-details summary,.task-specific-details summary{
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  font-weight:850;
+  cursor:pointer;
+}
+.high-band-body,.task-requirement-body,.error-analysis-body,.sentence-corrections-body,.priority-body,.task-specific-body{
+  padding:12px;
+  border-top:1px solid var(--line);
+  line-height:1.55;
+}
+.correction-card,.requirement-card,.error-pattern-card{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--card);
+  padding:12px;
+  margin-top:10px;
+}
+.correction-card p,.requirement-card p,.error-pattern-card p{margin:0 0 8px;line-height:1.55}
+.correction-card p:last-child,.requirement-card p:last-child,.error-pattern-card p:last-child{margin-bottom:0}
+.correction-label{display:inline-block;min-width:92px;color:var(--muted);font-weight:800}
+.high-band-yes{color:var(--teal);font-weight:800}
+.high-band-no{color:var(--rose);font-weight:800}
+.copy-mini{min-height:30px;padding:0 8px;margin-left:6px;font-size:12px;border:1px solid var(--line2);border-radius:6px;background:var(--card);color:var(--ink)}
