@@ -1,0 +1,9 @@
+{
+  "name": "ielts-gt-writing-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static IELTS General Training Writing practice hub with a Vercel grading API.",
+  "engines": {
+    "node": ">=20"
+  }
+}
