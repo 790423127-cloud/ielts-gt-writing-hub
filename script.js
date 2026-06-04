@@ -413,15 +413,122 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}) {
 function renderHighBandDiagnostics(diagnostics) {
   if (!diagnostics || typeof diagnostics !== "object") return "";
   return `<details class="calibration-details">
-    <summary>高分证据判断</summary>
+    <summary>高分判断依据</summary>
     <div class="calibration-body compact-facts">
       <p><strong>建议高分范围：</strong>${escapeHtml(diagnostics.recommendedHighBandRange || "暂无")}</p>
       <p><strong>原因：</strong>${escapeHtml(diagnostics.reason || "暂无")}</p>
       <p><strong>完整回应题目：</strong>${boolText(diagnostics.fullyAddressesTask)}</p>
       <p><strong>结构推进清楚：</strong>${boolText(diagnostics.clearProgression)}</p>
-      <p><strong>语言错误很少：</strong>${boolText(diagnostics.fewErrors)}</p>
+      <p><strong>观点/内容展开充分：</strong>${boolText(diagnostics.wellDevelopedIdeas)}</p>
+      <p><strong>词汇准确灵活：</strong>${boolText(diagnostics.wideAccurateVocabulary)}</p>
+      <p><strong>语法灵活：</strong>${boolText(diagnostics.flexibleGrammar)}</p>
+      <p><strong>错误很少：</strong>${boolText(diagnostics.fewErrors)}</p>
+      <p><strong>Task 1 语气合适：</strong>${diagnostics.appropriateToneTask1 === undefined ? "不适用" : boolText(diagnostics.appropriateToneTask1)}</p>
     </div>
   </details>`;
+}
+
+function hasAnyText(value) {
+  if (Array.isArray(value)) return value.some(hasAnyText);
+  if (value && typeof value === "object") return Object.values(value).some(hasAnyText);
+  return String(value ?? "").trim().length > 0;
+}
+
+function renderCopyButton(text, label = "复制") {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  return `<button class="secondary copy-mini" type="button" data-copy-text="${escapeHtml(value)}">${label}</button>`;
+}
+
+function renderErrorAnalysis(analysis) {
+  if (!analysis || typeof analysis !== "object" || !hasAnyText(analysis)) return "";
+  const patterns = Array.isArray(analysis.errorPatterns) ? analysis.errorPatterns : [];
+  return `<section class="grading-section">
+    <h4>主要错误总结</h4>
+    ${analysis.summary ? `<p>${escapeHtml(analysis.summary)}</p>` : ""}
+    ${analysis.summaryZh ? renderZhToggle(analysis.summaryZh) : ""}
+    ${patterns.length ? `<div class="correction-list">${patterns.map((item) => `
+      <div class="correction-item">
+        <p><strong>错误类型：</strong>${escapeHtml(item.type || "")}${item.typeZh ? ` / ${escapeHtml(item.typeZh)}` : ""}</p>
+        <p><strong>出现频率：</strong>${escapeHtml(item.frequency || "未说明")}</p>
+        <p><strong>对分数影响：</strong>${escapeHtml(item.impactOnBand || "")}</p>
+        <p><strong>怎么改：</strong>${escapeHtml(item.howToFix || "")}</p>
+        ${renderZhToggle([item.impactOnBandZh, item.howToFixZh].filter(Boolean).join("\n"))}
+      </div>`).join("")}</div>` : ""}
+    ${analysis.priorityFixes?.length ? `<h4>优先修改点</h4>${listHtml(analysis.priorityFixes)}` : ""}
+    ${analysis.priorityFixesZh?.length ? renderZhToggle(analysis.priorityFixesZh.join("\n")) : ""}
+  </section>`;
+}
+
+function renderDetailedSentenceCorrections(items = []) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `<section class="grading-section">
+    <h4>逐句批改</h4>
+    <div class="correction-list">${items.map((item, index) => {
+      const original = item.originalSentence || item.original || "";
+      const corrected = item.correctedSentence || item.corrected || "";
+      const better = item.betterExpression || "";
+      return `<div class="correction-item">
+        <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
+        <p><strong>原句：</strong>${escapeHtml(original)}</p>
+        <p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>
+        ${better ? `<p><strong>更好表达：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        <p><strong>错误类型：</strong>${escapeHtml(item.errorType || "")}${item.errorTypeZh ? ` / ${escapeHtml(item.errorTypeZh)}` : ""}</p>
+        ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
+        ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
+        ${item.bandImpact ? `<p><strong>对分数影响：</strong>${escapeHtml(item.bandImpact)}</p>` : ""}
+        ${renderZhToggle([item.problemZh, item.ruleZh, item.betterExpressionZh, item.bandImpactZh].filter(Boolean).join("\n"))}
+      </div>`;
+    }).join("")}</div>
+  </section>`;
+}
+
+function renderCorrectionPriority(priority) {
+  if (!priority || typeof priority !== "object" || !hasAnyText(priority)) return "";
+  return `<section class="grading-section">
+    <h4>错误优先级</h4>
+    <div class="advice-grid">
+      <div><h4>先改 Fix First</h4>${listHtml(priority.fixFirst)}${priority.fixFirstZh?.length ? renderZhToggle(priority.fixFirstZh.join("\n")) : ""}</div>
+      <div><h4>再改 Fix Next</h4>${listHtml(priority.fixNext)}${priority.fixNextZh?.length ? renderZhToggle(priority.fixNextZh.join("\n")) : ""}</div>
+      <div><h4>最后优化 Polish Later</h4>${listHtml(priority.polishLater)}${priority.polishLaterZh?.length ? renderZhToggle(priority.polishLaterZh.join("\n")) : ""}</div>
+    </div>
+  </section>`;
+}
+
+function renderTask1LetterCorrections(corrections) {
+  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) return "";
+  const bulletAdvice = Array.isArray(corrections.bulletPointAdvice) ? corrections.bulletPointAdvice : [];
+  return `<section class="grading-section">
+    <h4>书信专项修改</h4>
+    <div class="compact-facts">
+      <p><strong>Opening：</strong>${escapeHtml(corrections.openingComment || "暂无")}</p>
+      <p><strong>Closing：</strong>${escapeHtml(corrections.closingComment || "暂无")}</p>
+      <p><strong>Tone：</strong>${escapeHtml(corrections.toneComment || "暂无")}</p>
+      <p><strong>Purpose：</strong>${escapeHtml(corrections.purposeComment || "暂无")}</p>
+    </div>
+    ${bulletAdvice.length ? `<h4>Bullet point 建议</h4><div class="correction-list">${bulletAdvice.map((item) => `
+      <div class="correction-item">
+        <p><strong>要点：</strong>${escapeHtml(item.bulletPoint || "")}</p>
+        <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
+        <p><strong>建议：</strong>${escapeHtml(item.comment || "")}</p>
+        ${item.suggestedSentence ? `<p><strong>可用句：</strong>${escapeHtml(item.suggestedSentence)} ${renderCopyButton(item.suggestedSentence)}</p>` : ""}
+      </div>`).join("")}</div>` : ""}
+  </section>`;
+}
+
+function renderTask2EssayCorrections(corrections) {
+  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) return "";
+  return `<section class="grading-section">
+    <h4>议论文专项修改</h4>
+    <div class="compact-facts">
+      <p><strong>立场：</strong>${escapeHtml(corrections.positionComment || "暂无")}</p>
+      <p><strong>开头段：</strong>${escapeHtml(corrections.introductionComment || "暂无")}</p>
+      <p><strong>主体段：</strong>${escapeHtml(corrections.bodyParagraphComment || "暂无")}</p>
+      <p><strong>例子：</strong>${escapeHtml(corrections.exampleComment || "暂无")}</p>
+      <p><strong>结论：</strong>${escapeHtml(corrections.conclusionComment || "暂无")}</p>
+    </div>
+    ${corrections.developmentAdvice?.length ? `<h4>展开建议</h4>${listHtml(corrections.developmentAdvice)}` : ""}
+  </section>`;
 }
 
 function renderRevisionLimitWarning(result = {}) {
@@ -485,7 +592,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   els.gradingResults.innerHTML = `
-    ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断反馈。建议补充作文后重新批改。</p>` : ""}
+    ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck)}
     ${renderScoreCalibration(result.scoreCalibration)}
@@ -503,6 +610,10 @@ function renderGradingResult(result = {}) {
       <div><h4>Strengths</h4>${listHtml(result.strengths)}</div>
       <div><h4>Main Problems</h4>${listHtml(result.mainProblems)}</div>
     </section>
+    ${renderErrorAnalysis(result.errorAnalysis)}
+    ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
+    ${renderCorrectionPriority(result.correctionPriority)}
+    ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     <section class="grading-section">
       <h4>语法错误</h4>
       ${renderGrammarErrors(result.grammarErrors)}
@@ -539,6 +650,12 @@ function renderGradingResult(result = {}) {
     </section>`;
   els.gradingResults.querySelectorAll("[data-revision-action]").forEach((button) => {
     button.addEventListener("click", () => handleRevisionAction(button.dataset.revisionAction, button.dataset.target));
+  });
+  els.gradingResults.querySelectorAll("[data-copy-text]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await copyText(button.dataset.copyText || "");
+      setGradingStatus("已复制", "done");
+    });
   });
   bindZhToggles(els.gradingResults);
 }
