@@ -297,6 +297,7 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "grammarErrors and sentenceCorrections must each have at most 5 items.",
     "Provide brief Chinese helper notes in *Zh fields only. Chinese helper notes should explain feedback only; do not translate the full essay, original sentences, corrected sentences, model answers, or revised essays.",
     "For taskRequirementAnalysisZh, scoreCalibrationZh, lowBandDiagnosticsZh, highBandDiagnosticsZh, strengthsZh, and mainProblemsZh, write short Chinese explanations of the feedback only.",
+    "For advice arrays and task-specific correction fields, provide matching short *Zh helper fields when possible, but never translate complete essay text or revised essay text.",
     "Keep Chinese helper notes short. Do not let Chinese helper notes replace the English feedback.",
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",

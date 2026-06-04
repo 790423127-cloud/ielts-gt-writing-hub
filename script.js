@@ -529,17 +529,18 @@ function renderTask1LetterCorrections(corrections) {
   return `<section class="grading-section">
     <h4>书信专项修改</h4>
     <div class="compact-facts">
-      <p><strong>Opening：</strong>${escapeHtml(corrections.openingComment || "暂无")}</p>
-      <p><strong>Closing：</strong>${escapeHtml(corrections.closingComment || "暂无")}</p>
-      <p><strong>Tone：</strong>${escapeHtml(corrections.toneComment || "暂无")}</p>
-      <p><strong>Purpose：</strong>${escapeHtml(corrections.purposeComment || "暂无")}</p>
+      <div><strong>Opening：</strong>${renderTextWithTranslation(corrections.openingComment || "暂无", corrections.openingCommentZh, { tag: "span" })}</div>
+      <div><strong>Closing：</strong>${renderTextWithTranslation(corrections.closingComment || "暂无", corrections.closingCommentZh, { tag: "span" })}</div>
+      <div><strong>Tone：</strong>${renderTextWithTranslation(corrections.toneComment || "暂无", corrections.toneCommentZh, { tag: "span" })}</div>
+      <div><strong>Purpose：</strong>${renderTextWithTranslation(corrections.purposeComment || "暂无", corrections.purposeCommentZh, { tag: "span" })}</div>
     </div>
     ${bulletAdvice.length ? `<h4>Bullet point 建议</h4><div class="correction-list">${bulletAdvice.map((item) => `
       <div class="correction-item">
         <p><strong>要点：</strong>${escapeHtml(item.bulletPoint || "")}</p>
         <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
-        <p><strong>建议：</strong>${escapeHtml(item.comment || "")}</p>
+        <div><strong>建议：</strong>${renderTextWithTranslation(item.comment || "", item.commentZh, { tag: "span" })}</div>
         ${item.suggestedSentence ? `<p><strong>可用句：</strong>${escapeHtml(item.suggestedSentence)} ${renderCopyButton(item.suggestedSentence)}</p>` : ""}
+        ${renderZhToggle(item.suggestedSentenceZh)}
       </div>`).join("")}</div>` : ""}
   </section>`;
 }
@@ -549,13 +550,13 @@ function renderTask2EssayCorrections(corrections) {
   return `<section class="grading-section">
     <h4>议论文专项修改</h4>
     <div class="compact-facts">
-      <p><strong>立场：</strong>${escapeHtml(corrections.positionComment || "暂无")}</p>
-      <p><strong>开头段：</strong>${escapeHtml(corrections.introductionComment || "暂无")}</p>
-      <p><strong>主体段：</strong>${escapeHtml(corrections.bodyParagraphComment || "暂无")}</p>
-      <p><strong>例子：</strong>${escapeHtml(corrections.exampleComment || "暂无")}</p>
-      <p><strong>结论：</strong>${escapeHtml(corrections.conclusionComment || "暂无")}</p>
+      <div><strong>立场：</strong>${renderTextWithTranslation(corrections.positionComment || "暂无", corrections.positionCommentZh, { tag: "span" })}</div>
+      <div><strong>开头段：</strong>${renderTextWithTranslation(corrections.introductionComment || "暂无", corrections.introductionCommentZh, { tag: "span" })}</div>
+      <div><strong>主体段：</strong>${renderTextWithTranslation(corrections.bodyParagraphComment || "暂无", corrections.bodyParagraphCommentZh, { tag: "span" })}</div>
+      <div><strong>例子：</strong>${renderTextWithTranslation(corrections.exampleComment || "暂无", corrections.exampleCommentZh, { tag: "span" })}</div>
+      <div><strong>结论：</strong>${renderTextWithTranslation(corrections.conclusionComment || "暂无", corrections.conclusionCommentZh, { tag: "span" })}</div>
     </div>
-    ${corrections.developmentAdvice?.length ? `<h4>展开建议</h4>${listHtml(corrections.developmentAdvice)}` : ""}
+    ${corrections.developmentAdvice?.length ? `<h4>展开建议</h4>${renderListWithTranslations(corrections.developmentAdvice, corrections.developmentAdviceZh, "No detailed task analysis is available for this response.")}` : ""}
   </section>`;
 }
 
@@ -651,15 +652,15 @@ function renderGradingResult(result = {}) {
       ${renderSentenceCorrections(result.sentenceCorrections)}
     </section>
     <section class="grading-section advice-grid">
-      <div><h4>${taskAdviceTitle}</h4>${listHtml(result.taskAchievementAdvice)}</div>
-      <div><h4>Coherence Advice</h4>${listHtml(result.coherenceAdvice)}</div>
-      <div><h4>Lexical Advice</h4>${listHtml(result.lexicalAdvice)}</div>
-      <div><h4>Grammar Advice</h4>${listHtml(result.grammarAdvice)}</div>
+      <div><h4>${taskAdviceTitle}</h4>${renderListWithTranslations(result.taskAchievementAdvice, result.taskAchievementAdviceZh, "No task advice is available.")}</div>
+      <div><h4>Coherence Advice</h4>${renderListWithTranslations(result.coherenceAdvice, result.coherenceAdviceZh, "No coherence advice is available.")}</div>
+      <div><h4>Lexical Advice</h4>${renderListWithTranslations(result.lexicalAdvice, result.lexicalAdviceZh, "No lexical advice is available.")}</div>
+      <div><h4>Grammar Advice</h4>${renderListWithTranslations(result.grammarAdvice, result.grammarAdviceZh, "No grammar advice is available.")}</div>
     </section>
     <section class="grading-section advice-grid">
-      <div><h4>Band 5 保底建议</h4>${listHtml(result.band5FixPlan)}</div>
-      <div><h4>Band 6+ 提升建议</h4>${listHtml(result.band6UpgradePlan)}</div>
-      <div><h4>Band 7+ 高分建议</h4>${listHtml(result.band7UpgradePlan)}</div>
+      <div><h4>Band 5 保底建议</h4>${renderListWithTranslations(result.band5FixPlan, result.band5FixPlanZh, "No Band 5 plan is available.")}</div>
+      <div><h4>Band 6+ 提升建议</h4>${renderListWithTranslations(result.band6UpgradePlan, result.band6UpgradePlanZh, "No Band 6 plan is available.")}</div>
+      <div><h4>Band 7+ 高分建议</h4>${renderListWithTranslations(result.band7UpgradePlan, result.band7UpgradePlanZh, "No Band 7 plan is available.")}</div>
     </section>
     <section class="grading-section">
       <h4>Model answer outline</h4>
