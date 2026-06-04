@@ -9,6 +9,50 @@ const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
+
+function normalizeLocale(value) {
+  const raw = String(value || "en").toLowerCase();
+  return raw.startsWith("zh") || raw.includes("chinese") ? "zh-CN" : "en";
+}
+
+function isChineseLocale(locale) {
+  return normalizeLocale(locale) === "zh-CN";
+}
+
+function emptyForLocaleZh(value, locale) {
+  if (isChineseLocale(locale)) return value;
+  return Array.isArray(value) ? [] : "";
+}
+
+function localizeResultForOutput(result, locale) {
+  if (isChineseLocale(locale) || !result || typeof result !== "object") return result;
+  const seen = new WeakSet();
+  const scrub = (value, key = "") => {
+    if (Array.isArray(value)) {
+      if (/Zh$/.test(key)) return [];
+      return value.map((item) => scrub(item));
+    }
+    if (value && typeof value === "object") {
+      if (seen.has(value)) return value;
+      seen.add(value);
+      Object.keys(value).forEach((childKey) => {
+        value[childKey] = scrub(value[childKey], childKey);
+      });
+      return value;
+    }
+    if (/Zh$/.test(key)) return "";
+    return value;
+  };
+  return scrub(result);
+}
+
+function lowWordCountReason(body) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  return `${task} has ${words} words, below the recommended minimum of ${threshold} words. DeepSeek must still assess it on the full IELTS 0-9 scale, starting from Band 0 when there is no rateable response, and apply strict word-count caps without inventing a minimum score.`;
+}
+
 function corsHeaders(req) {
   const origin = req.headers.origin;
   const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://790423127-cloud.github.io";
@@ -118,6 +162,12 @@ function buildLowBandDiagnostics(body) {
   } else if (severeTask1 || severeTask2) {
     recommendedLowBandRange = "2.0-3.5";
     reason = "The response is extremely short and misses most task requirements.";
+  } else if (task === "Task 1" && words < 150) {
+    recommendedLowBandRange = words < 80 ? "3.0-4.0" : (words < 120 ? "4.0-5.0" : "Underlength warning");
+    reason = `Task 1 has ${words} words, below the recommended 150-word minimum. Task Achievement and development are limited.`;
+  } else if (task === "Task 2" && words < 250) {
+    recommendedLowBandRange = words < 150 ? "3.0-4.0" : (words < 200 ? "4.0-5.0" : "Underlength warning");
+    reason = `Task 2 has ${words} words, below the recommended 250-word minimum. Task Response and idea development are limited.`;
   }
 
   return {
@@ -148,15 +198,18 @@ function capFromDiagnostics(body, diagnostics) {
   if (diagnostics.mostlyCopiedFromPrompt) {
     return { cap: 1, firstCap: 1, reason: "The response is mostly copied from the prompt and has little original rateable writing." };
   }
+  if (words <= 5) {
+    return { cap: 1, firstCap: 1, reason: "The response has 5 words or fewer; assess from Band 0-1 depending on whether any rateable original English is present." };
+  }
   if (words <= 20) {
-    return { cap: 1, firstCap: 1, reason: "The response has 20 words or fewer, so Band 2+ is not normally justified." };
+    return { cap: 2, firstCap: 2, reason: "The response has 20 words or fewer; assess from Band 0-2 depending on rateable content, relevance, and clarity." };
   }
   if (task === "Task 1") {
-    if (words < 50) return { cap: 3, firstCap: 3, reason: "Task 1 is under 50 words; overall and Task Achievement are normally capped around Band 2-3." };
+    if (words < 50) return { cap: 3, firstCap: 3, reason: "Task 1 is under 50 words; assess strictly from Band 0-3 depending on rateable content, relevance, and task coverage." };
     if (words < 80) return { cap: 4, firstCap: 4, reason: "Task 1 is 50-79 words; Task Achievement is normally capped at Band 4." };
     if (words < 120) return { cap: 5, firstCap: 5, reason: "Task 1 is 80-119 words; task coverage and development are limited." };
   } else {
-    if (words < 80) return { cap: 3, firstCap: 3, reason: "Task 2 is under 80 words; overall and Task Response are normally capped around Band 2-3." };
+    if (words < 80) return { cap: 3, firstCap: 3, reason: "Task 2 is under 80 words; assess strictly from Band 0-3 depending on rateable content, relevance, and task response." };
     if (words < 150) return { cap: 4, firstCap: 4, reason: "Task 2 is 80-149 words; Task Response is normally capped at Band 4." };
     if (words < 200) return { cap: 5, firstCap: 5, reason: "Task 2 is 150-199 words; argument development is too limited for higher Task Response." };
   }
@@ -170,8 +223,12 @@ function capFromDiagnostics(body, diagnostics) {
   return { cap: null, firstCap: null, reason: "" };
 }
 
-function buildSystemPrompt(veryShort = false) {
+function buildSystemPrompt(veryShort = false, locale = "en") {
+  const outputLanguageInstruction = isChineseLocale(locale)
+    ? "Output language request: English feedback may include brief Chinese helper notes only in fields ending with Zh. Do not translate whole essays."
+    : "Output language request: English only. All user-visible strings must be English. Leave every field ending with Zh empty. Do not output Chinese.";
   const rules = [
+    outputLanguageInstruction,
     "You are a strict IELTS Writing examiner and writing coach.",
     "The score is only an AI estimated score, not an official IELTS score.",
     "Your score must be evidence-based, conservative, and aligned with IELTS Writing public band descriptor logic.",
@@ -191,12 +248,13 @@ function buildSystemPrompt(veryShort = false) {
     "For Task 1, use Task Achievement as the first criterion.",
     "For Task 2, use Task Response as the first criterion.",
     "Do not mix Task 1 and Task 2 first criteria.",
-    "Task 1 word logic: the recommended minimum is 150 words. Do not apply Task 2 250-word thresholds. A Task 1 letter with 150+ words is not underlength. A 270-word Task 1 letter may be long, but length alone is not a low-band trigger. Do not set revisionLimited=true for a 150+ word Task 1 unless it is blank, mostly non-English, mostly copied, wholly unrelated, or clearly Band 0-3. If a Task 1 letter fully covers all bullet points, uses appropriate tone, and has accurate language, allow Band 8-9; do not cap it at Band 7 without specific evidence.",
-    "Task 2 word logic: the recommended minimum is 250 words. Do not apply Task 1 bullet point rules to Task 2.",
+    "Task 1 word logic: the recommended minimum is 150 words. Do not apply Task 2 250-word thresholds. A Task 1 letter with 150+ words is not underlength. There is no maximum word count cap for Task 1. A 270-word or longer Task 1 letter may be long, but length alone is not a low-band trigger. Do not set revisionLimited=true for a 150+ word Task 1 unless it is blank, mostly non-English, mostly copied, wholly unrelated, or clearly Band 0-3. If a Task 1 letter fully covers all bullet points, uses appropriate tone, and has accurate language, allow Band 8-9; do not cap it at Band 7 without specific evidence.",
+    "Task 2 word logic: the recommended minimum is 250 words. Do not apply Task 1 bullet point rules to Task 2. There is no maximum word count cap for Task 2; do not penalise length alone unless excessive length clearly harms relevance, coherence, task focus, or language control.",
     "Strict IELTS scoring does not mean artificially low scoring. A normal-length response that fully answers the task, is coherent, well developed, and accurate can receive Band 7, Band 8, or Band 9. Do not use Band 7 as a default ceiling. Band 8 does not require a perfect essay; occasional minor errors are acceptable when communication is strong. Band 9 does not require literary or native-level writing; it requires full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and very rare minor errors. If the response is official-sample quality and answers the selected prompt, allow Band 8-9. Do not force strong relevant samples into Band 5 or Band 7.",
     "Low-band diagnostics should trigger only for clear evidence: blank/no attempt, 20 words or fewer, mostly non-English, mostly copied from prompt, wholly unrelated, little relevant message, no rateable English, or meaning mostly blocked. Do not trigger low-band diagnostics merely because language is simple, not advanced, not Band 9, or because a Task 1 answer is over 250 words.",
     "scoreCalibration.capApplied must be true only for a real cap: word count below the relevant threshold, Task 1 missing major bullet points, Task 2 no clear position when required, off-topic, mostly copied, mostly non-English, meaning mostly blocked, blank/no attempt, or task mismatch.",
-    "Score from 0 to 9 and allow half bands.",
+    "Score from 0 to 9 and allow half bands. Low-word-count responses must also be assessed from Band 0 upward; never use Band 2, 3, 4, or 5.5 as a minimum score.",
+    "There is no upper word-count limit in this app. Do not cap or penalise an answer simply because it is long; only penalise if length causes repetition, irrelevance, weak organisation, or loss of task focus.",
     "Band 9: fully addresses all parts, natural fluent organisation, wide precise vocabulary, flexible highly accurate grammar, very rare minor errors.",
     "High-band distinction: Band 7 covers the task well with clear progression, good vocabulary, some grammar flexibility, and noticeable errors that usually do not block meaning; it may feel somewhat mechanical or less natural.",
     "High-band distinction: Band 8 fully addresses the task with well-developed ideas, natural controlled cohesion, wide precise mostly natural vocabulary, flexible accurate grammar, occasional minor errors, and very well controlled Task 1 tone/purpose.",
@@ -217,8 +275,8 @@ function buildSystemPrompt(veryShort = false) {
     "Band 1 normally applies for 20 words or fewer, wholly unrelated content, no relevant message, isolated words, mostly copied prompt, or virtual non-writer. Do not award Band 2+ unless there is a clear relevant original English message.",
     "Band 2 normally applies when content barely relates to the task, there is little relevant message, ideas are undeveloped, organisation is absent, vocabulary is extremely limited, and there is little evidence of sentence forms.",
     "Band 3 normally applies when the task is not adequately addressed, the situation/prompt is misunderstood, ideas are irrelevant or difficult to connect, vocabulary is inadequate, and grammar errors prevent most meaning.",
-    "Task 1 word count caps: under 50 words overall normally 2.0-3.0 and Task Achievement no higher than 3.0; 50-79 words overall no higher than 4.0; 80-119 words overall no higher than 5.0; 120-149 words may score normally but mention limited development if relevant.",
-    "Task 2 word count caps: under 80 words overall normally 2.0-3.0 and Task Response no higher than 3.0; 80-149 words overall no higher than 4.0; 150-199 words overall no higher than 5.0; 200-249 words may score normally but mention limited development if relevant.",
+    "Task 1 word count caps: blank/non-English/no rateable attempt = Band 0; isolated words or mostly copied prompt = Band 0-1; 20 words or fewer normally no higher than Band 2; under 50 words normally no higher than Band 3; 50-79 words normally no higher than Band 4; 80-119 words normally no higher than Band 5; 120-149 words may score normally but mention limited development if relevant.",
+    "Task 2 word count caps: blank/non-English/no rateable attempt = Band 0; isolated words or mostly copied prompt = Band 0-1; 20 words or fewer normally no higher than Band 2; under 80 words normally no higher than Band 3; 80-149 words normally no higher than Band 4; 150-199 words normally no higher than Band 5; 200-249 words may score normally but mention limited development if relevant.",
     "Do not reject short essays. Grade them, but apply caps.",
     "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
     "Task 2 argument caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; off-topic no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
@@ -256,7 +314,7 @@ function buildSystemPrompt(veryShort = false) {
     "Do not write long paragraphs inside arrays.",
     "Every array must have at most 5 items.",
     "grammarErrors and sentenceCorrections must each have at most 5 items.",
-    "Provide brief Chinese helper notes only in feedbackZh, howToImproveZh, explanationZh, reasonZh, and revisionNotesZh.",
+    isChineseLocale(locale) ? "Provide brief Chinese helper notes only in feedbackZh, howToImproveZh, explanationZh, reasonZh, and revisionNotesZh." : "For English output, set feedbackZh, howToImproveZh, explanationZh, reasonZh, revisionNotesZh, summaryZh, and other *Zh fields to empty strings or empty arrays.",
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
     "Do not use comments inside JSON."
@@ -280,7 +338,7 @@ function buildSystemPrompt(veryShort = false) {
   return rules.join(" ");
 }
 
-function buildExpectedJsonShape(task) {
+function buildExpectedJsonShape(task, locale = "en") {
   const firstCriterion = firstCriterionName(task);
   return {
     actualWordCount: 0,
@@ -331,30 +389,30 @@ function buildExpectedJsonShape(task) {
       [firstCriterion]: {
         band: 0,
         feedback: "...",
-        feedbackZh: "简短中文解释",
+        feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
-        howToImproveZh: "简短中文建议"
+        howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Coherence and Cohesion": {
         band: 0,
         feedback: "...",
-        feedbackZh: "简短中文解释",
+        feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
-        howToImproveZh: "简短中文建议"
+        howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Lexical Resource": {
         band: 0,
         feedback: "...",
-        feedbackZh: "简短中文解释",
+        feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
-        howToImproveZh: "简短中文建议"
+        howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Grammatical Range and Accuracy": {
         band: 0,
         feedback: "...",
-        feedbackZh: "简短中文解释",
+        feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
-        howToImproveZh: "简短中文建议"
+        howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       }
     },
     strengths: ["..."],
@@ -365,7 +423,7 @@ function buildExpectedJsonShape(task) {
         original: "...",
         corrected: "...",
         explanation: "...",
-        explanationZh: "简短中文解释"
+        explanationZh: emptyForLocaleZh("Brief Chinese explanation", locale)
       }
     ],
     sentenceCorrections: [
@@ -373,21 +431,21 @@ function buildExpectedJsonShape(task) {
         original: "...",
         corrected: "...",
         reason: "...",
-        reasonZh: "简短中文解释"
+        reasonZh: emptyForLocaleZh("Brief Chinese explanation", locale)
       }
     ],
     errorAnalysis: {
       summary: "...",
-      summaryZh: "简短中文总结",
+      summaryZh: emptyForLocaleZh("Brief Chinese summary", locale),
       errorPatterns: [
         {
           type: "Verb tense",
-          typeZh: "动词时态",
+          typeZh: emptyForLocaleZh("动词时态", locale),
           frequency: "occasional / frequent",
           impactOnBand: "...",
-          impactOnBandZh: "...",
+          impactOnBandZh: emptyForLocaleZh("", locale),
           howToFix: "...",
-          howToFixZh: "..."
+          howToFixZh: emptyForLocaleZh("", locale)
         }
       ],
       priorityFixes: ["..."],
@@ -399,15 +457,15 @@ function buildExpectedJsonShape(task) {
         originalSentence: "...",
         correctedSentence: "...",
         errorType: "Verb tense",
-        errorTypeZh: "动词时态",
+        errorTypeZh: emptyForLocaleZh("动词时态", locale),
         problem: "...",
-        problemZh: "...",
+        problemZh: emptyForLocaleZh("", locale),
         rule: "...",
-        ruleZh: "...",
+        ruleZh: emptyForLocaleZh("", locale),
         betterExpression: "...",
-        betterExpressionZh: "...",
+        betterExpressionZh: emptyForLocaleZh("", locale),
         bandImpact: "...",
-        bandImpactZh: "..."
+        bandImpactZh: emptyForLocaleZh("", locale)
       }
     ],
     task1LetterCorrections: task === "Task 1" ? {
@@ -452,12 +510,12 @@ function buildExpectedJsonShape(task) {
       revisionLimitReason: ""
     },
     revisionNotes: ["..."],
-    revisionNotesZh: ["简短中文说明"],
+    revisionNotesZh: emptyForLocaleZh(["Brief Chinese revision note"], locale),
     disclaimer: DISCLAIMER
   };
 }
 
-function buildUserPrompt(body, veryShort) {
+function buildUserPrompt(body, veryShort, locale = "en") {
   const mode = normalizeMode(body.mode);
   const effectiveMode = veryShort ? "quick" : mode;
   const isRevisionMode = effectiveMode === "revision";
@@ -472,17 +530,19 @@ function buildUserPrompt(body, veryShort) {
 
   return [
     "Return exactly one JSON object matching this shape and keep the same keys:",
-    JSON.stringify(buildExpectedJsonShape(body.task), null, 2),
+    JSON.stringify(buildExpectedJsonShape(body.task, locale), null, 2),
     "",
     "Mode instructions:",
     "- quick: shortest feedback, no revised essays, compact arrays only.",
     "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
     "- revision: include all three revised essays, but keep all non-essay feedback compact.",
-    veryShort ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "",
-    veryShort ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "",
+    veryShort ? (isChineseLocale(locale) ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note in revisionNotesZh: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Keep revisionNotesZh empty.") : "",
+    veryShort ? (isChineseLocale(locale) ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, English feedback max 25 words, and all *Zh fields empty.") : "",
     revisionInstruction,
     underMinimumInstruction,
-    "Use brief Chinese helper notes only for local understanding. Do not translate the whole essay or revised essays.",
+    body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 0 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
+    "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
+    isChineseLocale(locale) ? "Use brief Chinese helper notes only for local understanding. Do not translate the whole essay or revised essays." : "Use English only. Do not include Chinese in any user-visible field. Leave all *Zh fields empty.",
     "Local low-band diagnostics from the server are provided below. Use them as strong evidence, but still assess the actual writing.",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }, null, 2),
     "If capSuggestion.cap is not null, apply that as an upper cap unless the essay is clearly worse, and explain it in scoreCalibration.",
@@ -499,6 +559,7 @@ function buildUserPrompt(body, veryShort) {
       promptText: body.questionPrompt,
       taskType: body.task === "Task 1" ? "task1" : "task2",
       gradingMode: effectiveMode,
+      outputLanguage: normalizeLocale(locale),
       actualWordCount: body.wordCount,
       wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
       wordCountStatus: body.task === "Task 1"
@@ -553,7 +614,7 @@ function extractPromptBulletPoints(prompt) {
   return candidates.slice(0, 5);
 }
 
-function buildFallbackTaskRequirementAnalysis(body, fallbackReason) {
+function buildFallbackTaskRequirementAnalysis(body, fallbackReason, locale = "en") {
   const prompt = String(body.questionPrompt || "");
   if (body.task === "Task 1") {
     const bulletPoints = extractPromptBulletPoints(prompt).map((requirement) => ({
@@ -564,10 +625,10 @@ function buildFallbackTaskRequirementAnalysis(body, fallbackReason) {
     return {
       taskType: "task1",
       taskPurpose: "Write a General Training Task 1 letter that answers the selected prompt.",
-      recipient: "",
-      relationship: "",
-      requiredTone: "",
-      letterType: "",
+      recipient: "Not extracted in local low-word-count/fallback mode.",
+      relationship: "Not extracted in local low-word-count/fallback mode.",
+      requiredTone: "Use the tone required by the selected prompt.",
+      letterType: "General Training Task 1 letter.",
       bulletPoints,
       missingRequirements: bulletPoints.map((item) => item.requirement),
       taskMatchSummary: `Fallback mode: ${fallbackReason || "AI output was incomplete."}`
@@ -579,7 +640,7 @@ function buildFallbackTaskRequirementAnalysis(body, fallbackReason) {
     questionType: "",
     topic: prompt.slice(0, 160),
     requiredPosition: "Check the selected Task 2 question and give a clear position if required.",
-    requiredParts: [],
+    requiredParts: ["Answer all parts of the selected Task 2 question."],
     positionPresent: false,
     mainIdeasRelevant: false,
     missingRequirements: [],
@@ -587,26 +648,26 @@ function buildFallbackTaskRequirementAnalysis(body, fallbackReason) {
   };
 }
 
-function buildFallbackErrorAnalysis(body, words) {
+function buildFallbackErrorAnalysis(body, words, locale = "en") {
   const taskLabel = body.task === "Task 1" ? "Task 1 letter" : "Task 2 essay";
   return {
     summary: `The AI provider did not return complete feedback. This fallback only confirms that the ${taskLabel} has ${words} words and needs a retry for detailed correction.`,
-    summaryZh: `AI 未返回完整批改；当前仅提供基础诊断，作文约 ${words} 词。`,
+    summaryZh: emptyForLocaleZh(`AI 未返回完整批改；当前仅提供基础诊断，作文约 ${words} 词。`, locale),
     errorPatterns: [],
     priorityFixes: [
       "Retry the grading request once.",
       "If it fails again, use Full Grading instead of Revision.",
       body.task === "Task 1" ? "Check that all bullet points are covered." : "Check that the position and main ideas are clear."
     ],
-    priorityFixesZh: [
+    priorityFixesZh: emptyForLocaleZh([
       "先重新点击批改一次。",
       "如果仍失败，先用完整评分模式。",
       body.task === "Task 1" ? "检查三个书信要点是否完整。" : "检查立场和主要观点是否清楚。"
-    ]
+    ], locale)
   };
 }
 
-function buildFallbackFeedback(body, reason) {
+function buildFallbackFeedback(body, reason, locale = "en") {
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
   const firstCriterion = firstCriterionName(body.task);
@@ -618,15 +679,33 @@ function buildFallbackFeedback(body, reason) {
   if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
     band = 0;
     bandReason = diagnostics.reason || "There is no rateable English attempt.";
-  } else if (diagnostics.mostlyCopiedFromPrompt || words <= 20) {
+  } else if (diagnostics.mostlyCopiedFromPrompt) {
     band = 1;
-    bandReason = "The response has almost no rateable original writing.";
+    bandReason = "The response is mostly copied from the prompt and has little rateable original writing.";
+  } else if (words <= 5) {
+    band = 0.5;
+    bandReason = "The response has 5 words or fewer and almost no rateable content.";
+  } else if (words <= 20) {
+    band = 1.5;
+    bandReason = "The response has 20 words or fewer and provides very little rateable content.";
   } else if ((body.task === "Task 1" && words < 50) || (body.task === "Task 2" && words < 80)) {
     band = 2.5;
-    bandReason = "The response is extremely short and misses most task requirements.";
+    bandReason = "The response is extremely short and should be assessed from Band 0-3 depending on rateable content.";
   } else if ((body.task === "Task 1" && words < 80) || (body.task === "Task 2" && words < 150)) {
     band = 3.5;
     bandReason = "The response is significantly underlength and only partly communicates a relevant message.";
+  } else if (body.task === "Task 1" && words < 120) {
+    band = 4.5;
+    bandReason = "Task 1 is below 120 words, so task coverage and development are limited.";
+  } else if (body.task === "Task 1" && words < 150) {
+    band = 5;
+    bandReason = "Task 1 is below the 150-word recommended minimum, so the response is underdeveloped.";
+  } else if (body.task === "Task 2" && words < 200) {
+    band = 4.5;
+    bandReason = "Task 2 is below 200 words, so argument development is limited.";
+  } else if (body.task === "Task 2" && words < 250) {
+    band = 5;
+    bandReason = "Task 2 is below the 250-word recommended minimum, so the response is underdeveloped.";
   } else if (cap.cap !== null) {
     band = Math.min(4, cap.cap);
     bandReason = cap.reason;
@@ -650,7 +729,7 @@ function buildFallbackFeedback(body, reason) {
     taskTypeDetected: body.task === "Task 1" ? "task1" : "task2",
     wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
     wordCountStatus: body.task === "Task 1" ? (words >= 150 ? "meets_task1_minimum" : (words < 80 ? "very_short_task1" : "under_task1_minimum")) : (words >= 250 ? "meets_task2_minimum" : (words < 150 ? "very_short_task2" : "under_task2_minimum")),
-    taskRequirementAnalysis: buildFallbackTaskRequirementAnalysis(body, reason),
+    taskRequirementAnalysis: buildFallbackTaskRequirementAnalysis(body, reason, locale),
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No mismatch was detected before fallback was used.", warning: "" },
     highBandDiagnostics: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: normalLength ? "Fallback mode cannot confirm high-band evidence. Retry for full high-band diagnostics." : "The response is too short or limited for high-band evidence." },
     overallBand: criterionBand,
@@ -676,30 +755,30 @@ function buildFallbackFeedback(body, reason) {
       [firstCriterion]: {
         band: criterionBand,
         feedback: firstFeedback,
-        feedbackZh: firstFeedbackZh,
+        feedbackZh: emptyForLocaleZh(firstFeedbackZh, locale),
         howToImprove: "Write a fuller response and cover all bullet points or develop your main ideas.",
-        howToImproveZh: "请补充内容，覆盖所有要点或展开主要观点。"
+        howToImproveZh: emptyForLocaleZh("请补充内容，覆盖所有要点或展开主要观点。", locale)
       },
       "Coherence and Cohesion": {
         band: criterionBand,
         feedback: "There is not enough text to show clear organisation.",
-        feedbackZh: "内容太少，无法体现清楚结构。",
+        feedbackZh: emptyForLocaleZh("内容太少，无法体现清楚结构。", locale),
         howToImprove: "Use separate paragraphs and simple linking words.",
-        howToImproveZh: "请分段，并使用简单连接词。"
+        howToImproveZh: emptyForLocaleZh("请分段，并使用简单连接词。", locale)
       },
       "Lexical Resource": {
         band: criterionBand,
         feedback: "Vocabulary range is very limited.",
-        feedbackZh: "词汇范围非常有限。",
+        feedbackZh: emptyForLocaleZh("词汇范围非常有限。", locale),
         howToImprove: "Add more topic-related vocabulary.",
-        howToImproveZh: "增加与题目相关的词汇。"
+        howToImproveZh: emptyForLocaleZh("增加与题目相关的词汇。", locale)
       },
       "Grammatical Range and Accuracy": {
         band: criterionBand,
         feedback: "There is not enough language to assess grammar fully.",
-        feedbackZh: "语言太少，难以完整评估语法。",
+        feedbackZh: emptyForLocaleZh("语言太少，难以完整评估语法。", locale),
         howToImprove: "Write complete sentences and check verb forms.",
-        howToImproveZh: "写完整句子，并检查动词形式。"
+        howToImproveZh: emptyForLocaleZh("写完整句子，并检查动词形式。", locale)
       }
     },
     strengths: noRateable ? [] : ["You attempted to respond to the task."],
@@ -721,16 +800,30 @@ function buildFallbackFeedback(body, reason) {
     revisedEssayBand7: "",
     revisedEssayMeta: defaultRevisedEssayMeta(revisionLimited, "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions."),
     revisionNotes: [normalLength ? "AI output was incomplete, so this is a temporary fallback estimate. Retry to get full feedback and revisions." : "The response was too short, so only a basic diagnostic score is provided."],
-    revisionNotesZh: [normalLength ? "AI 返回内容不完整；当前只是临时估分，请重试获取完整批改。" : "作文太短，因此这里只提供基础诊断评分。"],
-    errorAnalysis: buildFallbackErrorAnalysis(body, words),
+    revisionNotesZh: emptyForLocaleZh([normalLength ? "AI 返回内容不完整；当前只是临时估分，请重试获取完整批改。" : "作文太短，因此这里只提供基础诊断评分。"], locale),
+    errorAnalysis: buildFallbackErrorAnalysis(body, words, locale),
     detailedSentenceCorrections: [],
-    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: body.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
-    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "The opening could not be fully checked in fallback mode.", closingComment: "The closing could not be fully checked in fallback mode.", toneComment: "Use a tone suitable for the recipient in the selected prompt.", purposeComment: normalLength ? "Retry for a full purpose and bullet-point check." : "The response is underlength, so the purpose and bullet points need fuller development.", bulletPointAdvice: extractPromptBulletPoints(body.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Coverage could not be fully checked in fallback mode.", suggestedSentence: "" })) } : null,
+    task2EssayCorrections: body.task === "Task 2" ? { positionComment: "State a clear position if the question asks for your opinion.", introductionComment: "The introduction could not be fully checked in fallback mode.", bodyParagraphComment: "Develop each body paragraph with a clear main idea and support.", exampleComment: "Add specific examples where useful.", conclusionComment: "End with a clear summary or final opinion.", developmentAdvice: ["Expand the essay to meet the recommended word count."] } : null,
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: emptyForLocaleZh([], locale), fixNextZh: emptyForLocaleZh([], locale), polishLaterZh: emptyForLocaleZh([], locale) },
     scoreUnavailable: false,
+    scoringCalibration: {
+      strictness: "strict",
+      capApplied: !normalLength || Boolean(diagnostics.recommendedLowBandRange),
+      capReason: bandReason,
+      whyNotHigher: noRateable ? "There is no rateable English response, so a higher band is not justified." : (normalLength ? "This is a temporary fallback estimate because provider output was incomplete." : "The response is below the recommended word count and lacks enough development."),
+      whyNotLower: noRateable ? "Band 0 is already the lowest score." : "There is some rateable relevant English content.",
+      evidence: [`Word count: ${words}.`, bandReason, diagnostics.reason].filter(Boolean).slice(0, 5)
+    },
+    lowBandEvidence: diagnostics,
+    highBandEvidence: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: normalLength ? "Fallback mode cannot confirm high-band evidence. Retry for full high-band diagnostics." : "The response is below the recommended word count, so high-band evidence is not available." },
+    overallEstimatedBand: criterionBand,
+    revisedEssay: "",
+    feedback: normalLength ? "Temporary fallback feedback. Retry for a complete AI response." : "Low-word-count provider fallback. DeepSeek was attempted, but complete AI output was not available.",
     disclaimer: DISCLAIMER,
-    fallback: true,
-    fallbackReason: reason || "DeepSeek returned incomplete JSON."
+    fallback: !noRateable,
+    diagnosticMode: body.isUnderMinimum ? "provider_fallback_low_word_count" : (noRateable ? "no_rateable_response" : "provider_fallback"),
+    fallbackReason: reason || (body.isUnderMinimum ? `DeepSeek was attempted for this low-word-count response, but complete output was not available. ${lowWordCountReason(body)}` : "DeepSeek returned incomplete JSON.")
   };
 }
 
@@ -791,7 +884,7 @@ function parseJsonFromProvider(text) {
   }
 }
 
-function buildRepairPrompt(rawText, task) {
+function buildRepairPrompt(rawText, task, locale = "en") {
   return [
     "Convert the following text into one valid JSON object matching the required IELTS feedback schema.",
     "Return JSON only. Do not add markdown, explanations, or code fences.",
@@ -799,7 +892,7 @@ function buildRepairPrompt(rawText, task) {
     "Do not use trailing commas. Do not use comments inside JSON.",
     "",
     "Required JSON shape:",
-    JSON.stringify(buildExpectedJsonShape(task), null, 2),
+    JSON.stringify(buildExpectedJsonShape(task, locale), null, 2),
     "",
     "Text to repair:",
     String(rawText || "").slice(0, 12000)
@@ -1069,7 +1162,7 @@ function applyStrictCaps(result, body, diagnostics) {
   }
 }
 
-function normalizeResultForMode(result, mode, veryShort, body) {
+function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   const normalized = result && typeof result === "object" ? result : {};
   const words = Number(body?.wordCount) || countWordsServer(body?.essay);
   const taskTypeDetected = body?.task === "Task 1" ? "task1" : "task2";
@@ -1181,7 +1274,15 @@ function normalizeResultForMode(result, mode, veryShort, body) {
     normalized.revisedEssayBand7 = "";
   }
 
-  return normalized;
+
+  normalized.scoringCalibration = normalized.scoreCalibration;
+  normalized.lowBandEvidence = normalized.lowBandDiagnostics;
+  normalized.highBandEvidence = normalized.highBandDiagnostics;
+  normalized.overallEstimatedBand = normalized.overallBand;
+  normalized.revisedEssay = normalized.revisedEssayBand7 || normalized.revisedEssayBand6 || normalized.revisedEssayBand5 || "";
+  normalized.feedback = ensureArray(normalized.mainProblems).join(" ") || normalized.scoreCalibration?.whyNotHigher || "Feedback is available in the sections below.";
+
+  return localizeResultForOutput(normalized, locale);
 }
 
 module.exports = async function handler(req, res) {
@@ -1203,15 +1304,6 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) {
-    sendJson(req, res, 500, {
-      error: "Provider API key is not configured.",
-      provider: "deepseek"
-    });
-    return;
-  }
-
   let body;
   try {
     body = await readJsonBody(req);
@@ -1219,6 +1311,8 @@ module.exports = async function handler(req, res) {
     sendJson(req, res, 400, { error: "Invalid JSON request body.", detail: error.message });
     return;
   }
+
+  const locale = normalizeLocale(body.outputLanguage || body.locale || body.language);
 
   if (!body.questionPrompt || !String(body.questionPrompt).trim()) {
     sendJson(req, res, 400, { error: "questionPrompt is required." });
@@ -1233,7 +1327,19 @@ module.exports = async function handler(req, res) {
 
   const localDiagnostics = buildLowBandDiagnostics(body);
   if (localDiagnostics.isBlank || localDiagnostics.mostlyNonEnglish) {
-    sendJson(req, res, 200, buildFallbackFeedback(body, localDiagnostics.reason || "No rateable English attempt."));
+    sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, localDiagnostics.reason || "No rateable English attempt.", locale), locale));
+    return;
+  }
+
+  // Under-minimum responses still go through DeepSeek.
+  // The model must grade them with strict word-count caps and complete feedback.
+
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    sendJson(req, res, 500, {
+      error: "Provider API key is not configured.",
+      provider: "deepseek"
+    });
     return;
   }
 
@@ -1247,8 +1353,8 @@ module.exports = async function handler(req, res) {
     const outputText = await callDeepSeek({
       apiKey,
       model,
-      systemPrompt: buildSystemPrompt(veryShort),
-      userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
+      systemPrompt: buildSystemPrompt(veryShort, locale),
+      userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort, locale),
       maxTokens,
       temperature: 0.1
     });
@@ -1262,23 +1368,23 @@ module.exports = async function handler(req, res) {
           apiKey,
           model,
           systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
-          userPrompt: buildRepairPrompt(outputText, body.task),
+          userPrompt: buildRepairPrompt(outputText, body.task, locale),
           maxTokens,
           temperature: 0.1
         });
         result = parseJsonFromProvider(repairedText);
       } catch (repairError) {
         if (sendProviderError(req, res, repairError)) return;
-        sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned incomplete JSON."));
+        sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, "DeepSeek returned incomplete JSON.", locale), locale));
         return;
       }
     }
 
-    sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort, body));
+    sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort, body, locale));
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
     if (/empty response|invalid JSON|Unexpected end/i.test(error.message || "")) {
-      sendJson(req, res, 200, buildFallbackFeedback(body, error.message));
+      sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, error.message, locale), locale));
       return;
     }
     sendJson(req, res, 500, {
