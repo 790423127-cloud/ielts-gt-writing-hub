@@ -65,7 +65,6 @@ function corsHeaders(req) {
     Vary: "Origin"
   };
 }
-}
 
 function sendJson(req, res, statusCode, payload) {
   Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
