@@ -19,16 +19,47 @@ const stringArray = {
   items: { type: "string" }
 };
 
+const task1CriteriaSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    "Task Achievement": criterionSchema,
+    "Coherence and Cohesion": criterionSchema,
+    "Lexical Resource": criterionSchema,
+    "Grammatical Range and Accuracy": criterionSchema
+  },
+  required: [
+    "Task Achievement",
+    "Coherence and Cohesion",
+    "Lexical Resource",
+    "Grammatical Range and Accuracy"
+  ]
+};
+
+const task2CriteriaSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    "Task Response": criterionSchema,
+    "Coherence and Cohesion": criterionSchema,
+    "Lexical Resource": criterionSchema,
+    "Grammatical Range and Accuracy": criterionSchema
+  },
+  required: [
+    "Task Response",
+    "Coherence and Cohesion",
+    "Lexical Resource",
+    "Grammatical Range and Accuracy"
+  ]
+};
+
 const resultSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
     overallBand: { type: "number", minimum: 0, maximum: 9 },
     estimatedLevel: { type: "string" },
-    criteria: {
-      type: "object",
-      additionalProperties: criterionSchema
-    },
+    criteria: { anyOf: [task1CriteriaSchema, task2CriteriaSchema] },
     strengths: stringArray,
     mainProblems: stringArray,
     grammarErrors: {
