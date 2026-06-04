@@ -1,8 +1,25 @@
 const ALLOWED_ORIGINS = new Set([
   "https://790423127-cloud.github.io",
+  "https://ielts-gt-writing-hub.vercel.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000"
 ]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.includes("ielts-gt-writing-hub") &&
+      url.hostname.endsWith(".vercel.app")
+    );
+  } catch {
+    return false;
+  }
+}
 
 const DEFAULT_PROVIDER = "deepseek";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
@@ -36,7 +53,10 @@ function lowWordCountReason(body) {
 
 function corsHeaders(req) {
   const origin = req.headers.origin;
-  const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://790423127-cloud.github.io";
+  const allowedOrigin = isAllowedOrigin(origin)
+    ? origin
+    : "https://790423127-cloud.github.io";
+
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -44,6 +64,7 @@ function corsHeaders(req) {
     "Content-Type": "application/json; charset=utf-8",
     Vary: "Origin"
   };
+}
 }
 
 function sendJson(req, res, statusCode, payload) {
