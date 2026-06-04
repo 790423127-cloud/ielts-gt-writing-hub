@@ -28,6 +28,7 @@
 #gradingStatus[data-state=error]{color:var(--rose);font-weight:800}
 .grading-results{display:grid;gap:14px;margin-top:14px}
 .ai-disclaimer{margin:0;padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(164,93,0,.11);color:var(--amber);font-weight:750}
+.ai-warning{margin:0;padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(164,93,0,.11);color:var(--amber);font-weight:750}
 .grading-section{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);padding:14px}
 .grading-section h4{margin:0 0 10px;font-size:16px}
 .overall-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -38,6 +39,8 @@
 .criteria-item strong{display:block;color:var(--teal);margin-bottom:6px}
 .criteria-item p,.correction-item p{margin:0;line-height:1.55}
 .criteria-item .improve{margin-top:8px;color:var(--muted)}
+.zh-toggle{min-height:34px;margin-top:10px;padding:0 10px;font-size:13px}
+.zh-note{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,118,110,.08);color:var(--muted);line-height:1.55;white-space:pre-line}
 .correction-item+.correction-item{margin-top:10px}
 .grading-section ul{margin:0;padding-left:20px;line-height:1.65}
 .revision-block{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:0;margin-top:10px;overflow:hidden}
