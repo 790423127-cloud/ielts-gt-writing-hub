@@ -17,7 +17,7 @@ function unique(items) { return [...new Set(items)]; }
 function storageKey(id, part) { return `ielts-gt-writing-hub:${id}:${part}`; }
 function save(id, part, value) { localStorage.setItem(storageKey(id, part), value); }
 function load(id, part) { return localStorage.getItem(storageKey(id, part)) || ""; }
-function countWords(text) { return (text.trim().match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?/g) || []).length; }
+function countWords(text) { return (text.trim().match(/[A-Za-z0-9]+(?:[\'’-][A-Za-z0-9]+)*/g) || []).length; }
 function fmt(seconds) { return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function tag(text, cls) { return `<span class="tag ${cls}">${text}</span>`; }
 function escapeHtml(value) {
@@ -33,6 +33,18 @@ function proseHtml(text) {
 
 function boolText(value) {
   return value ? "是" : "否";
+}
+
+function targetWordsForPrompt(prompt) {
+  return prompt?.task === "Task 1" ? 150 : 250;
+}
+
+function taskTypeForPrompt(prompt) {
+  return prompt?.task === "Task 1" ? "task1" : "task2";
+}
+
+function extractBulletPointsFromPrompt(text) {
+  return String(text || "").split(/\n+/).map((line) => line.trim()).filter((line) => /^[-*•]\s+/.test(line)).map((line) => line.replace(/^[-*•]\s+/, ""));
 }
 
 function fillSelect(select, values, allText) {
@@ -255,19 +267,25 @@ function gradingPayload() {
   const essay = els.essayInput.value.trim();
   const wordCount = countWords(essay);
   const mode = els.gradingModeSelect.value || "quick";
-  const targetWordCount = selected.recommendedWords;
+  const targetWordCount = targetWordsForPrompt(selected);
   const includeRevision = mode === "revision";
   return {
     task: selected.task,
+    taskType: taskTypeForPrompt(selected),
     book: selected.book,
     test: selected.test,
     questionTitle: selected.title,
     questionPrompt: selected.prompt,
+    promptText: selected.prompt,
+    task1BulletPoints: selected.task === "Task 1" ? extractBulletPointsFromPrompt(selected.prompt) : [],
+    task2Instruction: selected.task === "Task 2" ? selected.prompt : "",
     essay,
     wordCount,
+    actualWordCount: wordCount,
     targetWordCount,
     isUnderMinimum: wordCount < targetWordCount,
     mode,
+    gradingMode: mode,
     includeRevision,
     revisionTargets: includeRevision ? ["band5", "band6", "band7"] : [],
     rubric: {
@@ -286,8 +304,9 @@ async function startGrading() {
   }
   const essay = els.essayInput.value.trim();
   const wordCount = countWords(essay);
-  const isUnderMinimum = wordCount < selected.recommendedWords;
-  if (wordCount < selected.recommendedWords) {
+  const targetWordCount = targetWordsForPrompt(selected);
+  const isUnderMinimum = wordCount < targetWordCount;
+  if (isUnderMinimum) {
     setGradingStatus("当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。", "error");
   }
 
@@ -361,6 +380,63 @@ function renderLowBandDiagnostics(diagnostics) {
   </details>`;
 }
 
+
+function renderTaskRequirementAnalysis(analysis = {}, match = {}) {
+  if (!analysis || typeof analysis !== "object") return "";
+  const isTask1 = analysis.taskType === "task1" || selected?.task === "Task 1";
+  const bullets = Array.isArray(analysis.bulletPoints) ? analysis.bulletPoints : [];
+  const parts = Array.isArray(analysis.requiredParts) ? analysis.requiredParts : [];
+  return `<details class="calibration-details">
+    <summary>题目要求分析</summary>
+    <div class="calibration-body">
+      <p><strong>题型：</strong>${isTask1 ? "Task 1 letter" : "Task 2 essay"}</p>
+      ${isTask1 ? `
+        <p><strong>收信人：</strong>${escapeHtml(analysis.recipient || "未返回")}</p>
+        <p><strong>关系：</strong>${escapeHtml(analysis.relationship || "未返回")}</p>
+        <p><strong>语气：</strong>${escapeHtml(analysis.requiredTone || "未返回")}</p>
+        <p><strong>信件类型：</strong>${escapeHtml(analysis.letterType || "未返回")}</p>
+        <div><strong>Bullet points：</strong>${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item.requirement || "")} ${item.covered ? "✓" : "✗"} ${item.evidence ? `- ${escapeHtml(item.evidence)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">暂无 bullet point 分析</p>`}</div>
+      ` : `
+        <p><strong>题目类型：</strong>${escapeHtml(analysis.questionType || "未返回")}</p>
+        <p><strong>话题：</strong>${escapeHtml(analysis.topic || "未返回")}</p>
+        <p><strong>是否需要明确立场：</strong>${escapeHtml(analysis.requiredPosition || "未返回")}</p>
+        <p><strong>立场是否出现：</strong>${boolText(analysis.positionPresent)}</p>
+        <div><strong>必须回答的部分：</strong>${parts.length ? listHtml(parts) : `<p class="muted">暂无 required parts 分析</p>`}</div>
+      `}
+      <div><strong>缺失要求：</strong>${listHtml(analysis.missingRequirements)}</div>
+      <p><strong>匹配检查：</strong>${escapeHtml(match.reason || analysis.taskMatchSummary || "暂无")}</p>
+      ${match.warning ? `<p class="ai-warning">${escapeHtml(match.warning)}</p>` : ""}
+    </div>
+  </details>`;
+}
+
+function renderHighBandDiagnostics(diagnostics) {
+  if (!diagnostics || typeof diagnostics !== "object") return "";
+  return `<details class="calibration-details">
+    <summary>高分证据判断</summary>
+    <div class="calibration-body compact-facts">
+      <p><strong>建议高分范围：</strong>${escapeHtml(diagnostics.recommendedHighBandRange || "暂无")}</p>
+      <p><strong>原因：</strong>${escapeHtml(diagnostics.reason || "暂无")}</p>
+      <p><strong>完整回应题目：</strong>${boolText(diagnostics.fullyAddressesTask)}</p>
+      <p><strong>结构推进清楚：</strong>${boolText(diagnostics.clearProgression)}</p>
+      <p><strong>语言错误很少：</strong>${boolText(diagnostics.fewErrors)}</p>
+    </div>
+  </details>`;
+}
+
+function renderRevisionLimitWarning(result = {}) {
+  const meta = result.revisedEssayMeta || {};
+  if (!meta.revisionLimited) return "";
+  const words = Number(result.actualWordCount ?? countWords(els.essayInput.value));
+  const threshold = Number(result.wordCountThresholdUsed ?? targetWordsForPrompt(selected));
+  const low = result.lowBandDiagnostics || {};
+  const mismatch = result.taskMatchCheck?.appearsToAnswerSelectedPrompt === false;
+  if (mismatch) return `<p class="ai-warning">文章可能没有回答当前选中的题目，因此评分会被限制。</p>`;
+  if (words < threshold) return `<p class="ai-warning">原文字数明显不足，系统只提供基础诊断或基础修改版。</p>`;
+  if (low.recommendedLowBandRange || low.littleRelevantMessage || low.meaningMostlyBlocked) return `<p class="ai-warning">原文可评分内容较少或偏离题目，系统只提供基础修改建议。</p>`;
+  return "";
+}
+
 function renderGrammarErrors(items = []) {
   if (!Array.isArray(items) || !items.length) return `<p class="muted">暂无语法错误列表。</p>`;
   return `<div class="correction-list">${items.map((item) => `
@@ -411,8 +487,10 @@ function renderGradingResult(result = {}) {
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断反馈。建议补充作文后重新批改。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
+    ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck)}
     ${renderScoreCalibration(result.scoreCalibration)}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics)}
+    ${renderHighBandDiagnostics(result.highBandDiagnostics)}
     <section class="grading-section">
       <h4>Overall estimated band</h4>
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div><span>${escapeHtml(result.estimatedLevel || "")}</span></div>
@@ -451,7 +529,7 @@ function renderGradingResult(result = {}) {
     <section class="grading-section">
       <h4>AI 修改版作文</h4>
       <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>
-      ${revisionMeta.revisionLimited ? `<p class="ai-warning">原文太短或内容太少，系统只提供基础修改版。请先补充内容后再生成更高分版本。</p>` : ""}
+      ${renderRevisionLimitWarning(result)}
       ${renderRevisionBlock("Band 5 Safe Revision", "band5", band5)}
       ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", band6)}
       ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}

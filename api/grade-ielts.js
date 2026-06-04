@@ -53,7 +53,7 @@ function maxTokensForMode(mode, veryShort) {
 }
 
 function countWordsServer(text) {
-  return (String(text || "").trim().match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?/g) || []).length;
+  return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
 }
 
 function roundHalf(value) {
@@ -97,17 +97,12 @@ function buildLowBandDiagnostics(body) {
   const isBlank = !trimmed;
   const nonEnglish = mostlyNonEnglish(essay);
   const copied = mostlyCopiedFromPrompt(essay, body.questionPrompt);
-  const wordCount20OrFewer = words <= 20;
-  const veryShortTask1 = task === "Task 1" && words < 80;
-  const veryShortTask2 = task === "Task 2" && words < 150;
-  const underSevereCap = (task === "Task 1" && words < 50) || (task === "Task 2" && words < 80);
-  const noClearPositionTask2 = task === "Task 2" && words < 150;
-  const noBulletPointCoverageTask1 = task === "Task 1" && words < 80;
-  const littleRelevantMessage = isBlank || nonEnglish || copied || wordCount20OrFewer || underSevereCap;
-  const meaningMostlyBlocked = isBlank || nonEnglish || wordCount20OrFewer;
+  const wordCount20OrFewer = words > 0 && words <= 20;
+  const severeTask1 = task === "Task 1" && words < 50;
+  const severeTask2 = task === "Task 2" && words < 80;
 
   let recommendedLowBandRange = "";
-  let reason = "";
+  let reason = "No low-band trigger detected.";
   if (isBlank) {
     recommendedLowBandRange = "0";
     reason = "The response is blank or has no rateable attempt.";
@@ -120,12 +115,9 @@ function buildLowBandDiagnostics(body) {
   } else if (wordCount20OrFewer) {
     recommendedLowBandRange = "1.0";
     reason = "The response has 20 words or fewer and provides very little rateable language.";
-  } else if (underSevereCap) {
+  } else if (severeTask1 || severeTask2) {
     recommendedLowBandRange = "2.0-3.5";
     reason = "The response is extremely short and misses most task requirements.";
-  } else if (veryShortTask1 || veryShortTask2) {
-    recommendedLowBandRange = "3.0-4.0";
-    reason = "The response is significantly underlength and cannot show enough task coverage.";
   }
 
   return {
@@ -135,11 +127,11 @@ function buildLowBandDiagnostics(body) {
     mostlyCopiedFromPrompt: copied,
     mostlyMemorised: false,
     whollyUnrelated: false,
-    barelyRelated: littleRelevantMessage && !isBlank,
-    littleRelevantMessage,
-    noClearPositionTask2,
-    noBulletPointCoverageTask1,
-    meaningMostlyBlocked,
+    barelyRelated: false,
+    littleRelevantMessage: isBlank || nonEnglish || copied || wordCount20OrFewer || severeTask1 || severeTask2,
+    noClearPositionTask2: false,
+    noBulletPointCoverageTask1: false,
+    meaningMostlyBlocked: isBlank || nonEnglish || wordCount20OrFewer,
     recommendedLowBandRange,
     reason
   };
@@ -199,6 +191,11 @@ function buildSystemPrompt(veryShort = false) {
     "For Task 1, use Task Achievement as the first criterion.",
     "For Task 2, use Task Response as the first criterion.",
     "Do not mix Task 1 and Task 2 first criteria.",
+    "Task 1 word logic: the recommended minimum is 150 words. Do not apply Task 2 250-word thresholds. A Task 1 letter with 150+ words is not underlength. A 270-word Task 1 letter may be long, but length alone is not a low-band trigger. Do not set revisionLimited=true for a 150+ word Task 1 unless it is blank, mostly non-English, mostly copied, wholly unrelated, or clearly Band 0-3. If a Task 1 letter fully covers all bullet points, uses appropriate tone, and has accurate language, allow Band 7-9.",
+    "Task 2 word logic: the recommended minimum is 250 words. Do not apply Task 1 bullet point rules to Task 2.",
+    "Strict IELTS scoring does not mean artificially low scoring. A normal-length response that fully answers the task, is coherent, well developed, and accurate can receive Band 7, Band 8, or Band 9. If the response is official-sample quality and answers the selected prompt, allow Band 8-9. Do not force strong relevant samples into Band 5.",
+    "Low-band diagnostics should trigger only for clear evidence: blank/no attempt, 20 words or fewer, mostly non-English, mostly copied from prompt, wholly unrelated, little relevant message, no rateable English, or meaning mostly blocked. Do not trigger low-band diagnostics merely because language is simple, not advanced, not Band 9, or because a Task 1 answer is over 250 words.",
+    "scoreCalibration.capApplied must be true only for a real cap: word count below the relevant threshold, Task 1 missing major bullet points, Task 2 no clear position when required, off-topic, mostly copied, mostly non-English, meaning mostly blocked, blank/no attempt, or task mismatch.",
     "Score from 0 to 9 and allow half bands.",
     "Band 9: fully addresses all parts, natural fluent organisation, wide precise vocabulary, flexible highly accurate grammar, very rare minor errors.",
     "Band 8: fully addresses the task with minor weaknesses, clear progression, wide mostly natural vocabulary, varied grammar with only occasional errors.",
@@ -276,6 +273,24 @@ function buildSystemPrompt(veryShort = false) {
 function buildExpectedJsonShape(task) {
   const firstCriterion = firstCriterionName(task);
   return {
+    actualWordCount: 0,
+    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: task === "Task 1" ? 150 : 250,
+    wordCountStatus: task === "Task 1" ? "meets_task1_minimum" : "meets_task2_minimum",
+    taskRequirementAnalysis: task === "Task 1"
+      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    highBandDiagnostics: {
+      fullyAddressesTask: false,
+      clearProgression: false,
+      wellDevelopedIdeas: false,
+      wideAccurateVocabulary: false,
+      flexibleGrammar: false,
+      fewErrors: false,
+      recommendedHighBandRange: "",
+      reason: ""
+    },
     overallBand: 5.5,
     estimatedLevel: "Band 5.5",
     lowBandDiagnostics: {
@@ -413,6 +428,14 @@ function buildUserPrompt(body, veryShort) {
       test: body.test,
       questionTitle: body.questionTitle,
       questionPrompt: body.questionPrompt,
+      promptText: body.questionPrompt,
+      taskType: body.task === "Task 1" ? "task1" : "task2",
+      gradingMode: effectiveMode,
+      actualWordCount: body.wordCount,
+      wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
+      wordCountStatus: body.task === "Task 1"
+        ? (body.wordCount >= 150 ? "meets_task1_minimum" : (body.wordCount < 80 ? "very_short_task1" : "under_task1_minimum"))
+        : (body.wordCount >= 250 ? "meets_task2_minimum" : (body.wordCount < 150 ? "very_short_task2" : "under_task2_minimum")),
       essay: body.essay,
       wordCount: body.wordCount,
       targetWordCount: body.targetWordCount,
@@ -788,8 +811,8 @@ function applyStrictCaps(result, body, diagnostics) {
   const existingCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
   result.scoreCalibration = {
     strictness: "strict",
-    capApplied: Boolean(existingCalibration.capApplied || capApplied || diagnostics.recommendedLowBandRange),
-    capReason: existingCalibration.capReason || capReason || diagnostics.reason || "",
+    capApplied: Boolean(capApplied || diagnostics.recommendedLowBandRange),
+    capReason: capApplied || diagnostics.recommendedLowBandRange ? (capReason || diagnostics.reason || "") : "",
     whyNotHigher: existingCalibration.whyNotHigher || "The score is limited by task coverage, word count, organisation, vocabulary, or grammar evidence.",
     whyNotLower: existingCalibration.whyNotLower || "Some rateable response is present unless Band 0 has been applied.",
     evidence: ensureArray(existingCalibration.evidence).concat([
@@ -806,6 +829,14 @@ function applyStrictCaps(result, body, diagnostics) {
 
 function normalizeResultForMode(result, mode, veryShort, body) {
   const normalized = result && typeof result === "object" ? result : {};
+  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
+  const taskTypeDetected = body?.task === "Task 1" ? "task1" : "task2";
+  normalized.actualWordCount = words;
+  normalized.taskTypeDetected = taskTypeDetected;
+  normalized.wordCountThresholdUsed = taskTypeDetected === "task1" ? 150 : 250;
+  normalized.wordCountStatus = taskTypeDetected === "task1"
+    ? (words >= 150 ? "meets_task1_minimum" : (words < 80 ? "very_short_task1" : "under_task1_minimum"))
+    : (words >= 250 ? "meets_task2_minimum" : (words < 150 ? "very_short_task2" : "under_task2_minimum"));
   const diagnostics = buildLowBandDiagnostics(body || {});
   const modelDiagnostics = normalized.lowBandDiagnostics && typeof normalized.lowBandDiagnostics === "object" ? normalized.lowBandDiagnostics : {};
   normalized.lowBandDiagnostics = {
@@ -838,6 +869,17 @@ function normalizeResultForMode(result, mode, veryShort, body) {
   normalized.revisionNotes = ensureArray(normalized.revisionNotes).slice(0, 5);
   normalized.revisionNotesZh = normalized.revisionNotesZh || [];
   normalized.revisionNotesZh = ensureArray(normalized.revisionNotesZh).slice(0, 5);
+  normalized.taskRequirementAnalysis = normalized.taskRequirementAnalysis && typeof normalized.taskRequirementAnalysis === "object"
+    ? normalized.taskRequirementAnalysis
+    : (body?.task === "Task 1"
+      ? { taskType: "task1", taskPurpose: "Write a General Training Task 1 letter that answers the selected prompt.", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "The selected prompt was provided to the grader." }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "The selected prompt was provided to the grader." });
+  normalized.taskMatchCheck = normalized.taskMatchCheck && typeof normalized.taskMatchCheck === "object"
+    ? normalized.taskMatchCheck
+    : { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected.", warning: "" };
+  normalized.highBandDiagnostics = normalized.highBandDiagnostics && typeof normalized.highBandDiagnostics === "object"
+    ? normalized.highBandDiagnostics
+    : { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, recommendedHighBandRange: "", reason: "" };
   normalized.revisedEssayMeta = {
     ...defaultRevisedEssayMeta(false),
     ...(normalized.revisedEssayMeta && typeof normalized.revisedEssayMeta === "object" ? normalized.revisedEssayMeta : {})
@@ -861,9 +903,18 @@ function normalizeResultForMode(result, mode, veryShort, body) {
     }
   }
 
-  const firstCriterion = firstCriterionName(body?.task);
-  const firstBand = roundHalf(normalized.criteria?.[firstCriterion]?.band ?? normalized.overallBand);
-  const lowOrLimited = veryShort || normalized.overallBand <= 3.5 || firstBand <= 4 || normalized.scoreCalibration.capApplied && normalized.overallBand <= 4;
+  const explicitLowBandTrigger = Boolean(
+    normalized.lowBandDiagnostics.isBlank ||
+    normalized.lowBandDiagnostics.wordCount20OrFewer ||
+    normalized.lowBandDiagnostics.mostlyNonEnglish ||
+    normalized.lowBandDiagnostics.mostlyCopiedFromPrompt ||
+    normalized.lowBandDiagnostics.whollyUnrelated ||
+    normalized.lowBandDiagnostics.barelyRelated ||
+    normalized.lowBandDiagnostics.littleRelevantMessage ||
+    normalized.lowBandDiagnostics.meaningMostlyBlocked
+  );
+  const taskMismatch = normalized.taskMatchCheck?.appearsToAnswerSelectedPrompt === false;
+  const lowOrLimited = veryShort || explicitLowBandTrigger || taskMismatch;
   if (lowOrLimited) {
     normalized.revisedEssayBand6 = "";
     normalized.revisedEssayBand7 = "";
@@ -926,8 +977,10 @@ module.exports = async function handler(req, res) {
   }
 
   body.essay = String(body.essay || "");
-  body.wordCount = Number(body.wordCount) || countWordsServer(body.essay);
   body.task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  body.wordCount = countWordsServer(body.essay);
+  body.targetWordCount = body.task === "Task 1" ? 150 : 250;
+  body.isUnderMinimum = body.wordCount < body.targetWordCount;
 
   const localDiagnostics = buildLowBandDiagnostics(body);
   if (localDiagnostics.isBlank || localDiagnostics.mostlyNonEnglish) {
