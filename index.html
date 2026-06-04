@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IELTS General Training Writing Practice Hub</title>
-  <link rel="stylesheet" href="style.css?v=20260604-1">
+  <link rel="stylesheet" href="style.css?v=20260604-2">
   <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
 </head>
 <body>
@@ -130,6 +130,14 @@
               <span class="muted">Grading API Endpoint</span>
               <input id="gradingEndpointInput" type="url" placeholder="https://your-domain.com/api/grade-ielts">
             </label>
+            <label class="endpoint-field">
+              <span class="muted">批改模式</span>
+              <select id="gradingModeSelect">
+                <option value="quick">Quick Check 快速检查</option>
+                <option value="full">Full IELTS Grading 完整评分</option>
+                <option value="revision">Grade + Revision 评分 + 修改版</option>
+              </select>
+            </label>
             <p class="muted ai-note">不要把 API key 放在前端网页中。此页面只会调用你填写的外部后端接口。</p>
             <div class="actions">
               <button id="gradeBtn" class="primary" type="button">开始批改</button>
@@ -158,7 +166,7 @@
   </main>
 
   <script src="data.js?v=20260604-1"></script>
-  <script src="script.js?v=20260604-1"></script>
+  <script src="script.js?v=20260604-2"></script>
   <script src="phrase-compact.js?v=20260603-5"></script>
 </body>
 </html>
