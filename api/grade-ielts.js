@@ -40,14 +40,20 @@ function normalizeMode(mode) {
   return ["quick", "full", "revision"].includes(mode) ? mode : "quick";
 }
 
-function maxTokensForMode(mode) {
-  if (mode === "quick") return 1800;
-  if (mode === "full") return 3200;
-  return 6000;
+function isVeryShortEssay(body) {
+  const words = Number(body.wordCount) || 0;
+  return body.task === "Task 1" ? words < 80 : words < 150;
 }
 
-function buildSystemPrompt() {
-  return [
+function maxTokensForMode(mode, veryShort) {
+  if (veryShort) return 1800;
+  if (mode === "quick") return 2500;
+  if (mode === "full") return 4200;
+  return 7000;
+}
+
+function buildSystemPrompt(veryShort = false) {
+  const rules = [
     "You are an IELTS General Training Writing examiner and writing coach.",
     "The score is only an AI estimated score, not an official IELTS score.",
     "Assess the essay using the four IELTS Writing criteria.",
@@ -70,7 +76,24 @@ function buildSystemPrompt() {
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
     "Do not use comments inside JSON."
-  ].join(" ");
+  ];
+
+  if (veryShort) {
+    rules.push(
+      "This is a very short essay. Use an ultra-compact diagnostic response.",
+      "Do not generate revised essays.",
+      "strengths must have at most 2 items.",
+      "mainProblems must have at most 3 items.",
+      "grammarErrors must have at most 3 items.",
+      "sentenceCorrections must have at most 3 items.",
+      "Each English feedback field must have at most 25 English words.",
+      "Each Chinese helper note must have at most 25 Chinese characters.",
+      "Do not output long paragraphs.",
+      "Return complete JSON only."
+    );
+  }
+
+  return rules.join(" ");
 }
 
 function buildExpectedJsonShape(task) {
@@ -144,9 +167,10 @@ function buildExpectedJsonShape(task) {
   };
 }
 
-function buildUserPrompt(body) {
+function buildUserPrompt(body, veryShort) {
   const mode = normalizeMode(body.mode);
-  const isRevisionMode = mode === "revision";
+  const effectiveMode = veryShort ? "quick" : mode;
+  const isRevisionMode = effectiveMode === "revision";
   const revisionInstruction = isRevisionMode
     ? "Grade + Revision mode: generate revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
     : "Quick Check and Full IELTS Grading modes: do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
@@ -162,6 +186,8 @@ function buildUserPrompt(body) {
     "- quick: shortest feedback, no revised essays, compact arrays only.",
     "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
     "- revision: include all three revised essays, but keep all non-essay feedback compact.",
+    veryShort ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "",
+    veryShort ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "",
     revisionInstruction,
     underMinimumInstruction,
     "Use brief Chinese helper notes only for local understanding. Do not translate the whole essay or revised essays.",
@@ -178,12 +204,70 @@ function buildUserPrompt(body) {
       wordCount: body.wordCount,
       targetWordCount: body.targetWordCount,
       isUnderMinimum: Boolean(body.isUnderMinimum),
-      mode,
-      includeRevision: Boolean(body.includeRevision),
-      revisionTargets: body.revisionTargets || [],
+      mode: effectiveMode,
+      includeRevision: isRevisionMode,
+      revisionTargets: isRevisionMode ? body.revisionTargets || [] : [],
       rubric: body.rubric
     }, null, 2)
   ].join("\n");
+}
+
+function buildFallbackFeedback(body, reason) {
+  const firstCriterion = body.task === "Task 1" ? "Task Achievement" : "Task Response";
+  return {
+    overallBand: 3,
+    estimatedLevel: "Band 3.0",
+    criteria: {
+      [firstCriterion]: {
+        band: 3,
+        feedback: "The response is too short and does not fully answer the task.",
+        feedbackZh: "作文太短，没有充分完成题目要求。",
+        howToImprove: "Write a fuller response and cover all bullet points or develop your main ideas.",
+        howToImproveZh: "请补充内容，覆盖所有要点或展开主要观点。"
+      },
+      "Coherence and Cohesion": {
+        band: 3,
+        feedback: "There is not enough text to show clear organisation.",
+        feedbackZh: "内容太少，无法体现清楚结构。",
+        howToImprove: "Use separate paragraphs and simple linking words.",
+        howToImproveZh: "请分段，并使用简单连接词。"
+      },
+      "Lexical Resource": {
+        band: 3,
+        feedback: "Vocabulary range is very limited.",
+        feedbackZh: "词汇范围非常有限。",
+        howToImprove: "Add more topic-related vocabulary.",
+        howToImproveZh: "增加与题目相关的词汇。"
+      },
+      "Grammatical Range and Accuracy": {
+        band: 3,
+        feedback: "There is not enough language to assess grammar fully.",
+        feedbackZh: "语言太少，难以完整评估语法。",
+        howToImprove: "Write complete sentences and check verb forms.",
+        howToImproveZh: "写完整句子，并检查动词形式。"
+      }
+    },
+    strengths: ["You attempted to respond to the task."],
+    mainProblems: ["The essay is far below the recommended word count.", "Several task points or ideas are missing."],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    taskAchievementAdvice: ["Add enough detail to answer the task properly."],
+    coherenceAdvice: ["Use clear paragraphs."],
+    lexicalAdvice: ["Use more topic vocabulary."],
+    grammarAdvice: ["Write complete sentences."],
+    band5FixPlan: ["Write at least the recommended word count.", "Cover all bullet points or develop two clear ideas."],
+    band6UpgradePlan: ["Add supporting details and examples."],
+    band7UpgradePlan: ["Use more precise vocabulary and varied sentence structures."],
+    modelAnswerOutline: "Write a fuller answer with an opening, clear body points, and a suitable closing.",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    revisionNotes: ["The response was too short, so only a basic diagnostic score is provided."],
+    revisionNotesZh: ["作文太短，因此这里只提供基础诊断评分。"],
+    disclaimer: DISCLAIMER,
+    fallback: true,
+    fallbackReason: reason || "DeepSeek returned incomplete JSON."
+  };
 }
 
 function stripCodeFence(text) {
@@ -339,15 +423,25 @@ function sendProviderError(req, res, error) {
   return true;
 }
 
-function normalizeResultForMode(result, mode) {
+function normalizeResultForMode(result, mode, veryShort) {
   const normalized = result && typeof result === "object" ? result : {};
   normalized.disclaimer = normalized.disclaimer || DISCLAIMER;
   normalized.revisionNotesZh = normalized.revisionNotesZh || [];
 
-  if (mode !== "revision") {
+  if (veryShort || mode !== "revision") {
     normalized.revisedEssayBand5 = "";
     normalized.revisedEssayBand6 = "";
     normalized.revisedEssayBand7 = "";
+    if (veryShort) {
+      normalized.revisionNotes = Array.isArray(normalized.revisionNotes) ? normalized.revisionNotes : [];
+      normalized.revisionNotesZh = Array.isArray(normalized.revisionNotesZh) ? normalized.revisionNotesZh : [];
+      if (!normalized.revisionNotes.some((note) => /too short/i.test(note))) {
+        normalized.revisionNotes.unshift("The essay is too short for a meaningful full revision. Please write a fuller response first.");
+      }
+      if (!normalized.revisionNotesZh.some((note) => note.includes("作文太短"))) {
+        normalized.revisionNotesZh.unshift("作文太短，暂不适合生成完整修改版，请先补充内容。");
+      }
+    }
   }
 
   return normalized;
@@ -400,15 +494,17 @@ module.exports = async function handler(req, res) {
   }
 
   const mode = normalizeMode(body.mode);
+  const veryShort = isVeryShortEssay(body);
+  const effectiveMode = veryShort ? "quick" : mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
-  const maxTokens = maxTokensForMode(mode);
+  const maxTokens = maxTokensForMode(effectiveMode, veryShort);
 
   try {
     const outputText = await callDeepSeek({
       apiKey,
       model,
-      systemPrompt: buildSystemPrompt(),
-      userPrompt: buildUserPrompt({ ...body, mode }),
+      systemPrompt: buildSystemPrompt(veryShort),
+      userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort),
       maxTokens,
       temperature: 0.2
     });
@@ -429,17 +525,12 @@ module.exports = async function handler(req, res) {
         result = parseJsonFromProvider(repairedText);
       } catch (repairError) {
         if (sendProviderError(req, res, repairError)) return;
-        sendJson(req, res, 502, {
-          error: "DeepSeek returned non-JSON output.",
-          provider: "deepseek",
-          detail: repairError.message || firstParseError.message,
-          rawPreview: String(outputText || "").slice(0, 1500)
-        });
+        sendJson(req, res, 200, buildFallbackFeedback(body, "DeepSeek returned incomplete JSON."));
         return;
       }
     }
 
-    sendJson(req, res, 200, normalizeResultForMode(result, mode));
+    sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort));
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
     sendJson(req, res, 500, {
