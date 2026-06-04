@@ -10,7 +10,7 @@ const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 const $ = (id) => document.getElementById(id);
 const els = {
   themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), searchInput: $("searchInput"),
-  promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradeBtn: $("gradeBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
+  promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradingModeSelect: $("gradingModeSelect"), gradeBtn: $("gradeBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
 };
 
 function unique(items) { return [...new Set(items)]; }
@@ -25,6 +25,10 @@ function escapeHtml(value) {
 }
 function listHtml(items) {
   return Array.isArray(items) && items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">暂无内容</p>`;
+}
+
+function proseHtml(text) {
+  return text ? `<p>${escapeHtml(text)}</p>` : `<p class="muted">暂无内容</p>`;
 }
 
 function fillSelect(select, values, allText) {
@@ -184,6 +188,7 @@ function resetGradingPanel() {
 function gradingPayload() {
   const essay = els.essayInput.value.trim();
   const wordCount = countWords(essay);
+  const mode = els.gradingModeSelect.value || "quick";
   return {
     task: selected.task,
     book: selected.book,
@@ -192,8 +197,9 @@ function gradingPayload() {
     questionPrompt: selected.prompt,
     essay,
     wordCount,
-    includeRevision: true,
-    revisionTargets: ["band5", "band6"],
+    mode,
+    includeRevision: mode === "revision",
+    revisionTargets: ["band5", "band6", "band7"],
     rubric: {
       task1: ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
       task2: ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
@@ -246,6 +252,18 @@ function renderCriteria(criteria = {}) {
       <span>${escapeHtml(name)}</span>
       <strong>Band ${escapeHtml(item?.band ?? "-")}</strong>
       <p>${escapeHtml(item?.feedback || "")}</p>
+      ${item?.howToImprove ? `<p class="improve"><strong>How to improve:</strong> ${escapeHtml(item.howToImprove)}</p>` : ""}
+    </div>`).join("")}</div>`;
+}
+
+function renderGrammarErrors(items = []) {
+  if (!Array.isArray(items) || !items.length) return `<p class="muted">暂无语法错误列表。</p>`;
+  return `<div class="correction-list">${items.map((item) => `
+    <div class="correction-item">
+      <p><strong>Type:</strong> ${escapeHtml(item.type || "other")}</p>
+      <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
+      <p><strong>Corrected:</strong> ${escapeHtml(item.corrected || "")}</p>
+      <p><strong>Explanation:</strong> ${escapeHtml(item.explanation || "")}</p>
     </div>`).join("")}</div>`;
 }
 
@@ -276,13 +294,16 @@ function renderRevisionBlock(label, target, text) {
 function renderGradingResult(result = {}) {
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
+  const band7 = result.revisedEssayBand7 || "";
   els.gradingResults.dataset.band5 = band5;
   els.gradingResults.dataset.band6 = band6;
+  els.gradingResults.dataset.band7 = band7;
+  const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   els.gradingResults.innerHTML = `
-    <p class="ai-disclaimer">This is an AI-generated estimated score and revision, not an official IELTS score.</p>
+    <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
     <section class="grading-section">
       <h4>Overall estimated band</h4>
-      <div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>
+      <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div><span>${escapeHtml(result.estimatedLevel || "")}</span></div>
     </section>
     <section class="grading-section">
       <h4>四项评分表</h4>
@@ -293,21 +314,33 @@ function renderGradingResult(result = {}) {
       <div><h4>Main Problems</h4>${listHtml(result.mainProblems)}</div>
     </section>
     <section class="grading-section">
+      <h4>语法错误</h4>
+      ${renderGrammarErrors(result.grammarErrors)}
+    </section>
+    <section class="grading-section">
       <h4>Sentence Corrections</h4>
       ${renderSentenceCorrections(result.sentenceCorrections)}
     </section>
-    <section class="grading-section two-mini">
-      <div><h4>Band 5 保底改法</h4>${listHtml(result.band5FixPlan)}</div>
-      <div><h4>Band 6+ 提升方向</h4>${listHtml(result.band6UpgradePlan)}</div>
+    <section class="grading-section advice-grid">
+      <div><h4>${taskAdviceTitle}</h4>${listHtml(result.taskAchievementAdvice)}</div>
+      <div><h4>Coherence Advice</h4>${listHtml(result.coherenceAdvice)}</div>
+      <div><h4>Lexical Advice</h4>${listHtml(result.lexicalAdvice)}</div>
+      <div><h4>Grammar Advice</h4>${listHtml(result.grammarAdvice)}</div>
+    </section>
+    <section class="grading-section advice-grid">
+      <div><h4>Band 5 保底建议</h4>${listHtml(result.band5FixPlan)}</div>
+      <div><h4>Band 6+ 提升建议</h4>${listHtml(result.band6UpgradePlan)}</div>
+      <div><h4>Band 7+ 高分建议</h4>${listHtml(result.band7UpgradePlan)}</div>
     </section>
     <section class="grading-section">
       <h4>Model answer outline</h4>
-      <p>${escapeHtml(result.modelAnswerOutline || "暂无内容")}</p>
+      ${proseHtml(result.modelAnswerOutline)}
     </section>
     <section class="grading-section">
       <h4>AI 修改版作文</h4>
-      ${renderRevisionBlock("Band 5 保底修改版", "band5", band5)}
-      ${renderRevisionBlock("Band 6+ 提升修改版", "band6", band6)}
+      ${renderRevisionBlock("Band 5 Safe Revision", "band5", band5)}
+      ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", band6)}
+      ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
       <h4>Revision Notes</h4>
       ${listHtml(result.revisionNotes)}
     </section>`;
