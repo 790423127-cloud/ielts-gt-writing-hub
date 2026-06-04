@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IELTS General Training Writing Practice Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="kicker">练习 + 复习 + 积累</p>
+      <h1>IELTS General Training Writing Practice Hub</h1>
+      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。当前题目均为原创占位内容，不是 Cambridge 原题。</p>
+    </div>
+    <button id="themeBtn" class="secondary" type="button">深色模式</button>
+  </header>
+
+  <main class="shell">
+    <section class="stats" aria-label="统计信息">
+      <div class="stat"><strong id="booksStat">6</strong><span>Books</span></div>
+      <div class="stat"><strong id="testsStat">24</strong><span>Tests</span></div>
+      <div class="stat"><strong id="task1Stat">24</strong><span>Task 1 prompts</span></div>
+      <div class="stat"><strong id="task2Stat">24</strong><span>Task 2 prompts</span></div>
+    </section>
+
+    <section class="filters" aria-label="筛选区">
+      <label class="wide">
+        <span>搜索关键词</span>
+        <input id="searchInput" type="search" placeholder="搜索 book、test、题型、标题或题目关键词">
+      </label>
+      <label><span>Book</span><select id="bookFilter"></select></label>
+      <label><span>Test</span><select id="testFilter"></select></label>
+      <label><span>Task</span><select id="taskFilter"></select></label>
+      <label><span>题型</span><select id="typeFilter"></select></label>
+    </section>
+
+    <div class="layout">
+      <section class="panel list-panel">
+        <div class="panel-head">
+          <div>
+            <p class="kicker">Practice Library</p>
+            <h2>练习入口</h2>
+          </div>
+          <span id="countLabel" class="muted"></span>
+        </div>
+        <div id="promptList" class="prompt-list"></div>
+      </section>
+
+      <section class="panel practice-panel">
+        <div id="emptyState" class="empty">
+          <h2>选择一道题开始练习</h2>
+          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。你之后可以把自己合法拥有的真题文本填入 data.js。</p>
+        </div>
+
+        <article id="practiceView" class="hidden">
+          <div class="practice-top">
+            <div id="metaTags" class="tags"></div>
+            <button id="backBtn" class="secondary" type="button">返回列表</button>
+          </div>
+
+          <section class="question-card">
+            <p id="sourceStatus" class="kicker"></p>
+            <h2 id="practiceTitle"></h2>
+            <p id="practicePrompt" class="prompt-text"></p>
+          </section>
+
+          <section id="infoGrid" class="info-grid"></section>
+
+          <section class="card">
+            <div class="card-head">
+              <div><p class="kicker">Timer</p><h3>写作计时器</h3></div>
+              <strong id="timerDisplay" class="timer">20:00</strong>
+            </div>
+            <div class="actions">
+              <button id="timerBtn" class="primary" type="button">开始</button>
+              <button id="resetTimerBtn" class="secondary" type="button">重置</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><p class="kicker">Plan</p><h3>写作前思路整理区</h3></div></div>
+            <div id="planArea" class="plan-grid"></div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <div><p class="kicker">My Essay</p><h3>我的作文输入区</h3></div>
+              <div class="wordbox"><strong id="wordCount">0</strong><span id="wordTarget">/ 150 words</span></div>
+            </div>
+            <textarea id="essayInput" class="essay" placeholder="在这里输入你的作文..." spellcheck="true"></textarea>
+            <div class="actions">
+              <button id="copyBtn" class="primary" type="button">一键复制作文</button>
+              <button id="clearBtn" class="secondary" type="button">清空重写</button>
+              <span id="statusText" class="muted"></span>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><p class="kicker">Collection</p><h3>我的常用表达收藏区</h3></div></div>
+            <textarea id="favoriteInput" class="notes" placeholder="点击下方句型可收藏，也可以手动记录你的高频表达。"></textarea>
+          </section>
+
+          <div class="two-col">
+            <section class="card">
+              <div class="card-head"><div><p class="kicker">Structure</p><h3>写作结构提示</h3></div></div>
+              <ol id="structureList"></ol>
+            </section>
+            <section class="card">
+              <div class="card-head"><div><p class="kicker">Band Tips</p><h3>分数段提示</h3></div></div>
+              <div id="bandTips"></div>
+            </section>
+          </div>
+
+          <section class="card">
+            <div class="card-head"><div><p id="phraseKicker" class="kicker">Useful Phrases</p><h3 id="phraseTitle">常用句型提示</h3></div></div>
+            <div id="phraseGroups" class="phrase-grid"></div>
+          </section>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
