@@ -9,7 +9,8 @@ const DISCLAIMER = "This is an AI-generated estimated score and revision, not an
 
 const stringArraySchema = {
   type: "array",
-  items: { type: "string" }
+  items: { type: "string" },
+  maxItems: 5
 };
 
 const criterionSchema = {
@@ -17,10 +18,12 @@ const criterionSchema = {
   properties: {
     band: { type: "number", minimum: 0, maximum: 9 },
     feedback: { type: "string" },
-    howToImprove: { type: "string" }
+    feedbackZh: { type: "string" },
+    howToImprove: { type: "string" },
+    howToImproveZh: { type: "string" }
   },
-  required: ["band", "feedback", "howToImprove"],
-  propertyOrdering: ["band", "feedback", "howToImprove"]
+  required: ["band", "feedback", "feedbackZh", "howToImprove", "howToImproveZh"],
+  propertyOrdering: ["band", "feedback", "feedbackZh", "howToImprove", "howToImproveZh"]
 };
 
 const IELTS_FEEDBACK_SCHEMA = {
@@ -50,29 +53,33 @@ const IELTS_FEEDBACK_SCHEMA = {
     mainProblems: stringArraySchema,
     grammarErrors: {
       type: "array",
+      maxItems: 5,
       items: {
         type: "object",
         properties: {
           type: { type: "string" },
           original: { type: "string" },
           corrected: { type: "string" },
-          explanation: { type: "string" }
+          explanation: { type: "string" },
+          explanationZh: { type: "string" }
         },
-        required: ["type", "original", "corrected", "explanation"],
-        propertyOrdering: ["type", "original", "corrected", "explanation"]
+        required: ["type", "original", "corrected", "explanation", "explanationZh"],
+        propertyOrdering: ["type", "original", "corrected", "explanation", "explanationZh"]
       }
     },
     sentenceCorrections: {
       type: "array",
+      maxItems: 5,
       items: {
         type: "object",
         properties: {
           original: { type: "string" },
           corrected: { type: "string" },
-          reason: { type: "string" }
+          reason: { type: "string" },
+          reasonZh: { type: "string" }
         },
-        required: ["original", "corrected", "reason"],
-        propertyOrdering: ["original", "corrected", "reason"]
+        required: ["original", "corrected", "reason", "reasonZh"],
+        propertyOrdering: ["original", "corrected", "reason", "reasonZh"]
       }
     },
     taskAchievementAdvice: stringArraySchema,
@@ -87,6 +94,7 @@ const IELTS_FEEDBACK_SCHEMA = {
     revisedEssayBand6: { type: "string" },
     revisedEssayBand7: { type: "string" },
     revisionNotes: stringArraySchema,
+    revisionNotesZh: stringArraySchema,
     disclaimer: { type: "string" }
   },
   required: [
@@ -109,6 +117,7 @@ const IELTS_FEEDBACK_SCHEMA = {
     "revisedEssayBand6",
     "revisedEssayBand7",
     "revisionNotes",
+    "revisionNotesZh",
     "disclaimer"
   ],
   propertyOrdering: [
@@ -131,6 +140,7 @@ const IELTS_FEEDBACK_SCHEMA = {
     "revisedEssayBand6",
     "revisedEssayBand7",
     "revisionNotes",
+    "revisionNotesZh",
     "disclaimer"
   ]
 };
@@ -180,6 +190,12 @@ function buildSystemPrompt() {
     "Do not include explanatory preface or closing comments.",
     "All required keys must exist.",
     "If a section has no content, return an empty array [] or an empty string \"\".",
+    "Use short, compact feedback.",
+    "Do not write long paragraphs inside arrays.",
+    "Every array must have at most 5 items.",
+    "grammarErrors, sentenceCorrections, strengths, mainProblems, band5FixPlan, band6UpgradePlan, and band7UpgradePlan must each have at most 5 items.",
+    "Provide brief Chinese helper notes only in feedbackZh, howToImproveZh, explanationZh, reasonZh, and revisionNotesZh.",
+    "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
     "Do not use comments inside JSON."
   ].join(" ");
@@ -194,22 +210,30 @@ function buildExpectedJsonShape(task) {
       [firstCriterion]: {
         band: 5.5,
         feedback: "...",
-        howToImprove: "..."
+        feedbackZh: "简短中文解释",
+        howToImprove: "...",
+        howToImproveZh: "简短中文建议"
       },
       "Coherence and Cohesion": {
         band: 5.5,
         feedback: "...",
-        howToImprove: "..."
+        feedbackZh: "简短中文解释",
+        howToImprove: "...",
+        howToImproveZh: "简短中文建议"
       },
       "Lexical Resource": {
         band: 5,
         feedback: "...",
-        howToImprove: "..."
+        feedbackZh: "简短中文解释",
+        howToImprove: "...",
+        howToImproveZh: "简短中文建议"
       },
       "Grammatical Range and Accuracy": {
         band: 5,
         feedback: "...",
-        howToImprove: "..."
+        feedbackZh: "简短中文解释",
+        howToImprove: "...",
+        howToImproveZh: "简短中文建议"
       }
     },
     strengths: ["..."],
@@ -219,14 +243,16 @@ function buildExpectedJsonShape(task) {
         type: "tense / article / subject-verb agreement / word form / sentence structure / punctuation / other",
         original: "...",
         corrected: "...",
-        explanation: "..."
+        explanation: "...",
+        explanationZh: "简短中文解释"
       }
     ],
     sentenceCorrections: [
       {
         original: "...",
         corrected: "...",
-        reason: "..."
+        reason: "...",
+        reasonZh: "简短中文解释"
       }
     ],
     taskAchievementAdvice: ["..."],
@@ -237,10 +263,11 @@ function buildExpectedJsonShape(task) {
     band6UpgradePlan: ["..."],
     band7UpgradePlan: ["..."],
     modelAnswerOutline: "...",
-    revisedEssayBand5: "...",
-    revisedEssayBand6: "...",
-    revisedEssayBand7: "...",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
     revisionNotes: ["..."],
+    revisionNotesZh: ["简短中文说明"],
     disclaimer: DISCLAIMER
   };
 }
@@ -249,8 +276,11 @@ function buildPrompt(body) {
   const mode = body.mode || "quick";
   const isRevisionMode = mode === "revision" || body.includeRevision;
   const revisionInstruction = isRevisionMode
-    ? "Return revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
-    : "For revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7, return empty strings unless a very short revision sample is necessary. Still include all fields.";
+    ? "Revision mode: return revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
+    : "Quick and full modes: do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
+  const underMinimumInstruction = body.isUnderMinimum
+    ? `The essay is below the IELTS target word count (${body.wordCount}/${body.targetWordCount}). Still grade normally. If this is Task 1, mention the word count issue in Task Achievement and mainProblems. If this is Task 2, mention the word count issue in Task Response and mainProblems because idea development and argument depth may be affected.`
+    : "The essay meets or exceeds the target word count.";
 
   return [
     buildSystemPrompt(),
@@ -259,10 +289,12 @@ function buildPrompt(body) {
     JSON.stringify(buildExpectedJsonShape(body.task), null, 2),
     "",
     "Mode instructions:",
-    "- quick: concise feedback, but still fill all JSON fields.",
-    "- full: detailed scoring and improvement advice.",
-    "- revision: include all three revised essays.",
+    "- quick: shortest feedback, no revised essays, compact arrays only.",
+    "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
+    "- revision: include all three revised essays, but keep all non-essay feedback compact.",
     revisionInstruction,
+    underMinimumInstruction,
+    "Use brief Chinese helper notes only for local understanding. Do not translate the whole essay or revised essays.",
     `Always set disclaimer to: ${DISCLAIMER}`,
     "",
     "Request data:",
@@ -274,6 +306,8 @@ function buildPrompt(body) {
       questionPrompt: body.questionPrompt,
       essay: body.essay,
       wordCount: body.wordCount,
+      targetWordCount: body.targetWordCount,
+      isUnderMinimum: Boolean(body.isUnderMinimum),
       mode,
       includeRevision: Boolean(body.includeRevision),
       revisionTargets: body.revisionTargets || [],
@@ -349,8 +383,7 @@ function parseJsonFromGemini(text) {
 
 function buildRepairPrompt(rawText) {
   return [
-    "Convert the following text into one valid JSON object matching the required IELTS feedback schema.",
-    "Return JSON only. Do not add markdown or explanations.",
+    "Convert the following text into one valid JSON object matching the required IELTS feedback schema. Return JSON only. Do not add markdown, explanations, or code fences. If a field is missing, add it with an empty array [] or empty string \"\" as appropriate.",
     "All required keys must exist.",
     "If a section has no content, return an empty array [] or empty string \"\".",
     "Do not use trailing commas. Do not use comments inside JSON.",
@@ -363,7 +396,7 @@ function buildRepairPrompt(rawText) {
   ].join("\n");
 }
 
-async function callGemini({ apiKey, model, prompt, maxOutputTokens }) {
+async function callGemini({ apiKey, model, prompt, maxOutputTokens, temperature = 0.2 }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const response = await fetch(url, {
     method: "POST",
@@ -379,7 +412,7 @@ async function callGemini({ apiKey, model, prompt, maxOutputTokens }) {
         }
       ],
       generationConfig: {
-        temperature: 0.2,
+        temperature,
         responseMimeType: "application/json",
         responseSchema: IELTS_FEEDBACK_SCHEMA,
         maxOutputTokens
@@ -453,12 +486,14 @@ module.exports = async function handler(req, res) {
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
 
   try {
-    const maxOutputTokens = (body.mode || "quick") === "quick" ? 2800 : 6500;
+    const mode = body.mode || "quick";
+    const maxOutputTokens = mode === "quick" ? 1800 : mode === "full" ? 3200 : 6000;
     const outputText = await callGemini({
       apiKey,
       model,
       prompt: buildPrompt(body),
-      maxOutputTokens
+      maxOutputTokens,
+      temperature: 0.2
     });
 
     let result;
@@ -470,7 +505,8 @@ module.exports = async function handler(req, res) {
           apiKey,
           model,
           prompt: buildRepairPrompt(outputText),
-          maxOutputTokens
+          maxOutputTokens,
+          temperature: 0.1
         });
         result = parseJsonFromGemini(repairedText);
       } catch (repairError) {
