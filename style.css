@@ -29,6 +29,10 @@
 .grading-results{display:grid;gap:14px;margin-top:14px}
 .ai-disclaimer{margin:0;padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(164,93,0,.11);color:var(--amber);font-weight:750}
 .ai-warning{margin:0;padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(164,93,0,.11);color:var(--amber);font-weight:750}
+.error-details{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);padding:0;overflow:hidden}
+.error-details summary{min-height:42px;display:flex;align-items:center;padding:0 12px;font-weight:800;cursor:pointer;color:var(--rose)}
+.error-details h4{margin:12px 12px 6px;font-size:13px;color:var(--muted)}
+.error-details pre{max-height:240px;overflow:auto;margin:0 12px 12px;padding:10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
 .grading-section{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);padding:14px}
 .grading-section h4{margin:0 0 10px;font-size:16px}
 .overall-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
