@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IELTS General Training Writing Practice Hub</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260603-5">
+  <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
 </head>
 <body>
   <header class="topbar">
     <div>
       <p class="kicker">练习 + 复习 + 积累</p>
       <h1>IELTS General Training Writing Practice Hub</h1>
-      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。当前题目均为原创占位内容，不是 Cambridge 原题。</p>
+      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。Task 2 已录入 G15-G20 共 24 道；Task 1 已录入 G19-G20 共 8 道，其余 G15-G18 Task 1 暂保留占位题。</p>
     </div>
     <button id="themeBtn" class="secondary" type="button">深色模式</button>
   </header>
@@ -50,7 +51,7 @@
       <section class="panel practice-panel">
         <div id="emptyState" class="empty">
           <h2>选择一道题开始练习</h2>
-          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。你之后可以把自己合法拥有的真题文本填入 data.js。</p>
+          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。已录入内容来自你提供的学习材料照片；未提供的 Task 1 页面暂时保留占位题。</p>
         </div>
 
         <article id="practiceView" class="hidden">
@@ -78,6 +79,30 @@
             </div>
           </section>
 
+          <section id="quickReference" class="card helper-dock">
+            <div class="card-head">
+              <div><p class="kicker">Quick Reference</p><h3>写作辅助折叠栏</h3></div>
+              <span class="muted">写作时随时展开查看</span>
+            </div>
+            <div class="accordion-stack">
+              <details class="accordion">
+                <summary>写作结构提示</summary>
+                <div class="accordion-body"><ol id="structureList"></ol></div>
+              </details>
+              <details class="accordion">
+                <summary>Band 5 / Band 6+ 提示</summary>
+                <div id="bandTips" class="accordion-body"></div>
+              </details>
+              <details class="accordion">
+                <summary id="phraseTitle">常用句型提示</summary>
+                <div class="accordion-body">
+                  <p id="phraseKicker" class="mini-kicker">Useful Phrases</p>
+                  <div id="phraseGroups" class="phrase-grid"></div>
+                </div>
+              </details>
+            </div>
+          </section>
+
           <section class="card">
             <div class="card-head"><div><p class="kicker">Plan</p><h3>写作前思路整理区</h3></div></div>
             <div id="planArea" class="plan-grid"></div>
@@ -100,28 +125,13 @@
             <div class="card-head"><div><p class="kicker">Collection</p><h3>我的常用表达收藏区</h3></div></div>
             <textarea id="favoriteInput" class="notes" placeholder="点击下方句型可收藏，也可以手动记录你的高频表达。"></textarea>
           </section>
-
-          <div class="two-col">
-            <section class="card">
-              <div class="card-head"><div><p class="kicker">Structure</p><h3>写作结构提示</h3></div></div>
-              <ol id="structureList"></ol>
-            </section>
-            <section class="card">
-              <div class="card-head"><div><p class="kicker">Band Tips</p><h3>分数段提示</h3></div></div>
-              <div id="bandTips"></div>
-            </section>
-          </div>
-
-          <section class="card">
-            <div class="card-head"><div><p id="phraseKicker" class="kicker">Useful Phrases</p><h3 id="phraseTitle">常用句型提示</h3></div></div>
-            <div id="phraseGroups" class="phrase-grid"></div>
-          </section>
         </article>
       </section>
     </div>
   </main>
 
-  <script src="data.js"></script>
-  <script src="script.js"></script>
+  <script src="data.js?v=20260603-real-1"></script>
+  <script src="script.js?v=20260603-5"></script>
+  <script src="phrase-compact.js?v=20260603-5"></script>
 </body>
 </html>
