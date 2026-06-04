@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IELTS General Training Writing Practice Hub</title>
-  <link rel="stylesheet" href="style.css?v=20260603-5">
+  <link rel="stylesheet" href="style.css?v=20260604-1">
   <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <div>
       <p class="kicker">练习 + 复习 + 积累</p>
       <h1>IELTS General Training Writing Practice Hub</h1>
-      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。部分题目已根据用户提供的学习材料录入，其余为占位练习题。</p>
+      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。题目已根据用户提供的学习材料整理录入。</p>
     </div>
     <button id="themeBtn" class="secondary" type="button">深色模式</button>
   </header>
@@ -51,7 +51,7 @@
       <section class="panel practice-panel">
         <div id="emptyState" class="empty">
           <h2>选择一道题开始练习</h2>
-          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。当前已录入部分用户提供题目，剩余题目可继续补充。</p>
+          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。当前题库已根据用户提供材料整理。</p>
         </div>
 
         <article id="practiceView" class="hidden">
@@ -121,6 +121,33 @@
             </div>
           </section>
 
+          <section id="aiGradingSection" class="card ai-card">
+            <div class="card-head">
+              <div><p class="kicker">AI Feedback</p><h3>AI IELTS 批改打分</h3></div>
+              <span id="gradingStatus" class="muted">等待批改</span>
+            </div>
+            <label class="endpoint-field">
+              <span class="muted">Grading API Endpoint</span>
+              <input id="gradingEndpointInput" type="url" placeholder="https://your-domain.com/api/grade-ielts">
+            </label>
+            <p class="muted ai-note">不要把 API key 放在前端网页中。此页面只会调用你填写的外部后端接口。</p>
+            <div class="actions">
+              <button id="gradeBtn" class="primary" type="button">开始批改</button>
+              <button id="restoreOriginalBtn" class="secondary" type="button">撤回到原文</button>
+            </div>
+            <div id="gradingResults" class="grading-results" aria-live="polite"></div>
+            <div id="revisionCompareArea" class="revision-compare hidden">
+              <div>
+                <h4>Original Essay</h4>
+                <pre id="compareOriginalText"></pre>
+              </div>
+              <div>
+                <h4>Revised Essay</h4>
+                <pre id="compareRevisedText"></pre>
+              </div>
+            </div>
+          </section>
+
           <section class="card">
             <div class="card-head"><div><p class="kicker">Collection</p><h3>我的常用表达收藏区</h3></div></div>
             <textarea id="favoriteInput" class="notes" placeholder="点击下方句型可收藏，也可以手动记录你的高频表达。"></textarea>
@@ -130,8 +157,8 @@
     </div>
   </main>
 
-  <script src="data.js?v=20260603-5"></script>
-  <script src="script.js?v=20260603-5"></script>
+  <script src="data.js?v=20260604-1"></script>
+  <script src="script.js?v=20260604-1"></script>
   <script src="phrase-compact.js?v=20260603-5"></script>
 </body>
 </html>
