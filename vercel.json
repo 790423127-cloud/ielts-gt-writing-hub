@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/grade-ielts.js": {
+      "runtime": "nodejs20.x"
+    }
+  }
+}
