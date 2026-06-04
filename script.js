@@ -31,6 +31,10 @@ function proseHtml(text) {
   return text ? `<p>${escapeHtml(text)}</p>` : `<p class="muted">暂无内容</p>`;
 }
 
+function boolText(value) {
+  return value ? "是" : "否";
+}
+
 function fillSelect(select, values, allText) {
   select.innerHTML = `<option value="all">${allText}</option>` + values.map((v) => `<option value="${v}">${v}</option>`).join("");
 }
@@ -281,7 +285,6 @@ async function startGrading() {
     return;
   }
   const essay = els.essayInput.value.trim();
-  if (!essay) { setGradingStatus("请先输入作文。", "error"); return; }
   const wordCount = countWords(essay);
   const isUnderMinimum = wordCount < selected.recommendedWords;
   if (wordCount < selected.recommendedWords) {
@@ -329,6 +332,35 @@ function renderCriteria(criteria = {}) {
     </div>`).join("")}</div>`;
 }
 
+function renderScoreCalibration(calibration) {
+  if (!calibration || typeof calibration !== "object") return "";
+  return `<details class="calibration-details">
+    <summary>评分校准说明</summary>
+    <div class="calibration-body">
+      <p><strong>是否应用限分规则：</strong>${boolText(calibration.capApplied)}</p>
+      <p><strong>限分原因：</strong>${escapeHtml(calibration.capReason || "无")}</p>
+      <p><strong>为什么不能更高：</strong>${escapeHtml(calibration.whyNotHigher || "暂无说明")}</p>
+      <p><strong>为什么没有更低：</strong>${escapeHtml(calibration.whyNotLower || "暂无说明")}</p>
+      <div><strong>评分证据：</strong>${listHtml(calibration.evidence)}</div>
+    </div>
+  </details>`;
+}
+
+function renderLowBandDiagnostics(diagnostics) {
+  if (!diagnostics || typeof diagnostics !== "object") return "";
+  return `<details class="calibration-details">
+    <summary>低分段判断依据</summary>
+    <div class="calibration-body compact-facts">
+      <p><strong>建议低分范围：</strong>${escapeHtml(diagnostics.recommendedLowBandRange || "无明显低分段限制")}</p>
+      <p><strong>原因：</strong>${escapeHtml(diagnostics.reason || "暂无")}</p>
+      <p><strong>20词或更少：</strong>${boolText(diagnostics.wordCount20OrFewer)}</p>
+      <p><strong>疑似大量复制题目：</strong>${boolText(diagnostics.mostlyCopiedFromPrompt)}</p>
+      <p><strong>相关信息很少：</strong>${boolText(diagnostics.littleRelevantMessage)}</p>
+      <p><strong>意思大多被错误阻断：</strong>${boolText(diagnostics.meaningMostlyBlocked)}</p>
+    </div>
+  </details>`;
+}
+
 function renderGrammarErrors(items = []) {
   if (!Array.isArray(items) || !items.length) return `<p class="muted">暂无语法错误列表。</p>`;
   return `<div class="correction-list">${items.map((item) => `
@@ -370,6 +402,7 @@ function renderGradingResult(result = {}) {
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
   const band7 = result.revisedEssayBand7 || "";
+  const revisionMeta = result.revisedEssayMeta || {};
   const revisionNotesZh = Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh;
   els.gradingResults.dataset.band5 = band5;
   els.gradingResults.dataset.band6 = band6;
@@ -378,6 +411,8 @@ function renderGradingResult(result = {}) {
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断反馈。建议补充作文后重新批改。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
+    ${renderScoreCalibration(result.scoreCalibration)}
+    ${renderLowBandDiagnostics(result.lowBandDiagnostics)}
     <section class="grading-section">
       <h4>Overall estimated band</h4>
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div><span>${escapeHtml(result.estimatedLevel || "")}</span></div>
@@ -415,6 +450,8 @@ function renderGradingResult(result = {}) {
     </section>
     <section class="grading-section">
       <h4>AI 修改版作文</h4>
+      <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>
+      ${revisionMeta.revisionLimited ? `<p class="ai-warning">原文太短或内容太少，系统只提供基础修改版。请先补充内容后再生成更高分版本。</p>` : ""}
       ${renderRevisionBlock("Band 5 Safe Revision", "band5", band5)}
       ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", band6)}
       ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
