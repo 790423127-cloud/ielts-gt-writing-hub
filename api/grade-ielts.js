@@ -120,9 +120,10 @@ function isVeryShortEssay(body) {
 function maxTokensForMode(mode, veryShort) {
   // Two user-facing modes are now supported:
   // full = detailed grading without model answer; revision = detailed grading + model/revision.
-  // Do not shrink under-minimum essays into a "basic" diagnostic; they still need detailed AI correction.
-  if (mode === "revision") return veryShort ? 3200 : 7000;
-  return veryShort ? 2400 : 5000;
+  // The user now prefers maximum AI feedback quality over token savings.
+  // Keep very short essays smaller, but allow full essays enough room for rich evidence.
+  if (mode === "revision") return veryShort ? 5200 : 11000;
+  return veryShort ? 4200 : 8500;
 }
 
 
@@ -366,10 +367,9 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Do not include explanatory preface or closing comments.",
     "All required keys must exist.",
     "If a section has no content, return an empty array [] or an empty string \"\".",
-    "Use short, compact feedback.",
-    "Do not write long paragraphs inside arrays.",
-    "Every array must have at most 5 items.",
-    "grammarErrors and sentenceCorrections must each have at most 5 items.",
+    "Use detailed but structured feedback. Do not be vague.",
+    "Do not cap advice arrays at 5 items when the user essay contains more clear issues; return as many clear score-affecting items as the schema and limits allow.",
+    "Each correction item must include a concrete fix, reason, and realistic next-step improvement.",
     "Provide brief Chinese helper notes in *Zh fields only. Chinese helper notes should explain feedback only; do not translate the full essay, original sentences, corrected sentences, model answers, or revised essays.",
     "For taskRequirementAnalysisZh, scoreCalibrationZh, lowBandDiagnosticsZh, highBandDiagnosticsZh, strengthsZh, and mainProblemsZh, write short Chinese explanations of the feedback only.",
     "For advice arrays and task-specific correction fields, provide matching short *Zh helper fields when possible, but never translate complete essay text or revised essay text.",
@@ -701,6 +701,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     task1LetterCorrections: taskType === "task1" ? { toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: taskType === "task2" ? { positionComment: "", bodyParagraphComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     coherenceAdvice: [],
     lexicalAdvice: [],
@@ -790,12 +791,97 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
 }
 
 
+function targetImprovementRangeFromBand(bandValue) {
+  const band = clampAiBand(bandValue, 5);
+  let lower;
+  let upper;
+  let maintenance = false;
+
+  if (band <= 3.5) {
+    lower = 5;
+    upper = 5;
+  } else if (band <= 4.5) {
+    lower = 5;
+    upper = 5.5;
+  } else if (band === 5) {
+    lower = 5.5;
+    upper = 6;
+  } else if (band === 5.5) {
+    lower = 6;
+    upper = 6.5;
+  } else if (band === 6) {
+    lower = 6.5;
+    upper = 7;
+  } else if (band === 6.5) {
+    lower = 7;
+    upper = 7.5;
+  } else if (band === 7) {
+    lower = 7.5;
+    upper = 8;
+  } else if (band === 7.5) {
+    lower = 8;
+    upper = 8.5;
+  } else if (band === 8) {
+    lower = 8.5;
+    upper = 9;
+  } else if (band === 8.5) {
+    lower = 9;
+    upper = 9;
+  } else {
+    lower = 9;
+    upper = 9;
+    maintenance = true;
+  }
+
+  return {
+    lower,
+    upper,
+    maintenance,
+    label: maintenance
+      ? "Band 9.0 maintenance"
+      : (lower === upper ? `Band ${formatBand(lower)}` : `Band ${formatBand(lower)}-${formatBand(upper)}`)
+  };
+}
+
+function buildTargetImprovementInstruction(body) {
+  const currentBand = Number(body?.currentOverallBand || body?.overallBand || body?.estimatedBand || 0);
+  if (!Number.isFinite(currentBand) || currentBand <= 0) {
+    return [
+      "Targeted improvement rule: first infer the current IELTS band from the grading result, then give advice for a realistic next step.",
+      "Use the full target ladder: Band 1.0-3.5 -> Band 5.0; Band 4.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+      "Do not give advice that jumps too far beyond the current level. A Band 3 essay should not receive Band 6-9 style advice; a Band 5 essay should not receive Band 8-9 style advice."
+    ].join("\n");
+  }
+
+  const roundedBand = clampAiBand(currentBand, 5);
+  const range = targetImprovementRangeFromBand(roundedBand);
+  return [
+    `Current estimated band from the AI scoring pass: Band ${formatBand(roundedBand)}.`,
+    `Target improvement range for advice: ${range.label}.`,
+    "Use this target range when writing all correction advice, band plans, betterExpression, model answer outline, and task-specific coaching.",
+    "Full target ladder: Band 1.0-3.5 -> Band 5.0; Band 4.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+    "Important coaching rule: advice should normally target only +0.5 to +1.0 band above the current level, with a minimum practical target of Band 5.0 for very weak essays.",
+    "If the current essay is below Band 5, give detailed Band 5 survival/pass advice first, not Band 6-9 advice.",
+    "If the current essay is Band 5.0, give Band 5.5-6.0 advice.",
+    "If the current essay is Band 5.5, give Band 6.0-6.5 advice.",
+    "If the current essay is Band 6.0, give Band 6.5-7.0 advice.",
+    "If the current essay is Band 6.5, give Band 7.0-7.5 advice.",
+    "If the current essay is Band 7.0, give Band 7.5-8.0 advice.",
+    "If the current essay is Band 7.5, give Band 8.0-8.5 advice.",
+    "If the current essay is Band 8.0, give Band 8.5-9.0 advice.",
+    "If the current essay is Band 8.5, give Band 9.0 advice.",
+    "If the current essay is Band 9.0, give maintenance advice: preserve task fulfilment, naturalness, precision, flexibility, and avoid over-writing.",
+    "Do not make the suggested sentence or betterExpression unrealistically advanced for the current level. Upgrade step by step."
+  ].join("\n");
+}
+
 function correctionLimitForEssay(body, mode) {
   const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  if (words <= 20) return 6;
-  if (words <= 80) return 10;
-  if (words <= 180) return 16;
-  return mode === "revision" ? 28 : 24;
+  if (words <= 20) return 8;
+  if (words <= 80) return 16;
+  if (words <= 180) return 28;
+  if (words <= 320) return mode === "revision" ? 48 : 40;
+  return mode === "revision" ? 70 : 60;
 }
 
 function buildAiCorrectionSystemPrompt(locale = "en") {
@@ -858,6 +944,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
       priorityFixesZh: []
     },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     taskAchievementAdvice: [],
@@ -876,14 +963,19 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     JSON.stringify(shape),
     "",
     `Mode: ${mode === "revision" ? "detailed grading plus model/revision" : "detailed grading without model answer"}.`,
-    `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors.`,
+    `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors. The user wants maximum detail; use the full limit when clear issues exist.`,
     "If there are no errors of a specific type, return an empty array for that type, but do not return all correction arrays empty when the essay has visible errors.",
-    "If the essay has more than 30 words, quote and correct at least 3 clear original errors unless there are genuinely fewer visible errors.",
+    "If the essay has more than 30 words, quote and correct at least 8 clear original errors unless there are genuinely fewer visible errors. For essays above 150 words, aim for 12+ concrete corrections across spellingCorrections, grammarErrors, sentenceCorrections, and detailedSentenceCorrections when errors exist.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
     "For detailedSentenceCorrections, include originalSentence, correctedSentence, betterExpression, problem, rule, and bandImpact.",
     "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
     "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
+    buildTargetImprovementInstruction(body),
+    "Fill targetImprovementPlan with a realistic next-step plan based on that target range.",
+    "Write every correction and betterExpression at the target level, not far above it.",
+    "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: do not give all plans equal priority. Put the most relevant plan for the target range first and make it the most detailed. If the target range is above Band 7, put the Band 7.5-9 coaching mainly in targetImprovementPlan, criterionUpgrades, practiceTasks, and band7UpgradePlan.",
+    "For each correction item, explain exactly how the change helps the user reach the target range.",
     "Chinese helper notes must be short and appear only in *Zh fields.",
     "",
     "Question:",
@@ -899,21 +991,96 @@ function correctionObjectHasText(item, fields) {
   return fields.some((field) => hasUsefulText(item[field]));
 }
 
+function pickFirstUsefulValue(item, fields) {
+  for (const field of fields) {
+    if (hasUsefulText(item?.[field])) return item[field];
+  }
+  return "";
+}
+
+function normalizeSpellingCorrectionItem(item) {
+  if (!item || typeof item !== "object") return null;
+  return {
+    originalWord: pickFirstUsefulValue(item, ["originalWord", "misspelledWord", "incorrectWord", "word", "original", "wrongWord"]),
+    correctedWord: pickFirstUsefulValue(item, ["correctedWord", "correctWord", "correction", "corrected", "correctSpelling", "rightWord"]),
+    sentence: pickFirstUsefulValue(item, ["sentence", "context", "originalSentence", "sourceSentence", "where"]),
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "comment"]),
+    explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "commentZh"])
+  };
+}
+
+function normalizeGrammarErrorItem(item) {
+  if (!item || typeof item !== "object") return null;
+  return {
+    type: pickFirstUsefulValue(item, ["type", "errorType", "category", "ruleType"]) || "grammar",
+    original: pickFirstUsefulValue(item, ["original", "originalSentence", "sentence", "sourceSentence", "wrong"]),
+    corrected: pickFirstUsefulValue(item, ["corrected", "correctedSentence", "correction", "fixed", "right"]),
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "rule", "comment"]),
+    explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "ruleZh", "commentZh"])
+  };
+}
+
+function normalizeSentenceCorrectionItem(item) {
+  if (!item || typeof item !== "object") return null;
+  return {
+    original: pickFirstUsefulValue(item, ["original", "originalSentence", "sentence", "sourceSentence", "wrong"]),
+    corrected: pickFirstUsefulValue(item, ["corrected", "correctedSentence", "correction", "fixed", "right"]),
+    reason: pickFirstUsefulValue(item, ["reason", "explanation", "problem", "rule", "comment"]),
+    reasonZh: pickFirstUsefulValue(item, ["reasonZh", "explanationZh", "problemZh", "ruleZh", "commentZh"])
+  };
+}
+
+function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
+  if (!item || typeof item !== "object") return null;
+  const originalSentence = pickFirstUsefulValue(item, ["originalSentence", "original", "sentence", "sourceSentence", "wrong"]);
+  const correctedSentence = pickFirstUsefulValue(item, ["correctedSentence", "corrected", "correction", "fixed", "right"]);
+  return {
+    sentenceNumber: Number(item.sentenceNumber || item.number || item.index || index + 1) || index + 1,
+    originalSentence,
+    correctedSentence,
+    errorType: pickFirstUsefulValue(item, ["errorType", "type", "category", "ruleType"]) || "sentence correction",
+    errorTypeZh: pickFirstUsefulValue(item, ["errorTypeZh", "typeZh", "categoryZh"]),
+    problem: pickFirstUsefulValue(item, ["problem", "explanation", "reason", "comment"]),
+    problemZh: pickFirstUsefulValue(item, ["problemZh", "explanationZh", "reasonZh", "commentZh"]),
+    rule: pickFirstUsefulValue(item, ["rule", "grammarRule", "howToFix"]),
+    ruleZh: pickFirstUsefulValue(item, ["ruleZh", "grammarRuleZh", "howToFixZh"]),
+    betterExpression: pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]),
+    betterExpressionZh: pickFirstUsefulValue(item, ["betterExpressionZh", "improvedSentenceZh", "naturalExpressionZh", "upgradeZh"]),
+    bandImpact: pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact"]),
+    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"])
+  };
+}
+
+function hasConcreteAiCorrectionItems(correction) {
+  const cleaned = sanitizeAiCorrectionPayload(correction);
+  return Boolean(
+    ensureArray(cleaned.spellingCorrections).length ||
+    ensureArray(cleaned.grammarErrors).length ||
+    ensureArray(cleaned.sentenceCorrections).length ||
+    ensureArray(cleaned.detailedSentenceCorrections).length
+  );
+}
+
 function sanitizeAiCorrectionPayload(correction) {
   if (!correction || typeof correction !== "object") return {};
   const cleaned = { ...correction };
-  cleaned.spellingCorrections = ensureArray(cleaned.spellingCorrections).filter((item) =>
-    correctionObjectHasText(item, ["originalWord", "correctedWord", "sentence", "explanation"])
-  );
-  cleaned.grammarErrors = ensureArray(cleaned.grammarErrors).filter((item) =>
-    correctionObjectHasText(item, ["original", "corrected", "explanation"])
-  );
-  cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections).filter((item) =>
-    correctionObjectHasText(item, ["original", "corrected", "reason"])
-  );
-  cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections).filter((item) =>
-    correctionObjectHasText(item, ["originalSentence", "correctedSentence", "problem", "rule", "betterExpression"])
-  );
+
+  cleaned.spellingCorrections = ensureArray(cleaned.spellingCorrections)
+    .map((item) => normalizeSpellingCorrectionItem(item))
+    .filter((item) => correctionObjectHasText(item, ["originalWord", "correctedWord", "sentence", "explanation"]));
+
+  cleaned.grammarErrors = ensureArray(cleaned.grammarErrors)
+    .map((item) => normalizeGrammarErrorItem(item))
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation"]));
+
+  cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
+    .map((item) => normalizeSentenceCorrectionItem(item))
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "reason"]));
+
+  cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections)
+    .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
+    .filter((item) => correctionObjectHasText(item, ["originalSentence", "correctedSentence", "problem", "rule", "betterExpression"]));
+
   return cleaned;
 }
 
@@ -956,7 +1123,7 @@ function mergeAiCorrectionDetails(result, correction, body, mode) {
     if (incoming.length) {
       const limit = ["spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections"].includes(field)
         ? correctionLimit
-        : 8;
+        : 18;
       merged[field] = incoming.slice(0, limit);
     }
   });
@@ -966,13 +1133,13 @@ function mergeAiCorrectionDetails(result, correction, body, mode) {
       ...(merged.errorAnalysis && typeof merged.errorAnalysis === "object" ? merged.errorAnalysis : {}),
       ...correction.errorAnalysis,
       errorPatterns: ensureArray(correction.errorAnalysis.errorPatterns).length
-        ? ensureArray(correction.errorAnalysis.errorPatterns).slice(0, 12)
+        ? ensureArray(correction.errorAnalysis.errorPatterns).slice(0, 24)
         : ensureArray(merged.errorAnalysis?.errorPatterns),
       priorityFixes: ensureArray(correction.errorAnalysis.priorityFixes).length
-        ? ensureArray(correction.errorAnalysis.priorityFixes).slice(0, 8)
+        ? ensureArray(correction.errorAnalysis.priorityFixes).slice(0, 16)
         : ensureArray(merged.errorAnalysis?.priorityFixes),
       priorityFixesZh: ensureArray(correction.errorAnalysis.priorityFixesZh).length
-        ? ensureArray(correction.errorAnalysis.priorityFixesZh).slice(0, 8)
+        ? ensureArray(correction.errorAnalysis.priorityFixesZh).slice(0, 16)
         : ensureArray(merged.errorAnalysis?.priorityFixesZh)
     };
   }
@@ -981,6 +1148,13 @@ function mergeAiCorrectionDetails(result, correction, body, mode) {
     merged.correctionPriority = {
       ...(merged.correctionPriority && typeof merged.correctionPriority === "object" ? merged.correctionPriority : {}),
       ...correction.correctionPriority
+    };
+  }
+
+  if (correction.targetImprovementPlan && typeof correction.targetImprovementPlan === "object") {
+    merged.targetImprovementPlan = {
+      ...(merged.targetImprovementPlan && typeof merged.targetImprovementPlan === "object" ? merged.targetImprovementPlan : {}),
+      ...correction.targetImprovementPlan
     };
   }
 
@@ -1033,7 +1207,7 @@ async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTo
 async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline, maxTokensOverride, timeoutMs }) {
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   if (!String(body.essay || "").trim()) return {};
-  const maxTokens = maxTokensOverride || Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 180, words < 80 ? 2200 : 3600), effectiveMode === "revision" ? 6200 : 5200);
+  const maxTokens = maxTokensOverride || Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 260, words < 80 ? 3600 : 6200), effectiveMode === "revision" ? 14000 : 11000);
   const rawText = await callDeepSeek({
     apiKey,
     model,
@@ -1059,6 +1233,7 @@ function buildFocusedAiCorrectionSystemPrompt(locale = "en") {
     "This is a focused retry because the detailed correction section was empty or incomplete.",
     "Scan the whole essay and quote real user text only.",
     "Return concrete corrections, not generic advice.",
+    "Do not return only errorAnalysis, task advice, strengths, or mainProblems. The correction arrays must contain quoted user text when errors are visible.",
     "Do not return blank objects.",
     "If the essay has visible errors, at least one of spellingCorrections, grammarErrors, sentenceCorrections, or detailedSentenceCorrections must contain items.",
     chineseRule
@@ -1068,7 +1243,7 @@ function buildFocusedAiCorrectionSystemPrompt(locale = "en") {
 function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const words = Number(body.wordCount) || countWordsServer(body.essay);
-  const itemTarget = words < 80 ? 3 : (words < 180 ? 6 : 10);
+  const itemTarget = words < 80 ? 6 : (words < 180 ? 12 : 20);
   const shape = {
     spellingCorrections: [
       { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
@@ -1098,6 +1273,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     ],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     coherenceAdvice: [],
     lexicalAdvice: [],
@@ -1107,7 +1283,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
   return [
     "Return one JSON object with this shape:",
     JSON.stringify(shape),
-    `Target: provide up to ${itemTarget} concrete corrections. Do not stop at two.`,
+    `Target: provide ${itemTarget} concrete corrections if the essay contains that many visible errors. Use the full target when the essay has many clear issues. Do not stop at two and do not return only generic advice.`,
     "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
     "For each corrected sentence, include a correctedSentence and a betterExpression.",
     "Include spelling errors if any misspelled words appear.",
@@ -1115,6 +1291,8 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     task === "Task 1"
       ? "Also mention tone, purpose, and bullet-point problems in advice arrays if relevant."
       : "Also mention position, idea development, examples, paragraphing, and conclusion problems in advice arrays if relevant.",
+    buildTargetImprovementInstruction(body),
+    "Fill targetImprovementPlan and make all fixes realistic for that target range.",
     "Question:",
     String(body.questionPrompt || ""),
     "Essay:",
@@ -1125,7 +1303,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
 async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline }) {
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   if (!String(body.essay || "").trim()) return {};
-  const maxTokens = Math.min(words < 80 ? 2200 : (words < 180 ? 3200 : 4200), 4600);
+  const maxTokens = Math.min(words < 80 ? 4200 : (words < 180 ? 7200 : 10000), 12000);
   const rawText = await callDeepSeek({
     apiKey,
     model,
@@ -1135,7 +1313,7 @@ async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode,
     temperature: 0.0,
     jsonMode: false,
     deadline,
-    timeoutMs: Math.min(18000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    timeoutMs: Math.min(28000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
   const parsed = await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
   return sanitizeAiCorrectionPayload(parsed);
@@ -1143,41 +1321,56 @@ async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode,
 
 async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingMode, locale, deadline }) {
   let output = result && typeof result === "object" ? result : {};
-  if (hasAiCorrectionContent(output)) return output;
   if (!String(body?.essay || "").trim()) return output;
 
-  if (remainingAiTime(deadline) < 9000) {
+  // Generic advice is not enough for the correction section. The user-facing
+  // modules need concrete quoted errors: spellingCorrections, grammarErrors,
+  // sentenceCorrections, or detailedSentenceCorrections. If the scoring pass
+  // only returned errorAnalysis/advice text, force a focused AI correction pass.
+  if (hasConcreteAiCorrectionItems(output)) return output;
+
+  if (remainingAiTime(deadline) < 7000) {
     output.correctionWarning = "AI detailed correction did not complete before the server deadline. Please retry detailed grading.";
     output.correctionPassWarning = output.correctionWarning;
     return output;
   }
 
-  try {
-    const focusedCorrection = await callAiFocusedCorrectionPass({
-      apiKey,
-      model,
-      body: { ...body, mode: gradingMode },
-      effectiveMode: gradingMode,
-      locale,
-      deadline
-    });
-    if (hasAiCorrectionContent(focusedCorrection)) {
-      output = mergeAiCorrectionDetails(output, focusedCorrection, body, gradingMode);
-      output.correctionWarning = "";
-      output.correctionPassWarning = "";
-      return output;
+  const retryAttempts = remainingAiTime(deadline) > 17000 ? 2 : 1;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+    try {
+      const focusedCorrection = await callAiFocusedCorrectionPass({
+        apiKey,
+        model,
+        body: { ...body, mode: gradingMode, correctionRetryAttempt: attempt },
+        effectiveMode: gradingMode,
+        locale,
+        deadline
+      });
+
+      if (hasConcreteAiCorrectionItems(focusedCorrection)) {
+        output = mergeAiCorrectionDetails(output, focusedCorrection, body, gradingMode);
+        output.correctionWarning = "";
+        output.correctionPassWarning = "";
+        return output;
+      }
+
+      if (hasAiCorrectionContent(focusedCorrection)) {
+        output = mergeAiCorrectionDetails(output, focusedCorrection, body, gradingMode);
+      }
+    } catch (error) {
+      lastError = error;
+      if (remainingAiTime(deadline) < 7000) break;
     }
-  } catch (error) {
-    output.correctionWarning = "AI detailed correction retry failed. The score was returned first. Please retry detailed grading.";
-    output.correctionPassWarning = output.correctionWarning;
-    return output;
   }
 
-  output.correctionWarning = "AI did not return concrete sentence-level corrections. Please retry detailed grading.";
+  output.correctionWarning = lastError
+    ? "AI detailed correction retry failed or timed out. The score was returned first. Please retry detailed grading."
+    : "AI did not return concrete sentence-level corrections. Please retry detailed grading.";
   output.correctionPassWarning = output.correctionWarning;
   return output;
 }
-
 
 function buildFastAiGradingSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
@@ -1251,6 +1444,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     coherenceAdvice: [],
     lexicalAdvice: [],
@@ -1737,7 +1931,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
       const correction = await callAiCorrectionPass({
         apiKey,
         model,
-        body: { ...body, mode: gradingMode },
+        body: { ...body, mode: gradingMode, currentOverallBand: result?.overallBand },
         effectiveMode: gradingMode,
         locale,
         deadline
@@ -1748,11 +1942,11 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         const correctionRetry = await callAiCorrectionPass({
           apiKey,
           model,
-          body: { ...body, mode: gradingMode },
+          body: { ...body, mode: gradingMode, currentOverallBand: result?.overallBand },
           effectiveMode: gradingMode,
           locale,
           deadline,
-          maxTokensOverride: 1800,
+          maxTokensOverride: 4200,
           timeoutMs: Math.min(10000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
         result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
@@ -1772,7 +1966,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
     result,
     apiKey,
     model,
-    body,
+    body: { ...body, currentOverallBand: result?.overallBand },
     gradingMode,
     locale,
     deadline
@@ -2614,15 +2808,15 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
   const threshold = task === "Task 1" ? 150 : 250;
   const underMinimum = words < threshold;
 
-  normalized.strengths = cleanStringArray(normalized.strengths).slice(0, 8);
+  normalized.strengths = cleanStringArray(normalized.strengths).slice(0, 16);
   normalized.mainProblems = cleanStringArray(normalized.mainProblems).slice(0, 10);
-  normalized.taskAchievementAdvice = cleanStringArray(normalized.taskAchievementAdvice).slice(0, 8);
-  normalized.coherenceAdvice = cleanStringArray(normalized.coherenceAdvice).slice(0, 8);
-  normalized.lexicalAdvice = cleanStringArray(normalized.lexicalAdvice).slice(0, 8);
-  normalized.grammarAdvice = cleanStringArray(normalized.grammarAdvice).slice(0, 8);
-  normalized.band5FixPlan = cleanStringArray(normalized.band5FixPlan).slice(0, 8);
-  normalized.band6UpgradePlan = cleanStringArray(normalized.band6UpgradePlan).slice(0, 8);
-  normalized.band7UpgradePlan = cleanStringArray(normalized.band7UpgradePlan).slice(0, 8);
+  normalized.taskAchievementAdvice = cleanStringArray(normalized.taskAchievementAdvice).slice(0, 16);
+  normalized.coherenceAdvice = cleanStringArray(normalized.coherenceAdvice).slice(0, 16);
+  normalized.lexicalAdvice = cleanStringArray(normalized.lexicalAdvice).slice(0, 16);
+  normalized.grammarAdvice = cleanStringArray(normalized.grammarAdvice).slice(0, 16);
+  normalized.band5FixPlan = cleanStringArray(normalized.band5FixPlan).slice(0, 16);
+  normalized.band6UpgradePlan = cleanStringArray(normalized.band6UpgradePlan).slice(0, 16);
+  normalized.band7UpgradePlan = cleanStringArray(normalized.band7UpgradePlan).slice(0, 16);
 
   // Remove blank correction cards that the front end would otherwise render as empty boxes.
   const correctionLimit = correctionLimitForEssay(body, mode);
@@ -2990,9 +3184,9 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.grammarErrors = ensureArray(cleanedNormalizedCorrections.grammarErrors).slice(0, correctionLimit);
   normalized.sentenceCorrections = ensureArray(cleanedNormalizedCorrections.sentenceCorrections).slice(0, correctionLimit);
   normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
-  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, 12);
-  normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 8);
-  normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 8);
+  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, 24);
+  normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 16);
+  normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 16);
   normalized.detailedSentenceCorrections = ensureArray(cleanedNormalizedCorrections.detailedSentenceCorrections).slice(0, correctionLimit);
   normalized.task1LetterCorrections = body?.task === "Task 1"
     ? (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object" ? normalized.task1LetterCorrections : { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] })
