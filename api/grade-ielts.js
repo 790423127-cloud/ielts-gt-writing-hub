@@ -48,7 +48,7 @@ function lowWordCountReason(body) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   const threshold = task === "Task 1" ? 150 : 250;
-  return `${task} has ${words} words, below the recommended minimum of ${threshold} words. DeepSeek must still assess it on the full IELTS 0-9 scale, starting from Band 0 when there is no rateable response, and apply strict word-count caps without inventing a minimum score.`;
+  return `${task} has ${words} words, below the recommended minimum of ${threshold} words. DeepSeek must still assess it on the full IELTS 1-9 scale. The app's minimum visible band is Band 1, even for extremely weak or one-word responses. Apply strict IELTS word-count penalties without inventing a local fallback score.`;
 }
 
 function corsHeaders(req) {
@@ -109,6 +109,28 @@ function formatBand(value) {
   return Number.isInteger(value) ? `${value}.0` : String(value);
 }
 
+function clampAiBand(value, fallback = 1) {
+  const numeric = Number(value);
+  const base = Number.isFinite(numeric) ? numeric : fallback;
+  return Math.max(1, Math.min(9, Math.round(base * 2) / 2));
+}
+
+function normalizeAiBandsOnly(result, body) {
+  const fallbackBand = 1;
+  result.overallBand = clampAiBand(result.overallBand, fallbackBand);
+  result.estimatedLevel = result.estimatedLevel || `Band ${formatBand(result.overallBand)}`;
+
+  ensureCriteria(result, body?.task);
+  Object.values(result.criteria || {}).forEach((criterion) => {
+    criterion.band = clampAiBand(criterion.band, result.overallBand);
+  });
+
+  if (result.scoreCalibration && typeof result.scoreCalibration === "object") {
+    result.scoreCalibration.capApplied = Boolean(result.scoreCalibration.capApplied);
+    result.scoreCalibration.strictness = result.scoreCalibration.strictness || "strict";
+  }
+}
+
 function firstCriterionName(task) {
   return task === "Task 1" ? "Task Achievement" : "Task Response";
 }
@@ -149,13 +171,13 @@ function buildLowBandDiagnostics(body) {
   let recommendedLowBandRange = "";
   let reason = "No low-band trigger detected.";
   if (isBlank) {
-    recommendedLowBandRange = "0";
-    reason = "The response is blank or has no rateable attempt.";
+    recommendedLowBandRange = "1";
+    reason = "The response is blank or has no rateable attempt. The app minimum visible score is Band 1.";
   } else if (nonEnglish) {
-    recommendedLowBandRange = "0";
-    reason = "The response is mostly not written in English.";
+    recommendedLowBandRange = "1";
+    reason = "The response is mostly not written in English. The app minimum visible score is Band 1.";
   } else if (copied) {
-    recommendedLowBandRange = "0-1.0";
+    recommendedLowBandRange = "1.0";
     reason = "The response appears mostly copied from the question prompt.";
   } else if (wordCount20OrFewer) {
     recommendedLowBandRange = "1.0";
@@ -194,7 +216,7 @@ function capFromDiagnostics(body, diagnostics) {
   const firstCriterion = firstCriterionName(task);
 
   if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
-    return { cap: 0, firstCap: 0, reason: diagnostics.reason || "No rateable English response." };
+    return { cap: 1, firstCap: 1, reason: diagnostics.reason || "No rateable English response. The app minimum visible score is Band 1." };
   }
   if (diagnostics.mostlyCopiedFromPrompt) {
     return { cap: 1, firstCap: 1, reason: "The response is mostly copied from the prompt and has little original rateable writing." };
@@ -254,7 +276,7 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Strict IELTS scoring does not mean artificially low scoring. A normal-length response that fully answers the task, is coherent, well developed, and accurate can receive Band 7, Band 8, or Band 9. Do not use Band 7 as a default ceiling. Band 8 does not require a perfect essay; occasional minor errors are acceptable when communication is strong. Band 9 does not require literary or native-level writing; it requires full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and very rare minor errors. If the response is official-sample quality and answers the selected prompt, allow Band 8-9. Do not force strong relevant samples into Band 5 or Band 7.",
     "Low-band diagnostics should trigger only for clear evidence: blank/no attempt, 20 words or fewer, mostly non-English, mostly copied from prompt, wholly unrelated, little relevant message, no rateable English, or meaning mostly blocked. Do not trigger low-band diagnostics merely because language is simple, not advanced, not Band 9, or because a Task 1 answer is over 250 words.",
     "scoreCalibration.capApplied must be true only for a real cap: word count below the relevant threshold, Task 1 missing major bullet points, Task 2 no clear position when required, off-topic, mostly copied, mostly non-English, meaning mostly blocked, blank/no attempt, or task mismatch.",
-    "Score from 0 to 9 and allow half bands. Low-word-count responses must also be assessed from Band 0 upward; never use Band 2, 3, 4, or 5.5 as a minimum score.",
+    "Score from 1 to 9 and allow half bands. Low-word-count responses must also be assessed from Band 1 upward. The app's visible lower limit is Band 1; never use Band 2, 3, 4, or 5.5 as a minimum score.",
     "There is no upper word-count limit in this app. Do not cap or penalise an answer simply because it is long; only penalise if length causes repetition, irrelevance, weak organisation, or loss of task focus.",
     "Band 9: fully addresses all parts, natural fluent organisation, wide precise vocabulary, flexible highly accurate grammar, very rare minor errors.",
     "High-band distinction: Band 7 covers the task well with clear progression, good vocabulary, some grammar flexibility, and noticeable errors that usually do not block meaning; it may feel somewhat mechanical or less natural.",
@@ -270,14 +292,14 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Band 3: very limited response, serious difficulty communicating ideas, very limited vocabulary, frequent grammar errors often block meaning.",
     "Band 2: barely communicates, very few relevant ideas, mostly fragments, memorised phrases, isolated words, or very limited recognisable strings.",
     "Band 1: almost no ability to communicate in writing, only isolated words or a response of 20 words or fewer.",
-    "Band 0: no answer, completely unrelated answer, completely non-English answer, or only copied/memorised text with no rateable original writing.",
+    "Band 1: no answer, completely unrelated answer, completely non-English answer, or only copied/memorised text with no rateable original writing. The app does not display Band 0.",
     "Use IELTS public band descriptor logic for low bands. Do not give Band 4 or above if there is too little rateable language, mostly unrelated content, mostly copied language, mostly memorised text, or no relevant message.",
-    "Band 0 applies for blank/no attempt, completely non-English, totally memorised, only copied prompt text, or no meaningful attempt. If Band 0 applies, overallBand and all criteria must be 0, scoreCalibration.capApplied true, no revised essays.",
+    "Band 1 applies for blank/no attempt, completely non-English, totally memorised, only copied prompt text, or no meaningful attempt. The app does not display Band 0; if the lowest band applies, overallBand and all criteria must be 1, scoreCalibration.capApplied true, no revised essays.",
     "Band 1 normally applies for 20 words or fewer, wholly unrelated content, no relevant message, isolated words, mostly copied prompt, or virtual non-writer. Do not award Band 2+ unless there is a clear relevant original English message.",
     "Band 2 normally applies when content barely relates to the task, there is little relevant message, ideas are undeveloped, organisation is absent, vocabulary is extremely limited, and there is little evidence of sentence forms.",
     "Band 3 normally applies when the task is not adequately addressed, the situation/prompt is misunderstood, ideas are irrelevant or difficult to connect, vocabulary is inadequate, and grammar errors prevent most meaning.",
-    "Task 1 word count caps: blank/non-English/no rateable attempt = Band 0; isolated words or mostly copied prompt = Band 0-1; 20 words or fewer normally no higher than Band 2; under 50 words normally no higher than Band 3; 50-79 words normally no higher than Band 4; 80-119 words normally no higher than Band 5; 120-149 words may score normally but mention limited development if relevant.",
-    "Task 2 word count caps: blank/non-English/no rateable attempt = Band 0; isolated words or mostly copied prompt = Band 0-1; 20 words or fewer normally no higher than Band 2; under 80 words normally no higher than Band 3; 80-149 words normally no higher than Band 4; 150-199 words normally no higher than Band 5; 200-249 words may score normally but mention limited development if relevant.",
+    "Task 1 word count caps: blank/non-English/no rateable attempt = Band 1; isolated words or mostly copied prompt = Band 1; 20 words or fewer normally no higher than Band 2; under 50 words normally no higher than Band 3; 50-79 words normally no higher than Band 4; 80-119 words normally no higher than Band 5; 120-149 words may score normally but mention limited development if relevant.",
+    "Task 2 word count caps: blank/non-English/no rateable attempt = Band 1; isolated words or mostly copied prompt = Band 1; 20 words or fewer normally no higher than Band 2; under 80 words normally no higher than Band 3; 80-149 words normally no higher than Band 4; 150-199 words normally no higher than Band 5; 200-249 words may score normally but mention limited development if relevant.",
     "Do not reject short essays. Grade them, but apply caps.",
     "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
     "Task 2 argument caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; off-topic no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
@@ -365,7 +387,7 @@ function buildExpectedJsonShape(task, locale = "en") {
       recommendedHighBandRange: "",
       reason: ""
     },
-    overallBand: 0,
+    overallBand: 1,
     estimatedLevel: "",
     lowBandDiagnostics: {
       isBlank: false,
@@ -395,28 +417,28 @@ function buildExpectedJsonShape(task, locale = "en") {
     scoreCalibrationZh: { capReasonZh: emptyForLocaleZh("简短限分原因解释", locale), whyNotHigherZh: emptyForLocaleZh("简短说明为什么不能更高", locale), whyNotLowerZh: emptyForLocaleZh("简短说明为什么没有更低", locale), evidenceZh: emptyForLocaleZh(["简短证据解释"], locale) },
     criteria: {
       [firstCriterion]: {
-        band: 0,
+        band: 1,
         feedback: "...",
         feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
         howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Coherence and Cohesion": {
-        band: 0,
+        band: 1,
         feedback: "...",
         feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
         howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Lexical Resource": {
-        band: 0,
+        band: 1,
         feedback: "...",
         feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
         howToImproveZh: emptyForLocaleZh("Brief Chinese suggestion", locale)
       },
       "Grammatical Range and Accuracy": {
-        band: 0,
+        band: 1,
         feedback: "...",
         feedbackZh: emptyForLocaleZh("Brief Chinese explanation", locale),
         howToImprove: "...",
@@ -550,13 +572,13 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     veryShort ? (isChineseLocale(locale) ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, English feedback max 25 words, and all *Zh fields empty.") : "",
     revisionInstruction,
     underMinimumInstruction,
-    body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 0 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
+    body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 1 because the app minimum visible band is 1, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
     "Use English for the main feedback. Use brief Chinese helper notes only in *Zh fields for local understanding. Do not translate the whole essay or revised essays.",
-    "Local low-band diagnostics from the server are provided below. Use them as strong evidence, but still assess the actual writing.",
-    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }, null, 2),
-    "If capSuggestion.cap is not null, apply that as an upper cap unless the essay is clearly worse, and explain it in scoreCalibration.",
-    "If lowBandDiagnostics.recommendedLowBandRange is not empty, reflect it in scoreCalibration and avoid inflated scores.",
+    "Server context is provided below for word count and obvious risk flags only. It is not a local score. DeepSeek must be the only scorer.",
+    JSON.stringify({ actualWordCount: body.wordCount, targetWordCount: body.targetWordCount, isUnderMinimum: Boolean(body.isUnderMinimum), serverRiskFlags: diagnostics }, null, 2),
+    "Use the server context only as factual context. Do not copy a local band. Assign the band yourself using IELTS criteria.",
+    "The app minimum visible band is 1. Do not return 0. There is no word-count upper limit.",
     `Always set disclaimer to: ${DISCLAIMER}`,
     "",
     "Request data:",
@@ -586,6 +608,67 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     }, null, 2)
   ].join("\n");
 }
+
+
+function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
+  const taskType = body.task === "Task 1" ? "task1" : "task2";
+  const firstCriterion = firstCriterionName(body.task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  return [
+    "Return exactly one valid JSON object. No markdown. No code fences.",
+    "DeepSeek is the only scorer. Do not use or copy any local fallback score.",
+    "Score from Band 1 to Band 9 only. Do not return 0. The app minimum visible band is 1.",
+    "There is no upper word-count limit. Penalise long answers only if they are repetitive, irrelevant, incoherent, or lose task focus.",
+    "Low-word-count answers must still receive an AI score and AI feedback. Apply IELTS word-count penalties strictly but do not reject the answer.",
+    previousIssue ? `Previous issue: ${previousIssue}` : "",
+    "Required compact JSON keys:",
+    JSON.stringify({
+      actualWordCount: words,
+      taskTypeDetected: taskType,
+      wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
+      wordCountStatus: body.isUnderMinimum ? "under_minimum_ai_scored" : "meets_minimum_ai_scored",
+      taskRequirementAnalysis: body.task === "Task 1"
+        ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+        : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+      overallBand: 1,
+      estimatedLevel: "Band 1.0",
+      criteria: {
+        [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      },
+      lowBandDiagnostics: { recommendedLowBandRange: "", reason: "" },
+      highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
+      scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+      strengths: [],
+      mainProblems: [],
+      grammarErrors: [],
+      sentenceCorrections: [],
+      errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+      detailedSentenceCorrections: [],
+      task1LetterCorrections: body.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+      task2EssayCorrections: body.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+      correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+      revisionNotes: [],
+      disclaimer: DISCLAIMER
+    }, null, 2),
+    "Request:",
+    JSON.stringify({
+      task: body.task,
+      taskType,
+      mode: normalizeMode(body.mode),
+      outputLanguage: normalizeLocale(locale),
+      questionTitle: body.questionTitle,
+      questionPrompt: body.questionPrompt,
+      actualWordCount: words,
+      targetWordCount: body.targetWordCount,
+      isUnderMinimum: Boolean(body.isUnderMinimum),
+      essay: body.essay
+    }, null, 2)
+  ].filter(Boolean).join("\n");
+}
+
 
 function defaultRevisedEssayMeta(limited = false, reason = "") {
   if (limited) {
@@ -687,13 +770,13 @@ function buildFallbackFeedback(body, reason, locale = "en") {
   const normalLength = (body.task === "Task 1" && words >= 150) || (body.task === "Task 2" && words >= 250);
 
   if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
-    band = 0;
-    bandReason = diagnostics.reason || "There is no rateable English attempt.";
+    band = 1;
+    bandReason = diagnostics.reason || "There is no rateable English attempt. The app minimum visible score is Band 1.";
   } else if (diagnostics.mostlyCopiedFromPrompt) {
     band = 1;
     bandReason = "The response is mostly copied from the prompt and has little rateable original writing.";
   } else if (words <= 5) {
-    band = 0.5;
+    band = 1;
     bandReason = "The response has 5 words or fewer and almost no rateable content.";
   } else if (words <= 20) {
     band = 1.5;
@@ -725,7 +808,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
   }
 
   const criterionBand = roundHalf(band);
-  const noRateable = criterionBand === 0;
+  const noRateable = criterionBand <= 1;
   const revisionLimited = criterionBand <= 3.5 || diagnostics.littleRelevantMessage;
   const firstFeedback = noRateable
     ? "There is no rateable English response to assess for this task."
@@ -755,7 +838,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
         ? "There is no rateable English response, so a higher band is not justified."
         : (normalLength ? "This is a fallback estimate because the AI provider returned incomplete output; retry for a reliable higher-band decision." : "The answer is too short, misses key task requirements, and provides too little evidence of organisation, vocabulary, and grammar control."),
       whyNotLower: noRateable
-        ? "Band 0 is already the lowest score."
+        ? "Band 1 is the app's lowest visible score."
         : (normalLength ? "The response meets the task word-count threshold, so a zero or unavailable score is not appropriate in fallback mode." : "There is at least a small attempt to communicate something related to the task."),
       evidence: [
         `The response has ${words} words.`,
@@ -825,7 +908,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
       capApplied: !normalLength || Boolean(diagnostics.recommendedLowBandRange),
       capReason: bandReason,
       whyNotHigher: noRateable ? "There is no rateable English response, so a higher band is not justified." : (normalLength ? "This is a temporary fallback estimate because provider output was incomplete." : "The response is below the recommended word count and lacks enough development."),
-      whyNotLower: noRateable ? "Band 0 is already the lowest score." : "There is some rateable relevant English content.",
+      whyNotLower: noRateable ? "Band 1 is the app's lowest visible score." : "There is some rateable relevant English content.",
       evidence: [`Word count: ${words}.`, bandReason, diagnostics.reason].filter(Boolean).slice(0, 5)
     },
     lowBandEvidence: diagnostics,
@@ -1254,7 +1337,8 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
     ...(normalized.revisedEssayMeta && typeof normalized.revisedEssayMeta === "object" ? normalized.revisedEssayMeta : {})
   };
 
-  applyStrictCaps(normalized, body || {}, normalized.lowBandDiagnostics);
+  // Do not apply local score caps here. DeepSeek is the only scorer; the server only clamps the visible AI band to the app range.
+  normalizeAiBandsOnly(normalized, body || {});
   alignHighBandDiagnostics(normalized, body || {});
 
   if (veryShort || mode !== "revision") {
@@ -1296,7 +1380,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
       normalized.revisionNotesZh.unshift("原文太短或内容太少，不适合直接生成 Band 6 / Band 7 修改版。");
     }
   }
-  if (normalized.overallBand === 0) {
+  if (Number(normalized.overallBand) < 1) {
     normalized.revisedEssayBand5 = "";
     normalized.revisedEssayBand6 = "";
     normalized.revisedEssayBand7 = "";
@@ -1354,13 +1438,8 @@ module.exports = async function handler(req, res) {
   body.isUnderMinimum = body.wordCount < body.targetWordCount;
 
   const localDiagnostics = buildLowBandDiagnostics(body);
-  if (localDiagnostics.isBlank || localDiagnostics.mostlyNonEnglish) {
-    sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, localDiagnostics.reason || "No rateable English attempt.", locale), locale));
-    return;
-  }
-
-  // Under-minimum responses still go through DeepSeek.
-  // The model must grade them with strict word-count caps and complete feedback.
+  // No local scoring: even blank, very short, under-minimum, copied, or mostly non-English submissions go to DeepSeek.
+  // The server may provide factual context, but DeepSeek must be the only scorer.
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -1376,14 +1455,17 @@ module.exports = async function handler(req, res) {
   const effectiveMode = veryShort ? "quick" : mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
+  const useCompactAiOnlyPrompt = Boolean(body.isUnderMinimum || veryShort);
 
   try {
     const outputText = await callDeepSeek({
       apiKey,
       model,
       systemPrompt: buildSystemPrompt(veryShort, locale),
-      userPrompt: buildUserPrompt({ ...body, mode: effectiveMode }, veryShort, locale),
-      maxTokens,
+      userPrompt: useCompactAiOnlyPrompt
+        ? buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale)
+        : buildUserPrompt({ ...body, mode: effectiveMode }, veryShort, locale),
+      maxTokens: useCompactAiOnlyPrompt ? Math.max(maxTokens, 1800) : maxTokens,
       temperature: 0.1
     });
 
@@ -1391,11 +1473,6 @@ module.exports = async function handler(req, res) {
     try {
       result = parseJsonFromProvider(outputText);
     } catch (firstParseError) {
-      if (effectiveMode === "quick") {
-        sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, "DeepSeek returned incomplete JSON in Quick Check.", locale), locale));
-        return;
-      }
-
       try {
         const repairedText = await callDeepSeek({
           apiKey,
@@ -1407,9 +1484,35 @@ module.exports = async function handler(req, res) {
         });
         result = parseJsonFromProvider(repairedText);
       } catch (repairError) {
-        if (sendProviderError(req, res, repairError)) return;
-        sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, "DeepSeek returned incomplete JSON.", locale), locale));
-        return;
+        if (!useCompactAiOnlyPrompt) {
+          try {
+            const compactText = await callDeepSeek({
+              apiKey,
+              model,
+              systemPrompt: buildSystemPrompt(true, locale),
+              userPrompt: buildCompactAiOnlyPrompt({ ...body, mode: "quick" }, locale, "The previous full JSON response was incomplete or malformed."),
+              maxTokens: 2200,
+              temperature: 0.1
+            });
+            result = parseJsonFromProvider(compactText);
+          } catch (compactError) {
+            if (sendProviderError(req, res, compactError)) return;
+            sendJson(req, res, 502, {
+              error: "AI grading failed. No local score was generated.",
+              provider: "deepseek",
+              detail: compactError.message || "DeepSeek returned incomplete JSON."
+            });
+            return;
+          }
+        } else {
+          if (sendProviderError(req, res, repairError)) return;
+          sendJson(req, res, 502, {
+            error: "AI grading failed. No local score was generated.",
+            provider: "deepseek",
+            detail: repairError.message || "DeepSeek returned incomplete JSON."
+          });
+          return;
+        }
       }
     }
 
@@ -1419,12 +1522,16 @@ module.exports = async function handler(req, res) {
 
     const errorText = `${error.message || ""} ${error.name || ""}`;
     if (/empty response|invalid JSON|Unexpected end|AbortError|aborted|timeout/i.test(errorText)) {
-      sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, error.message || error.name || "AI request timed out.", locale), locale));
+      sendJson(req, res, 502, {
+        error: "AI grading failed. No local score was generated.",
+        provider: "deepseek",
+        detail: error.message || error.name || "AI request timed out."
+      });
       return;
     }
 
     sendJson(req, res, 500, {
-      error: "Server error while grading IELTS writing.",
+      error: "Server error while grading IELTS writing. No local score was generated.",
       provider: "deepseek",
       detail: error.message
     });
