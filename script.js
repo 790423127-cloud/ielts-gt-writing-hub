@@ -1090,6 +1090,88 @@ function sameFeedbackText(a, b) {
   return Boolean(left && right && left === right);
 }
 
+function tokenizeExpressionForComparison(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+}
+
+function expressionSimilarity(a, b) {
+  const aTokens = tokenizeExpressionForComparison(a);
+  const bTokens = tokenizeExpressionForComparison(b);
+  if (!aTokens.length || !bTokens.length) return 0;
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  let overlap = 0;
+  aSet.forEach((token) => { if (bSet.has(token)) overlap += 1; });
+  return overlap / Math.max(aSet.size, bSet.size);
+}
+
+function expressionTokenEditDistance(a, b) {
+  const left = tokenizeExpressionForComparison(a);
+  const right = tokenizeExpressionForComparison(b);
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+  const dp = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[left.length][right.length];
+}
+
+function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").toLowerCase();
+  const better = String(betterExpression || "").toLowerCase();
+  if (!better.trim()) return false;
+
+  const correctedTokens = tokenizeExpressionForComparison(corrected);
+  const betterTokens = tokenizeExpressionForComparison(better);
+  if (!correctedTokens.length || !betterTokens.length) return false;
+
+  const similarity = expressionSimilarity(corrected, better);
+  const editDistance = expressionTokenEditDistance(corrected, better);
+  const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
+
+  // "更好表达"必须是明显升级，不只是换几个单词。
+  if (similarity >= 0.74) return false;
+  if (editDistance <= 4 && lengthGap <= 4) return false;
+
+  const structureMarkers = [
+    "not because", "but because", "rather than", "instead of", "so that", "in order to",
+    "which", "while", "although", "whereas", "because", "therefore", "as a result",
+    "this would", "i would be grateful", "i am seeking", "i hope to", "my aim is", "with the aim of"
+  ];
+  const hasStructureMarker = structureMarkers.some((marker) => better.includes(marker) && !corrected.includes(marker));
+  const hasClearLengthUpgrade = betterTokens.length >= correctedTokens.length + 5 || correctedTokens.length >= betterTokens.length + 5;
+  const hasClearRewrite = editDistance >= 6 && similarity < 0.72;
+
+  return hasStructureMarker || hasClearLengthUpgrade || hasClearRewrite;
+}
+
+function shouldShowBetterExpression(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").trim();
+  const better = String(betterExpression || "").trim();
+  if (!better) return false;
+  if (!corrected) return true;
+  if (sameFeedbackText(corrected, better)) return false;
+  return hasBetterExpressionUpgradeSignal(corrected, better);
+}
+
+
 function isScoreImpactingDetailedCorrection(item = {}) {
   const original = item.originalSentence || item.original || "";
   const corrected = item.correctedSentence || item.corrected || "";
@@ -1183,7 +1265,8 @@ function renderDetailedSentenceCorrections(items = []) {
     <div class="correction-list">${filtered.map((item, index) => {
       const original = item.originalSentence || item.original || "";
       const corrected = item.correctedSentence || item.corrected || "";
-      const better = item.betterExpression || "";
+      const rawBetter = item.betterExpression || "";
+      const better = shouldShowBetterExpression(corrected || original, rawBetter) ? rawBetter : "";
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         <p><strong>原句：</strong>${escapeHtml(original)}</p>
@@ -1193,7 +1276,7 @@ function renderDetailedSentenceCorrections(items = []) {
         ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
         ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
         ${item.bandImpact ? `<p><strong>对分数影响：</strong>${escapeHtml(item.bandImpact)}</p>` : ""}
-        ${renderZhToggle([item.problemZh, item.ruleZh, item.betterExpressionZh, item.bandImpactZh].filter(Boolean).join("\n"))}
+        ${renderZhToggle([item.problemZh, item.ruleZh, better ? item.betterExpressionZh : "", item.bandImpactZh].filter(Boolean).join("\n"))}
       </div>`;
     }).join("")}</div>
   `);
