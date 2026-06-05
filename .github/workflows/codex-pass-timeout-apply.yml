@@ -23,7 +23,7 @@ jobs:
           import base64, os, pathlib, subprocess
           patch = base64.b64decode(os.environ['PATCH_B64']).decode('utf-8')
           pathlib.Path('/tmp/pass-timeout.patch').write_text(patch, encoding='utf-8')
-          subprocess.run(['git', 'apply', '--ignore-whitespace', '--recount', '/tmp/pass-timeout.patch'], check=True)
+          subprocess.run(['git', 'apply', '-p0', '--ignore-whitespace', '--recount', '/tmp/pass-timeout.patch'], check=True)
           PY
       - name: Syntax check
         run: node --check api/grade-ielts.js
