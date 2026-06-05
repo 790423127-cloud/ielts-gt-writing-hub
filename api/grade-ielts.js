@@ -27,12 +27,12 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
 const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
-  30000,
-  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 90000, 170000)
+  60000,
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 150000, 240000)
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
-  60000,
-  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 240000, 260000)
+  120000,
+  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 260000, 290000)
 );
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
@@ -1862,10 +1862,305 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
 }
 
 
+function buildLeanScoreSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use short Chinese helper notes only in fields ending with Zh. Do not translate essays."
+    : "Main feedback must be English. Use short Chinese helper notes only in fields ending with Zh. Do not translate essays.";
+  return [
+    "You are a strict IELTS Writing examiner.",
+    "This pass is ONLY for scoring and task analysis. Do not do detailed sentence correction here.",
+    "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
+    "Use IELTS Writing public band descriptor logic.",
+    "Score from Band 1 to Band 9 only and allow half bands.",
+    "DeepSeek is the only scorer. Do not use or mention local fallback scoring.",
+    "Penalise underlength strictly, but still grade from Band 1 upward.",
+    "There is no maximum word-count cap; penalise long answers only for repetition, irrelevance, weak coherence, or loss of task focus.",
+    "For Task 1 use Task Achievement. For Task 2 use Task Response.",
+    "High-quality relevant answers may receive Band 8 or 9. Do not artificially cap strong writing at Band 7.",
+    "Keep the JSON compact enough to finish reliably, but make every scoring reason essay-specific.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildLeanScorePrompt(body, gradingMode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const taskType = task === "Task 1" ? "task1" : "task2";
+  const firstCriterion = firstCriterionName(task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const diagnostics = buildLowBandDiagnostics(body);
+  const cap = capFromDiagnostics(body, diagnostics);
+  const shape = {
+    actualWordCount: words,
+    taskTypeDetected: taskType,
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: words >= threshold ? "meets_minimum" : "under_minimum_ai_scored",
+    taskRequirementAnalysis: taskType === "task1"
+      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    taskRequirementAnalysisZh: { taskMatchSummaryZh: "", taskPurposeZh: "", requiredToneZh: "", requiredPartsZh: [], bulletPointsZh: [] },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    lowBandDiagnostics: { recommendedLowBandRange: "", reason: "" },
+    lowBandDiagnosticsZh: { reasonZh: "" },
+    highBandDiagnostics: {
+      fullyAddressesTask: false,
+      clearProgression: false,
+      wellDevelopedIdeas: false,
+      wideAccurateVocabulary: false,
+      flexibleGrammar: false,
+      fewErrors: false,
+      appropriateToneTask1: task === "Task 1" ? false : null,
+      recommendedHighBandRange: "",
+      reason: ""
+    },
+    highBandDiagnosticsZh: { reasonZh: "" },
+    scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+    scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+    overallBand: 1,
+    estimatedLevel: "Band 1.0",
+    criteria: {
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+    },
+    strengths: [],
+    strengthsZh: [],
+    mainProblems: [],
+    mainProblemsZh: [],
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: [],
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
+    spellingCorrections: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    detailedSentenceCorrections: [],
+    errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    modelAnswerOutline: "",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "This scoring stage does not generate a model answer." },
+    revisionNotes: [],
+    revisionNotesZh: [],
+    disclaimer: DISCLAIMER
+  };
+
+  return [
+    "Return exactly one valid JSON object matching this shape. Fill scoring and task-analysis fields with real IELTS assessment.",
+    JSON.stringify(shape),
+    "Important scoring rules:",
+    "- Do not copy template values. Replace Band 1 placeholders with real criterion bands.",
+    "- Give specific evidence from the essay for each criterion.",
+    "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
+    "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
+    "- Keep strengths/mainProblems/advice arrays short but specific, usually 2-5 items.",
+    buildTargetImprovementInstruction(body),
+    "Server low-band context:",
+    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
+    "Request:",
+    JSON.stringify({
+      task,
+      taskType,
+      gradingMode,
+      questionTitle: body.questionTitle,
+      questionPrompt: body.questionPrompt,
+      actualWordCount: words,
+      targetWordCount: body.targetWordCount,
+      isUnderMinimum: Boolean(body.isUnderMinimum),
+      essay: body.essay
+    })
+  ].join("\n");
+}
+
+async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale, deadline }) {
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildLeanScoreSystemPrompt(locale),
+    userPrompt: buildLeanScorePrompt({ ...body, mode: gradingMode }, gradingMode, locale),
+    maxTokens: 3000,
+    temperature: 0.1,
+    jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(90000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 150000))
+  });
+
+  return await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: gradingMode },
+    locale,
+    maxTokens: 3000,
+    allowRepair: true,
+    deadline
+  });
+}
+
+function normalizeFocusedCorrectionStage(value) {
+  const raw = String(value || "").toLowerCase().replace(/[_\s-]+/g, "");
+  if (["spell", "spelling", "spellingcorrection", "spellingcorrections", "correctionspelling"].includes(raw)) return "spelling";
+  if (["grammar", "grammarerror", "grammarerrors", "correctiongrammar"].includes(raw)) return "grammar";
+  if (["sentence", "sentences", "sentencecorrection", "sentencecorrections", "detailedsentence", "correctionsentence"].includes(raw)) return "sentence";
+  if (["advice", "coaching", "plan", "priority", "taskadvice", "correctionadvice"].includes(raw)) return "advice";
+  return "";
+}
+
+function buildFocusedSectionSystemPrompt(section, locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
+    : "Main fields must be English. Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay.";
+  const sectionName = {
+    spelling: "spelling and typo correction",
+    grammar: "grammar and word-form correction",
+    sentence: "sentence-level correction and better expressions",
+    advice: "IELTS improvement coaching and task-specific advice"
+  }[section] || "IELTS correction";
+  return [
+    `You are an IELTS Writing examiner. This pass is ONLY for ${sectionName}.`,
+    "Do not rescore the essay.",
+    "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
+    "Use only words and sentences that appear in the user's essay for original text fields.",
+    "Do not invent user sentences.",
+    "The user wants maximum useful detail. Do not stop at two examples when more clear issues exist.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const limit = correctionLimitForEssay(body, mode);
+  const common = [
+    `Task: ${task}`,
+    `Current estimated band from score stage: ${body.currentOverallBand || body.overallBand || "unknown"}`,
+    `Word count: ${words}`,
+    buildTargetImprovementInstruction(body),
+    "Question:",
+    String(body.questionPrompt || ""),
+    "Essay:",
+    String(body.essay || "")
+  ];
+
+  if (section === "spelling") {
+    return [
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        spellingCorrections: [
+          { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
+        ],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      `Find all clear spelling mistakes and typo-like errors. Return up to ${limit} items. If none exist, return an empty spellingCorrections array and say this briefly in errorAnalysis.summary.`,
+      "Do not include correctly spelled words.",
+      ...common
+    ].join("\n");
+  }
+
+  if (section === "grammar") {
+    return [
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        grammarErrors: [
+          { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+        ],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      `Find all clear grammar, word-form, article, tense, plural, agreement, preposition, punctuation, and sentence-structure errors. Return up to ${limit} items.`,
+      "Each item must include original text from the essay, corrected text, and a specific rule/explanation.",
+      ...common
+    ].join("\n");
+  }
+
+  if (section === "sentence") {
+    return [
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        sentenceCorrections: [
+          { original: "", corrected: "", reason: "", reasonZh: "" }
+        ],
+        detailedSentenceCorrections: [
+          { sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "" }
+        ]
+      }),
+      `Scan the whole essay sentence by sentence. Return up to ${limit} sentenceCorrections and up to ${limit} detailedSentenceCorrections.`,
+      "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, problem, rule, and band impact.",
+      "Do not make Band 3-5 learners imitate Band 8-9 language. Upgrade only to the next realistic target range.",
+      ...common
+    ].join("\n");
+  }
+
+  return [
+    "Return JSON with this exact shape:",
+    JSON.stringify({
+      correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [], practiceTasks: [], practiceTasksZh: [] },
+      task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+      task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+      taskAchievementAdvice: [],
+      coherenceAdvice: [],
+      lexicalAdvice: [],
+      grammarAdvice: [],
+      band5FixPlan: [],
+      band6UpgradePlan: [],
+      band7UpgradePlan: [],
+      errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+    }),
+    "Give detailed IELTS coaching based on the current band and the next realistic target range.",
+    "Focus on improving 0.5-1 band at a time, with Band 5 as the first floor for very weak writing.",
+    "Give concrete actions, not generic advice. Include task-specific advice.",
+    "For Task 1: opening, closing, tone, purpose, bullet coverage.",
+    "For Task 2: position, introduction, body paragraph development, examples, conclusion, relevance.",
+    ...common
+  ].join("\n");
+}
+
+async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
+  const maxTokensBySection = {
+    spelling: 3200,
+    grammar: 5200,
+    sentence: 7600,
+    advice: 5200
+  };
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildFocusedSectionSystemPrompt(section, locale),
+    userPrompt: buildFocusedSectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, section, locale),
+    maxTokens: maxTokensBySection[section] || 4200,
+    temperature: 0.15,
+    jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 150000))
+  });
+
+  const parsed = await parseCorrectionJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: effectiveMode },
+    locale,
+    maxTokens: maxTokensBySection[section] || 4200,
+    deadline
+  });
+
+  const output = { disclaimer: DISCLAIMER };
+  return mergeAiCorrectionDetails(output, parsed, body, effectiveMode);
+}
+
+
 
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["score", "scoring", "grade", "grading"].includes(raw)) return "score";
+  const focused = normalizeFocusedCorrectionStage(raw);
+  if (focused) return `correction-${focused}`;
   if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
   if (["revision", "model", "modelanswer", "revisedessay"].includes(raw)) return "revision";
   return "all";
@@ -1877,17 +2172,15 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
   let result;
 
   try {
-    result = await callAiGradingPass({
+    result = await callAiLeanScoringPass({
       apiKey,
       model,
       body,
       gradingMode,
-      maxTokens: gradingMaxTokens,
       locale,
-      deadline,
-      veryShort
+      deadline
     });
-    result = assertMeaningfulAiScoringResult(result, body, "Primary AI scoring");
+    result = assertMeaningfulAiScoringResult(result, body, "Lean AI scoring");
   } catch (primaryError) {
     try {
       result = await callAiCompactScoringRetry({
@@ -2006,17 +2299,15 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 
   let result;
   try {
-    result = await callAiGradingPass({
+    result = await callAiLeanScoringPass({
       apiKey,
       model,
       body,
       gradingMode,
-      maxTokens: gradingMaxTokens,
       locale,
-      deadline,
-      veryShort
+      deadline
     });
-    result = assertMeaningfulAiScoringResult(result, body, "Primary AI scoring");
+    result = assertMeaningfulAiScoringResult(result, body, "Lean AI scoring");
   } catch (primaryError) {
     try {
       result = await callAiCompactScoringRetry({
@@ -3511,6 +3802,19 @@ async function handleRequest(req, res) {
       });
       result.aiStage = "score";
       result = normalizeResultForMode(result, "full", veryShort, body, locale);
+    } else if (aiStage.startsWith("correction-")) {
+      const section = aiStage.slice("correction-".length);
+      result = await callAiFocusedSectionStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        section,
+        locale,
+        deadline
+      });
+      result.aiStage = aiStage;
+      result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage === "correction") {
       result = await callAiCorrectionStageOnly({
         apiKey,
