@@ -91,10 +91,10 @@ function isVeryShortEssay(body) {
 }
 
 function maxTokensForMode(mode, veryShort) {
-  if (veryShort) return 1800;
-  if (mode === "quick") return 4200;
-  if (mode === "full") return 5600;
-  return 7600;
+  if (veryShort) return 1200;
+  if (mode === "quick") return 1800;
+  if (mode === "full") return 3200;
+  return 4800;
 }
 
 function countWordsServer(text) {
@@ -917,6 +917,9 @@ function extractDeepSeekText(data) {
 }
 
 async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+
   const requestBody = {
     model,
     messages: [
@@ -929,14 +932,20 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
   };
   if (jsonMode) requestBody.response_format = { type: "json_object" };
 
-  const response = await fetch(DEEPSEEK_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(requestBody)
-  });
+  let response;
+  try {
+    response = await fetch(DEEPSEEK_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const raw = await response.text();
   if (!response.ok) {
@@ -1382,13 +1391,18 @@ module.exports = async function handler(req, res) {
     try {
       result = parseJsonFromProvider(outputText);
     } catch (firstParseError) {
+      if (effectiveMode === "quick") {
+        sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, "DeepSeek returned incomplete JSON in Quick Check.", locale), locale));
+        return;
+      }
+
       try {
         const repairedText = await callDeepSeek({
           apiKey,
           model,
           systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
           userPrompt: buildRepairPrompt(outputText, body.task, locale),
-          maxTokens,
+          maxTokens: Math.min(maxTokens, 1800),
           temperature: 0.1
         });
         result = parseJsonFromProvider(repairedText);
@@ -1402,10 +1416,13 @@ module.exports = async function handler(req, res) {
     sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort, body, locale));
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
-    if (/empty response|invalid JSON|Unexpected end/i.test(error.message || "")) {
-      sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, error.message, locale), locale));
+
+    const errorText = `${error.message || ""} ${error.name || ""}`;
+    if (/empty response|invalid JSON|Unexpected end|AbortError|aborted|timeout/i.test(errorText)) {
+      sendJson(req, res, 200, localizeResultForOutput(buildFallbackFeedback(body, error.message || error.name || "AI request timed out.", locale), locale));
       return;
     }
+
     sendJson(req, res, 500, {
       error: "Server error while grading IELTS writing.",
       provider: "deepseek",
