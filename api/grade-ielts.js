@@ -26,10 +26,29 @@ const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
-const AI_REQUEST_TIMEOUT_MS = Math.max(3500, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 7500, 8000));
+const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
+  12000,
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 25000, 30000)
+);
+const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
+  30000,
+  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 55000, 58000)
+);
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
 globalThis.__IELTS_AI_RESPONSE_CACHE__ = AI_RESPONSE_CACHE;
+
+function remainingAiTime(deadline) {
+  if (!deadline) return AI_SINGLE_REQUEST_TIMEOUT_MS;
+  return Math.max(0, deadline - Date.now() - 1000);
+}
+
+function resolveAiTimeout(deadline, requestedTimeout) {
+  const base = requestedTimeout
+    ? Math.min(requestedTimeout, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    : AI_SINGLE_REQUEST_TIMEOUT_MS;
+  return Math.max(1000, Math.min(base, remainingAiTime(deadline)));
+}
 
 
 
@@ -731,7 +750,7 @@ function buildCompactAiOnlyRepairPrompt(rawText, body, locale = "en") {
 }
 
 
-async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTokens, allowRepair = true }) {
+async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTokens, allowRepair = true, deadline }) {
   try {
     return parseJsonFromProvider(rawText);
   } catch (parseError) {
@@ -747,7 +766,9 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
           userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
           maxTokens: Math.min(Math.max(maxTokens, 1000), 1700),
           temperature: 0.0,
-          jsonMode: false
+          jsonMode: false,
+          deadline,
+          timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
         try {
           return parseJsonFromProvider(repairedText);
@@ -955,7 +976,7 @@ function mergeAiCorrectionDetails(result, correction, body, mode) {
   return merged;
 }
 
-async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens }) {
+async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline }) {
   try {
     return parseJsonFromProvider(rawText);
   } catch (parseError) {
@@ -971,9 +992,11 @@ async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTo
           "Malformed JSON/text:",
           String(rawText || "").slice(0, 10000)
         ].join("\n"),
-        maxTokens: Math.min(Math.max(maxTokens, 1800), 3200),
+        maxTokens: 1800,
         temperature: 0.0,
-        jsonMode: false
+        jsonMode: false,
+        deadline,
+        timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
       });
       return parseJsonFromProvider(repairedText);
     } catch {
@@ -982,10 +1005,10 @@ async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTo
   }
 }
 
-async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale }) {
+async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline, maxTokensOverride, timeoutMs }) {
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   if (!String(body.essay || "").trim()) return {};
-  const maxTokens = Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 180, words < 80 ? 2200 : 3600), effectiveMode === "revision" ? 6200 : 5200);
+  const maxTokens = maxTokensOverride || Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 180, words < 80 ? 2200 : 3600), effectiveMode === "revision" ? 6200 : 5200);
   const rawText = await callDeepSeek({
     apiKey,
     model,
@@ -993,49 +1016,132 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
     userPrompt: buildAiCorrectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, locale),
     maxTokens,
     temperature: 0.1,
-    jsonMode: false
+    jsonMode: false,
+    deadline,
+    timeoutMs
   });
-  return await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens });
+  return await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
 }
 
-async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale }) {
-  const mainSystemPrompt = buildSystemPrompt(false, locale);
-  const mainUserPrompt = buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
-
+async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline }) {
   const rawText = await callDeepSeek({
     apiKey,
     model,
-    systemPrompt: mainSystemPrompt,
-    userPrompt: mainUserPrompt,
+    systemPrompt: buildSystemPrompt(false, locale),
+    userPrompt: buildUserPrompt({ ...body, mode: gradingMode }, false, locale),
     maxTokens,
     temperature: 0.1,
-    jsonMode: false
+    jsonMode: false,
+    deadline
   });
 
-  const graded = await parseOrRepairAiJson({
+  return await parseOrRepairAiJson({
     apiKey,
     model,
     rawText,
-    body: { ...body, mode: effectiveMode },
+    body: { ...body, mode: gradingMode },
     locale,
     maxTokens,
-    allowRepair: true
+    allowRepair: true,
+    deadline
+  });
+}
+
+function mergeRevisionPassIntoResult(result, revision) {
+  if (!revision || typeof revision !== "object") return result;
+  const merged = result && typeof result === "object" ? { ...result } : {};
+  ["revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline"].forEach((field) => {
+    if (hasUsefulText(revision[field])) merged[field] = revision[field];
+  });
+  if (Array.isArray(revision.revisionNotes) && revision.revisionNotes.length) merged.revisionNotes = revision.revisionNotes;
+  if (Array.isArray(revision.revisionNotesZh) && revision.revisionNotesZh.length) merged.revisionNotesZh = revision.revisionNotesZh;
+  if (revision.revisedEssayMeta && typeof revision.revisedEssayMeta === "object") {
+    merged.revisedEssayMeta = {
+      ...(merged.revisedEssayMeta && typeof merged.revisedEssayMeta === "object" ? merged.revisedEssayMeta : {}),
+      ...revision.revisedEssayMeta
+    };
+  }
+  return merged;
+}
+
+function addRevisionTimeoutWarning(result) {
+  const updated = result && typeof result === "object" ? { ...result } : {};
+  const note = "Model answer generation timed out. The grading and correction feedback were returned first.";
+  updated.revisionNotes = ensureArray(updated.revisionNotes);
+  if (!updated.revisionNotes.includes(note)) updated.revisionNotes.push(note);
+  updated.revisionNotesZh = ensureArray(updated.revisionNotesZh);
+  if (!updated.revisionNotesZh.length) updated.revisionNotesZh.push("");
+  updated.revisedEssayMeta = updated.revisedEssayMeta && typeof updated.revisedEssayMeta === "object" ? { ...updated.revisedEssayMeta } : defaultRevisedEssayMeta(false);
+  updated.revisedEssayMeta.revisionLimitReason = note;
+  return updated;
+}
+
+async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
+  const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
+  const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
+
+  const gradingPromise = callAiGradingPass({
+    apiKey,
+    model,
+    body,
+    gradingMode,
+    maxTokens: gradingMaxTokens,
+    locale,
+    deadline
   });
 
-  try {
-    const correction = await callAiCorrectionPass({
-      apiKey,
-      model,
-      body: { ...body, mode: effectiveMode },
-      effectiveMode,
-      locale
-    });
-    return mergeAiCorrectionDetails(graded, correction, body, effectiveMode);
-  } catch (correctionError) {
-    const result = graded && typeof graded === "object" ? graded : {};
-    result.correctionPassWarning = `AI correction pass failed: ${correctionError.message || correctionError.name || "unknown error"}`;
-    return result;
+  const correctionPromise = callAiCorrectionPass({
+    apiKey,
+    model,
+    body: { ...body, mode: gradingMode },
+    effectiveMode: gradingMode,
+    locale,
+    deadline
+  });
+
+  const [gradingSettled, correctionSettled] = await Promise.allSettled([gradingPromise, correctionPromise]);
+  if (gradingSettled.status !== "fulfilled") throw gradingSettled.reason;
+
+  let result = gradingSettled.value && typeof gradingSettled.value === "object" ? gradingSettled.value : {};
+  if (correctionSettled.status === "fulfilled") {
+    result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
+  } else {
+    try {
+      const correctionRetry = await callAiCorrectionPass({
+        apiKey,
+        model,
+        body: { ...body, mode: gradingMode },
+        effectiveMode: gradingMode,
+        locale,
+        deadline,
+        maxTokensOverride: 1800,
+        timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+      });
+      result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
+    } catch {
+      result.correctionWarning = "AI sentence-level correction timed out. Please retry detailed grading.";
+      result.correctionPassWarning = result.correctionWarning;
+    }
   }
+
+  if (effectiveMode === "revision") {
+    try {
+      const revision = await callAiGradingPass({
+        apiKey,
+        model,
+        body,
+        gradingMode: "revision",
+        maxTokens,
+        locale,
+        deadline
+      });
+      result = mergeRevisionPassIntoResult(result, revision);
+    } catch {
+      result = addRevisionTimeoutWarning(result);
+    }
+  }
+
+  return result;
 }
 
 
@@ -1369,9 +1475,10 @@ function extractDeepSeekText(data) {
   return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false }) {
+async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false, deadline, timeoutMs }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+  const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   const requestBody = {
     model,
@@ -2344,6 +2451,7 @@ async function handleRequest(req, res) {
   const effectiveMode = mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
+  const deadline = Date.now() + AI_TOTAL_REQUEST_TIMEOUT_MS;
 
   const cacheKey = buildAiCacheKey(body, effectiveMode, model, locale);
   const cachedResult = getCachedAiResult(cacheKey);
@@ -2360,7 +2468,8 @@ async function handleRequest(req, res) {
       effectiveMode,
       veryShort,
       maxTokens,
-      locale
+      locale,
+      deadline
     });
 
     const normalizedResult = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
@@ -2392,4 +2501,8 @@ module.exports = async function handler(req, res) {
       suggestion: "Please retry later or check Vercel runtime logs."
     });
   }
+};
+
+module.exports.config = {
+  maxDuration: 60
 };
