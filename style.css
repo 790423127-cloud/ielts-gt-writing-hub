@@ -328,3 +328,6 @@
 .mock-score-card{border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,118,110,.09);padding:16px}
 .mock-score-card h3{margin:4px 0 8px}
 @media(max-width:900px){.mock-exam-grid{grid-template-columns:1fr}.mock-task-card textarea{min-height:240px}}
+
+.word-count-note{border-left:4px solid var(--amber);background:rgba(164,93,0,.08)}
+.word-count-note h4{color:var(--amber)}

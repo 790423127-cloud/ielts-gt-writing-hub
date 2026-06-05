@@ -439,6 +439,7 @@ function buildExpectedJsonShape(task, locale = "en") {
       : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
     taskRequirementAnalysisZh: { taskPurposeZh: emptyForLocaleZh("", locale), requiredToneZh: emptyForLocaleZh("", locale), letterTypeZh: emptyForLocaleZh("", locale), taskMatchSummaryZh: emptyForLocaleZh("", locale), bulletPointsZh: emptyForLocaleZh([], locale), requiredPartsZh: emptyForLocaleZh([], locale) },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    wordCountWarning: { message: "", messageZh: "" },
     highBandDiagnostics: {
       fullyAddressesTask: false,
       clearProgression: false,
@@ -1674,6 +1675,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
       : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
     taskRequirementAnalysisZh: { taskMatchSummaryZh: "", taskPurposeZh: "", requiredToneZh: "", requiredPartsZh: [], bulletPointsZh: [] },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    wordCountWarning: { message: "", messageZh: "" },
     highBandDiagnostics: {
       fullyAddressesTask: false,
       clearProgression: false,
@@ -5060,6 +5062,70 @@ function suppressNonBlockingGrammarWarningsFinal(result) {
   }
 }
 
+
+function isWordCountWarningText(value) {
+  const text = finalGateText(value).toLowerCase();
+  return /\bword count\b|\bunderlength\b|below the recommended|under the recommended|recommended minimum|\b150 words\b|\b250 words\b|significantly under/.test(text);
+}
+
+function wordCountWarningZhFromText(value, body = {}) {
+  const task = body?.task === "Task 2" ? "Task 2" : "Task 1";
+  const threshold = task === "Task 1" ? 150 : 250;
+  const text = finalGateText(value);
+  if (!text) return "";
+  return `${task} 建议至少写 ${threshold} 词。当前字数不足会限制内容展开和任务完成度，但这不是答错题。`;
+}
+
+function relocateWordCountWarningsFinal(result, body = {}) {
+  if (!result || typeof result !== "object") return;
+  const taskMatch = result.taskMatchCheck && typeof result.taskMatchCheck === "object"
+    ? result.taskMatchCheck
+    : { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected.", warning: "" };
+  result.taskMatchCheck = taskMatch;
+
+  const existingWordWarning = result.wordCountWarning && typeof result.wordCountWarning === "object" ? result.wordCountWarning : {};
+  const collected = [];
+  const collect = (value) => {
+    const text = finalGateText(value);
+    if (text && isWordCountWarningText(text) && !collected.includes(text)) collected.push(text);
+  };
+
+  collect(existingWordWarning.message);
+  collect(existingWordWarning.note);
+  collect(existingWordWarning.warning);
+  collect(taskMatch.warning);
+
+  if (isWordCountWarningText(taskMatch.warning)) {
+    taskMatch.warning = "";
+  }
+
+  const low = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object" ? result.lowBandDiagnostics : {};
+  const calibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
+  collect(low.reason);
+  collect(calibration.capReason);
+  collect(calibration.whyNotHigher);
+
+  const mainMessage = collected[0] || "";
+  if (mainMessage) {
+    result.wordCountWarning = {
+      message: mainMessage,
+      messageZh: existingWordWarning.messageZh || existingWordWarning.warningZh || wordCountWarningZhFromText(mainMessage, body),
+      source: existingWordWarning.source || "word_count"
+    };
+  } else if (Object.keys(existingWordWarning).length) {
+    result.wordCountWarning = existingWordWarning;
+  }
+
+  if (!hasUsefulText(taskMatch.reason) || isWordCountWarningText(taskMatch.reason)) {
+    const summary = finalGateText(result.taskRequirementAnalysis?.taskMatchSummary);
+    taskMatch.reason = summary && !isWordCountWarningText(summary)
+      ? summary
+      : "The response appears to answer the selected prompt. Word count issues are shown separately from task matching.";
+  }
+
+  result.taskMatchCheck = taskMatch;
+}
+
 function forcePlaceholderBulletsToUnknownFinal(result, body = {}) {
   if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
   const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
@@ -5102,6 +5168,7 @@ function finalQualityGate(result, body = {}) {
   repairTaskRequirementAnalysisFinal(result, body);
   forcePlaceholderBulletsToUnknownFinal(result, body);
   suppressNonBlockingGrammarWarningsFinal(result);
+  relocateWordCountWarningsFinal(result, body);
   normalizeBandPlanVisibilityAndZhFinal(result);
   cleanGenericChineseFieldsFinal(result);
 
@@ -5113,6 +5180,7 @@ function finalQualityGate(result, body = {}) {
   repairTaskRequirementAnalysisFinal(result, body);
   forcePlaceholderBulletsToUnknownFinal(result, body);
   suppressNonBlockingGrammarWarningsFinal(result);
+  relocateWordCountWarningsFinal(result, body);
   normalizeBandPlanVisibilityAndZhFinal(result);
   cleanGenericChineseFieldsFinal(result);
 
@@ -5409,6 +5477,9 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.taskMatchCheck = normalized.taskMatchCheck && typeof normalized.taskMatchCheck === "object"
     ? normalized.taskMatchCheck
     : { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected.", warning: "" };
+  normalized.wordCountWarning = normalized.wordCountWarning && typeof normalized.wordCountWarning === "object"
+    ? normalized.wordCountWarning
+    : { message: "", messageZh: "" };
   normalized.highBandDiagnostics = normalized.highBandDiagnostics && typeof normalized.highBandDiagnostics === "object"
     ? normalized.highBandDiagnostics
     : { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body?.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: "" };
