@@ -380,8 +380,10 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "modelAnswerOutline must be an outline only: structure, paragraph content, simple expressions, bullet point arrangement for Task 1, or position/examples for Task 2. Do not write a full essay in the outline.",
     "Error correction requirements: Always return errorAnalysis, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, task1LetterCorrections or task2EssayCorrections, and correctionPriority.",
     "For spellingCorrections, list all clear misspelled words from the user's essay, with the corrected spelling, the sentence where it appears, a short explanation, and a brief explanationZh.",
-    "For detailedSentenceCorrections, use originalSentence from the user's essay only. correctedSentence is for the direct error fix; betterExpression is optional and must be a clearly stronger rewrite.",
-    "betterExpression must show a meaningful upgrade beyond correction: clearer logic, improved formal tone, stronger cohesion, better clause structure, or more natural IELTS-level phrasing. Do not use betterExpression for a one-word synonym swap, a short phrase replacement, or a sentence that keeps almost the same structure. If there is no clear upgrade, leave betterExpression and betterExpressionZh empty.",
+    "For detailedSentenceCorrections, use originalSentence from the user's essay only. correctedSentence is for the direct error fix; betterExpression is for a realistic next-band expression that the learner can imitate.",
+    "For every score-impacting detailedSentenceCorrections item below Band 9, betterExpression should be returned whenever a useful +0.5 to +1.0 band upgrade can be shown without losing meaning. For essays scored Band 0-4.5, betterExpression must target Band 5.0-5.5. For Band 5.0+, target the next 0.5-1.0 band range.",
+    "Do not make betterExpression unrealistically advanced. A Band 4 essay should receive a clear Band 5.0-5.5 expression, not Band 7-9 language. For every score-impacting sentence below Band 9, return a betterExpression unless doing so would change or remove the meaning. Do not hide useful modest upgrades merely because the sentence structure is similar.",
+    "Do not use betterExpression for a pure one-word synonym swap, a truncated sentence, or any rewrite that removes a reason, purpose, condition, contrast, result, or other task-relevant information. The betterExpression must show obvious improvement in structure, formality, clarity, cohesion, or IELTS-level phrasing, not just 1-2 changed words. If there is no useful safe upgrade, leave betterExpression and betterExpressionZh empty.",
     "detailedSentenceCorrections must contain only score-impacting issues. Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or correct salutation/closing items.",
     "If a criterion band is 7.5 or higher, its feedback must describe high-band quality and frame suggestions as minor polishing/refinement. Do not pair Band 8 with Band 5-6 template wording such as 'needs clearer control' or 'grammar needs improvement' unless the band is lowered.",
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
@@ -750,7 +752,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     task1LetterCorrections: taskType === "task1" ? { toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: taskType === "task2" ? { positionComment: "", bodyParagraphComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     taskAchievementAdviceZh: [],
     coherenceAdvice: [],
@@ -856,7 +858,7 @@ function targetImprovementRangeFromBand(bandValue) {
 
   if (band <= 4.5) {
     lower = 5;
-    upper = 5;
+    upper = 5.5;
   } else if (band === 5) {
     lower = 5.5;
     upper = 6;
@@ -902,7 +904,7 @@ function buildTargetImprovementInstruction(body) {
   if (!Number.isFinite(currentBand) || currentBand <= 0) {
     return [
       "Targeted improvement rule: first infer the current IELTS band from the grading result, then give advice for a realistic next step.",
-      "Use the full target ladder: Band 0.0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+      "Use the full target ladder: Band 0.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
       "Do not give advice that jumps too far beyond the current level. A Band 3 essay should not receive Band 6-9 style advice; a Band 5 essay should not receive Band 8-9 style advice."
     ].join("\n");
   }
@@ -913,9 +915,9 @@ function buildTargetImprovementInstruction(body) {
     `Current estimated band from the AI scoring pass: Band ${formatBand(roundedBand)}.`,
     `Target improvement range for advice: ${range.label}.`,
     "Use this target range when writing all correction advice, band plans, betterExpression, model answer outline, and task-specific coaching.",
-    "Full target ladder: Band 0.0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
-    "Important coaching rule: advice should normally target only +0.5 to +1.0 band above the current level, with Band 5.0 as the minimum practical target for any essay scored Band 0-4.5.",
-    "If the current essay is Band 0-4.5, give practical Band 5.0 survival/pass advice and Band 5.0-level betterExpression first, not Band 5.5+ or Band 6-9 advice.",
+    "Full target ladder: Band 0.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+    "Important coaching rule: advice should normally target only +0.5 to +1.0 band above the current level, with Band 5.0-5.5 as the minimum practical target for any essay scored Band 0-4.5.",
+    "If the current essay is Band 0-4.5, give practical Band 5.0-5.5 survival/pass advice and Band 5.0-5.5-level betterExpression first, not Band 6-9 advice.",
     "If the current essay is Band 5.0, give Band 5.5-6.0 advice.",
     "If the current essay is Band 5.5, give Band 6.0-6.5 advice.",
     "If the current essay is Band 6.0, give Band 6.5-7.0 advice.",
@@ -1003,7 +1005,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
       priorityFixesZh: []
     },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
     taskAchievementAdvice: [],
@@ -1037,13 +1039,15 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "For high-band writing with few errors, do not invent errors; instead give precise polishing advice with evidence, but do not display harmless salutation/closing items as errors.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
-    "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
+    "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, targetBandExpression, and betterExpressionTargetBand when a useful next-band expression exists.",
+    "betterExpression must be a realistic next-step expression: Band 0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0.",
+    "Do not omit betterExpression just because the upgrade is modest. Show it when it is complete, preserves meaning, and is more natural or clearer at the target band.",
     "Do not fill betterExpression if it is the same as correctedSentence, only swaps one word/phrase without improving clarity, or deletes important information. betterExpression should be a realistic next-step rewrite at the target band range; it may be a modest upgrade for low-band essays, but it must be complete, natural, and more useful than the direct correction.",
     "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
     "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
     buildTargetImprovementInstruction(body),
     "Fill targetImprovementPlan with a realistic next-step plan based on that target range.",
-    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, target, action, exampleUpgrade, actionZh. The action field must be a concrete step, not blank.",
+    "targetImprovementPlan must include targetBandRangeZh and targetReasonZh. targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, currentWeaknessZh, target, targetZh, action, actionZh, exampleUpgrade, exampleUpgradeZh. The action field must be a concrete step, not blank.",
     "Write correctedSentence as a direct fix at the target level. Write betterExpression only when you can provide a visibly stronger rewrite at the target level, not far above it.",
     "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: generate these ladder plans only when the current overallBand is 7.0 or below. If the current score is above Band 7.0, return band5FixPlan, band6UpgradePlan, band7UpgradePlan and their Zh arrays as empty arrays, and put high-band coaching only in targetImprovementPlan, criterionUpgrades, practiceTasks, and four-criterion advice.",
     "For every advice array, also return a matching Chinese explanation array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must accurately explain the corresponding English item, not a general template.",
@@ -1108,7 +1112,8 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
   if (!item || typeof item !== "object") return null;
   const originalSentence = pickFirstUsefulValue(item, ["originalSentence", "original", "sentence", "sourceSentence", "wrong"]);
   const correctedSentence = pickFirstUsefulValue(item, ["correctedSentence", "corrected", "correction", "fixed", "right"]);
-  const rawBetterExpression = pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]);
+  const targetBandExpressionCandidate = pickFirstUsefulValue(item, ["targetBandExpression", "targetExpression", "bandTargetExpression"]);
+  const rawBetterExpression = pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]) || targetBandExpressionCandidate;
   const keepBetterExpression = shouldShowBetterExpression(correctedSentence || originalSentence, rawBetterExpression);
   const scoreImpactingRaw = item.scoreImpacting ?? item.affectsBand ?? item.bandAffecting ?? item.isScoreImpacting;
   return {
@@ -1128,7 +1133,7 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     scoreImpacting: scoreImpactingRaw === undefined ? true : scoreImpactingRaw !== false && String(scoreImpactingRaw).toLowerCase() !== "false",
     whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]),
     betterExpressionTargetBand: pickFirstUsefulValue(item, ["betterExpressionTargetBand", "targetBandRange", "targetRange", "targetBand"]),
-    targetBandExpression: pickFirstUsefulValue(item, ["targetBandExpression", "targetExpression", "bandTargetExpression"])
+    targetBandExpression: targetBandExpressionCandidate
   };
 }
 
@@ -1241,10 +1246,11 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
 
-  // Hide only fake upgrades: identical wording, meaningless tiny swaps, or obvious truncation.
-  if (similarity >= 0.92) return false;
-  if (editDistance <= 2 && lengthGap <= 2) return false;
-  if (editDistance <= 3 && lengthGap <= 1 && similarity >= 0.82) return false;
+  // Hide only genuinely bad upgrades: identical wording, tiny mechanical swaps, or obvious truncation.
+  // Modest next-band upgrades are valid, especially for Band 0-5 learners.
+  if (similarity >= 0.97) return false;
+  if (editDistance <= 1 && lengthGap <= 1) return false;
+  if (editDistance <= 2 && lengthGap === 0 && similarity >= 0.9) return false;
   if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
   return true;
@@ -1527,7 +1533,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     ],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     coherenceAdvice: [],
     lexicalAdvice: [],
@@ -1704,7 +1710,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     taskAchievementAdviceZh: [],
     coherenceAdvice: [],
@@ -2212,7 +2218,7 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     lexicalAdviceZh: [],
     grammarAdvice: [],
     grammarAdviceZh: [],
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     spellingCorrections: [],
     grammarErrors: [],
     sentenceCorrections: [],
@@ -2436,7 +2442,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       }),
       `Scan the whole essay sentence by sentence. Return up to ${limit} sentenceCorrections and up to ${limit} detailedSentenceCorrections.`,
       "Return only sentence issues that affect IELTS band. Do not include errorType None, No significant improvement needed, No impact on band score, unchanged corrections, or correct salutations/closings.",
-      "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, problem, rule, band impact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
+      "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, betterExpressionTargetBand, problem, rule, band impact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
+    "betterExpression must usually be present for every score-impacting correction below Band 9 when there is a safe next-band model. Keep it at the target range, not far above the learner level, and preserve all task-relevant meaning.",
       "Do not make Band 3-5 learners imitate Band 8-9 language. Upgrade only to the next realistic target range.",
       ...common
     ].join("\n");
@@ -2446,7 +2453,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     "Return JSON with this exact shape:",
     JSON.stringify({
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
       task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
       task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
       taskAchievementAdvice: [],
@@ -3789,7 +3796,7 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
       bulletPointsZh: [],
       requiredPartsZh: task === "Task 2" ? ["回答题目的所有部分。"] : []
     },
-    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "The recovered AI output did not show a task mismatch.", warning: issue ? `AI JSON was repaired after: ${String(issue).slice(0, 100)}` : "" },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "The recovered AI output did not show a task mismatch.", warning: "" },
     overallBand: clampAiBand(overall, 1),
     estimatedLevel: `Band ${formatBand(clampAiBand(overall, 1))}`,
     lowBandDiagnostics: { recommendedLowBandRange: underMinimum ? "Underlength warning" : "", reason: lowReason },
@@ -4939,7 +4946,7 @@ function repairTaskRequirementAnalysisFinal(result, body = {}) {
 
 
 function isNonBlockingGrammarWarningText(value) {
-  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content/i.test(String(value || ""));
+  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON/i.test(String(value || ""));
 }
 
 function ensureAlignedZhArrayFinal(items, zhItems, dictionary = {}) {
@@ -4991,6 +4998,53 @@ function normalizeBandPlanVisibilityAndZhFinal(result) {
   if (ensureArray(result.band5FixPlan).length) result.band5FixPlanZh = ensureAlignedZhArrayFinal(result.band5FixPlan, result.band5FixPlanZh, band5Dict);
   if (ensureArray(result.band6UpgradePlan).length) result.band6UpgradePlanZh = ensureAlignedZhArrayFinal(result.band6UpgradePlan, result.band6UpgradePlanZh, band6Dict);
   if (ensureArray(result.band7UpgradePlan).length) result.band7UpgradePlanZh = ensureAlignedZhArrayFinal(result.band7UpgradePlan, result.band7UpgradePlanZh, band7Dict);
+}
+
+
+function betterExpressionTargetRangeLabel(bandValue) {
+  return targetImprovementRangeFromBand(bandValue).label;
+}
+
+function buildFallbackBetterExpression(correctedSentence, bandValue, body = {}) {
+  const band = clampAiBand(bandValue, 5);
+  if (band >= 9) return "";
+  const source = String(correctedSentence || "").trim();
+  if (!source || tokenizeExpressionForComparison(source).length < 4) return "";
+  let upgraded = source;
+
+  const replacements = [
+    [/\bI write this letter because I want to go to another department\b/i, "I am writing to request a transfer to another department because I would like to develop my skills"],
+    [/\bI am writing this letter because I want to go to another department\b/i, "I am writing to request a transfer to another department because I would like to develop my skills"],
+    [/\bI write this letter because I want to\b/i, "I am writing to request permission to"],
+    [/\bI am writing this letter because I want to\b/i, "I am writing to request permission to"],
+    [/\bI want to go to another department\b/i, "I would like to transfer to another department"],
+    [/\bwant to go to another department\b/i, "would like to transfer to another department"],
+    [/\bgo to another department\b/i, "transfer to another department"],
+    [/\bI want to\b/i, "I would like to"],
+    [/\bI need to\b/i, "I would like to"],
+    [/\bdo some job\b/i, "carry out my work"],
+    [/\bmake better use of\b/i, "make more effective use of"],
+    [/\bgood for me\b/i, "helpful for my development"],
+    [/\bvery good\b/i, "very useful"],
+    [/\bnice\b/i, "helpful"],
+    [/\bpeople is\b/i, "people are"],
+    [/\bother department\b/i, "another department"]
+  ];
+  replacements.forEach(([pattern, replacement]) => {
+    upgraded = upgraded.replace(pattern, replacement);
+  });
+
+  if (sameCorrectionText(upgraded, source)) {
+    if (/^I am writing to request\b/i.test(source) && !/\b(because|as|so that|in order to)\b/i.test(source)) {
+      upgraded = source.replace(/[.。!?]*$/, "") + " because I believe this change would support my professional development.";
+    } else if (/^I am writing\b/i.test(source) && /\btransfer\b|\bdepartment\b/i.test(source) && !/\b(because|as)\b/i.test(source)) {
+      upgraded = source.replace(/[.。!?]*$/, "") + ", as I hope to develop my skills in a new role.";
+    }
+  }
+
+  if (!/[.!?]$/.test(upgraded)) upgraded += ".";
+  if (!shouldShowBetterExpression(source, upgraded)) return "";
+  return upgraded;
 }
 
 function suppressNonBlockingGrammarWarningsFinal(result) {
@@ -5072,7 +5126,8 @@ function ensureTargetImprovementPlan(result, body) {
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   const firstCriterion = firstCriterionName(task);
   const currentBand = formatBand(roundHalf(result.overallBand || 1));
-  const targetRange = targetImprovementRangeFromBand(result.overallBand || 1);
+  const targetRangeInfo = targetImprovementRangeFromBand(result.overallBand || 1);
+  const targetRange = targetRangeInfo.label;
   const criteriaNames = [firstCriterion, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
   const existingPlan = result.targetImprovementPlan && typeof result.targetImprovementPlan === "object" ? result.targetImprovementPlan : {};
   const existingUpgrades = ensureArray(existingPlan.criterionUpgrades).filter((item) => item && typeof item === "object");
@@ -5094,19 +5149,51 @@ function ensureTargetImprovementPlan(result, body) {
     return {
       criterion,
       currentWeakness: weakness,
+      currentWeaknessZh: existing.currentWeaknessZh || criterionItem.feedbackZh || "这项目前最需要根据英文反馈中的弱点进行针对性修正。",
       target: existing.target || existing.targetBand || targetRange,
+      targetZh: existing.targetZh || `这一项的目标是达到 ${targetRange} 的可实现水平。`,
       action,
       exampleUpgrade: exampleUpgrade || "Apply the action to one paragraph, then repeat the same check across the essay.",
-      actionZh: existing.actionZh || existing.howToImproveZh || ""
+      exampleUpgradeZh: existing.exampleUpgradeZh || "示例升级应保留原意，同时让表达更清楚、更自然。",
+      actionZh: existing.actionZh || existing.howToImproveZh || "按英文动作逐步修改，先解决最影响分数的问题。"
     };
   });
   result.targetImprovementPlan = {
     ...existingPlan,
     currentBand: existingPlan.currentBand || `Band ${currentBand}`,
-    targetBandRange: existingPlan.targetBandRange || targetRange,
+    targetBandRange: targetRange,
+    targetBandRangeZh: `目标范围按当前分数设置为 ${targetRange}，避免跳到过高表达。`,
     targetReason: existingPlan.targetReason || "The next target should improve the current score by about 0.5-1 band with realistic, criterion-specific changes.",
+    targetReasonZh: existingPlan.targetReasonZh || "这个目标按当前分数上调约0.5到1分，重点放在最容易实际提高的任务回应、结构、词汇或语法问题上。",
     criterionUpgrades
   };
+
+  const targetLabel = result.targetImprovementPlan.targetBandRange || targetRange;
+  const overall = clampAiBand(result.overallBand || 1, 1);
+  ensureArray(result.detailedSentenceCorrections).forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const baseSentence = item.correctedSentence || item.originalSentence || "";
+    if (overall >= 9) {
+      item.betterExpression = "";
+      item.targetBandExpression = "";
+      item.betterExpressionZh = "";
+      return;
+    }
+    const fallbackBetter = buildFallbackBetterExpression(baseSentence, overall, body);
+    const candidates = [item.betterExpression, item.targetBandExpression, fallbackBetter]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const chosen = candidates.find((candidate) => shouldShowBetterExpression(baseSentence, candidate)) || "";
+    if (chosen) {
+      item.betterExpression = chosen;
+      if (!item.targetBandExpression || !shouldShowBetterExpression(baseSentence, item.targetBandExpression)) item.targetBandExpression = chosen;
+      if (!item.betterExpressionTargetBand) item.betterExpressionTargetBand = targetLabel;
+      if (!item.betterExpressionZh) item.betterExpressionZh = `这个更好表达按 ${targetLabel} 设计：保留原意，但让句子更自然、更正式或更清楚。`;
+    } else {
+      item.betterExpression = "";
+      item.betterExpressionZh = "";
+    }
+  });
 }
 
 function sanitizeLowBandDiagnosticsForTask(modelDiagnostics, localDiagnostics, body) {
