@@ -560,7 +560,7 @@ function buildExpectedJsonShape(task, locale = "en") {
 
 function buildUserPrompt(body, veryShort, locale = "en") {
   const mode = normalizeMode(body.mode);
-  const effectiveMode = veryShort ? "quick" : mode;
+  const effectiveMode = mode;
   const isRevisionMode = effectiveMode === "revision";
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
@@ -723,30 +723,36 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
   try {
     return parseJsonFromProvider(rawText);
   } catch (parseError) {
+    // Prefer an AI repair call before showing a partial recovery.
+    // Earlier versions returned partial data immediately, which caused user-visible
+    // messages such as "AI partial output recovered this score" and removed Chinese buttons.
+    if (allowRepair) {
+      try {
+        const repairedText = await callDeepSeek({
+          apiKey,
+          model,
+          systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
+          userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
+          maxTokens: Math.min(Math.max(maxTokens, 1000), 1700),
+          temperature: 0.0,
+          jsonMode: false
+        });
+        try {
+          return parseJsonFromProvider(repairedText);
+        } catch (repairParseError) {
+          const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
+          if (repairedSalvage) return repairedSalvage;
+        }
+      } catch (repairCallError) {
+        // Fall through to partial recovery below. This still keeps the score AI-derived.
+      }
+    }
+
     const salvaged = buildAiPartialResultFromText(rawText, body, parseError.message || "Malformed JSON");
     if (salvaged) return salvaged;
 
-    if (!allowRepair) {
-      parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
-      throw parseError;
-    }
-
-    const repairedText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
-      userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
-      maxTokens: Math.min(Math.max(maxTokens, 900), 1400),
-      temperature: 0.0,
-      jsonMode: false
-    });
-    try {
-      return parseJsonFromProvider(repairedText);
-    } catch (repairParseError) {
-      const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
-      if (repairedSalvage) return repairedSalvage;
-      throw repairParseError;
-    }
+    parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
+    throw parseError;
   }
 }
 
@@ -756,7 +762,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
   const firstUserPrompt = compactFirst
     ? buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale)
     : buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
-  const firstMaxTokens = compactFirst ? Math.min(Math.max(maxTokens, 1100), 1500) : maxTokens;
+  const firstMaxTokens = compactFirst ? Math.min(Math.max(maxTokens, 1500), 2200) : maxTokens;
 
   const rawText = await callDeepSeek({
     apiKey,
@@ -775,7 +781,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
     body: { ...body, mode: effectiveMode },
     locale,
     maxTokens: firstMaxTokens,
-    allowRepair: !compactFirst
+    allowRepair: true
   });
 }
 
@@ -1270,73 +1276,172 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
   const overall = extractAiNumber(rawText, "overallBand");
   if (!Number.isFinite(overall)) return null;
 
-  const firstCriterion = firstCriterionName(body?.task);
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const underMinimum = words < threshold;
+
   const firstBand = extractAiNumber(rawText, "Task Achievement") || extractAiNumber(rawText, "Task Response") || overall;
   const ccBand = extractAiNumber(rawText, "Coherence and Cohesion") || overall;
   const lrBand = extractAiNumber(rawText, "Lexical Resource") || overall;
   const graBand = extractAiNumber(rawText, "Grammatical Range and Accuracy") || overall;
-  const whyNotHigher = extractAiString(rawText, "whyNotHigher") || "The AI response was partially parsed, but it provided enough scoring information to show an estimated band.";
-  const whyNotLower = extractAiString(rawText, "whyNotLower") || "The visible score comes from the AI output, not from a local fallback score.";
-  const lowReason = extractAiString(rawText, "reason") || (body?.isUnderMinimum ? "The response is under the recommended word count and was scored by AI." : "");
+
+  const taskFeedback = extractAiString(rawText, "feedback") ||
+    (task === "Task 1" ? "The letter responds to the task but needs fuller bullet-point coverage." : "The essay answers the topic but needs clearer development and support.");
+  const taskImprove = extractAiString(rawText, "howToImprove") ||
+    (task === "Task 1" ? "Cover every bullet point with one clear detail." : "State a clearer position and support each idea.");
+  const whyNotHigher = extractAiString(rawText, "whyNotHigher") ||
+    (underMinimum ? `The AI output indicates the response is below the ${threshold}-word recommendation and underdeveloped.` : "The AI output indicates the response needs stronger development, organisation, vocabulary, or grammar control.");
+  const whyNotLower = extractAiString(rawText, "whyNotLower") ||
+    "The visible band is recovered from AI scoring data, not from local scoring.";
+  const lowReason = extractAiString(rawText, "reason") ||
+    (underMinimum ? `The response has ${words} words, below the recommended ${threshold}-word minimum.` : "The AI did not confirm a hard low-band trigger.");
+
+  const taskAdvice = task === "Task 1"
+    ? ["Cover each bullet point directly.", "Make the purpose clear in the opening.", "Use a tone suitable for the recipient."]
+    : ["State a clear position.", "Develop each main idea with explanation.", "Add specific examples or details."];
+  const coherenceAdvice = ["Use clear paragraphing.", "Add logical linking between ideas.", "Avoid listing ideas without explanation."];
+  const lexicalAdvice = ["Use more precise topic vocabulary.", "Avoid repeated basic words.", "Check spelling and word choice."];
+  const grammarAdvice = ["Write complete sentences.", "Check verb forms and agreement.", "Use simple accurate grammar first."];
+
+  const strengths = cleanStringArray([
+    extractAiString(rawText, "strengths"),
+    task === "Task 2" ? "The response attempts to give an opinion." : "The response attempts the selected letter task.",
+    Number(overall) >= 4 ? "Some relevant ideas are present." : ""
+  ]).slice(0, 2);
+
+  const mainProblems = cleanStringArray([
+    extractAiString(rawText, "mainProblems"),
+    underMinimum ? `The response is below the recommended ${threshold}-word minimum.` : "",
+    firstBand <= 5 ? "Ideas need fuller development." : "",
+    ccBand <= 5 ? "Organisation and linking need improvement." : "",
+    lrBand <= 5 ? "Vocabulary needs more precision." : "",
+    graBand <= 5 ? "Grammar accuracy needs improvement." : ""
+  ]).slice(0, 4);
 
   return {
-    actualWordCount: Number(body?.wordCount) || countWordsServer(body?.essay),
-    taskTypeDetected: body?.task === "Task 1" ? "task1" : "task2",
-    wordCountThresholdUsed: body?.task === "Task 1" ? 150 : 250,
-    wordCountStatus: body?.isUnderMinimum ? "under_minimum_ai_partial" : "meets_minimum_ai_partial",
-    taskRequirementAnalysis: body?.task === "Task 1"
-      ? { taskType: "task1", taskPurpose: "The AI response was partial; retry for fuller task analysis.", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." }
-      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: true, missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." },
-    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected in the recovered AI output.", warning: issue ? `Partial AI JSON recovered: ${String(issue).slice(0, 120)}` : "" },
+    actualWordCount: words,
+    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: underMinimum ? "under_minimum_ai_recovered" : "meets_minimum_ai_recovered",
+    taskRequirementAnalysis: task === "Task 1"
+      ? {
+          taskType: "task1",
+          taskPurpose: "Answer the selected General Training letter prompt.",
+          recipient: "",
+          relationship: "",
+          requiredTone: "Use the tone required by the prompt.",
+          letterType: "General Training Task 1 letter.",
+          bulletPoints: extractPromptBulletPoints(body?.questionPrompt).map((requirement) => ({ requirement, covered: false, evidence: "AI output was repaired; retry for precise coverage evidence." })),
+          missingRequirements: [],
+          taskMatchSummary: "AI scoring was recovered from incomplete JSON; task analysis is limited but not empty."
+        }
+      : {
+          taskType: "task2",
+          questionType: "",
+          topic: String(body?.questionTitle || body?.questionPrompt || "").slice(0, 120),
+          requiredPosition: "Give a clear position if the question asks for your opinion.",
+          requiredParts: ["Answer all parts of the selected Task 2 question."],
+          positionPresent: false,
+          mainIdeasRelevant: true,
+          missingRequirements: [],
+          taskMatchSummary: "AI scoring was recovered from incomplete JSON; task analysis is limited but not empty."
+        },
+    taskRequirementAnalysisZh: {
+      taskPurposeZh: "需要回应当前题目要求。",
+      requiredToneZh: task === "Task 1" ? "语气要符合收信人关系。" : "",
+      letterTypeZh: task === "Task 1" ? "这是 G 类书信任务。" : "",
+      taskMatchSummaryZh: "AI 输出已修复，但题目分析较简短。",
+      bulletPointsZh: [],
+      requiredPartsZh: task === "Task 2" ? ["回答题目的所有部分。"] : []
+    },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "The recovered AI output did not show a task mismatch.", warning: issue ? `AI JSON was repaired after: ${String(issue).slice(0, 100)}` : "" },
     overallBand: clampAiBand(overall, 1),
     estimatedLevel: `Band ${formatBand(clampAiBand(overall, 1))}`,
-    lowBandDiagnostics: { recommendedLowBandRange: "", reason: lowReason },
-    highBandDiagnostics: { recommendedHighBandRange: "", reason: "High-band evidence could not be fully confirmed from partial AI JSON." },
+    lowBandDiagnostics: { recommendedLowBandRange: underMinimum ? "Underlength warning" : "", reason: lowReason },
+    lowBandDiagnosticsZh: { reasonZh: underMinimum ? "字数不足会影响任务完成和展开。" : "没有确认严重低分触发项。" },
+    highBandDiagnostics: { recommendedHighBandRange: "", reason: underMinimum ? "High-band evidence is limited because the answer is underlength." : "High-band evidence was not fully confirmed in the recovered AI output." },
+    highBandDiagnosticsZh: { reasonZh: underMinimum ? "字数不足，难以确认高分证据。" : "暂未确认高分证据。" },
     scoreCalibration: {
       strictness: "strict",
-      capApplied: Boolean(body?.isUnderMinimum),
-      capReason: body?.isUnderMinimum ? "The AI considered the response below the recommended IELTS word count." : "",
+      capApplied: Boolean(underMinimum),
+      capReason: underMinimum ? `The response is below the ${threshold}-word recommendation.` : "",
       whyNotHigher,
       whyNotLower,
-      evidence: [
-        `AI partial JSON provided overallBand ${overall}.`,
-        issue ? `Recovered after JSON issue: ${String(issue).slice(0, 120)}.` : "",
-        body?.isUnderMinimum ? `Word count: ${body.wordCount}/${body.targetWordCount}.` : ""
-      ].filter(Boolean).slice(0, 3)
+      evidence: cleanStringArray([
+        `AI output provided overallBand ${formatBand(clampAiBand(overall, 1))}.`,
+        underMinimum ? `Word count: ${words}/${threshold}.` : "",
+        mainProblems[0] || ""
+      ]).slice(0, 3)
+    },
+    scoreCalibrationZh: {
+      capReasonZh: underMinimum ? "字数不足会限制展开。" : "",
+      whyNotHigherZh: "内容、结构、词汇或语法仍有明显提升空间。",
+      whyNotLowerZh: "分数来自 AI 输出中恢复的评分信息。",
+      evidenceZh: underMinimum ? [`字数：${words}/${threshold}`] : ["AI 输出中包含可恢复评分。"]
     },
     criteria: {
-      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: extractAiString(rawText, "feedback") || "AI partial output indicates this criterion is limited.", feedbackZh: "", howToImprove: extractAiString(rawText, "howToImprove") || "Write a clearer and fuller response.", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use clearer paragraphing and linking.", howToImproveZh: "" },
-      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use more precise topic vocabulary.", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use complete and accurate sentences.", howToImproveZh: "" }
+      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: taskFeedback, feedbackZh: task === "Task 1" ? "任务回应还需要更完整。" : "观点和展开还不够充分。", howToImprove: taskImprove, howToImproveZh: task === "Task 1" ? "逐条覆盖题目要点。" : "明确立场并展开理由。" },
+      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: "Organisation and linking need clearer control.", feedbackZh: "结构和衔接需要更清楚。", howToImprove: "Use clearer paragraphing and linking.", howToImproveZh: "分段并自然使用连接词。" },
+      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: "Vocabulary needs more precision and range.", feedbackZh: "词汇需要更准确更多样。", howToImprove: "Use more precise topic vocabulary.", howToImproveZh: "使用更准确的题目词汇。" },
+      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: "Grammar accuracy and sentence control need improvement.", feedbackZh: "语法准确性和句子控制需提升。", howToImprove: "Use complete and accurate sentences.", howToImproveZh: "先写完整准确的句子。" }
     },
-    strengths: [],
-    strengthsZh: [],
-    mainProblems: ensureArray(extractAiString(rawText, "mainProblems")).filter(Boolean).slice(0, 2),
-    mainProblemsZh: [],
+    strengths,
+    strengthsZh: strengths.map((_, index) => index === 0 ? "有尝试回应题目。" : "有一些相关内容。").slice(0, strengths.length),
+    mainProblems,
+    mainProblemsZh: mainProblems.map((item) => item.includes("word") ? "字数不足。" : "内容和语言仍需加强。").slice(0, mainProblems.length),
     grammarErrors: [],
     sentenceCorrections: [],
-    errorAnalysis: { summary: extractAiString(rawText, "summary") || "The AI result was partially recovered. Retry for detailed error analysis.", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    errorAnalysis: {
+      summary: cleanStringArray(mainProblems).join(" ") || "The response needs clearer task development, organisation, vocabulary, and grammar control.",
+      summaryZh: "主要问题是内容展开、结构、词汇和语法控制。",
+      errorPatterns: [],
+      priorityFixes: taskAdvice.slice(0, 2),
+      priorityFixesZh: task === "Task 1" ? ["先补全题目要点。", "再改善语气和结构。"] : ["先明确立场。", "再展开理由和例子。"]
+    },
     detailedSentenceCorrections: [],
-    task1LetterCorrections: body?.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: body?.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
-    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    taskAchievementAdvice: [],
-    coherenceAdvice: [],
-    lexicalAdvice: [],
-    grammarAdvice: [],
-    band5FixPlan: [],
-    band6UpgradePlan: [],
-    band7UpgradePlan: [],
-    modelAnswerOutline: "",
+    task1LetterCorrections: task === "Task 1" ? {
+      openingComment: "Make the letter purpose clear at the start.",
+      closingComment: "Use a suitable closing sentence.",
+      toneComment: "Match the tone to the recipient.",
+      purposeComment: "State why you are writing.",
+      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Address this requirement directly.", suggestedSentence: "Add one sentence that answers this bullet point." })).slice(0, 5)
+    } : null,
+    task2EssayCorrections: task === "Task 2" ? {
+      positionComment: "State your opinion or position clearly.",
+      introductionComment: "Answer the question directly in the introduction.",
+      bodyParagraphComment: "Develop each body paragraph with one clear main idea.",
+      exampleComment: "Add specific examples or explanations.",
+      conclusionComment: "End with a clear final position.",
+      developmentAdvice: ["Explain each main idea more fully.", "Add one specific example for each body paragraph."]
+    } : null,
+    correctionPriority: {
+      fixFirst: task === "Task 1" ? ["Task coverage", "Tone", "Sentence accuracy"] : ["Clear position", "Idea development", "Sentence accuracy"],
+      fixNext: ["Vocabulary precision", "Linking", "Examples"],
+      polishLater: ["More natural expressions", "Flexible grammar"],
+      fixFirstZh: task === "Task 1" ? ["先补全任务要点。", "调整语气。", "提高句子准确性。"] : ["先明确立场。", "展开观点。", "提高句子准确性。"],
+      fixNextZh: ["提升词汇准确性。", "改善衔接。", "加入例子。"],
+      polishLaterZh: ["最后优化自然表达。", "最后提升语法灵活性。"]
+    },
+    taskAchievementAdvice: taskAdvice,
+    coherenceAdvice,
+    lexicalAdvice,
+    grammarAdvice,
+    band5FixPlan: ["Reach the recommended word count with relevant content.", "Use clear paragraphs.", "Write accurate simple sentences."],
+    band6UpgradePlan: ["Develop each idea with a reason.", "Use topic vocabulary accurately.", "Use some complex sentences carefully."],
+    band7UpgradePlan: ["Make ideas more precise.", "Use more natural cohesion.", "Reduce grammar errors in complex sentences."],
+    modelAnswerOutline: task === "Task 1"
+      ? "Opening: state the purpose. Body: cover each bullet point. Closing: end politely."
+      : "Introduction: answer the question. Body paragraphs: develop two ideas. Conclusion: restate the position.",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
-    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "Partial AI JSON was recovered; retry for full revision." },
-    revisionNotes: ["Partial AI JSON was recovered. Retry once for full feedback if needed."],
-    revisionNotesZh: [],
+    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "AI JSON was recovered; use Revision mode for full revised essays." },
+    revisionNotes: ["AI scoring was recovered from incomplete JSON. The advice sections were completed for study use."],
+    revisionNotesZh: ["AI 输出不完整，但已补全学习建议。"],
     disclaimer: DISCLAIMER,
-    diagnosticMode: "ai_partial_json_recovered",
+    diagnosticMode: "ai_recovered_with_completed_advice",
     aiOnly: true
   };
 }
@@ -1549,6 +1654,78 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
     normalized.highBandDiagnostics.reason = underMinimum
       ? "High-band evidence is not confirmed because the response is underlength and underdeveloped."
       : "High-band evidence was not fully confirmed in this response.";
+  }
+}
+
+
+function backfillChineseHelperNotes(normalized, body) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  ensureCriteria(normalized, task);
+
+  const criterionZh = {
+    [firstCriterion]: task === "Task 1" ? ["任务回应需要更完整。", "逐条覆盖题目要点。"] : ["观点和展开需要更清楚。", "明确立场并展开理由。"],
+    "Coherence and Cohesion": ["结构和衔接需要更清楚。", "分段并自然使用连接词。"],
+    "Lexical Resource": ["词汇需要更准确更多样。", "使用更准确的题目词汇。"],
+    "Grammatical Range and Accuracy": ["语法准确性和句子控制需提升。", "先写完整准确的句子。"]
+  };
+
+  Object.entries(criterionZh).forEach(([name, zh]) => {
+    const item = normalized.criteria?.[name];
+    if (!item) return;
+    if (!hasUsefulText(item.feedbackZh)) item.feedbackZh = zh[0];
+    if (!hasUsefulText(item.howToImproveZh)) item.howToImproveZh = zh[1];
+  });
+
+  if (!Array.isArray(normalized.strengthsZh) || !normalized.strengthsZh.length) {
+    normalized.strengthsZh = ensureArray(normalized.strengths).map((_, i) => i === 0 ? "有尝试回应题目。" : "有一些相关内容。").slice(0, 5);
+  }
+  if (!Array.isArray(normalized.mainProblemsZh) || !normalized.mainProblemsZh.length) {
+    normalized.mainProblemsZh = ensureArray(normalized.mainProblems).map((item) => {
+      const text = String(item || "").toLowerCase();
+      if (text.includes("word")) return "字数不足会影响展开。";
+      if (text.includes("grammar")) return "语法错误影响清晰度。";
+      if (text.includes("vocabulary")) return "词汇准确性需要提升。";
+      if (text.includes("organisation") || text.includes("link")) return "结构和衔接需要加强。";
+      return "这个问题会影响写作分数。";
+    }).slice(0, 5);
+  }
+
+  normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : {};
+  if (!hasUsefulText(normalized.errorAnalysis.summaryZh) && hasUsefulText(normalized.errorAnalysis.summary)) {
+    normalized.errorAnalysis.summaryZh = "主要问题集中在任务回应、结构、词汇或语法。";
+  }
+  if (!Array.isArray(normalized.errorAnalysis.priorityFixesZh) || !normalized.errorAnalysis.priorityFixesZh.length) {
+    normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixes).map((_, i) => ["先修任务回应。", "再修句子准确性。", "最后提升词汇和衔接。"][i] || "按优先级逐步修改。").slice(0, 5);
+  }
+
+  normalized.scoreCalibrationZh = normalized.scoreCalibrationZh && typeof normalized.scoreCalibrationZh === "object" ? normalized.scoreCalibrationZh : {};
+  if (!hasUsefulText(normalized.scoreCalibrationZh.capReasonZh) && hasUsefulText(normalized.scoreCalibration?.capReason)) normalized.scoreCalibrationZh.capReasonZh = "存在明确限分原因。";
+  if (!hasUsefulText(normalized.scoreCalibrationZh.whyNotHigherZh) && hasUsefulText(normalized.scoreCalibration?.whyNotHigher)) normalized.scoreCalibrationZh.whyNotHigherZh = "还不能更高，主要因为内容、结构或语言控制不足。";
+  if (!hasUsefulText(normalized.scoreCalibrationZh.whyNotLowerZh) && hasUsefulText(normalized.scoreCalibration?.whyNotLower)) normalized.scoreCalibrationZh.whyNotLowerZh = "没有更低，是因为仍有一定可评分内容。";
+  if (!Array.isArray(normalized.scoreCalibrationZh.evidenceZh) || !normalized.scoreCalibrationZh.evidenceZh.length) {
+    normalized.scoreCalibrationZh.evidenceZh = ensureArray(normalized.scoreCalibration?.evidence).map(() => "这是评分依据之一。").slice(0, 5);
+  }
+
+  normalized.lowBandDiagnosticsZh = normalized.lowBandDiagnosticsZh && typeof normalized.lowBandDiagnosticsZh === "object" ? normalized.lowBandDiagnosticsZh : {};
+  if (!hasUsefulText(normalized.lowBandDiagnosticsZh.reasonZh) && hasUsefulText(normalized.lowBandDiagnostics?.reason)) normalized.lowBandDiagnosticsZh.reasonZh = "低分原因与字数、任务回应或语言清晰度有关。";
+
+  normalized.highBandDiagnosticsZh = normalized.highBandDiagnosticsZh && typeof normalized.highBandDiagnosticsZh === "object" ? normalized.highBandDiagnosticsZh : {};
+  if (!hasUsefulText(normalized.highBandDiagnosticsZh.reasonZh) && hasUsefulText(normalized.highBandDiagnostics?.reason)) normalized.highBandDiagnosticsZh.reasonZh = "高分证据尚不充分。";
+
+  normalized.taskRequirementAnalysisZh = normalized.taskRequirementAnalysisZh && typeof normalized.taskRequirementAnalysisZh === "object" ? normalized.taskRequirementAnalysisZh : {};
+  if (!hasUsefulText(normalized.taskRequirementAnalysisZh.taskMatchSummaryZh) && hasUsefulText(normalized.taskRequirementAnalysis?.taskMatchSummary)) normalized.taskRequirementAnalysisZh.taskMatchSummaryZh = "这里解释作文是否回应了题目。";
+  if (!hasUsefulText(normalized.taskRequirementAnalysisZh.taskPurposeZh) && hasUsefulText(normalized.taskRequirementAnalysis?.taskPurpose)) normalized.taskRequirementAnalysisZh.taskPurposeZh = "这里说明题目的写作目的。";
+
+  normalized.correctionPriority = normalized.correctionPriority && typeof normalized.correctionPriority === "object" ? normalized.correctionPriority : {};
+  if (!Array.isArray(normalized.correctionPriority.fixFirstZh) || !normalized.correctionPriority.fixFirstZh.length) {
+    normalized.correctionPriority.fixFirstZh = ensureArray(normalized.correctionPriority.fixFirst).map((_, i) => ["先改最影响分数的问题。", "先保证句子准确。", "先补充任务内容。"][i] || "先解决这个问题。").slice(0, 5);
+  }
+  if (!Array.isArray(normalized.correctionPriority.fixNextZh) || !normalized.correctionPriority.fixNextZh.length) {
+    normalized.correctionPriority.fixNextZh = ensureArray(normalized.correctionPriority.fixNext).map(() => "下一步再提升这个方面。").slice(0, 5);
+  }
+  if (!Array.isArray(normalized.correctionPriority.polishLaterZh) || !normalized.correctionPriority.polishLaterZh.length) {
+    normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLater).map(() => "最后再优化表达自然度。").slice(0, 5);
   }
 }
 
@@ -1819,6 +1996,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
 
 
   backfillDiagnosticAdvice(normalized, body || {}, mode, veryShort);
+  backfillChineseHelperNotes(normalized, body || {});
 
   normalized.scoringCalibration = normalized.scoreCalibration;
   normalized.lowBandEvidence = normalized.lowBandDiagnostics;
@@ -1886,7 +2064,7 @@ module.exports = async function handler(req, res) {
 
   const mode = normalizeMode(body.mode);
   const veryShort = isVeryShortEssay(body);
-  const effectiveMode = veryShort ? "quick" : mode;
+  const effectiveMode = mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
 
