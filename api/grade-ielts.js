@@ -2121,40 +2121,125 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
   ].join("\n");
 }
 
-async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
-  const maxTokensBySection = {
-    spelling: 3200,
-    grammar: 5200,
-    sentence: 7600,
-    advice: 5200
-  };
-  const rawText = await callDeepSeek({
-    apiKey,
-    model,
-    systemPrompt: buildFocusedSectionSystemPrompt(section, locale),
-    userPrompt: buildFocusedSectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, section, locale),
-    maxTokens: maxTokensBySection[section] || 4200,
-    temperature: 0.15,
-    jsonMode: false,
-    deadline,
-    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 150000))
-  });
-
-  const parsed = await parseCorrectionJson({
-    apiKey,
-    model,
-    rawText,
-    body: { ...body, mode: effectiveMode },
-    locale,
-    maxTokens: maxTokensBySection[section] || 4200,
-    deadline
-  });
-
-  const output = { disclaimer: DISCLAIMER };
-  return mergeAiCorrectionDetails(output, parsed, body, effectiveMode);
+function hasFocusedSectionUsableContent(section, output, body) {
+  const cleaned = sanitizeAiCorrectionPayload(output);
+  if (section === "spelling") {
+    // A spelling stage may legitimately return no spelling mistakes, but it must at least
+    // return an AI-written summary so the UI can show that the stage completed.
+    return ensureArray(cleaned.spellingCorrections).length > 0 || hasUsefulText(cleaned.errorAnalysis?.summary);
+  }
+  if (section === "grammar") {
+    return ensureArray(cleaned.grammarErrors).length > 0 || ensureArray(cleaned.detailedSentenceCorrections).length > 0;
+  }
+  if (section === "sentence") {
+    return ensureArray(cleaned.sentenceCorrections).length > 0 || ensureArray(cleaned.detailedSentenceCorrections).length > 0;
+  }
+  if (section === "advice") {
+    return Boolean(
+      ensureArray(cleaned.taskAchievementAdvice).length ||
+      ensureArray(cleaned.coherenceAdvice).length ||
+      ensureArray(cleaned.lexicalAdvice).length ||
+      ensureArray(cleaned.grammarAdvice).length ||
+      ensureArray(cleaned.band5FixPlan).length ||
+      ensureArray(cleaned.band6UpgradePlan).length ||
+      ensureArray(cleaned.band7UpgradePlan).length ||
+      hasUsefulText(cleaned.errorAnalysis?.summary) ||
+      hasUsefulText(cleaned.targetImprovementPlan?.targetBandRange) ||
+      ensureArray(cleaned.targetImprovementPlan?.focus).length ||
+      ensureArray(cleaned.targetImprovementPlan?.practiceTasks).length ||
+      ensureArray(cleaned.correctionPriority?.fixFirst).length ||
+      ensureArray(cleaned.task1LetterCorrections?.bulletPointAdvice).length ||
+      ensureArray(cleaned.task2EssayCorrections?.developmentAdvice).length ||
+      hasUsefulText(cleaned.task1LetterCorrections?.toneComment) ||
+      hasUsefulText(cleaned.task2EssayCorrections?.bodyParagraphComment)
+    );
+  }
+  return hasAiCorrectionContent(cleaned);
 }
 
+function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", previousIssue = "") {
+  return [
+    buildFocusedSectionPrompt(body, mode, section, locale),
+    "",
+    "IMPORTANT RETRY INSTRUCTION:",
+    previousIssue ? `Previous issue: ${String(previousIssue).slice(0, 300)}` : "The previous stage returned too little useful detail.",
+    "Return usable content for this exact section. Do not return an empty object.",
+    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text." : "",
+    section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence and betterExpression." : "",
+    section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object." : "",
+    section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
+  ].filter(Boolean).join("\n");
+}
 
+async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
+  const maxTokensBySection = {
+    spelling: 3600,
+    grammar: 7000,
+    sentence: 10000,
+    advice: 8500
+  };
+  const sectionTimeout = Math.min(
+    AI_SINGLE_REQUEST_TIMEOUT_MS,
+    Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 150000)
+  );
+  const maxAttempts = section === "spelling" ? 1 : 2;
+  let lastError = null;
+  let bestOutput = { disclaimer: DISCLAIMER };
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (remainingAiTime(deadline) < 15000) break;
+    try {
+      const userPrompt = attempt === 1
+        ? buildFocusedSectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, section, locale)
+        : buildFocusedSectionRetryPrompt({ ...body, mode: effectiveMode }, effectiveMode, section, locale, lastError?.message || "empty section result");
+      const rawText = await callDeepSeek({
+        apiKey,
+        model,
+        systemPrompt: buildFocusedSectionSystemPrompt(section, locale),
+        userPrompt,
+        maxTokens: maxTokensBySection[section] || 5200,
+        temperature: attempt === 1 ? 0.1 : 0.0,
+        jsonMode: false,
+        deadline,
+        timeoutMs: sectionTimeout
+      });
+
+      const parsed = await parseCorrectionJson({
+        apiKey,
+        model,
+        rawText,
+        body: { ...body, mode: effectiveMode },
+        locale,
+        maxTokens: maxTokensBySection[section] || 5200,
+        deadline
+      });
+
+      const output = mergeAiCorrectionDetails({ disclaimer: DISCLAIMER }, parsed, body, effectiveMode);
+      if (hasFocusedSectionUsableContent(section, output, body)) {
+        output.sectionStage = section;
+        output.sectionWarning = "";
+        return output;
+      }
+
+      bestOutput = mergeAiCorrectionDetails(bestOutput, output, body, effectiveMode);
+      lastError = new Error(`AI ${section} stage returned no usable detailed content.`);
+    } catch (error) {
+      lastError = error;
+      if (remainingAiTime(deadline) < 15000) break;
+    }
+  }
+
+  if (hasFocusedSectionUsableContent(section, bestOutput, body)) {
+    bestOutput.sectionStage = section;
+    bestOutput.sectionWarning = "";
+    return bestOutput;
+  }
+
+  const error = lastError || new Error(`AI ${section} stage returned no usable detailed content.`);
+  error.code = error.code || "AI_SECTION_EMPTY";
+  error.section = section;
+  throw error;
+}
 
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
