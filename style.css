@@ -33,6 +33,19 @@
 .error-details summary{min-height:42px;display:flex;align-items:center;padding:0 12px;font-weight:800;cursor:pointer;color:var(--rose)}
 .error-details h4{margin:12px 12px 6px;font-size:13px;color:var(--muted)}
 .error-details pre{max-height:240px;overflow:auto;margin:0 12px 12px;padding:10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.feedback-collapse{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);overflow:hidden}
+.feedback-collapse+ .feedback-collapse{margin-top:0}
+.feedback-collapse summary{min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;font-weight:850;cursor:pointer;list-style:none;word-break:break-word}
+.feedback-collapse summary::-webkit-details-marker{display:none}
+.feedback-collapse summary::after{content:"+";display:grid;place-items:center;flex:0 0 auto;width:28px;height:28px;border:1px solid var(--line2);border-radius:999px;color:var(--teal);font-weight:900;line-height:1}
+.feedback-collapse[open] summary::after{content:"-"}
+.feedback-collapse summary:hover{background:rgba(15,118,110,.08)}
+.feedback-collapse-body{padding:14px;border-top:1px solid var(--line);line-height:1.55;overflow-wrap:anywhere}
+.feedback-collapse-body>p:first-child,.feedback-collapse-body>ul:first-child{margin-top:0}
+.feedback-collapse-body>p:last-child,.feedback-collapse-body>ul:last-child{margin-bottom:0}
+.feedback-collapse .feedback-collapse{background:var(--card);margin-top:10px}
+.feedback-collapse pre{max-width:100%;white-space:pre-wrap;overflow:auto;word-break:break-word}
+.compact-body p{margin:0 0 8px}
 .calibration-details{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);overflow:hidden}
 .calibration-details summary{min-height:42px;display:flex;align-items:center;padding:0 12px;font-weight:850;cursor:pointer}
 .calibration-body{padding:12px;border-top:1px solid var(--line);font-size:14px;line-height:1.55}

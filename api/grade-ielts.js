@@ -358,6 +358,10 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Error correction requirements: Always return errorAnalysis, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, task1LetterCorrections or task2EssayCorrections, and correctionPriority.",
     "For spellingCorrections, list all clear misspelled words from the user's essay, with the corrected spelling, the sentence where it appears, a short explanation, and a brief explanationZh.",
     "For detailedSentenceCorrections, use originalSentence from the user's essay only, correctedSentence for direct correction, and betterExpression for a natural IELTS-style improvement without making Band 5 learners imitate Band 9 language.",
+    "detailedSentenceCorrections must contain only score-impacting issues. Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or correct salutation/closing items.",
+    "If a criterion band is 7.5 or higher, its feedback must describe high-band quality and frame suggestions as minor polishing/refinement. Do not pair Band 8 with Band 5-6 template wording such as 'needs clearer control' or 'grammar needs improvement' unless the band is lowered.",
+    "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
+    "targetImprovementPlan.criterionUpgrades must include currentWeakness, target, action, and exampleUpgrade for each IELTS criterion. Each action should help improve about 0.5-1 band from the current level.",
     "Classify errors using categories such as Task response/achievement problem, Missing bullet point, Tone problem, Verb tense, Subject-verb agreement, Article error, Singular/plural error, Word form error, Word choice error, Collocation error, Sentence fragment, Run-on sentence, Unclear meaning, Repetition, Informal wording in formal writing, Weak linking, Paragraphing problem, and Spelling error.",
     "There is no Quick Check mode. Both modes must include detailed AI error diagnosis. Full mode gives detailed grading without model answer; Revision mode gives detailed grading plus model/revision output.",
     "Do not limit corrections to two examples. Check the whole essay and return all clear score-affecting spelling, grammar, vocabulary, sentence-structure, cohesion, and task-response errors. For repeated identical errors, group the pattern but still show representative original text and corrections.",
@@ -539,7 +543,10 @@ function buildExpectedJsonShape(task, locale = "en") {
         betterExpression: "...",
         betterExpressionZh: emptyForLocaleZh("", locale),
         bandImpact: "...",
-        bandImpactZh: emptyForLocaleZh("", locale)
+        bandImpactZh: emptyForLocaleZh("", locale),
+        scoreImpacting: true,
+        whyThisAffectsBand: "...",
+        targetBandExpression: "..."
       }
     ],
     task1LetterCorrections: task === "Task 1" ? {
@@ -708,7 +715,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     task1LetterCorrections: taskType === "task1" ? { toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: taskType === "task2" ? { positionComment: "", bodyParagraphComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     taskAchievementAdviceZh: [],
     coherenceAdvice: [],
@@ -945,7 +952,10 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
         betterExpression: "",
         betterExpressionZh: "",
         bandImpact: "",
-        bandImpactZh: ""
+        bandImpactZh: "",
+        scoreImpacting: true,
+        whyThisAffectsBand: "",
+        targetBandExpression: ""
       }
     ],
     errorAnalysis: {
@@ -958,7 +968,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
       priorityFixesZh: []
     },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     taskAchievementAdvice: [],
@@ -989,16 +999,17 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "If the essay has more than 30 words, quote and correct at least 8 clear original errors unless there are genuinely fewer visible errors. For essays above 150 words, aim for 12+ concrete corrections across spellingCorrections, grammarErrors, sentenceCorrections, and detailedSentenceCorrections when errors exist.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
-    "For detailedSentenceCorrections, include originalSentence, correctedSentence, betterExpression, problem, rule, and bandImpact.",
+    "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
     "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
     "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
     buildTargetImprovementInstruction(body),
     "Fill targetImprovementPlan with a realistic next-step plan based on that target range.",
-    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use exactly these keys: criterion, target, action, actionZh. The action field must be a concrete step, not blank.",
+    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, target, action, exampleUpgrade, actionZh. The action field must be a concrete step, not blank.",
     "Write every correction and betterExpression at the target level, not far above it.",
     "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: do not give all plans equal priority. Put the most relevant plan for the target range first and make it the most detailed. If the target range is above Band 7, put the Band 7.5-9 coaching mainly in targetImprovementPlan, criterionUpgrades, practiceTasks, and band7UpgradePlan.",
     "For every advice array, also return a matching short Chinese helper array: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. These are not full translations; they are concise explanations for Chinese learners.",
     "Do not return blank objects in errorAnalysis.errorPatterns, targetImprovementPlan.criterionUpgrades, or developmentAdvice. Omit empty objects and return useful text instead.",
+    "Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or salutation/closing-only items with no score impact.",
     "For each correction item, explain exactly how the change helps the user reach the target range.",
     "Chinese helper notes must be short and appear only in *Zh fields.",
     "",
@@ -1058,6 +1069,7 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
   if (!item || typeof item !== "object") return null;
   const originalSentence = pickFirstUsefulValue(item, ["originalSentence", "original", "sentence", "sourceSentence", "wrong"]);
   const correctedSentence = pickFirstUsefulValue(item, ["correctedSentence", "corrected", "correction", "fixed", "right"]);
+  const scoreImpactingRaw = item.scoreImpacting ?? item.affectsBand ?? item.bandAffecting ?? item.isScoreImpacting;
   return {
     sentenceNumber: Number(item.sentenceNumber || item.number || item.index || index + 1) || index + 1,
     originalSentence,
@@ -1071,8 +1083,74 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     betterExpression: pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]),
     betterExpressionZh: pickFirstUsefulValue(item, ["betterExpressionZh", "improvedSentenceZh", "naturalExpressionZh", "upgradeZh"]),
     bandImpact: pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact"]),
-    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"])
+    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"]),
+    scoreImpacting: scoreImpactingRaw === undefined ? true : scoreImpactingRaw !== false && String(scoreImpactingRaw).toLowerCase() !== "false",
+    whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]),
+    targetBandExpression: pickFirstUsefulValue(item, ["targetBandExpression", "targetExpression", "bandTargetExpression"])
   };
+}
+
+function compactCorrectionText(value) {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isNoImpactCorrectionText(value) {
+  const text = compactCorrectionText(value);
+  if (!text) return false;
+  return (
+    text === "none" ||
+    text === "n/a" ||
+    text === "no" ||
+    text.includes("none /") ||
+    text.includes("no error") ||
+    text.includes("no mistake") ||
+    text.includes("no significant") ||
+    text.includes("no improvement needed") ||
+    text.includes("no impact") ||
+    text.includes("not affect the band") ||
+    text.includes("does not affect the band") ||
+    text.includes("without affecting the score") ||
+    text.includes("无")
+  );
+}
+
+function sameCorrectionText(a, b) {
+  const left = compactCorrectionText(a).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
+  const right = compactCorrectionText(b).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
+  return Boolean(left && right && left === right);
+}
+
+function isPlainSalutationOrClosing(text) {
+  const value = compactCorrectionText(text).replace(/[.,!?;:'"()]/g, "");
+  return (
+    /^dear\s+/.test(value) ||
+    /^(hi|hello)\s+/.test(value) ||
+    /^(yours sincerely|yours faithfully|best regards|kind regards|regards|sincerely|faithfully)$/.test(value)
+  );
+}
+
+function isScoreImpactingDetailedCorrection(item) {
+  if (!item || typeof item !== "object") return false;
+  if (item.scoreImpacting === false) return false;
+  const original = item.originalSentence || "";
+  const corrected = item.correctedSentence || "";
+  const problem = item.problem || "";
+  const rule = item.rule || "";
+  const impact = item.bandImpact || "";
+  const errorType = item.errorType || "";
+  const better = item.betterExpression || "";
+  if (isNoImpactCorrectionText(errorType) || isNoImpactCorrectionText(problem) || isNoImpactCorrectionText(rule) || isNoImpactCorrectionText(impact)) return false;
+  if (sameCorrectionText(original, corrected) && (!better || sameCorrectionText(original, better))) return false;
+  if (isPlainSalutationOrClosing(original) && !problem && !rule && !impact) return false;
+  return correctionObjectHasText(item, ["originalSentence", "correctedSentence", "problem", "rule", "betterExpression", "bandImpact"]);
+}
+
+function isScoreImpactingSimpleCorrection(item, originalKey, correctedKey, reasonKeys = []) {
+  if (!item || typeof item !== "object") return false;
+  const original = item[originalKey] || "";
+  const corrected = item[correctedKey] || "";
+  if (sameCorrectionText(original, corrected)) return false;
+  return !reasonKeys.some((key) => isNoImpactCorrectionText(item[key]));
 }
 
 function hasConcreteAiCorrectionItems(correction) {
@@ -1095,15 +1173,17 @@ function sanitizeAiCorrectionPayload(correction) {
 
   cleaned.grammarErrors = ensureArray(cleaned.grammarErrors)
     .map((item) => normalizeGrammarErrorItem(item))
-    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation"]));
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation"]))
+    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["type", "explanation"]));
 
   cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
     .map((item) => normalizeSentenceCorrectionItem(item))
-    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "reason"]));
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "reason"]))
+    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["reason"]));
 
   cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections)
     .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
-    .filter((item) => correctionObjectHasText(item, ["originalSentence", "correctedSentence", "problem", "rule", "betterExpression"]));
+    .filter((item) => isScoreImpactingDetailedCorrection(item));
 
   return cleaned;
 }
@@ -1297,7 +1377,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     ],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     coherenceAdvice: [],
     lexicalAdvice: [],
@@ -1317,7 +1397,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
       : "Also mention position, idea development, examples, paragraphing, and conclusion problems in advice arrays if relevant.",
     buildTargetImprovementInstruction(body),
     "Fill targetImprovementPlan and make all fixes realistic for that target range.",
-    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, target, action, actionZh. Do not return blank criterionUpgrades objects.",
+    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, currentWeakness, target, action, exampleUpgrade, actionZh. Do not return blank criterionUpgrades objects.",
     "Question:",
     String(body.questionPrompt || ""),
     "Essay:",
@@ -1469,7 +1549,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
     taskAchievementAdviceZh: [],
     coherenceAdvice: [],
@@ -1857,10 +1937,13 @@ function buildNoTemplateAiScoringPrompt(body, gradingMode, locale = "en") {
     "strengths and mainProblems must each contain at least 2 concrete items if the essay has English content.",
     "scoreCalibration must contain strictness, capApplied, capReason, whyNotHigher, whyNotLower, evidence.",
     "Do not output empty strings for scoring feedback. Do not return the schema only.",
+    body.currentResult ? "This is a score-audit pass. Check that bands, feedback, strengths, mainProblems, highBandDiagnostics, lowBandDiagnostics, and scoreCalibration are internally consistent. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "Use underlength as a penalty only when relevant; it is not automatically Band 1.",
     `Task: ${task}`,
     `Mode: ${gradingMode}`,
     `Word count: ${words}/${threshold}`,
+    body.currentResult ? "Current result to audit:" : "",
+    body.currentResult ? JSON.stringify(body.currentResult).slice(0, 3500) : "",
     "Question:",
     String(body.questionPrompt || "").slice(0, 1800),
     "Essay:",
@@ -1964,7 +2047,7 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     coherenceAdvice: [],
     lexicalAdvice: [],
     grammarAdvice: [],
-    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+    targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     spellingCorrections: [],
     grammarErrors: [],
     sentenceCorrections: [],
@@ -1989,12 +2072,15 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "Important scoring rules:",
     "- Do not copy template values. Replace Band 1 placeholders with real criterion bands.",
     "- Give specific evidence from the essay for each criterion.",
+    body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
     "- Keep strengths/mainProblems/advice arrays short but specific, usually 2-5 items.",
     buildTargetImprovementInstruction(body),
     "Server low-band context:",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
+    body.currentResult ? "Current result to audit:" : "",
+    body.currentResult ? JSON.stringify(body.currentResult).slice(0, 3500) : "",
     "Request:",
     JSON.stringify({
       task,
@@ -2037,10 +2123,13 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
 
 function normalizeFocusedCorrectionStage(value) {
   const raw = String(value || "").toLowerCase().replace(/[_\s-]+/g, "");
+  if (["task", "taskresponse", "taskachievement", "taskstructure", "correctiontask"].includes(raw)) return "task";
+  if (["language", "languagemistakes", "grammarandsentence", "correctionlanguage"].includes(raw)) return "language";
+  if (["vocabulary", "lexical", "lexicalresource", "wordchoice", "collocation", "correctionvocabulary"].includes(raw)) return "vocabulary";
   if (["spell", "spelling", "spellingcorrection", "spellingcorrections", "correctionspelling"].includes(raw)) return "spelling";
   if (["grammar", "grammarerror", "grammarerrors", "correctiongrammar"].includes(raw)) return "grammar";
   if (["sentence", "sentences", "sentencecorrection", "sentencecorrections", "detailedsentence", "correctionsentence"].includes(raw)) return "sentence";
-  if (["advice", "coaching", "plan", "priority", "taskadvice", "correctionadvice"].includes(raw)) return "advice";
+  if (["advice", "coaching", "plan", "priority", "taskadvice", "correctionadvice", "improvement", "improvementplan"].includes(raw)) return "advice";
   return "";
 }
 
@@ -2049,6 +2138,9 @@ function buildFocusedSectionSystemPrompt(section, locale = "en") {
     ? "Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
     : "Main fields must be English. Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay.";
   const sectionName = {
+    task: "task response, structure, tone, and prompt coverage",
+    language: "grammar, sentence structure, and meaning-control correction",
+    vocabulary: "lexical resource, word choice, spelling, collocation, and repetition correction",
     spelling: "spelling and typo correction",
     grammar: "grammar and word-form correction",
     sentence: "sentence-level correction and better expressions",
@@ -2080,6 +2172,44 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     String(body.essay || "")
   ];
 
+  if (section === "task") {
+    return [
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+        task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+        taskAchievementAdvice: [],
+        taskAchievementAdviceZh: [],
+        coherenceAdvice: [],
+        coherenceAdviceZh: [],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Check only task response/achievement, prompt coverage, purpose, tone, opening/closing, paragraphing, relevance, position, development, examples, and conclusion.",
+      "Return only issues that can affect Task Achievement/Task Response or Coherence and Cohesion.",
+      ...common
+    ].join("\n");
+  }
+
+  if (section === "vocabulary") {
+    return [
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        spellingCorrections: [
+          { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
+        ],
+        detailedSentenceCorrections: [
+          { sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / repetition / spelling", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }
+        ],
+        lexicalAdvice: [],
+        lexicalAdviceZh: [],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      `Find spelling, word choice, collocation, repetition, register, and lexical precision issues that affect Lexical Resource. Return up to ${limit} correction items.`,
+      "Do not include correct words or harmless style preferences. Every detailed item must be scoreImpacting=true.",
+      ...common
+    ].join("\n");
+  }
+
   if (section === "spelling") {
     return [
       "Return JSON with this exact shape:",
@@ -2095,17 +2225,24 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     ].join("\n");
   }
 
-  if (section === "grammar") {
+  if (section === "grammar" || section === "language") {
     return [
       "Return JSON with this exact shape:",
       JSON.stringify({
         grammarErrors: [
           { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
         ],
+        sentenceCorrections: [
+          { original: "", corrected: "", reason: "", reasonZh: "" }
+        ],
+        detailedSentenceCorrections: [
+          { sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }
+        ],
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       `Find all clear grammar, word-form, article, tense, plural, agreement, preposition, punctuation, and sentence-structure errors. Return up to ${limit} items.`,
       "Each item must include original text from the essay, corrected text, and a specific rule/explanation.",
+      "Do not return errorType None, No significant improvement needed, No impact on band score, or unchanged corrections.",
       ...common
     ].join("\n");
   }
@@ -2118,11 +2255,12 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
           { original: "", corrected: "", reason: "", reasonZh: "" }
         ],
         detailedSentenceCorrections: [
-          { sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "" }
+          { sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }
         ]
       }),
       `Scan the whole essay sentence by sentence. Return up to ${limit} sentenceCorrections and up to ${limit} detailedSentenceCorrections.`,
-      "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, problem, rule, and band impact.",
+      "Return only sentence issues that affect IELTS band. Do not include errorType None, No significant improvement needed, No impact on band score, unchanged corrections, or correct salutations/closings.",
+      "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, problem, rule, band impact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
       "Do not make Band 3-5 learners imitate Band 8-9 language. Upgrade only to the next realistic target range.",
       ...common
     ].join("\n");
@@ -2132,7 +2270,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     "Return JSON with this exact shape:",
     JSON.stringify({
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
       task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
       task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
       taskAchievementAdvice: [],
@@ -2152,7 +2290,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
     }),
     "Give detailed IELTS coaching based on the current band and the next realistic target range.",
-    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, target, action, actionZh: one for Task Response/Task Achievement, one for Coherence and Cohesion, one for Lexical Resource, and one for Grammatical Range and Accuracy.",
+    "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, currentWeakness, target, action, exampleUpgrade, actionZh: one for Task Response/Task Achievement, one for Coherence and Cohesion, one for Lexical Resource, and one for Grammatical Range and Accuracy.",
     "Focus on improving 0.5-1 band at a time, with Band 5 as the first floor for very weak writing.",
     "Give concrete actions, not generic advice. Include task-specific advice.",
     "For every English advice array, return a matching short Chinese helper array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, and band7UpgradePlanZh.",
@@ -2165,6 +2303,29 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
 
 function hasFocusedSectionUsableContent(section, output, body) {
   const cleaned = sanitizeAiCorrectionPayload(output);
+  if (section === "task") {
+    return Boolean(
+      ensureArray(cleaned.taskAchievementAdvice).length ||
+      ensureArray(cleaned.coherenceAdvice).length ||
+      ensureArray(cleaned.task1LetterCorrections?.bulletPointAdvice).length ||
+      ensureArray(cleaned.task2EssayCorrections?.developmentAdvice).length ||
+      hasUsefulText(cleaned.task1LetterCorrections?.toneComment) ||
+      hasUsefulText(cleaned.task2EssayCorrections?.bodyParagraphComment) ||
+      hasUsefulText(cleaned.errorAnalysis?.summary)
+    );
+  }
+  if (section === "language") {
+    return ensureArray(cleaned.grammarErrors).length > 0 ||
+      ensureArray(cleaned.sentenceCorrections).length > 0 ||
+      ensureArray(cleaned.detailedSentenceCorrections).length > 0 ||
+      hasUsefulText(cleaned.errorAnalysis?.summary);
+  }
+  if (section === "vocabulary") {
+    return ensureArray(cleaned.spellingCorrections).length > 0 ||
+      ensureArray(cleaned.detailedSentenceCorrections).length > 0 ||
+      ensureArray(cleaned.lexicalAdvice).length > 0 ||
+      hasUsefulText(cleaned.errorAnalysis?.summary);
+  }
   if (section === "spelling") {
     // A spelling stage may legitimately return no spelling mistakes, but it must at least
     // return an AI-written summary so the UI can show that the stage completed.
@@ -2206,6 +2367,9 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     "IMPORTANT RETRY INSTRUCTION:",
     previousIssue ? `Previous issue: ${String(previousIssue).slice(0, 300)}` : "The previous stage returned too little useful detail.",
     "Return usable content for this exact section. Do not return an empty object.",
+    section === "task" ? "Return task-specific correction content: Task 1 bullet/tone/purpose advice or Task 2 position/development/conclusion advice, plus taskAchievementAdvice and coherenceAdvice." : "",
+    section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
+    section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
     section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text." : "",
     section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence and betterExpression." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object." : "",
@@ -2215,6 +2379,9 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
 
 async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
   const maxTokensBySection = {
+    task: 7200,
+    language: 9000,
+    vocabulary: 7200,
     spelling: 3600,
     grammar: 7000,
     sentence: 10000,
@@ -2286,6 +2453,7 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["score", "scoring", "grade", "grading"].includes(raw)) return "score";
+  if (["scoreaudit", "auditscore", "gradingaudit", "audit"].includes(raw)) return "score-audit";
   const focused = normalizeFocusedCorrectionStage(raw);
   if (focused) return `correction-${focused}`;
   if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
@@ -3380,7 +3548,9 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
   normalized.spellingCorrections = cleanObjectArray(normalized.spellingCorrections, ["originalWord", "correctedWord", "sentence", "explanation"]).slice(0, correctionLimit);
   normalized.grammarErrors = cleanObjectArray(normalized.grammarErrors, ["original", "corrected", "explanation"]).slice(0, correctionLimit);
   normalized.sentenceCorrections = cleanObjectArray(normalized.sentenceCorrections, ["original", "corrected", "reason"]).slice(0, correctionLimit);
-  normalized.detailedSentenceCorrections = cleanObjectArray(normalized.detailedSentenceCorrections, ["originalSentence", "correctedSentence", "problem", "rule", "bandImpact"]).slice(0, correctionLimit);
+  normalized.detailedSentenceCorrections = cleanObjectArray(normalized.detailedSentenceCorrections, ["originalSentence", "correctedSentence", "problem", "rule", "bandImpact"])
+    .filter((item, index) => isScoreImpactingDetailedCorrection(normalizeDetailedSentenceCorrectionItem(item, index)))
+    .slice(0, correctionLimit);
 
   const firstImprove = criterionImprove(normalized, task, firstCriterion, task === "Task 1" ? "Answer each bullet point directly with enough detail." : "State a clear position and support it with specific reasons.");
   const ccImprove = criterionImprove(normalized, task, "Coherence and Cohesion", "Use clear paragraphing and logical linking between ideas.");
@@ -3413,6 +3583,7 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
       Number(normalized.overallBand) >= 4 ? "Some relevant ideas are present." : "There is some rateable English content."
     ]).slice(0, 3);
   }
+  sanitizeStrengthProblemBuckets(normalized);
 
   if (!normalized.band5FixPlan.length) {
     normalized.band5FixPlan = cleanStringArray([
@@ -3490,6 +3661,7 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
       ? "High-band evidence is not confirmed because the response is underlength and underdeveloped."
       : "High-band evidence was not fully confirmed in this response.";
   }
+  sanitizeStrengthProblemBuckets(normalized);
 }
 
 
@@ -3626,6 +3798,148 @@ function hasHardLowBandEvidence(diagnostics, words, task) {
   if (task === "Task 1" && words < 80) return true;
   if (task === "Task 2" && words < 150) return true;
   return false;
+}
+
+function looksLikeStrengthText(value) {
+  const text = compactCorrectionText(value);
+  return Boolean(text && (
+    text.includes("fully addresses") ||
+    text.includes("addresses all") ||
+    text.includes("covers all") ||
+    text.includes("clear purpose") ||
+    text.includes("appropriate tone") ||
+    text.includes("well-developed") ||
+    text.includes("well developed") ||
+    text.includes("clear progression") ||
+    text.includes("coherent") ||
+    text.includes("accurate language") ||
+    text.includes("few errors") ||
+    text.includes("strong control") ||
+    text.includes("natural")
+  ));
+}
+
+function looksLikeProblemText(value) {
+  const text = compactCorrectionText(value);
+  return Boolean(text && (
+    text.includes("missing") ||
+    text.includes("unclear") ||
+    text.includes("limited") ||
+    text.includes("underdeveloped") ||
+    text.includes("inaccurate") ||
+    text.includes("error") ||
+    text.includes("weak") ||
+    text.includes("needs") ||
+    text.includes("lack") ||
+    text.includes("not fully") ||
+    text.includes("does not")
+  ));
+}
+
+function dedupeStrings(items) {
+  const seen = new Set();
+  return cleanStringArray(items).filter((item) => {
+    const key = compactCorrectionText(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sanitizeStrengthProblemBuckets(result) {
+  if (!result || typeof result !== "object") return;
+  const strengths = dedupeStrings(result.strengths);
+  const problems = dedupeStrings(result.mainProblems);
+  const movedStrengths = problems.filter((item) => looksLikeStrengthText(item) && !looksLikeProblemText(item));
+  result.mainProblems = problems.filter((item) => !(looksLikeStrengthText(item) && !looksLikeProblemText(item))).slice(0, 5);
+  result.strengths = dedupeStrings(strengths.concat(movedStrengths)).filter((item) => !looksLikeProblemText(item) || looksLikeStrengthText(item)).slice(0, 5);
+  if (Array.isArray(result.mainProblemsZh) && result.mainProblemsZh.length > result.mainProblems.length) {
+    result.mainProblemsZh = result.mainProblemsZh.slice(0, result.mainProblems.length);
+  }
+}
+
+function criterionHasLowBandTemplate(item) {
+  const text = compactCorrectionText([item?.feedback, item?.howToImprove].filter(Boolean).join(" "));
+  return Boolean(text && (
+    text.includes("needs clearer control") ||
+    text.includes("need clearer control") ||
+    text.includes("needs more precision and range") ||
+    text.includes("needs improvement") ||
+    text.includes("need improvement") ||
+    text.includes("task development is limited") ||
+    text.includes("grammar errors reduce clarity") ||
+    text.includes("vocabulary is limited") ||
+    text.includes("organisation is basic")
+  ));
+}
+
+function polishHighBandCriteria(result, body) {
+  if (!result?.criteria || typeof result.criteria !== "object") return;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  Object.entries(result.criteria).forEach(([name, item]) => {
+    const band = Number(item?.band);
+    if (!item || Number.isNaN(band) || band < 7.5 || !criterionHasLowBandTemplate(item)) return;
+    if (name === firstCriterion) {
+      item.feedback = task === "Task 1"
+        ? "The letter shows strong task fulfilment, clear purpose, and generally appropriate tone. Any remaining issue is minor refinement rather than basic task coverage."
+        : "The essay gives a strong, relevant response with a clear position and well-developed ideas. Any remaining issue is minor refinement rather than basic task response.";
+      item.howToImprove = task === "Task 1"
+        ? "Polish the precision of details and make the tone consistently natural throughout the letter."
+        : "Polish the depth of examples and make the final line of reasoning even more precise.";
+    } else if (name === "Coherence and Cohesion") {
+      item.feedback = "Organisation is clear and progression is effective. Any cohesion issue is a minor polishing point, not a basic control problem.";
+      item.howToImprove = "Refine paragraph transitions and avoid any slightly mechanical linking.";
+    } else if (name === "Lexical Resource") {
+      item.feedback = "Vocabulary is accurate and flexible enough for a high band. Remaining lexical work is about precision and natural collocation.";
+      item.howToImprove = "Replace any slightly general wording with more exact but still natural IELTS General Training phrasing.";
+    } else if (name === "Grammatical Range and Accuracy") {
+      item.feedback = "Grammar control is strong, with only minor accuracy or naturalness issues if any. This is not a major sentence-control weakness.";
+      item.howToImprove = "Polish small slips in complex sentences and keep sentence variety natural.";
+    }
+  });
+}
+
+function ensureTargetImprovementPlan(result, body) {
+  if (!result || typeof result !== "object") return;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const currentBand = formatBand(roundHalf(result.overallBand || 1));
+  const targetRange = targetImprovementRangeFromBand(result.overallBand || 1);
+  const criteriaNames = [firstCriterion, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+  const existingPlan = result.targetImprovementPlan && typeof result.targetImprovementPlan === "object" ? result.targetImprovementPlan : {};
+  const existingUpgrades = ensureArray(existingPlan.criterionUpgrades).filter((item) => item && typeof item === "object");
+  const byCriterion = new Map(existingUpgrades.map((item) => [compactCorrectionText(item.criterion || item.criteria || item.name), item]));
+  const criterionUpgrades = criteriaNames.map((criterion) => {
+    const existing = byCriterion.get(compactCorrectionText(criterion)) || {};
+    const criterionItem = result.criteria?.[criterion] || {};
+    const weakness = existing.currentWeakness || existing.weakness || criterionItem.howToImprove || criterionItem.feedback || "No major weakness was specified; focus on controlled refinement.";
+    const action = existing.action || existing.specificAction || existing.howToImprove || criterionItem.howToImprove || (
+      criterion === firstCriterion
+        ? (task === "Task 1" ? "Check that each bullet point is answered with one precise detail." : "Make each main idea answer the question directly and support it with a concrete reason.")
+        : criterion === "Coherence and Cohesion"
+          ? "Make paragraph progression explicit and keep linking natural."
+          : criterion === "Lexical Resource"
+            ? "Use more exact topic vocabulary and avoid repeated general words."
+            : "Keep sentence forms varied while removing recurring grammar slips."
+    );
+    const exampleUpgrade = existing.exampleUpgrade || existing.example || existing.betterExample || existing.targetBandExpression || "";
+    return {
+      criterion,
+      currentWeakness: weakness,
+      target: existing.target || existing.targetBand || targetRange,
+      action,
+      exampleUpgrade: exampleUpgrade || "Apply the action to one paragraph, then repeat the same check across the essay.",
+      actionZh: existing.actionZh || existing.howToImproveZh || ""
+    };
+  });
+  result.targetImprovementPlan = {
+    ...existingPlan,
+    currentBand: existingPlan.currentBand || `Band ${currentBand}`,
+    targetBandRange: existingPlan.targetBandRange || targetRange,
+    targetReason: existingPlan.targetReason || "The next target should improve the current score by about 0.5-1 band with realistic, criterion-specific changes.",
+    criterionUpgrades
+  };
 }
 
 function sanitizeLowBandDiagnosticsForTask(modelDiagnostics, localDiagnostics, body) {
@@ -3898,7 +4212,11 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
 
 
   backfillDiagnosticAdvice(normalized, body || {}, mode, veryShort);
+  sanitizeStrengthProblemBuckets(normalized);
+  polishHighBandCriteria(normalized, body || {});
+  ensureTargetImprovementPlan(normalized, body || {});
   backfillChineseHelperNotes(normalized, body || {});
+  sanitizeStrengthProblemBuckets(normalized);
 
   normalized.scoringCalibration = normalized.scoreCalibration;
   normalized.lowBandEvidence = normalized.lowBandDiagnostics;
@@ -3993,6 +4311,19 @@ async function handleRequest(req, res) {
         deadline
       });
       result.aiStage = "score";
+      result = normalizeResultForMode(result, "full", veryShort, body, locale);
+    } else if (aiStage === "score-audit") {
+      result = await callAiScoreOnlyGrader({
+        apiKey,
+        model,
+        body: { ...body, currentResult: body.currentResult || null },
+        effectiveMode,
+        veryShort,
+        maxTokens: maxTokensForMode("full", veryShort),
+        locale,
+        deadline
+      });
+      result.aiStage = "score-audit";
       result = normalizeResultForMode(result, "full", veryShort, body, locale);
     } else if (aiStage.startsWith("correction-")) {
       const section = aiStage.slice("correction-".length);

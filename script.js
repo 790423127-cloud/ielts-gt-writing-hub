@@ -230,12 +230,7 @@ function renderErrorDetails(errorInfo) {
   if (!errorInfo?.detail && !errorInfo?.rawPreview) return;
   const detailBlock = errorInfo.detail ? `<h4>Detail</h4><pre>${escapeHtml(errorInfo.detail)}</pre>` : "";
   const rawBlock = errorInfo.rawPreview ? `<h4>Raw Preview</h4><pre>${escapeHtml(errorInfo.rawPreview)}</pre>` : "";
-  els.gradingResults.innerHTML = `
-    <details class="error-details">
-      <summary>查看详细错误</summary>
-      ${detailBlock}
-      ${rawBlock}
-    </details>`;
+  els.gradingResults.innerHTML = collapsibleSection("查看详细错误", `${detailBlock}${rawBlock}`, { className: "error-details" });
 }
 
 function renderZhToggle(text) {
@@ -258,6 +253,18 @@ function renderTextWithTranslation(englishText, chineseText, options = {}) {
   if (options.noTranslate || !hasTranslationValue(chineseText)) return englishHtml;
   const zhText = Array.isArray(chineseText) ? chineseText.filter(Boolean).join("\n") : chineseText;
   return `<div class="translation-inline">${englishHtml}${renderZhToggle(zhText)}</div>`;
+}
+
+function collapsibleSection(title, contentHtml, options = {}) {
+  const content = String(contentHtml || "").trim();
+  if (!content && options.hideIfEmpty) return "";
+  const open = options.defaultOpen ? " open" : "";
+  const className = options.className ? ` ${options.className}` : "";
+  const bodyClass = options.bodyClass ? ` ${options.bodyClass}` : "";
+  return `<details class="feedback-collapse${className}"${open}>
+    <summary>${escapeHtml(title)}</summary>
+    <div class="feedback-collapse-body${bodyClass}">${content || `<p class="muted">${escapeHtml(options.emptyText || "No content is available.")}</p>`}</div>
+  </details>`;
 }
 
 function renderListWithTranslations(items, translations, fallbackText) {
@@ -400,7 +407,7 @@ function mergeAiStageResult(base, incoming) {
     if (typeof data[field] === "string" && data[field].trim()) output[field] = data[field];
   });
   if (data.criteria && typeof data.criteria === "object") output.criteria = data.criteria;
-  const mayReplaceScore = !output.overallBand || data.aiStage === "score" || data.aiStage === "all" || !data.aiStage;
+  const mayReplaceScore = !output.overallBand || data.aiStage === "score" || data.aiStage === "score-audit" || data.aiStage === "all" || !data.aiStage;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
@@ -417,6 +424,34 @@ function hasUsefulItemArray(value) {
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
+  if (aiStage === "score-audit") {
+    return Boolean(data.criteria || data.scoreCalibration || hasUsefulItemArray(data.strengths) || hasUsefulItemArray(data.mainProblems));
+  }
+  if (aiStage === "correction-task") {
+    return Boolean(
+      hasUsefulItemArray(data.taskAchievementAdvice) ||
+      hasUsefulItemArray(data.coherenceAdvice) ||
+      hasAnyText(data.task1LetterCorrections) ||
+      hasAnyText(data.task2EssayCorrections) ||
+      hasAnyText(data.errorAnalysis?.summary)
+    );
+  }
+  if (aiStage === "correction-language") {
+    return hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
+  }
+  if (aiStage === "correction-vocabulary") {
+    return hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
+  }
+  if (aiStage === "improvement-plan" || aiStage === "correction-advice") {
+    return Boolean(
+      targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
+      hasAnyText(data.correctionPriority) ||
+      hasUsefulItemArray(data.taskAchievementAdvice) ||
+      hasUsefulItemArray(data.coherenceAdvice) ||
+      hasUsefulItemArray(data.lexicalAdvice) ||
+      hasUsefulItemArray(data.grammarAdvice)
+    );
+  }
   if (aiStage === "correction-spelling") {
     return hasUsefulItemArray(data.spellingCorrections) || hasAnyText(data.errorAnalysis?.summary);
   }
@@ -518,18 +553,19 @@ async function startGrading() {
 
   const originalButtonText = els.gradeBtn.textContent;
   els.gradeBtn.disabled = true;
-  els.gradeBtn.textContent = "AI 批改中...";
+  els.gradeBtn.textContent = "AI grading...";
   els.gradeBtn.setAttribute("aria-busy", "true");
   if (els.gradingModeSelect) els.gradingModeSelect.disabled = true;
   if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
 
-  setGradingStatus("第 1 步/3：AI 正在评分与分析题目，请等待。", "loading");
+  setGradingStatus("AI is scoring and analysing the task.", "loading");
   els.gradingResults.innerHTML = isUnderMinimum
     ? `<p class="ai-warning">当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。</p>`
     : "";
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
+  const totalSteps = payload.mode === "revision" ? 7 : 6;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -548,7 +584,7 @@ async function startGrading() {
   async function runMergeStage(aiStage, statusText, warningPrefix) {
     markStage(warningPrefix, "running", statusText);
     try {
-      const stageResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result?.overallBand }, aiStage, statusText);
+      const stageResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result?.overallBand, currentResult: result || null }, aiStage, statusText);
       const hasExpectedContent = stageResultHasExpectedContent(aiStage, stageResult);
       result = mergeAiStageResult(result || {}, stageResult);
 
@@ -580,17 +616,18 @@ async function startGrading() {
   }
 
   try {
-    const scoreResult = await postAiStage(endpoint, payload, "score", "第 1 步/3：AI 正在评分与分析题目，请等待。");
+    const scoreResult = await postAiStage(endpoint, payload, "score", `第 1 步/${totalSteps}：AI 正在评分与分析题目`);
     result = mergeAiStageResult({}, scoreResult);
-    markStage("评分与题目分析", "done", "第 1 步/3 已完成：AI 已返回分数和题目分析。");
+    markStage("评分与题目分析", "done", `第 1 步/${totalSteps} 已完成：AI 已返回分数和题目分析。`);
     syncStageMeta();
     renderGradingResult(result);
 
     const correctionStages = [
-      ["correction-spelling", "第 2 步/3：AI 正在逐词检查拼写和明显拼写错误，请等待。", "拼写错误检查"],
-      ["correction-grammar", "第 2 步/3：AI 正在检查语法、词形、时态、冠词和搭配问题，请等待。", "语法错误检查"],
-      ["correction-sentence", "第 2 步/3：AI 正在逐句修改原句、修改句和更好表达，请等待。", "句子级修改"],
-      ["correction-advice", "第 2 步/3：AI 正在生成提分计划、错误优先级和专项建议，请等待。", "提分建议生成"]
+      ["score-audit", `第 2 步/${totalSteps}：AI 正在审核评分一致性`, "评分一致性审核"],
+      ["correction-task", `第 3 步/${totalSteps}：AI 正在检查任务回应与结构问题`, "任务回应与结构检查"],
+      ["correction-language", `第 4 步/${totalSteps}：AI 正在检查语法和句子结构错误`, "语法和句子结构检查"],
+      ["correction-vocabulary", `第 5 步/${totalSteps}：AI 正在检查词汇、拼写和搭配问题`, "词汇拼写和搭配检查"],
+      ["improvement-plan", `第 6 步/${totalSteps}：AI 正在生成下一阶段提分计划`, "提分计划生成"]
     ];
 
     for (const [stage, statusText, warningPrefix] of correctionStages) {
@@ -621,10 +658,10 @@ async function startGrading() {
     renderGradingResult(result);
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。", "范文/修改版生成");
+      await runMergeStage("revision", `第 7 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
-      setGradingStatus("第 3 步/3：AI 正在整理最终批改结果。", "loading");
-      markStage("最终整理", "done", "第 3 步/3 已完成：结果已整理。");
+      setGradingStatus("AI 正在整理最终批改结果。", "loading");
+      markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
       renderGradingResult(result);
     }
@@ -654,14 +691,13 @@ function renderStageProgress(result = {}) {
     .filter((item) => String(item || "").trim());
   const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
   if (!progress.length && !allWarnings.length) return "";
-  return `<section class="grading-section">
-    <h4>AI 批改进度与提示</h4>
+  return collapsibleSection("AI 批改进度与提示", `
     ${progress.length ? `<ul>${progress.map((item) => {
       const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? "需注意" : "未完成";
       return `<li><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}</li>`;
     }).join("")}</ul>` : ""}
     ${allWarnings.length ? `<div class="ai-warning">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
-  </section>`;
+  `);
 }
 
 function renderCriteria(criteria = {}) {
@@ -677,45 +713,37 @@ function renderCriteria(criteria = {}) {
 }
 
 function renderScoreCalibration(calibration, calibrationZh = {}) {
-  if (!calibration || typeof calibration !== "object") return `<details class="calibration-details"><summary>评分校准说明</summary><div class="calibration-body"><p class="muted">No detailed score calibration is available.</p></div></details>`;
-  return `<details class="calibration-details">
-    <summary>评分校准说明</summary>
-    <div class="calibration-body">
+  if (!calibration || typeof calibration !== "object") return collapsibleSection("评分校准说明", `<p class="muted">No detailed score calibration is available.</p>`);
+  return collapsibleSection("评分校准说明", `
       <p><strong>是否应用限分规则：</strong>${boolText(calibration.capApplied)}</p>
       <div><strong>限分原因：</strong>${renderTextWithTranslation(calibration.capReason || "No cap was applied.", calibrationZh.capReasonZh, { tag: "span" })}</div>
       <div><strong>为什么不能更高：</strong>${renderTextWithTranslation(calibration.whyNotHigher || "No detailed score calibration is available.", calibrationZh.whyNotHigherZh, { tag: "span" })}</div>
       <div><strong>为什么没有更低：</strong>${renderTextWithTranslation(calibration.whyNotLower || "No detailed score calibration is available.", calibrationZh.whyNotLowerZh, { tag: "span" })}</div>
       <div><strong>评分证据：</strong>${renderListWithTranslations(calibration.evidence, calibrationZh.evidenceZh, "No detailed score calibration is available.")}</div>
-    </div>
-  </details>`;
+  `, { bodyClass: "compact-body" });
 }
 
 function renderLowBandDiagnostics(diagnostics, diagnosticsZh = {}) {
-  if (!diagnostics || typeof diagnostics !== "object") return `<details class="calibration-details"><summary>低分段判断依据</summary><div class="calibration-body"><p class="muted">No low-band trigger was detected.</p></div></details>`;
-  return `<details class="calibration-details">
-    <summary>低分段判断依据</summary>
-    <div class="calibration-body compact-facts">
+  if (!diagnostics || typeof diagnostics !== "object") return collapsibleSection("低分段判断依据", `<p class="muted">No low-band trigger was detected.</p>`);
+  return collapsibleSection("低分段判断依据", `
       <p><strong>建议低分范围：</strong>${escapeHtml(diagnostics.recommendedLowBandRange || "无明显低分段限制")}</p>
       <div><strong>原因：</strong>${renderTextWithTranslation(diagnostics.reason || "No low-band trigger was detected.", diagnosticsZh.reasonZh, { tag: "span" })}</div>
       <p><strong>20词或更少：</strong>${boolText(diagnostics.wordCount20OrFewer)}</p>
       <p><strong>疑似大量复制题目：</strong>${boolText(diagnostics.mostlyCopiedFromPrompt)}</p>
       <p><strong>相关信息很少：</strong>${boolText(diagnostics.littleRelevantMessage)}</p>
       <p><strong>意思大多被错误阻断：</strong>${boolText(diagnostics.meaningMostlyBlocked)}</p>
-    </div>
-  </details>`;
+  `, { bodyClass: "compact-facts" });
 }
 
 
 function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {}) {
-  if (!analysis || typeof analysis !== "object") return `<details class="calibration-details"><summary>题目要求分析</summary><div class="calibration-body"><p class="muted">No detailed task analysis is available for this response.</p></div></details>`;
+  if (!analysis || typeof analysis !== "object") return collapsibleSection("题目要求分析", `<p class="muted">No detailed task analysis is available for this response.</p>`);
   const isTask1 = analysis.taskType === "task1" || selected?.task === "Task 1";
   const bullets = Array.isArray(analysis.bulletPoints) ? analysis.bulletPoints : [];
   const bulletsZh = Array.isArray(analysisZh.bulletPointsZh) ? analysisZh.bulletPointsZh : [];
   const parts = Array.isArray(analysis.requiredParts) ? analysis.requiredParts : [];
   const partsZh = Array.isArray(analysisZh.requiredPartsZh) ? analysisZh.requiredPartsZh : [];
-  return `<details class="calibration-details">
-    <summary>题目要求分析</summary>
-    <div class="calibration-body">
+  return collapsibleSection("题目要求分析", `
       <p><strong>题型：</strong>${isTask1 ? "Task 1 letter" : "Task 2 essay"}</p>
       ${isTask1 ? `
         <p><strong>收信人：</strong>${escapeHtml(analysis.recipient || "未返回")}</p>
@@ -734,15 +762,12 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
       <div><strong>缺失要求：</strong>${listHtml(analysis.missingRequirements)}</div>
       <div><strong>匹配检查：</strong>${renderTextWithTranslation(match.reason || analysis.taskMatchSummary || "No detailed task analysis is available for this response.", analysisZh.taskMatchSummaryZh, { tag: "span" })}</div>
       ${match.warning ? `<p class="ai-warning">${escapeHtml(match.warning)}</p>` : ""}
-    </div>
-  </details>`;
+  `);
 }
 
 function renderHighBandDiagnostics(diagnostics, diagnosticsZh = {}) {
-  if (!diagnostics || typeof diagnostics !== "object") return `<details class="calibration-details"><summary>高分判断依据</summary><div class="calibration-body"><p class="muted">No high-band evidence was confirmed.</p></div></details>`;
-  return `<details class="calibration-details">
-    <summary>高分判断依据</summary>
-    <div class="calibration-body compact-facts">
+  if (!diagnostics || typeof diagnostics !== "object") return collapsibleSection("高分判断依据", `<p class="muted">No high-band evidence was confirmed.</p>`);
+  return collapsibleSection("高分判断依据", `
       <p><strong>建议高分范围：</strong>${escapeHtml(diagnostics.recommendedHighBandRange || "暂无")}</p>
       <div><strong>原因：</strong>${renderTextWithTranslation(diagnostics.reason || "No high-band evidence was confirmed.", diagnosticsZh.reasonZh, { tag: "span" })}</div>
       <p><strong>完整回应题目：</strong>${boolText(diagnostics.fullyAddressesTask)}</p>
@@ -752,8 +777,7 @@ function renderHighBandDiagnostics(diagnostics, diagnosticsZh = {}) {
       <p><strong>语法灵活：</strong>${boolText(diagnostics.flexibleGrammar)}</p>
       <p><strong>错误很少：</strong>${boolText(diagnostics.fewErrors)}</p>
       <p><strong>Task 1 语气合适：</strong>${diagnostics.appropriateToneTask1 === undefined ? "不适用" : boolText(diagnostics.appropriateToneTask1)}</p>
-    </div>
-  </details>`;
+  `, { bodyClass: "compact-facts" });
 }
 
 function hasAnyText(value) {
@@ -769,12 +793,13 @@ function renderCopyButton(text, label = "复制") {
 }
 
 function renderErrorAnalysis(analysis) {
-  if (!analysis || typeof analysis !== "object" || !hasAnyText(analysis)) return "";
+  if (!analysis || typeof analysis !== "object" || !hasAnyText(analysis)) {
+    return collapsibleSection("主要错误总结", `<p class="muted">No detailed error analysis is available.</p>`);
+  }
   const patterns = Array.isArray(analysis.errorPatterns)
     ? analysis.errorPatterns.filter((item) => item && (hasAnyText(item.type) || hasAnyText(item.impactOnBand) || hasAnyText(item.howToFix)))
     : [];
-  return `<section class="grading-section">
-    <h4>主要错误总结</h4>
+  return collapsibleSection("主要错误总结", `
     ${analysis.summary ? `<p>${escapeHtml(analysis.summary)}</p>` : ""}
     ${analysis.summaryZh ? renderZhToggle(analysis.summaryZh) : ""}
     ${patterns.length ? `<div class="correction-list">${patterns.map((item) => `
@@ -786,14 +811,95 @@ function renderErrorAnalysis(analysis) {
         ${renderZhToggle([item.impactOnBandZh, item.howToFixZh].filter(Boolean).join("\n"))}
       </div>`).join("")}</div>` : ""}
     ${analysis.priorityFixes?.length ? `<h4>优先修改点</h4>${renderListWithTranslations(analysis.priorityFixes, analysis.priorityFixesZh, "No priority fixes are available.")}` : ""}
-  </section>`;
+  `);
+}
+
+function compactFeedbackText(value) {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isNoImpactFeedback(value) {
+  const text = compactFeedbackText(value);
+  return Boolean(text && (
+    text === "none" ||
+    text === "n/a" ||
+    text.includes("none /") ||
+    text.includes("no significant") ||
+    text.includes("no impact") ||
+    text.includes("no error") ||
+    text.includes("no mistake") ||
+    text.includes("does not affect the band") ||
+    text.includes("not affect the band") ||
+    text.includes("无")
+  ));
+}
+
+function sameFeedbackText(a, b) {
+  const left = compactFeedbackText(a).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
+  const right = compactFeedbackText(b).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
+  return Boolean(left && right && left === right);
+}
+
+function isScoreImpactingDetailedCorrection(item = {}) {
+  const original = item.originalSentence || item.original || "";
+  const corrected = item.correctedSentence || item.corrected || "";
+  const better = item.betterExpression || "";
+  if (item.scoreImpacting === false) return false;
+  if (isNoImpactFeedback(item.errorType) || isNoImpactFeedback(item.problem) || isNoImpactFeedback(item.rule) || isNoImpactFeedback(item.bandImpact)) return false;
+  if (sameFeedbackText(original, corrected) && (!better || sameFeedbackText(original, better))) return false;
+  return hasAnyText(original) || hasAnyText(corrected) || hasAnyText(item.problem) || hasAnyText(item.rule) || hasAnyText(better) || hasAnyText(item.bandImpact);
+}
+
+function looksLikeStrengthInProblem(value) {
+  const text = compactFeedbackText(value);
+  return Boolean(text && (
+    text.includes("fully addresses") ||
+    text.includes("addresses all") ||
+    text.includes("covers all") ||
+    text.includes("clear purpose") ||
+    text.includes("appropriate tone") ||
+    text.includes("well-developed") ||
+    text.includes("well developed") ||
+    text.includes("clear progression") ||
+    text.includes("accurate language") ||
+    text.includes("few errors")
+  ) && !(
+    text.includes("but") ||
+    text.includes("however") ||
+    text.includes("although") ||
+    text.includes("needs") ||
+    text.includes("missing") ||
+    text.includes("limited")
+  ));
+}
+
+function filteredMainProblems(items = [], translations = []) {
+  const list = Array.isArray(items) ? items : [];
+  const zhList = Array.isArray(translations) ? translations : [];
+  const kept = [];
+  const keptZh = [];
+  list.forEach((item, index) => {
+    if (!String(item || "").trim() || looksLikeStrengthInProblem(item)) return;
+    kept.push(item);
+    if (zhList[index]) keptZh.push(zhList[index]);
+  });
+  if (!kept.length) {
+    return {
+      items: ["No major problems were identified at this band; focus on refinement."],
+      translations: []
+    };
+  }
+  return { items: kept, translations: keptZh };
 }
 
 function renderDetailedSentenceCorrections(items = []) {
-  if (!Array.isArray(items) || !items.length) return "";
-  return `<section class="grading-section">
-    <h4>逐句批改</h4>
-    <div class="correction-list">${items.map((item, index) => {
+  const filtered = Array.isArray(items) ? items.filter(isScoreImpactingDetailedCorrection) : [];
+  if (!filtered.length && Array.isArray(items) && items.length) {
+    return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No score-affecting sentence-level errors were found.</p>`);
+  }
+  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available.</p>`);
+  return collapsibleSection("逐句批改 Sentence Corrections", `
+    <div class="correction-list">${filtered.map((item, index) => {
       const original = item.originalSentence || item.original || "";
       const corrected = item.correctedSentence || item.corrected || "";
       const better = item.betterExpression || "";
@@ -809,19 +915,20 @@ function renderDetailedSentenceCorrections(items = []) {
         ${renderZhToggle([item.problemZh, item.ruleZh, item.betterExpressionZh, item.bandImpactZh].filter(Boolean).join("\n"))}
       </div>`;
     }).join("")}</div>
-  </section>`;
+  `);
 }
 
 function renderCorrectionPriority(priority) {
-  if (!priority || typeof priority !== "object" || !hasAnyText(priority)) return "";
-  return `<section class="grading-section">
-    <h4>错误优先级</h4>
+  if (!priority || typeof priority !== "object" || !hasAnyText(priority)) {
+    return collapsibleSection("错误优先级", `<p class="muted">No correction priority was returned by AI.</p>`);
+  }
+  return collapsibleSection("错误优先级", `
     <div class="advice-grid">
       <div><h4>先改 Fix First</h4>${listHtml(priority.fixFirst)}${priority.fixFirstZh?.length ? renderZhToggle(priority.fixFirstZh.join("\n")) : ""}</div>
       <div><h4>再改 Fix Next</h4>${listHtml(priority.fixNext)}${priority.fixNextZh?.length ? renderZhToggle(priority.fixNextZh.join("\n")) : ""}</div>
       <div><h4>最后优化 Polish Later</h4>${listHtml(priority.polishLater)}${priority.polishLaterZh?.length ? renderZhToggle(priority.polishLaterZh.join("\n")) : ""}</div>
     </div>
-  </section>`;
+  `);
 }
 
 function firstNonEmpty(...values) {
@@ -878,10 +985,18 @@ function normalizeCriterionUpgradeItem(item) {
     item.actionStep, item.actionSteps, item.steps, item.howToImprove,
     item.whatToDo, item.recommendation, item.suggestion, item.plan, item.detail, item.details
   );
+  const currentWeakness = firstNonEmpty(
+    item.currentWeakness, item.weakness, item.currentProblem, item.currentIssue,
+    item.problem, item.gap, item.whyThisMatters
+  );
+  const exampleUpgrade = firstNonEmpty(
+    item.exampleUpgrade, item.example, item.exampleAction, item.modelUpgrade,
+    item.betterExample, item.targetBandExpression, item.upgradedExample
+  );
   if (!action && hasAnyText(item)) action = flattenObjectText(item);
   const actionZh = firstNonEmpty(item.actionZh, item.adviceZh, item.specificActionZh, item.suggestionZh, item.howToImproveZh);
   if (!criterion && !target && !action) return null;
-  return { criterion, target, action, actionZh };
+  return { criterion, currentWeakness, target, action, exampleUpgrade, actionZh };
 }
 
 function getPlanUpgradeSource(plan) {
@@ -918,7 +1033,14 @@ function fallbackCriterionUpgrades(plan, result = {}) {
     const criterionFeedback = result.criteria?.[criterion]?.howToImprove || result.criteria?.[criterion]?.feedback || "";
     const advice = Array.isArray(adviceMap[criterion]) ? adviceMap[criterion].filter(Boolean).join("; ") : "";
     const action = advice || criterionFeedback || "Use the criterion feedback above to make one concrete improvement in this area.";
-    return { criterion, target, action, actionZh: "" };
+    return {
+      criterion,
+      currentWeakness: criterionFeedback || "Use the criterion feedback above to identify the most important current weakness.",
+      target,
+      action,
+      exampleUpgrade: "Apply the action to one paragraph or sentence, then repeat the same check across the whole response.",
+      actionZh: ""
+    };
   });
 }
 
@@ -934,33 +1056,37 @@ function targetImprovementPlanHasUsefulContent(plan) {
 }
 
 function renderTargetImprovementPlan(plan, result = {}) {
-  if (!plan || typeof plan !== "object" || !targetImprovementPlanHasUsefulContent(plan)) return "";
+  if (!plan || typeof plan !== "object" || !targetImprovementPlanHasUsefulContent(plan)) {
+    return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `<p class="muted">No detailed improvement plan is available.</p>`);
+  }
   let criterionUpgrades = getPlanUpgradeSource(plan).map(normalizeCriterionUpgradeItem).filter(Boolean).filter((item) => item.action || item.criterion || item.target);
   if (!criterionUpgrades.length) criterionUpgrades = fallbackCriterionUpgrades(plan, result);
-  return `<section class="grading-section">
-    <h4>下一阶段提分计划 Target Improvement Plan</h4>
+  return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
     <div class="compact-facts">
       <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || result.overallBand || "")}</p>
       <p><strong>目标范围：</strong>${escapeHtml(plan.targetBandRange || plan.targetRange || plan.target || "")}</p>
       ${plan.targetReason ? `<p><strong>为什么是这个目标：</strong>${escapeHtml(plan.targetReason)}</p>` : ""}
     </div>
     ${Array.isArray(plan.focus) && plan.focus.length ? `<h4>这次最应该提升的点</h4>${renderListWithTranslations(plan.focus, plan.focusZh, "No target focus was returned.")}` : ""}
-    ${criterionUpgrades.length ? `<h4>四项提分动作</h4><div class="correction-list">${criterionUpgrades.map((item) => `
-      <div class="correction-item">
-        <p><strong>项目：</strong>${escapeHtml(item.criterion || "General improvement")}</p>
-        <p><strong>目标：</strong>${escapeHtml(item.target || plan.targetBandRange || "Next realistic band range")}</p>
-        <p><strong>具体动作：</strong>${escapeHtml(item.action || "Use the feedback above to make this criterion stronger.")}</p>
-        ${renderZhToggle(item.actionZh || item.adviceZh || "")}
-      </div>`).join("")}</div>` : ""}
-    ${Array.isArray(plan.practiceTasks) && plan.practiceTasks.length ? `<h4>练习任务</h4>${renderListWithTranslations(plan.practiceTasks, plan.practiceTasksZh, "No practice tasks were returned.")}` : ""}
-  </section>`;
+    ${collapsibleSection("四项提分动作", criterionUpgrades.length ? `<div class="correction-list">${criterionUpgrades.map((item) => `
+        <div class="correction-item">
+          <p><strong>项目：</strong>${escapeHtml(item.criterion || "General improvement")}</p>
+          ${item.currentWeakness ? `<p><strong>Current weakness:</strong> ${escapeHtml(item.currentWeakness)}</p>` : ""}
+          <p><strong>目标：</strong>${escapeHtml(item.target || plan.targetBandRange || "Next realistic band range")}</p>
+          <p><strong>具体动作：</strong>${escapeHtml(item.action || "Use the feedback above to make this criterion stronger.")}</p>
+          ${item.exampleUpgrade ? `<p><strong>Example upgrade:</strong> ${escapeHtml(item.exampleUpgrade)}</p>` : ""}
+          ${renderZhToggle(item.actionZh || item.adviceZh || "")}
+        </div>`).join("")}</div>` : `<p class="muted">No criterion upgrades were returned.</p>`)}
+    ${collapsibleSection("练习任务", Array.isArray(plan.practiceTasks) && plan.practiceTasks.length ? renderListWithTranslations(plan.practiceTasks, plan.practiceTasksZh, "No practice tasks were returned.") : `<p class="muted">No practice tasks were returned.</p>`)}
+  `);
 }
 
 function renderTask1LetterCorrections(corrections) {
-  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) return "";
+  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) {
+    return collapsibleSection("Task 1 书信专项修改", `<p class="muted">No detailed Task 1 letter corrections are available.</p>`);
+  }
   const bulletAdvice = Array.isArray(corrections.bulletPointAdvice) ? corrections.bulletPointAdvice : [];
-  return `<section class="grading-section">
-    <h4>书信专项修改</h4>
+  return collapsibleSection("Task 1 书信专项修改", `
     <div class="compact-facts">
       <div><strong>Opening：</strong>${renderTextWithTranslation(corrections.openingComment || "暂无", corrections.openingCommentZh, { tag: "span" })}</div>
       <div><strong>Closing：</strong>${renderTextWithTranslation(corrections.closingComment || "暂无", corrections.closingCommentZh, { tag: "span" })}</div>
@@ -975,13 +1101,14 @@ function renderTask1LetterCorrections(corrections) {
         ${item.suggestedSentence ? `<p><strong>可用句：</strong>${escapeHtml(item.suggestedSentence)} ${renderCopyButton(item.suggestedSentence)}</p>` : ""}
         ${renderZhToggle(item.suggestedSentenceZh)}
       </div>`).join("")}</div>` : ""}
-  </section>`;
+  `);
 }
 
 function renderTask2EssayCorrections(corrections) {
-  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) return "";
-  return `<section class="grading-section">
-    <h4>议论文专项修改</h4>
+  if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) {
+    return collapsibleSection("Task 2 议论文专项修改", `<p class="muted">No detailed Task 2 essay corrections are available.</p>`);
+  }
+  return collapsibleSection("Task 2 议论文专项修改", `
     <div class="compact-facts">
       <div><strong>立场：</strong>${renderTextWithTranslation(corrections.positionComment || "暂无", corrections.positionCommentZh, { tag: "span" })}</div>
       <div><strong>开头段：</strong>${renderTextWithTranslation(corrections.introductionComment || "暂无", corrections.introductionCommentZh, { tag: "span" })}</div>
@@ -990,7 +1117,7 @@ function renderTask2EssayCorrections(corrections) {
       <div><strong>结论：</strong>${renderTextWithTranslation(corrections.conclusionComment || "暂无", corrections.conclusionCommentZh, { tag: "span" })}</div>
     </div>
     ${corrections.developmentAdvice?.length ? `<h4>展开建议</h4>${renderListWithTranslations(corrections.developmentAdvice, corrections.developmentAdviceZh, "No detailed task analysis is available for this response.")}` : ""}
-  </section>`;
+  `);
 }
 
 function renderRevisionLimitWarning(result = {}) {
@@ -1053,13 +1180,15 @@ function renderSentenceCorrections(items = []) {
 function renderRevisionBlock(label, target, text) {
   const content = text ? `<pre>${escapeHtml(text)}</pre>` : `<p class="muted">后端暂未返回修改版作文。</p>`;
   const disabled = text ? "" : "disabled";
-  return `<details class="revision-block" open>
-    <summary>${label}</summary>
+  return `<details class="feedback-collapse revision-block">
+    <summary>${escapeHtml(label)}</summary>
+    <div class="feedback-collapse-body">
     ${content}
     <div class="actions">
       <button class="secondary" type="button" data-revision-action="copy" data-target="${target}" ${disabled}>复制修改版</button>
       <button class="primary" type="button" data-revision-action="apply" data-target="${target}" ${disabled}>应用到作文输入区</button>
       <button class="secondary" type="button" data-revision-action="compare" data-target="${target}" ${disabled}>和原文对比</button>
+    </div>
     </div>
   </details>`;
 }
@@ -1074,6 +1203,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band6 = band6;
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
+  const mainProblems = filteredMainProblems(result.mainProblems, result.mainProblemsZh);
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
@@ -1091,53 +1221,36 @@ function renderGradingResult(result = {}) {
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
     </section>
-    <section class="grading-section two-mini">
-      <div><h4>Strengths</h4>${renderListWithTranslations(result.strengths, result.strengthsZh, "No strengths were returned for this response.")}</div>
-      <div><h4>Main Problems</h4>${renderListWithTranslations(result.mainProblems, result.mainProblemsZh, "No main problems were returned for this response.")}</div>
-    </section>
+    ${collapsibleSection("Strengths", renderListWithTranslations(result.strengths, result.strengthsZh, "No strengths were returned for this response."))}
+    ${collapsibleSection("Main Problems", renderListWithTranslations(mainProblems.items, mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
     ${renderCorrectionPriority(result.correctionPriority)}
     ${renderTargetImprovementPlan(result.targetImprovementPlan, result)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
-    <section class="grading-section">
-      <h4>拼写错误 Spelling Corrections</h4>
-      ${renderSpellingCorrections(result.spellingCorrections)}
-    </section>
-    <section class="grading-section">
-      <h4>语法错误</h4>
-      ${renderGrammarErrors(result.grammarErrors)}
-    </section>
-    <section class="grading-section">
-      <h4>Sentence Corrections</h4>
-      ${renderSentenceCorrections(result.sentenceCorrections)}
-    </section>
-    <section class="grading-section advice-grid">
+    ${collapsibleSection("拼写错误 Spelling Corrections", renderSpellingCorrections(result.spellingCorrections))}
+    ${collapsibleSection("语法错误 Grammar Errors", renderGrammarErrors(result.grammarErrors))}
+    ${collapsibleSection("Sentence Corrections", renderSentenceCorrections(result.sentenceCorrections))}
+    ${collapsibleSection("四项专项建议", `<div class="advice-grid">
       <div><h4>${taskAdviceTitle}</h4>${renderListWithTranslations(result.taskAchievementAdvice, result.taskAchievementAdviceZh, "No task advice is available.")}</div>
       <div><h4>Coherence Advice</h4>${renderListWithTranslations(result.coherenceAdvice, result.coherenceAdviceZh, "No coherence advice is available.")}</div>
       <div><h4>Lexical Advice</h4>${renderListWithTranslations(result.lexicalAdvice, result.lexicalAdviceZh, "No lexical advice is available.")}</div>
       <div><h4>Grammar Advice</h4>${renderListWithTranslations(result.grammarAdvice, result.grammarAdviceZh, "No grammar advice is available.")}</div>
-    </section>
-    <section class="grading-section advice-grid">
+    </div>`)}
+    ${collapsibleSection("Band 5 / Band 6 / Band 7 提分建议", `<div class="advice-grid">
       <div><h4>Band 5 保底建议</h4>${renderListWithTranslations(result.band5FixPlan, result.band5FixPlanZh, "No Band 5 plan is available.")}</div>
       <div><h4>Band 6+ 提升建议</h4>${renderListWithTranslations(result.band6UpgradePlan, result.band6UpgradePlanZh, "No Band 6 plan is available.")}</div>
       <div><h4>Band 7+ 高分建议</h4>${renderListWithTranslations(result.band7UpgradePlan, result.band7UpgradePlanZh, "No Band 7 plan is available.")}</div>
-    </section>
-    <section class="grading-section">
-      <h4>Model answer outline</h4>
-      ${proseHtml(result.modelAnswerOutline)}
-    </section>
-    <section class="grading-section">
-      <h4>AI 修改版作文</h4>
+    </div>`)}
+    ${collapsibleSection("Model answer outline", proseHtml(result.modelAnswerOutline) || `<p class="muted">No model answer outline was returned.</p>`)}
+    ${collapsibleSection("AI 修改版作文 / Revised Essays", `
       <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>
       ${renderRevisionLimitWarning(result)}
       ${renderRevisionBlock("Band 5 Safe Revision", "band5", band5)}
       ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", band6)}
       ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
-      <h4>Revision Notes</h4>
-      ${listHtml(result.revisionNotes)}
-      ${revisionNotesZh ? `<h4>修改重点中文说明</h4>${renderZhToggle(revisionNotesZh)}` : ""}
-    </section>`;
+      ${collapsibleSection("Revision notes", `${listHtml(result.revisionNotes)}${revisionNotesZh ? `<h4>修改重点中文说明</h4>${renderZhToggle(revisionNotesZh)}` : ""}`)}
+    `)}`;
   els.gradingResults.querySelectorAll("[data-revision-action]").forEach((button) => {
     button.addEventListener("click", () => handleRevisionAction(button.dataset.revisionAction, button.dataset.target));
   });
