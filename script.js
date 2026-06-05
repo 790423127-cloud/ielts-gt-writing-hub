@@ -8,8 +8,8 @@ let currentLimit = 0;
 const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
 const feedbackUiState = {
-  zhExpanded: false,
-  detailsExpanded: null,
+  zhMode: "none", // "none" | "expanded" | "collapsed"
+  detailsMode: "none", // "none" | "expanded" | "collapsed"
   toolsOpen: false
 };
 
@@ -64,7 +64,34 @@ function taskTypeForPrompt(prompt) {
 }
 
 function extractBulletPointsFromPrompt(text) {
-  return String(text || "").split(/\n+/).map((line) => line.trim()).filter((line) => /^[-*•]\s+/.test(line)).map((line) => line.replace(/^[-*•]\s+/, ""));
+  const source = String(text || "");
+  const clean = (value) => String(value || "")
+    .replace(/^[-*•·]\s+/, "")
+    .replace(/^(\d+)[.)]\s+/, "")
+    .replace(/^and\s+/i, "")
+    .replace(/[.;:,\s]+$/g, "")
+    .trim();
+  const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const direct = lines
+    .filter((line) => /^[-*•·]\s+/.test(line) || /^(\d+)[.)]\s+/.test(line))
+    .map(clean)
+    .filter(Boolean);
+  if (direct.length) return direct.slice(0, 5);
+
+  const afterInYourLetter = source.split(/In your letter[:,]?/i)[1] || source.split(/You should/i)[1] || "";
+  const candidateSource = afterInYourLetter || source;
+  let candidates = candidateSource
+    .split(/\r?\n|;/)
+    .map(clean)
+    .filter((part) => /^(give|explain|describe|say|tell|ask|suggest|apologise|apologize|thank|invite|offer|request|remind|include|state|mention|why|what|how)/i.test(part));
+  if (!candidates.length) {
+    const matches = [];
+    const pattern = /(?:^|[.;:\n])\s*(say|tell|explain|describe|suggest|ask|give|thank|apologise|apologize|invite|offer|request|state|mention)\b[^.\n;]+/gi;
+    let match;
+    while ((match = pattern.exec(candidateSource)) && matches.length < 5) matches.push(clean(match[0]));
+    candidates = matches;
+  }
+  return candidates.filter(Boolean).slice(0, 5);
 }
 
 function fillSelect(select, values, allText) {
@@ -389,6 +416,7 @@ function renderListWithTranslations(items, translations, fallbackText) {
 function bindZhToggles(scope) {
   scope.querySelectorAll(".zh-toggle").forEach((button) => {
     button.addEventListener("click", () => {
+      feedbackUiState.zhMode = "none";
       const note = button.nextElementSibling;
       if (!note) return;
       const isHidden = note.classList.toggle("hidden");
@@ -412,7 +440,7 @@ function renderFeedbackTools() {
 }
 
 function setAllZhPanels(scope, expanded) {
-  feedbackUiState.zhExpanded = Boolean(expanded);
+  feedbackUiState.zhMode = expanded ? "expanded" : "collapsed";
   scope.querySelectorAll(".zh-toggle").forEach((button) => {
     const note = button.nextElementSibling;
     if (!note) return;
@@ -423,7 +451,7 @@ function setAllZhPanels(scope, expanded) {
 }
 
 function setAllDetails(scope, expanded) {
-  feedbackUiState.detailsExpanded = Boolean(expanded);
+  feedbackUiState.detailsMode = expanded ? "expanded" : "collapsed";
   scope.querySelectorAll("details.feedback-collapse").forEach((detail) => {
     detail.open = expanded;
   });
@@ -432,14 +460,37 @@ function setAllDetails(scope, expanded) {
 function applyFeedbackUiState(scope) {
   const tools = scope.querySelector(".grading-tools-menu");
   if (tools) tools.open = Boolean(feedbackUiState.toolsOpen);
-  if (feedbackUiState.zhExpanded) setAllZhPanels(scope, true);
-  if (feedbackUiState.detailsExpanded !== null) setAllDetails(scope, feedbackUiState.detailsExpanded);
+  if (feedbackUiState.zhMode === "expanded") applyAllZhPanels(scope, true);
+  if (feedbackUiState.zhMode === "collapsed") applyAllZhPanels(scope, false);
+  if (feedbackUiState.detailsMode === "expanded") applyAllDetails(scope, true);
+  if (feedbackUiState.detailsMode === "collapsed") applyAllDetails(scope, false);
+}
+
+function applyAllZhPanels(scope, expanded) {
+  scope.querySelectorAll(".zh-toggle").forEach((button) => {
+    const note = button.nextElementSibling;
+    if (!note) return;
+    note.classList.toggle("hidden", !expanded);
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "收起中文" : "中文解释";
+  });
+}
+
+function applyAllDetails(scope, expanded) {
+  scope.querySelectorAll("details.feedback-collapse").forEach((detail) => {
+    detail.open = expanded;
+  });
 }
 
 function bindFeedbackTools(scope) {
   scope.querySelectorAll(".grading-tools-menu").forEach((menu) => {
     menu.addEventListener("toggle", () => {
       feedbackUiState.toolsOpen = menu.open;
+    });
+  });
+  scope.querySelectorAll("details.feedback-collapse").forEach((detail) => {
+    detail.addEventListener("toggle", () => {
+      feedbackUiState.detailsMode = "none";
     });
   });
   scope.querySelectorAll("[data-feedback-tool]").forEach((button) => {
@@ -856,12 +907,17 @@ async function startGrading() {
 }
 
 
+
+function isNonBlockingStageWarning(text) {
+  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content/i.test(String(text || ""));
+}
+
 function renderStageProgress(result = {}) {
   const progress = Array.isArray(result.stageProgress) ? result.stageProgress : [];
   const warnings = Array.isArray(result.stageWarnings) ? result.stageWarnings : [];
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
-  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
+  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && !isNonBlockingStageWarning(item) && arr.indexOf(item) === index);
   if (!progress.length && !allWarnings.length) return "";
   return collapsibleSection("AI 批改进度与提示", `
     ${progress.length ? `<ul>${progress.map((item) => {
@@ -908,6 +964,12 @@ function renderLowBandDiagnostics(diagnostics, diagnosticsZh = {}) {
 }
 
 
+
+function isPlaceholderBulletLabel(value) {
+  const text = String(value || "").trim();
+  return !text || /^bullet\s*point\s*\d+$/i.test(text) || /^point\s*\d+$/i.test(text) || /AI did not reliably return this prompt bullet point/i.test(text);
+}
+
 function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {}) {
   if (!analysis || typeof analysis !== "object") return collapsibleSection("题目要求分析", `<p class="muted">No detailed task analysis is available for this response.</p>`);
   const isTask1 = analysis.taskType === "task1" || selected?.task === "Task 1";
@@ -924,14 +986,16 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
         <div><strong>信件类型：</strong>${renderTextWithTranslation(analysis.letterType || "Not returned.", analysisZh.letterTypeZh, { tag: "span" })}</div>
         <div><strong>写作目的：</strong>${renderTextWithTranslation(analysis.taskPurpose || "No detailed task analysis is available for this response.", analysisZh.taskPurposeZh, { tag: "span" })}</div>
         <div><strong>Bullet points：</strong>${bullets.length ? `<div class="correction-list bullet-analysis-list">${bullets.map((item, index) => {
-          const requirement = firstNonEmpty(item.requirement, item.bulletPoint, item.point, item.taskRequirement, item.text);
+          const rawRequirement = firstNonEmpty(item.requirement, item.bulletPoint, item.point, item.taskRequirement, item.text);
+          const placeholder = isPlaceholderBulletLabel(rawRequirement) || item.coverageUnknown;
+          const requirement = placeholder ? "AI 未可靠返回该题目要点" : rawRequirement;
           const evidence = firstNonEmpty(item.evidence, item.evidenceFromEssay, item.originalEvidence, item.quote);
-          const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason, item.comment);
+          const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason, item.comment) || (placeholder ? "该项是占位结果，不能判定为未覆盖。" : "");
           const suggestion = firstNonEmpty(item.suggestion, item.suggestedSentence, item.howToFix, item.advice, item.recommendation);
-          const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh, [requirement, evidence, problem, suggestion].join(" "));
+          const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh || (placeholder ? "AI 只返回了占位要点，不能直接判定为未覆盖；需要重新核验题目和原文证据。" : ""), [requirement, evidence, problem, suggestion].join(" "));
           return `<div class="correction-item bullet-analysis-item">
-            <p><strong>要点：</strong>${escapeHtml(requirement || `Bullet point ${index + 1}`)}</p>
-            <p><strong>是否覆盖：</strong>${coverageText(item.covered)}</p>
+            <p><strong>要点：</strong>${escapeHtml(requirement)}</p>
+            <p><strong>是否覆盖：</strong>${placeholder ? "待 AI 核验" : coverageText(item.covered)}</p>
             ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
             ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
             ${suggestion ? `<p><strong>建议：</strong>${escapeHtml(suggestion)} ${renderCopyButton(suggestion)}</p>` : ""}
@@ -1419,6 +1483,36 @@ function renderRevisionBlock(label, target, text) {
   </details>`;
 }
 
+
+function numericBand(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function shouldShowBandLadderPlans(result = {}) {
+  const band = numericBand(result.overallBand);
+  if (band > 7) return false;
+  return hasUsefulItemArray(result.band5FixPlan) || hasUsefulItemArray(result.band6UpgradePlan) || hasUsefulItemArray(result.band7UpgradePlan);
+}
+
+function bandPlanTranslationsComplete(result = {}) {
+  return hasMatchingTranslationArray(result.band5FixPlan, result.band5FixPlanZh) &&
+    hasMatchingTranslationArray(result.band6UpgradePlan, result.band6UpgradePlanZh) &&
+    hasMatchingTranslationArray(result.band7UpgradePlan, result.band7UpgradePlanZh);
+}
+
+function renderBandLadderPlans(result = {}) {
+  if (!shouldShowBandLadderPlans(result)) return "";
+  if (!bandPlanTranslationsComplete(result)) {
+    return collapsibleSection("Band 5 / Band 6 / Band 7 提分建议", `<p class="muted">AI 未返回完整提分计划中文解释；请重试专项建议生成。</p>`);
+  }
+  return collapsibleSection("Band 5 / Band 6 / Band 7 提分建议", `<div class="advice-grid">
+    <div><h4>Band 5 保底建议</h4>${renderListWithTranslations(result.band5FixPlan, result.band5FixPlanZh, "No Band 5 plan is available.")}</div>
+    <div><h4>Band 6+ 提升建议</h4>${renderListWithTranslations(result.band6UpgradePlan, result.band6UpgradePlanZh, "No Band 6 plan is available.")}</div>
+    <div><h4>Band 7+ 高分建议</h4>${renderListWithTranslations(result.band7UpgradePlan, result.band7UpgradePlanZh, "No Band 7 plan is available.")}</div>
+  </div>`);
+}
+
 function renderGradingResult(result = {}) {
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
@@ -1463,11 +1557,7 @@ function renderGradingResult(result = {}) {
       <div><h4>Lexical Advice</h4>${renderListWithTranslations(result.lexicalAdvice, result.lexicalAdviceZh, "No lexical advice is available.")}</div>
       <div><h4>Grammar Advice</h4>${renderListWithTranslations(result.grammarAdvice, result.grammarAdviceZh, "No grammar advice is available.")}</div>
     </div>`)}
-    ${collapsibleSection("Band 5 / Band 6 / Band 7 提分建议", `<div class="advice-grid">
-      <div><h4>Band 5 保底建议</h4>${renderListWithTranslations(result.band5FixPlan, result.band5FixPlanZh, "No Band 5 plan is available.")}</div>
-      <div><h4>Band 6+ 提升建议</h4>${renderListWithTranslations(result.band6UpgradePlan, result.band6UpgradePlanZh, "No Band 6 plan is available.")}</div>
-      <div><h4>Band 7+ 高分建议</h4>${renderListWithTranslations(result.band7UpgradePlan, result.band7UpgradePlanZh, "No Band 7 plan is available.")}</div>
-    </div>`)}
+    ${renderBandLadderPlans(result)}
     ${collapsibleSection("Model answer outline", renderTextWithTranslation(result.modelAnswerOutline || "", result.modelAnswerOutlineZh, { fallback: "No model answer outline was returned." }))}
     ${collapsibleSection("AI 修改版作文 / Revised Essays", `
       <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>

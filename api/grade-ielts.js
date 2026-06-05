@@ -1046,7 +1046,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "Fill targetImprovementPlan with a realistic next-step plan based on that target range.",
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, target, action, exampleUpgrade, actionZh. The action field must be a concrete step, not blank.",
     "Write every correction and betterExpression at the target level, not far above it.",
-    "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: do not give all plans equal priority. Put the most relevant plan for the target range first and make it the most detailed. If the target range is above Band 7, put the Band 7.5-9 coaching mainly in targetImprovementPlan, criterionUpgrades, practiceTasks, and band7UpgradePlan.",
+    "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: generate these ladder plans only when the current overallBand is 7.0 or below. If the current score is above Band 7.0, return band5FixPlan, band6UpgradePlan, band7UpgradePlan and their Zh arrays as empty arrays, and put high-band coaching only in targetImprovementPlan, criterionUpgrades, practiceTasks, and four-criterion advice.",
     "For every advice array, also return a matching Chinese explanation array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must accurately explain the corresponding English item, not a general template.",
     "Do not return blank objects in errorAnalysis.errorPatterns, targetImprovementPlan.criterionUpgrades, or developmentAdvice. Omit empty objects and return useful text instead.",
     "Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or salutation/closing-only items with no score impact.",
@@ -2552,6 +2552,20 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     return bestOutput;
   }
 
+  if (section === "grammar") {
+    bestOutput.sectionStage = section;
+    bestOutput.sectionWarning = "";
+    bestOutput.stageWarnings = ensureArray(bestOutput.stageWarnings).filter((item) => !isNonBlockingGrammarWarningText(item));
+    bestOutput.grammarErrors = ensureArray(bestOutput.grammarErrors);
+    bestOutput.detailedSentenceCorrections = ensureArray(bestOutput.detailedSentenceCorrections);
+    bestOutput.grammarAdvice = ensureArray(bestOutput.grammarAdvice);
+    bestOutput.grammarAdviceZh = ensureArray(bestOutput.grammarAdviceZh);
+    bestOutput.errorAnalysis = bestOutput.errorAnalysis && typeof bestOutput.errorAnalysis === "object" ? bestOutput.errorAnalysis : {};
+    bestOutput.errorAnalysis.summary = bestOutput.errorAnalysis.summary || "No major grammar-specific issue was returned in this stage; rely on the overall language, sentence-level, and polishing feedback.";
+    bestOutput.errorAnalysis.summaryZh = bestOutput.errorAnalysis.summaryZh || "本次语法专项没有返回明显语法问题；可参考总体语言、逐句修改和润色建议。";
+    return bestOutput;
+  }
+
   const warning = lastError?.message || `AI ${section} stage returned no usable detailed content.`;
   bestOutput.sectionStage = section;
   bestOutput.sectionWarning = warning;
@@ -3007,19 +3021,38 @@ function defaultRevisedEssayMeta(limited = false, reason = "") {
 
 function extractPromptBulletPoints(prompt) {
   const text = String(prompt || "");
+  const clean = (value) => String(value || "")
+    .replace(/^[-*•·]\s+/, "")
+    .replace(/^(\d+)[.)]\s+/, "")
+    .replace(/^and\s+/i, "")
+    .replace(/[.;:,\s]+$/g, "")
+    .trim();
+
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const bulletLines = lines
     .filter((line) => /^[-*•·]\s+/.test(line) || /^(\d+)[.)]\s+/.test(line))
-    .map((line) => line.replace(/^[-*•·]\s+/, "").replace(/^(\d+)[.)]\s+/, "").trim())
+    .map(clean)
     .filter(Boolean);
   if (bulletLines.length) return bulletLines.slice(0, 5);
 
-  const afterInYourLetter = text.split(/In your letter/i)[1] || "";
-  const candidates = afterInYourLetter
-    .split(/\n|;/)
-    .map((part) => part.replace(/^[-*•·]\s+/, "").trim())
-    .filter((part) => /^(give|explain|describe|say|tell|ask|suggest|apologise|thank|invite|offer|request|remind)/i.test(part));
-  return candidates.slice(0, 5);
+  const afterInYourLetter = text.split(/In your letter[:,]?/i)[1] || text.split(/You should/i)[1] || "";
+  const candidateSource = afterInYourLetter || text;
+  let candidates = candidateSource
+    .split(/\r?\n|;/)
+    .map(clean)
+    .filter((part) => /^(give|explain|describe|say|tell|ask|suggest|apologise|apologize|thank|invite|offer|request|remind|include|state|mention|why|what|how)/i.test(part));
+
+  if (!candidates.length) {
+    const matches = [];
+    const pattern = /(?:^|[.;:\n])\s*(say|tell|explain|describe|suggest|ask|give|thank|apologise|apologize|invite|offer|request|state|mention)\b[^.\n;]+/gi;
+    let match;
+    while ((match = pattern.exec(candidateSource)) && matches.length < 5) {
+      matches.push(clean(match[0]));
+    }
+    candidates = matches;
+  }
+
+  return candidates.filter(Boolean).slice(0, 5);
 }
 
 function buildFallbackTaskRequirementAnalysis(body, fallbackReason, locale = "en") {
@@ -3027,8 +3060,10 @@ function buildFallbackTaskRequirementAnalysis(body, fallbackReason, locale = "en
   if (body.task === "Task 1") {
     const bulletPoints = extractPromptBulletPoints(prompt).map((requirement) => ({
       requirement,
-      covered: false,
-      evidence: "Fallback mode was used, so bullet-point coverage could not be checked reliably."
+      covered: null,
+      coverageUnknown: true,
+      evidence: "Fallback mode was used, so bullet-point coverage could not be checked reliably.",
+      problem: "Coverage is unknown rather than confirmed missing."
     }));
     return {
       taskType: "task1",
@@ -4741,12 +4776,31 @@ function promptBulletRequirements(body) {
 function repairTaskRequirementAnalysisFinal(result, body = {}) {
   if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
   const points = promptBulletRequirements(body);
-  if (!points.length) return;
 
   const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object"
     ? result.taskRequirementAnalysis
     : {};
   const bullets = ensureArray(analysis.bulletPoints);
+
+  if (!points.length && bullets.some((item) => isPlaceholderBulletRequirement(item))) {
+    analysis.taskType = "task1";
+    analysis.bulletPoints = bullets.map(() => ({
+      requirement: "AI did not reliably return this prompt bullet point",
+      covered: null,
+      coverageUnknown: true,
+      evidence: "The AI output used a placeholder label instead of a real prompt requirement.",
+      problem: "Coverage is unknown rather than confirmed missing.",
+      suggestion: "Retry task analysis or check the original prompt manually."
+    }));
+    analysis.missingRequirements = [];
+    analysis.taskMatchSummary = analysis.taskMatchSummary || "Reliable bullet-point coverage evidence was not returned.";
+    result.taskRequirementAnalysis = analysis;
+    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object" ? result.taskRequirementAnalysisZh : {};
+    result.taskRequirementAnalysisZh.bulletPointsZh = analysis.bulletPoints.map(() => "AI 只返回了占位要点，不能判定为未覆盖；需要重新核验题目要点和原文证据。");
+    result.taskRequirementAnalysisZh.taskMatchSummaryZh = result.taskRequirementAnalysisZh.taskMatchSummaryZh || "要点覆盖情况需要更可靠的 AI 证据。";
+    return;
+  }
+  if (!points.length) return;
   const hasPlaceholder = !bullets.length || bullets.some((item) => isPlaceholderBulletRequirement(item));
   const hasTooFewRealBullets = bullets.filter((item) => !isPlaceholderBulletRequirement(item)).length < Math.min(points.length, 3);
 
@@ -4774,6 +4828,106 @@ function repairTaskRequirementAnalysisFinal(result, body = {}) {
   }
 }
 
+
+function isNonBlockingGrammarWarningText(value) {
+  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content/i.test(String(value || ""));
+}
+
+function ensureAlignedZhArrayFinal(items, zhItems, dictionary = {}) {
+  const en = ensureArray(items).filter((item) => hasUsefulText(item));
+  const zh = ensureArray(zhItems).filter((item) => hasUsefulText(item));
+  return en.map((item, index) => {
+    const existing = zh[index];
+    if (existing && !isGenericChineseNoteFinal(existing)) return existing;
+    const key = String(item || "").trim().toLowerCase();
+    if (dictionary[key]) return dictionary[key];
+    return `这条建议对应英文内容：“${String(item || "").slice(0, 70)}”。请按这一步具体修改，提升该项评分表现。`;
+  });
+}
+
+function normalizeBandPlanVisibilityAndZhFinal(result) {
+  if (!result || typeof result !== "object") return;
+  const band = Number(result.overallBand || 0);
+  if (Number.isFinite(band) && band > 7) {
+    result.band5FixPlan = [];
+    result.band5FixPlanZh = [];
+    result.band6UpgradePlan = [];
+    result.band6UpgradePlanZh = [];
+    result.band7UpgradePlan = [];
+    result.band7UpgradePlanZh = [];
+    result.lowBandPlanHidden = true;
+    result.lowBandPlanHiddenReason = "The estimated band is above 7.0, so Band 5/6/7 ladder advice is not shown. Use the target improvement plan and high-band polishing advice instead.";
+    return;
+  }
+
+  const band5Dict = {
+    "cover the task more completely.": "更完整地回应题目，确保每个要求都有直接回答。",
+    "use clear paragraphs.": "使用清楚的段落，让读者容易看出每一段的作用。",
+    "write mostly accurate simple sentences.": "先写准确的简单句，减少基础语法错误。",
+    "use basic topic vocabulary correctly.": "先把基础话题词用准确，避免为了高级而误用词。"
+  };
+  const band6Dict = {
+    "develop each main idea with a reason and example.": "每个主要观点都要配一个原因和例子，避免只列观点。",
+    "use linking words naturally, not mechanically.": "连接词要自然服务于逻辑，不要机械堆砌。",
+    "use a wider range of accurate topic vocabulary.": "扩大话题词汇范围，但要优先保证用词准确。",
+    "mix simple and some complex sentences accurately.": "在准确简单句基础上加入部分准确复杂句。"
+  };
+  const band7Dict = {
+    "make ideas more precise and fully developed.": "把观点写得更具体、更充分，减少笼统表达。",
+    "use natural cohesion across paragraphs.": "段落之间要自然衔接，而不是只靠连接词。",
+    "choose more exact collocations.": "选择更准确的搭配，提高词汇自然度。",
+    "reduce grammar errors in complex sentences.": "减少复杂句中的语法错误，保持表达灵活且准确。"
+  };
+
+  if (ensureArray(result.band5FixPlan).length) result.band5FixPlanZh = ensureAlignedZhArrayFinal(result.band5FixPlan, result.band5FixPlanZh, band5Dict);
+  if (ensureArray(result.band6UpgradePlan).length) result.band6UpgradePlanZh = ensureAlignedZhArrayFinal(result.band6UpgradePlan, result.band6UpgradePlanZh, band6Dict);
+  if (ensureArray(result.band7UpgradePlan).length) result.band7UpgradePlanZh = ensureAlignedZhArrayFinal(result.band7UpgradePlan, result.band7UpgradePlanZh, band7Dict);
+}
+
+function suppressNonBlockingGrammarWarningsFinal(result) {
+  if (!result || typeof result !== "object") return;
+  result.stageWarnings = ensureArray(result.stageWarnings).filter((item) => !isNonBlockingGrammarWarningText(item));
+  ["sectionWarning", "correctionWarning", "correctionPassWarning", "gradingWarning"].forEach((field) => {
+    if (isNonBlockingGrammarWarningText(result[field])) result[field] = "";
+  });
+  if (!result.errorAnalysis || typeof result.errorAnalysis !== "object") result.errorAnalysis = {};
+  if (!ensureArray(result.grammarErrors).length && !hasUsefulText(result.errorAnalysis.summary)) {
+    result.errorAnalysis.summary = "No major grammar-specific issue was returned in the grammar stage; use the sentence-level and language advice for polishing.";
+    result.errorAnalysis.summaryZh = "语法专项没有返回明显语法问题；可以参考逐句修改和语言建议进行润色。";
+  }
+}
+
+function forcePlaceholderBulletsToUnknownFinal(result, body = {}) {
+  if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
+  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
+  const bullets = ensureArray(analysis.bulletPoints);
+  if (!bullets.length) return;
+  let changed = false;
+  analysis.bulletPoints = bullets.map((item, index) => {
+    const requirement = bulletRequirementText(item);
+    if (isPlaceholderBulletRequirement(item)) {
+      changed = true;
+      return {
+        requirement: "AI did not reliably return this prompt bullet point",
+        covered: null,
+        coverageUnknown: true,
+        evidence: "The returned bullet-point label was only a placeholder, not a real prompt requirement.",
+        problem: "Coverage is unknown rather than confirmed missing.",
+        suggestion: "Retry task analysis or check the original prompt manually."
+      };
+    }
+    if (item && typeof item === "object" && item.coverageUnknown) {
+      return { ...item, covered: null };
+    }
+    return item;
+  });
+  if (changed) {
+    result.taskRequirementAnalysis = analysis;
+    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object" ? result.taskRequirementAnalysisZh : {};
+    result.taskRequirementAnalysisZh.bulletPointsZh = analysis.bulletPoints.map(() => "该项原本是占位要点，不能判定为未覆盖；需要重新核验题目要点和原文证据。");
+  }
+}
+
 function finalQualityGate(result, body = {}) {
   if (!result || typeof result !== "object") return result;
 
@@ -4783,6 +4937,9 @@ function finalQualityGate(result, body = {}) {
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
   repairTaskRequirementAnalysisFinal(result, body);
+  forcePlaceholderBulletsToUnknownFinal(result, body);
+  suppressNonBlockingGrammarWarningsFinal(result);
+  normalizeBandPlanVisibilityAndZhFinal(result);
   cleanGenericChineseFieldsFinal(result);
 
   sanitizeStrengthProblemBucketsFinal(result);
@@ -4791,6 +4948,9 @@ function finalQualityGate(result, body = {}) {
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
   repairTaskRequirementAnalysisFinal(result, body);
+  forcePlaceholderBulletsToUnknownFinal(result, body);
+  suppressNonBlockingGrammarWarningsFinal(result);
+  normalizeBandPlanVisibilityAndZhFinal(result);
   cleanGenericChineseFieldsFinal(result);
 
   return result;
