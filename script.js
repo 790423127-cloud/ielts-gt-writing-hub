@@ -1174,11 +1174,10 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
 
-  // 只拦截假升级：完全重复、机械小替换、截断或丢信息。
-  // 不再要求大幅重写；Band 0-5 的适度升级表达也应该显示。
-  if (similarity >= 0.97) return false;
-  if (editDistance <= 1 && lengthGap <= 1) return false;
-  if (editDistance <= 2 && lengthGap === 0 && similarity >= 0.9) return false;
+  // 只拦截假升级：完全重复、无意义小替换、截断或丢信息。
+  if (similarity >= 0.92) return false;
+  if (editDistance <= 2 && lengthGap <= 2) return false;
+  if (editDistance <= 3 && lengthGap <= 1 && similarity >= 0.82) return false;
   if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
   return true;
@@ -1287,7 +1286,7 @@ function renderDetailedSentenceCorrections(items = []) {
     <div class="correction-list">${filtered.map((item, index) => {
       const original = item.originalSentence || item.original || "";
       const corrected = item.correctedSentence || item.corrected || "";
-      const rawBetter = item.betterExpression || item.targetBandExpression || "";
+      const rawBetter = item.betterExpression || "";
       const better = shouldShowBetterExpression(corrected || original, rawBetter) ? rawBetter : "";
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
@@ -1447,14 +1446,11 @@ function renderTargetImprovementPlan(plan, result = {}) {
   }
   let criterionUpgrades = getPlanUpgradeSource(plan).map(normalizeCriterionUpgradeItem).filter(Boolean).filter((item) => item.action || item.criterion || item.target);
   if (!criterionUpgrades.length) criterionUpgrades = fallbackCriterionUpgrades(plan, result);
-  const targetRangeText = plan.targetBandRange || plan.targetRange || plan.target || "";
-  const targetRangeZh = plan.targetBandRangeZh || (targetRangeText ? "目标范围按当前分数设置，控制在下一阶段可模仿、可实现的提升区间。" : "");
-  const targetReasonZh = plan.targetReasonZh || (plan.targetReason ? "这个目标按当前分数上调约0.5到1分，优先解决最影响分数的任务回应、结构、词汇或语法问题。" : "");
   return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
     <div class="compact-facts">
       <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || result.overallBand || "")}</p>
-      <div><strong>目标范围：</strong>${renderTextWithTranslation(targetRangeText, targetRangeZh, { tag: "span" })}</div>
-      ${plan.targetReason ? `<div><strong>为什么是这个目标：</strong>${renderTextWithTranslation(plan.targetReason, targetReasonZh, { tag: "span" })}</div>` : ""}
+      <div><strong>目标范围：</strong>${renderTextWithTranslation(plan.targetBandRange || plan.targetRange || plan.target || "", plan.targetBandRangeZh, { tag: "span" })}</div>
+      ${plan.targetReason ? `<div><strong>为什么是这个目标：</strong>${renderTextWithTranslation(plan.targetReason, plan.targetReasonZh, { tag: "span" })}</div>` : ""}
     </div>
     ${Array.isArray(plan.focus) && plan.focus.length ? `<h4>这次最应该提升的点</h4>${renderListWithTranslations(plan.focus, plan.focusZh, "No target focus was returned.")}` : ""}
     ${collapsibleSection("四项提分动作", criterionUpgrades.length ? `<div class="correction-list">${criterionUpgrades.map((item) => `
@@ -1758,33 +1754,111 @@ function restoreOriginalEssay() {
 }
 
 
-let mockTask1Prompt = null;
-let mockTask2Prompt = null;
+// Mock Writing Test: Task 1 + Task 2 in one 60-minute practice session.
 let mockTimerId = null;
 let mockRemaining = 60 * 60;
+let mockTask1 = null;
+let mockTask2 = null;
 
-function roundToHalfBand(value) {
+function roundMockBand(value) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(9, Math.round(numeric * 2) / 2));
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.max(1, Math.min(9, Math.round(numeric * 2) / 2));
 }
 
 function formatMockBand(value) {
-  const rounded = roundToHalfBand(value);
-  return Number.isInteger(rounded) ? `${rounded}.0` : String(rounded);
+  const band = roundMockBand(value);
+  return Number.isInteger(band) ? `${band}.0` : String(band);
 }
 
 function calculateMockWritingBand(task1Band, task2Band) {
-  const raw = (Number(task1Band || 0) + Number(task2Band || 0) * 2) / 3;
-  return roundToHalfBand(raw);
+  return roundMockBand((Number(task1Band || 0) + Number(task2Band || 0) * 2) / 3);
 }
 
-function chooseRandomPrompt(task) {
-  const pool = prompts.filter((p) => p.task === task);
-  return pool[Math.floor(Math.random() * pool.length)] || null;
+function mockStorageKey(part) {
+  return `ielts-gt-writing-hub:mock:${part}`;
 }
 
-function mockPayloadForPrompt(prompt, essay) {
+function findDefaultMockPair() {
+  const task1s = prompts.filter((p) => p.task === "Task 1");
+  const task2s = prompts.filter((p) => p.task === "Task 2");
+  if (!task1s.length || !task2s.length) return { task1: task1s[0] || null, task2: task2s[0] || null };
+
+  const selectedBook = selected?.book;
+  const selectedTest = selected?.test;
+  const sameTestTask1 = task1s.find((p) => p.book === selectedBook && p.test === selectedTest) || task1s[0];
+  const sameTestTask2 = task2s.find((p) => p.book === sameTestTask1.book && p.test === sameTestTask1.test) || task2s.find((p) => p.book === selectedBook && p.test === selectedTest) || task2s[0];
+  return { task1: sameTestTask1, task2: sameTestTask2 };
+}
+
+function mockPromptOptionText(prompt) {
+  if (!prompt) return "";
+  return `${prompt.book.replace("Cambridge IELTS ", "C")} · ${prompt.test} · ${prompt.title}`;
+}
+
+function buildMockSelectOptions(task) {
+  return prompts
+    .filter((p) => p.task === task)
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(mockPromptOptionText(p))}</option>`)
+    .join("");
+}
+
+function setMockTimerText() {
+  const timer = $("mockTimerDisplay");
+  if (timer) timer.textContent = fmt(mockRemaining);
+}
+
+function stopMockTimer() {
+  if (mockTimerId) clearInterval(mockTimerId);
+  mockTimerId = null;
+  const btn = $("mockStartTimerBtn");
+  if (btn) btn.textContent = "开始 60 分钟模拟";
+}
+
+function toggleMockTimer() {
+  if (mockTimerId) { stopMockTimer(); return; }
+  const btn = $("mockStartTimerBtn");
+  if (btn) btn.textContent = "暂停计时";
+  mockTimerId = setInterval(() => {
+    mockRemaining = Math.max(0, mockRemaining - 1);
+    setMockTimerText();
+    if (mockRemaining === 40 * 60) setMockStatus("建议进入 Task 2：剩余 40 分钟。", "loading");
+    if (mockRemaining === 10 * 60) setMockStatus("剩余 10 分钟，请检查两篇作文。", "loading");
+    if (mockRemaining === 0) {
+      stopMockTimer();
+      setMockStatus("时间结束。你仍然可以提交两篇作文进行模拟评分。", "warning");
+    }
+  }, 1000);
+}
+
+function resetMockTimer() {
+  stopMockTimer();
+  mockRemaining = 60 * 60;
+  setMockTimerText();
+  setMockStatus("模拟考试计时已重置。", "");
+}
+
+function setMockStatus(text, state = "") {
+  const status = $("mockStatus");
+  if (!status) return;
+  status.textContent = text || "";
+  status.dataset.state = state;
+}
+
+function refreshMockPrompts() {
+  const task1Select = $("mockTask1Select");
+  const task2Select = $("mockTask2Select");
+  if (!task1Select || !task2Select) return;
+  mockTask1 = prompts.find((p) => p.id === task1Select.value) || mockTask1;
+  mockTask2 = prompts.find((p) => p.id === task2Select.value) || mockTask2;
+
+  const t1Prompt = $("mockTask1Prompt");
+  const t2Prompt = $("mockTask2Prompt");
+  if (t1Prompt) t1Prompt.textContent = mockTask1?.prompt || "No Task 1 prompt available.";
+  if (t2Prompt) t2Prompt.textContent = mockTask2?.prompt || "No Task 2 prompt available.";
+}
+
+function mockPayload(prompt, essay) {
   const wordCount = countWords(essay);
   const targetWordCount = targetWordsForPrompt(prompt);
   return {
@@ -1803,12 +1877,11 @@ function mockPayloadForPrompt(prompt, essay) {
     targetWordCount,
     isUnderMinimum: wordCount < targetWordCount,
     mode: "full",
-    gradingMode: "full",
+    gradingMode: "mock",
     outputLanguage: "en",
     locale: "en",
     includeRevision: false,
     revisionTargets: [],
-    mockExam: true,
     rubric: {
       task1: ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
       task2: ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
@@ -1816,196 +1889,149 @@ function mockPayloadForPrompt(prompt, essay) {
   };
 }
 
-async function postMockScore(endpoint, prompt, essay, label) {
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), 285000) : null;
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...mockPayloadForPrompt(prompt, essay), aiStage: "score" }),
-      signal: controller ? controller.signal : undefined
-    });
-    if (!response.ok) {
-      const errorInfo = await buildResponseError(response);
-      throw new Error(`${label}: ${errorInfo.message}`);
-    }
-    return await response.json();
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
+function renderMockCriteria(criteria = {}) {
+  const entries = Object.entries(criteria || {});
+  if (!entries.length) return `<p class="muted">No criterion bands returned.</p>`;
+  return `<div class="mock-criteria-grid">${entries.map(([name, item]) => `
+    <div class="mock-criterion">
+      <strong>${escapeHtml(name)}</strong>
+      <span>Band ${escapeHtml(formatMockBand(item?.band || 1))}</span>
+    </div>`).join("")}</div>`;
 }
 
-function renderMockPrompt(targetId, prompt) {
-  const node = $(targetId);
-  if (!node || !prompt) return;
-  node.innerHTML = `
-    <div class="tags">${tag(prompt.book, "book")}${tag(prompt.test, "book")}${tag(prompt.task, prompt.task === "Task 1" ? "task1" : "task2")}${tag(prompt.type, "type")}</div>
-    <h4>${escapeHtml(prompt.title)}</h4>
-    <p class="prompt-text">${escapeHtml(prompt.prompt)}</p>`;
-}
-
-function setMockStatus(text, state = "") {
-  const node = $("mockExamStatus");
-  if (!node) return;
-  node.textContent = text;
-  node.dataset.state = state;
-}
-
-function updateMockWordCounts() {
-  const t1 = $("mockTask1Essay");
-  const t2 = $("mockTask2Essay");
-  const w1 = $("mockTask1Words");
-  const w2 = $("mockTask2Words");
-  if (w1 && t1) w1.textContent = countWords(t1.value);
-  if (w2 && t2) w2.textContent = countWords(t2.value);
-}
-
-function renderMockTimer() {
-  const node = $("mockTimerDisplay");
-  if (node) node.textContent = fmt(mockRemaining);
-}
-
-function startMockTimer() {
-  if (mockTimerId) clearInterval(mockTimerId);
-  mockTimerId = setInterval(() => {
-    mockRemaining = Math.max(0, mockRemaining - 1);
-    renderMockTimer();
-    if (mockRemaining === 40 * 60) setMockStatus("建议开始 Task 2。", "loading");
-    if (mockRemaining === 10 * 60) setMockStatus("剩余 10 分钟。", "loading");
-    if (mockRemaining === 0) {
-      clearInterval(mockTimerId);
-      mockTimerId = null;
-      setMockStatus("时间结束，可以提交两篇作文评分。", "warning");
-    }
-  }, 1000);
-}
-
-function resetMockExam(pickNew = true) {
-  if (pickNew || !mockTask1Prompt) mockTask1Prompt = chooseRandomPrompt("Task 1");
-  if (pickNew || !mockTask2Prompt) mockTask2Prompt = chooseRandomPrompt("Task 2");
-  renderMockPrompt("mockTask1Prompt", mockTask1Prompt);
-  renderMockPrompt("mockTask2Prompt", mockTask2Prompt);
-  const t1 = $("mockTask1Essay");
-  const t2 = $("mockTask2Essay");
-  if (pickNew) {
-    if (t1) t1.value = "";
-    if (t2) t2.value = "";
-    const results = $("mockExamResults");
-    if (results) results.innerHTML = "";
-  }
-  mockRemaining = 60 * 60;
-  renderMockTimer();
-  updateMockWordCounts();
-  setMockStatus("模拟考试准备就绪。", "");
-}
-
-function renderMockResults(task1Result, task2Result) {
-  const t1Band = roundToHalfBand(task1Result?.overallBand);
-  const t2Band = roundToHalfBand(task2Result?.overallBand);
-  const finalBand = calculateMockWritingBand(t1Band, t2Band);
-  const node = $("mockExamResults");
-  if (!node) return;
-  const combinedProblems = [
-    ...((Array.isArray(task1Result?.mainProblems) ? task1Result.mainProblems : []).slice(0, 3).map((x) => `Task 1: ${x}`)),
-    ...((Array.isArray(task2Result?.mainProblems) ? task2Result.mainProblems : []).slice(0, 3).map((x) => `Task 2: ${x}`))
-  ];
-  node.innerHTML = `
-    <div class="mock-score-card">
+function renderMockResult(task1Result, task2Result) {
+  const t1 = roundMockBand(task1Result?.overallBand || 1);
+  const t2 = roundMockBand(task2Result?.overallBand || 1);
+  const finalBand = calculateMockWritingBand(t1, t2);
+  const resultBox = $("mockResults");
+  if (!resultBox) return;
+  resultBox.innerHTML = `
+    <div class="mock-final-score">
       <p class="kicker">Mock Writing Result</p>
-      <h3>Final Writing estimated band: Band ${formatMockBand(finalBand)}</h3>
-      <p><strong>Task 1:</strong> Band ${formatMockBand(t1Band)} &nbsp; <strong>Task 2:</strong> Band ${formatMockBand(t2Band)}</p>
-      <p class="muted">综合公式：Task 1 + Task 2 × 2，再除以 3。Task 2 权重更高。本结果为 AI 估算，不是官方 IELTS 成绩。</p>
+      <h3>综合 Writing 估算分：Band ${escapeHtml(formatMockBand(finalBand))}</h3>
+      <p class="muted">计算公式：Task 1 ${escapeHtml(formatMockBand(t1))} + Task 2 ${escapeHtml(formatMockBand(t2))} × 2，再除以 3。Task 2 权重更高。</p>
     </div>
-    ${collapsibleSection("Task 1 模拟考试评分", `
-      <p><strong>Estimated band:</strong> Band ${formatMockBand(t1Band)}</p>
-      ${renderCriteria(task1Result?.criteria || {})}
-      ${renderListWithTranslations(task1Result?.mainProblems || [], task1Result?.mainProblemsZh || [], "No main problems returned.")}
-    `, { defaultOpen: true })}
-    ${collapsibleSection("Task 2 模拟考试评分", `
-      <p><strong>Estimated band:</strong> Band ${formatMockBand(t2Band)}</p>
-      ${renderCriteria(task2Result?.criteria || {})}
-      ${renderListWithTranslations(task2Result?.mainProblems || [], task2Result?.mainProblemsZh || [], "No main problems returned.")}
-    `, { defaultOpen: true })}
-    ${collapsibleSection("综合弱点与下一步", combinedProblems.length ? listHtml(combinedProblems) : `<p class="muted">No combined weakness summary is available.</p>`)}
-  `;
-  bindZhToggles(node);
+    <div class="mock-result-grid">
+      <section class="mock-result-card">
+        <h4>Task 1 estimated band: ${escapeHtml(formatMockBand(t1))}</h4>
+        ${renderMockCriteria(task1Result?.criteria)}
+      </section>
+      <section class="mock-result-card">
+        <h4>Task 2 estimated band: ${escapeHtml(formatMockBand(t2))}</h4>
+        ${renderMockCriteria(task2Result?.criteria)}
+      </section>
+    </div>
+    <p class="ai-disclaimer">This is an AI-generated mock Writing estimate, not an official IELTS score.</p>`;
 }
 
-async function submitMockExam() {
-  const endpoint = els.gradingEndpointInput.value.trim();
-  if (!endpoint) { setMockStatus("请先填写批改接口地址。", "error"); return; }
-  const t1Essay = String($("mockTask1Essay")?.value || "").trim();
-  const t2Essay = String($("mockTask2Essay")?.value || "").trim();
-  if (!t1Essay || !t2Essay) { setMockStatus("请先完成 Task 1 和 Task 2 两篇作文。", "error"); return; }
-  const btn = $("mockSubmitBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "评分中..."; }
+async function startMockGrading() {
+  const endpoint = els.gradingEndpointInput?.value?.trim() || "";
+  if (!endpoint) {
+    setMockStatus("请先在 AI IELTS 批改区填写 Grading API Endpoint。", "error");
+    return;
+  }
+  refreshMockPrompts();
+  const task1Essay = String($("mockTask1Essay")?.value || "").trim();
+  const task2Essay = String($("mockTask2Essay")?.value || "").trim();
+  if (!mockTask1 || !mockTask2) {
+    setMockStatus("题库中没有同时找到 Task 1 和 Task 2。", "error");
+    return;
+  }
+  if (!task1Essay || !task2Essay) {
+    setMockStatus("请先完成 Task 1 和 Task 2 两篇作文。", "error");
+    return;
+  }
+
+  const btn = $("mockGradeBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "模拟评分中...";
+  }
   try {
-    setMockStatus("正在评分 Task 1...", "loading");
-    const task1Result = await postMockScore(endpoint, mockTask1Prompt, t1Essay, "Task 1");
-    setMockStatus("正在评分 Task 2...", "loading");
-    const task2Result = await postMockScore(endpoint, mockTask2Prompt, t2Essay, "Task 2");
-    renderMockResults(task1Result, task2Result);
+    setMockStatus("第 1 步/2：正在批改 Task 1。", "loading");
+    const task1Result = await postAiStage(endpoint, mockPayload(mockTask1, task1Essay), "score", "Mock Task 1 scoring...");
+    setMockStatus("第 2 步/2：正在批改 Task 2。", "loading");
+    const task2Result = await postAiStage(endpoint, mockPayload(mockTask2, task2Essay), "score", "Mock Task 2 scoring...");
+    renderMockResult(task1Result, task2Result);
     setMockStatus("模拟考试评分完成。", "done");
   } catch (error) {
     setMockStatus(`模拟考试评分失败：${error.message}`, "error");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "提交两篇作文并综合评分"; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "提交两篇并模拟评分";
+    }
   }
 }
 
-function ensureMockExamPanel() {
+function initMockExamMode() {
   if ($("mockExamCard")) return;
   const filters = document.querySelector(".filters");
-  if (!filters || !filters.parentNode) return;
+  const shell = document.querySelector(".shell") || document.body;
+  const pair = findDefaultMockPair();
+  mockTask1 = pair.task1;
+  mockTask2 = pair.task2;
+
   const card = document.createElement("section");
   card.id = "mockExamCard";
   card.className = "card mock-exam-card";
   card.innerHTML = `
-    <div class="card-head">
-      <div><p class="kicker">IELTS GT Writing Mock Test</p><h3>模拟考试：Task 1 + Task 2</h3></div>
-      <button class="secondary" type="button" id="mockToggleBtn">打开模拟考试</button>
-    </div>
-    <div id="mockExamBody" class="mock-exam-body hidden">
-      <p class="ai-note">60 分钟完成两篇作文。Task 1 建议 20 分钟，Task 2 建议 40 分钟。提交后两篇分别评分，并按 Task 2 更高权重计算综合 Writing Band。</p>
-      <div class="mock-toolbar actions">
+    <div class="card-head mock-head">
+      <div>
+        <p class="kicker">IELTS GT MOCK TEST</p>
+        <h2>模拟考试：Task 1 + Task 2</h2>
+        <p class="muted">60 分钟完成两篇作文；系统分别估算 Task 1 和 Task 2，再按 Task 2 更高权重计算综合 Writing Band。</p>
+      </div>
+      <div class="mock-timer-box">
         <strong id="mockTimerDisplay" class="timer">60:00</strong>
-        <button class="secondary" type="button" id="mockStartTimerBtn">开始计时</button>
-        <button class="secondary" type="button" id="mockResetBtn">换一套题 / 重置</button>
-        <span id="mockExamStatus" class="muted"></span>
+        <button class="secondary" id="mockStartTimerBtn" type="button">开始 60 分钟模拟</button>
+        <button class="secondary" id="mockResetTimerBtn" type="button">重置</button>
       </div>
-      <div class="mock-exam-grid">
-        <div class="mock-task-card">
-          <h4>Task 1 Letter</h4>
-          <div id="mockTask1Prompt" class="question-card"></div>
-          <textarea id="mockTask1Essay" class="essay" placeholder="Write your Task 1 letter here..."></textarea>
-          <p class="wordbox"><strong id="mockTask1Words">0</strong><span>/ 150 words</span></p>
+    </div>
+    <details class="feedback-collapse mock-exam-panel">
+      <summary>打开模拟考试模式</summary>
+      <div class="feedback-collapse-body">
+        <div class="mock-select-grid">
+          <label><span class="muted">Task 1 题目</span><select id="mockTask1Select">${buildMockSelectOptions("Task 1")}</select></label>
+          <label><span class="muted">Task 2 题目</span><select id="mockTask2Select">${buildMockSelectOptions("Task 2")}</select></label>
         </div>
-        <div class="mock-task-card">
-          <h4>Task 2 Essay</h4>
-          <div id="mockTask2Prompt" class="question-card"></div>
-          <textarea id="mockTask2Essay" class="essay" placeholder="Write your Task 2 essay here..."></textarea>
-          <p class="wordbox"><strong id="mockTask2Words">0</strong><span>/ 250 words</span></p>
+        <div class="mock-task-grid">
+          <section class="mock-task-card">
+            <h3>Task 1 Letter</h3>
+            <p id="mockTask1Prompt" class="prompt-text"></p>
+            <textarea id="mockTask1Essay" class="essay" placeholder="Write your Task 1 answer here..."></textarea>
+            <p class="muted">建议：20 分钟，至少 150 words。</p>
+          </section>
+          <section class="mock-task-card">
+            <h3>Task 2 Essay</h3>
+            <p id="mockTask2Prompt" class="prompt-text"></p>
+            <textarea id="mockTask2Essay" class="essay" placeholder="Write your Task 2 answer here..."></textarea>
+            <p class="muted">建议：40 分钟，至少 250 words。</p>
+          </section>
         </div>
+        <div class="actions">
+          <button class="primary" id="mockGradeBtn" type="button">提交两篇并模拟评分</button>
+          <span id="mockStatus" class="muted"></span>
+        </div>
+        <div id="mockResults" class="mock-results"></div>
       </div>
-      <div class="actions"><button class="primary" type="button" id="mockSubmitBtn">提交两篇作文并综合评分</button></div>
-      <div id="mockExamResults" class="grading-results"></div>
-    </div>`;
-  filters.parentNode.insertBefore(card, filters.nextSibling);
-  $("mockToggleBtn")?.addEventListener("click", () => {
-    const body = $("mockExamBody");
-    if (!body) return;
-    const opening = body.classList.contains("hidden");
-    body.classList.toggle("hidden", !opening);
-    $("mockToggleBtn").textContent = opening ? "收起模拟考试" : "打开模拟考试";
-    if (opening) resetMockExam(false);
-  });
-  $("mockStartTimerBtn")?.addEventListener("click", startMockTimer);
-  $("mockResetBtn")?.addEventListener("click", () => resetMockExam(true));
-  $("mockSubmitBtn")?.addEventListener("click", submitMockExam);
-  $("mockTask1Essay")?.addEventListener("input", updateMockWordCounts);
-  $("mockTask2Essay")?.addEventListener("input", updateMockWordCounts);
-  resetMockExam(true);
+    </details>`;
+
+  if (filters && filters.parentNode) filters.parentNode.insertBefore(card, filters.nextSibling);
+  else shell.insertBefore(card, shell.firstChild);
+
+  const task1Select = $("mockTask1Select");
+  const task2Select = $("mockTask2Select");
+  if (mockTask1 && task1Select) task1Select.value = mockTask1.id;
+  if (mockTask2 && task2Select) task2Select.value = mockTask2.id;
+  refreshMockPrompts();
+  setMockTimerText();
+
+  task1Select?.addEventListener("change", refreshMockPrompts);
+  task2Select?.addEventListener("change", refreshMockPrompts);
+  $("mockStartTimerBtn")?.addEventListener("click", toggleMockTimer);
+  $("mockResetTimerBtn")?.addEventListener("click", resetMockTimer);
+  $("mockGradeBtn")?.addEventListener("click", startMockGrading);
 }
 
 function bind() {
@@ -2032,8 +2058,8 @@ function bind() {
 function init() {
   initFilters();
   setupGradingModes();
+  initMockExamMode();
   bind();
-  ensureMockExamPanel();
   els.gradingEndpointInput.value = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
   const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
   document.documentElement.dataset.theme = theme;
