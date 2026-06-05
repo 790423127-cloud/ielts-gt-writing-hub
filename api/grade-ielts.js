@@ -27,12 +27,12 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
 const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
-  12000,
-  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 28000, 30000)
+  30000,
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 90000, 170000)
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
-  30000,
-  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 55000, 58000)
+  60000,
+  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 240000, 290000)
 );
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
@@ -1862,6 +1862,144 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
 }
 
 
+
+function normalizeAiStage(value) {
+  const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
+  if (["score", "scoring", "grade", "grading"].includes(raw)) return "score";
+  if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
+  if (["revision", "model", "modelanswer", "revisedessay"].includes(raw)) return "revision";
+  return "all";
+}
+
+async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
+  const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
+  const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
+  let result;
+
+  try {
+    result = await callAiGradingPass({
+      apiKey,
+      model,
+      body,
+      gradingMode,
+      maxTokens: gradingMaxTokens,
+      locale,
+      deadline,
+      veryShort
+    });
+    result = assertMeaningfulAiScoringResult(result, body, "Primary AI scoring");
+  } catch (primaryError) {
+    try {
+      result = await callAiCompactScoringRetry({
+        apiKey,
+        model,
+        body,
+        gradingMode,
+        locale,
+        deadline
+      });
+      result = assertMeaningfulAiScoringResult(result, body, "Compact AI scoring retry");
+      result.gradingWarning = isDeepSeekEmptyResponseError(primaryError)
+        ? "Primary AI scoring returned empty content, so a compact AI scoring retry was used."
+        : "Primary AI scoring failed, so a compact AI scoring retry was used.";
+    } catch (retryError) {
+      try {
+        result = await callAiNoTemplateScoringPass({
+          apiKey,
+          model,
+          body,
+          gradingMode,
+          locale,
+          deadline
+        });
+        result = assertMeaningfulAiScoringResult(result, body, "No-template AI scoring retry");
+        result.gradingWarning = "Primary AI scoring was incomplete, so a no-template AI scoring retry was used.";
+      } catch (noTemplateError) {
+        try {
+          result = await callAiMinimalScoringPass({
+            apiKey,
+            model,
+            body,
+            gradingMode,
+            locale,
+            deadline
+          });
+          result = assertMeaningfulAiScoringResult(result, body, "Minimal AI scoring retry");
+          result.gradingWarning = isDeepSeekEmptyResponseError(primaryError) || isDeepSeekEmptyResponseError(retryError) || isDeepSeekEmptyResponseError(noTemplateError)
+            ? "Primary AI scoring returned empty content, so a minimal AI scoring retry was used."
+            : "Primary AI scoring failed, so a minimal AI scoring retry was used.";
+        } catch (minimalError) {
+          throw minimalError || noTemplateError || retryError || primaryError;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = { disclaimer: DISCLAIMER };
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  if (!String(body.essay || "").trim()) return output;
+
+  try {
+    const correction = await callAiCorrectionPass({
+      apiKey,
+      model,
+      body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
+      effectiveMode,
+      locale,
+      deadline,
+      maxTokensOverride: Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 320, words < 80 ? 5000 : 9000), effectiveMode === "revision" ? 18000 : 15000),
+      timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
+    });
+    output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
+  } catch (firstError) {
+    output.correctionWarning = isDeepSeekTimeoutError(firstError)
+      ? "AI detailed correction pass timed out. A focused retry will be attempted when enough server time remains."
+      : "AI detailed correction pass failed. A focused retry will be attempted when enough server time remains.";
+  }
+
+  output = await ensureAiCorrectionDetails({
+    result: output,
+    apiKey,
+    model,
+    body: { ...body, currentOverallBand: body.currentOverallBand || body.overallBand },
+    gradingMode: effectiveMode,
+    locale,
+    deadline
+  });
+
+  output.aiStage = "correction";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+async function callAiRevisionStageOnly({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
+  let output = { disclaimer: DISCLAIMER, aiStage: "revision" };
+  if (effectiveMode !== "revision") return output;
+  try {
+    const revision = await callAiGradingPass({
+      apiKey,
+      model,
+      body,
+      gradingMode: "revision",
+      maxTokens,
+      locale,
+      deadline,
+      veryShort
+    });
+    output = mergeRevisionPassIntoResult(output, revision);
+  } catch (error) {
+    output = addRevisionTimeoutWarning(output);
+    output.revisionWarning = isDeepSeekTimeoutError(error)
+      ? "AI model-answer pass timed out. Grading and correction can still be used."
+      : "AI model-answer pass did not complete. Grading and correction can still be used.";
+  }
+  return output;
+}
+
 async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
   const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
@@ -2386,6 +2524,7 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
         timeoutError.provider = "deepseek";
         timeoutError.detail = "The AI provider did not respond before the server timeout.";
         lastError = timeoutError;
+        throw lastError;
       } else {
         lastError = error;
       }
@@ -3349,7 +3488,8 @@ async function handleRequest(req, res) {
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
   const deadline = Date.now() + AI_TOTAL_REQUEST_TIMEOUT_MS;
 
-  const cacheKey = buildAiCacheKey(body, effectiveMode, model, locale);
+  const aiStage = normalizeAiStage(body.aiStage || body.stage || body.gradingStage);
+  const cacheKey = buildAiCacheKey(body, `${effectiveMode}:${aiStage}`, model, locale);
   const cachedResult = getCachedAiResult(cacheKey);
   if (cachedResult) {
     sendJson(req, res, 200, { ...cachedResult, cacheHit: true });
@@ -3357,20 +3497,60 @@ async function handleRequest(req, res) {
   }
 
   try {
-    const result = await callAiOnlyGrader({
-      apiKey,
-      model,
-      body,
-      effectiveMode,
-      veryShort,
-      maxTokens,
-      locale,
-      deadline
-    });
+    let result;
+    if (aiStage === "score") {
+      result = await callAiScoreOnlyGrader({
+        apiKey,
+        model,
+        body,
+        effectiveMode,
+        veryShort,
+        maxTokens: maxTokensForMode("full", veryShort),
+        locale,
+        deadline
+      });
+      result.aiStage = "score";
+      result = normalizeResultForMode(result, "full", veryShort, body, locale);
+    } else if (aiStage === "correction") {
+      result = await callAiCorrectionStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        locale,
+        deadline
+      });
+      result.aiStage = "correction";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
+    } else if (aiStage === "revision") {
+      result = await callAiRevisionStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode,
+        veryShort,
+        maxTokens,
+        locale,
+        deadline
+      });
+      result.aiStage = "revision";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
+    } else {
+      result = await callAiOnlyGrader({
+        apiKey,
+        model,
+        body,
+        effectiveMode,
+        veryShort,
+        maxTokens,
+        locale,
+        deadline
+      });
+      result = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
+    }
 
-    const normalizedResult = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
-    setCachedAiResult(cacheKey, normalizedResult);
-    sendJson(req, res, 200, normalizedResult);
+    setCachedAiResult(cacheKey, result);
+    sendJson(req, res, 200, result);
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
 
@@ -3400,5 +3580,5 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = {
-  maxDuration: 60
+  maxDuration: 300
 };
