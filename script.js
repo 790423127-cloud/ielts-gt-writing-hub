@@ -385,12 +385,15 @@ function bindZhToggles(scope) {
 
 
 function renderFeedbackTools() {
-  return `<div class="grading-tools" role="toolbar" aria-label="AI feedback tools">
-    <button class="secondary" type="button" data-feedback-tool="expand-zh">展开全部中文</button>
-    <button class="secondary" type="button" data-feedback-tool="collapse-zh">收起全部中文</button>
-    <button class="secondary" type="button" data-feedback-tool="expand-details">展开全部折叠</button>
-    <button class="secondary" type="button" data-feedback-tool="collapse-details">收起全部折叠</button>
-  </div>`;
+  return `<details class="grading-tools grading-tools-menu">
+    <summary class="secondary grading-tools-summary">反馈工具</summary>
+    <div class="grading-tools-panel" role="toolbar" aria-label="AI feedback tools">
+      <button class="secondary" type="button" data-feedback-tool="expand-zh">展开全部中文</button>
+      <button class="secondary" type="button" data-feedback-tool="collapse-zh">收起全部中文</button>
+      <button class="secondary" type="button" data-feedback-tool="expand-details">展开全部折叠</button>
+      <button class="secondary" type="button" data-feedback-tool="collapse-details">收起全部折叠</button>
+    </div>
+  </details>`;
 }
 
 function setAllZhPanels(scope, expanded) {
@@ -516,7 +519,7 @@ function mergeAiStageResult(base, incoming) {
     incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
   );
   if (canReplaceCriteria) output.criteria = data.criteria;
-  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage;
+  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || usefulScoreAudit || !incomingStage;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
@@ -529,6 +532,26 @@ function mergeAiStageResult(base, incoming) {
 
 function hasUsefulItemArray(value) {
   return Array.isArray(value) && value.some((item) => hasAnyText(item));
+}
+
+
+function hasMatchingTranslationArray(items, translations) {
+  const en = Array.isArray(items) ? items.filter((item) => hasAnyText(item)) : [];
+  if (!en.length) return true;
+  const zh = Array.isArray(translations) ? translations.filter((item) => hasAnyText(item)) : [];
+  return zh.length >= en.length;
+}
+
+function adviceTranslationsComplete(data = {}) {
+  return (
+    hasMatchingTranslationArray(data.taskAchievementAdvice, data.taskAchievementAdviceZh) &&
+    hasMatchingTranslationArray(data.coherenceAdvice, data.coherenceAdviceZh) &&
+    hasMatchingTranslationArray(data.lexicalAdvice, data.lexicalAdviceZh) &&
+    hasMatchingTranslationArray(data.grammarAdvice, data.grammarAdviceZh) &&
+    hasMatchingTranslationArray(data.band5FixPlan, data.band5FixPlanZh) &&
+    hasMatchingTranslationArray(data.band6UpgradePlan, data.band6UpgradePlanZh) &&
+    hasMatchingTranslationArray(data.band7UpgradePlan, data.band7UpgradePlanZh)
+  );
 }
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
@@ -553,7 +576,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
   }
   if (aiStage === "improvement-plan" || aiStage === "correction-advice") {
-    return Boolean(
+    const hasAdvice = Boolean(
       targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
       hasAnyText(data.correctionPriority) ||
       hasUsefulItemArray(data.taskAchievementAdvice) ||
@@ -561,6 +584,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasUsefulItemArray(data.lexicalAdvice) ||
       hasUsefulItemArray(data.grammarAdvice)
     );
+    return hasAdvice && adviceTranslationsComplete(data);
   }
   if (aiStage === "correction-spelling") {
     return hasUsefulItemArray(data.spellingCorrections) || hasAnyText(data.errorAnalysis?.summary);
@@ -572,7 +596,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections);
   }
   if (aiStage === "correction-advice") {
-    return Boolean(
+    const hasAdvice = Boolean(
       hasUsefulItemArray(data.taskAchievementAdvice) ||
       hasUsefulItemArray(data.coherenceAdvice) ||
       hasUsefulItemArray(data.lexicalAdvice) ||
@@ -585,6 +609,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasAnyText(data.task1LetterCorrections) ||
       hasAnyText(data.task2EssayCorrections)
     );
+    return hasAdvice && adviceTranslationsComplete(data);
   }
   if (aiStage === "correction") {
     return hasDetailedFeedbackContent(data) || hasDetailedAdviceContent(data);
@@ -1418,10 +1443,8 @@ function renderGradingResult(result = {}) {
 
   els.gradingResults.innerHTML = `
     <div class="grading-result-layout">
-      <aside class="grading-side-tools">
-        ${renderFeedbackTools()}
-      </aside>
       <div class="grading-result-main">
+        <div class="grading-floating-tools">${renderFeedbackTools()}</div>
         ${feedbackContentHtml}
       </div>
     </div>`;

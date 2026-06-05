@@ -2004,11 +2004,11 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
     model,
     systemPrompt: buildNoTemplateAiScoringSystemPrompt(locale),
     userPrompt: buildNoTemplateAiScoringPrompt({ ...body, mode: gradingMode }, gradingMode, locale),
-    maxTokens: 2200,
+    maxTokens: 3600,
     temperature: 0.0,
     jsonMode: false,
     deadline,
-    timeoutMs: Math.min(16000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    timeoutMs: Math.min(60000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
 
   return await parseOrRepairAiJson({
@@ -2017,7 +2017,7 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
     rawText,
     body: { ...body, mode: gradingMode },
     locale,
-    maxTokens: 2200,
+    maxTokens: 3600,
     allowRepair: true,
     deadline
   });
@@ -2039,6 +2039,10 @@ function buildLeanScoreSystemPrompt(locale = "en") {
     "There is no maximum word-count cap; penalise long answers only for repetition, irrelevance, weak coherence, or loss of task focus.",
     "For Task 1 use Task Achievement. For Task 2 use Task Response.",
     "High-quality relevant answers may receive Band 8 or 9. Do not artificially cap strong writing at Band 7.",
+    "High-quality scoring is the core product: prioritise accurate bands, evidence-based criterion feedback, and concrete next-step advice over speed.",
+    "Do not use Band 7 as a safe default. If the response fully satisfies the prompt, has natural progression, precise vocabulary, flexible grammar, and only rare minor issues, award Band 8-9 as appropriate.",
+    "If a Task 1 answer fully covers all bullet points, has a clear purpose, appropriate recipient tone, and controlled language, do not lower it to Band 7 unless you identify concrete score-limiting evidence.",
+    "For Band 7.5+ results, suggestions must be framed as minor refinement/polishing, not basic-control problems such as needs clearer control or needs improvement.",
     "Keep the JSON compact enough to finish reliably, but make every scoring reason essay-specific.",
     chineseRule
   ].join(" ");
@@ -2091,9 +2095,13 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     mainProblems: [],
     mainProblemsZh: [],
     taskAchievementAdvice: [],
+    taskAchievementAdviceZh: [],
     coherenceAdvice: [],
+    coherenceAdviceZh: [],
     lexicalAdvice: [],
+    lexicalAdviceZh: [],
     grammarAdvice: [],
+    grammarAdviceZh: [],
     targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     spellingCorrections: [],
     grammarErrors: [],
@@ -2125,6 +2133,9 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
     "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
+    "- High-band calibration is mandatory: when the evidence shows full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and rare minor errors, use Band 8-9. Do not force such writing into Band 7.",
+    "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
+    "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
     buildTargetImprovementInstruction(body),
     "Server low-band context:",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
@@ -2151,11 +2162,11 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     model,
     systemPrompt: buildLeanScoreSystemPrompt(locale),
     userPrompt: buildLeanScorePrompt({ ...body, mode: gradingMode }, gradingMode, locale),
-    maxTokens: 3000,
-    temperature: 0.1,
+    maxTokens: 5200,
+    temperature: 0.05,
     jsonMode: false,
     deadline,
-    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(90000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 150000))
+    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(120000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 190000))
   });
 
   return await parseOrRepairAiJson({
@@ -2164,7 +2175,7 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     rawText,
     body: { ...body, mode: gradingMode },
     locale,
-    maxTokens: 3000,
+    maxTokens: 5200,
     allowRepair: true,
     deadline
   });
@@ -2356,6 +2367,29 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
   ].join("\n");
 }
 
+
+function usefulArrayItemsForZhCheck(value) {
+  return ensureArray(value).filter((item) => hasUsefulText(item));
+}
+
+function hasMatchingZhArrayForAdvice(englishItems, zhItems) {
+  const en = usefulArrayItemsForZhCheck(englishItems);
+  if (!en.length) return true;
+  const zh = usefulArrayItemsForZhCheck(zhItems);
+  return zh.length >= en.length;
+}
+
+function adviceZhComplete(output) {
+  return Boolean(output && typeof output === "object" &&
+    hasMatchingZhArrayForAdvice(output.taskAchievementAdvice, output.taskAchievementAdviceZh) &&
+    hasMatchingZhArrayForAdvice(output.coherenceAdvice, output.coherenceAdviceZh) &&
+    hasMatchingZhArrayForAdvice(output.lexicalAdvice, output.lexicalAdviceZh) &&
+    hasMatchingZhArrayForAdvice(output.grammarAdvice, output.grammarAdviceZh) &&
+    hasMatchingZhArrayForAdvice(output.band5FixPlan, output.band5FixPlanZh) &&
+    hasMatchingZhArrayForAdvice(output.band6UpgradePlan, output.band6UpgradePlanZh) &&
+    hasMatchingZhArrayForAdvice(output.band7UpgradePlan, output.band7UpgradePlanZh));
+}
+
 function hasFocusedSectionUsableContent(section, output, body) {
   const cleaned = sanitizeAiCorrectionPayload(output);
   if (section === "task") {
@@ -2393,7 +2427,7 @@ function hasFocusedSectionUsableContent(section, output, body) {
     return ensureArray(cleaned.sentenceCorrections).length > 0 || ensureArray(cleaned.detailedSentenceCorrections).length > 0;
   }
   if (section === "advice") {
-    return Boolean(
+    const hasAdvice = Boolean(
       ensureArray(cleaned.taskAchievementAdvice).length ||
       ensureArray(cleaned.coherenceAdvice).length ||
       ensureArray(cleaned.lexicalAdvice).length ||
@@ -2411,6 +2445,7 @@ function hasFocusedSectionUsableContent(section, output, body) {
       hasUsefulText(cleaned.task1LetterCorrections?.toneComment) ||
       hasUsefulText(cleaned.task2EssayCorrections?.bodyParagraphComment)
     );
+    return hasAdvice && adviceZhComplete(cleaned);
   }
   return hasAiCorrectionContent(cleaned);
 }
@@ -2427,7 +2462,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
     section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text." : "",
     section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence and betterExpression." : "",
-    section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object." : "",
+    section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
   ].filter(Boolean).join("\n");
 }
@@ -2447,7 +2482,8 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 135000),
     90000
   );
-  const maxAttempts = Math.max(1, Math.min(Number(process.env.AI_SECTION_RETRY_ATTEMPTS) || 1, 2));
+  const configuredAttempts = Math.max(1, Math.min(Number(process.env.AI_SECTION_RETRY_ATTEMPTS) || 1, 2));
+  const maxAttempts = section === "advice" ? Math.max(2, configuredAttempts) : configuredAttempts;
   let lastError = null;
   let bestOutput = { disclaimer: DISCLAIMER };
 
@@ -2521,36 +2557,85 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
 function scoreAuditLooksNecessary(currentResult) {
   if (!currentResult || typeof currentResult !== "object") return false;
   const criteria = currentResult.criteria && typeof currentResult.criteria === "object" ? currentResult.criteria : {};
-  const weakPhrases = /needs clearer control|needs improvement|limited|weak|poor|basic|underdeveloped/i;
-  const strengthPhrases = /fully addresses|appropriate tone|well[-\s]?developed|clear purpose|coherent|accurate language|few errors/i;
-  const bands = Object.values(criteria).map((item) => Number(item?.band)).filter(Number.isFinite);
+  const combined = finalGateText([
+    currentResult.overallBand,
+    currentResult.estimatedLevel,
+    currentResult.highBandDiagnostics?.recommendedHighBandRange,
+    currentResult.highBandDiagnostics?.reason,
+    currentResult.scoreCalibration?.whyNotHigher,
+    currentResult.scoreCalibration?.whyNotLower,
+    currentResult.strengths,
+    currentResult.mainProblems,
+    currentResult.taskAchievementAdvice,
+    currentResult.coherenceAdvice,
+    currentResult.lexicalAdvice,
+    currentResult.grammarAdvice,
+    ...Object.values(criteria || {}).map((item) => [item?.band, item?.feedback, item?.howToImprove])
+  ], 40);
   const overall = Number(currentResult.overallBand);
+  const bands = Object.values(criteria).map((item) => Number(item?.band)).filter(Number.isFinite);
   if (bands.length && Number.isFinite(overall)) {
     const avg = bands.reduce((sum, value) => sum + value, 0) / bands.length;
-    if (Math.abs(avg - overall) > 1) return true;
+    if (Math.abs(avg - overall) > 0.75) return true;
   }
-  for (const item of Object.values(criteria)) {
-    const band = Number(item?.band);
-    const text = `${item?.feedback || ""} ${item?.howToImprove || ""}`;
-    if (band >= 7.5 && weakPhrases.test(text)) return true;
-  }
-  return ensureArray(currentResult.mainProblems).some((item) => strengthPhrases.test(String(item || "")));
+
+  const highBandSignals = [
+    "fully addresses", "fully satisfies", "satisfies all task requirements", "all three bullet points", "clear purpose",
+    "appropriate tone", "appropriately formal", "well-developed", "well developed", "natural progression", "clear progression",
+    "precise vocabulary", "high grammatical accuracy", "flexible grammar", "few errors", "rare minor errors", "band 8", "band 9"
+  ];
+  const lowBandSignals = [
+    "needs clearer control", "needs improvement", "development is limited", "task development is limited", "limited development",
+    "vocabulary is limited", "grammar accuracy and sentence control need improvement", "organisation is basic", "organization is basic"
+  ];
+  const hasHighBandSignal = highBandSignals.some((signal) => combined.includes(signal));
+  const hasLowBandTemplate = lowBandSignals.some((signal) => combined.includes(signal));
+
+  if (hasLowBandTemplate && Number.isFinite(overall) && overall >= 6.5) return true;
+  if (hasHighBandSignal && Number.isFinite(overall) && overall <= 7) return true;
+  if (combined.includes("recommendedhighbandrange") && /8|9/.test(combined) && Number.isFinite(overall) && overall < 8) return true;
+  if (ensureArray(currentResult.mainProblems).some((item) => isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item))) return true;
+  return false;
 }
 
 function buildScoreAuditPrompt(body, locale = "en") {
   const current = body.currentResult || {};
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
   return [
-    "Audit this IELTS scoring result for contradictions only. Return one compact valid JSON object.",
-    "Do not rescore from scratch. Do not produce corrections. Do not analyse the whole essay again.",
-    "If there is no contradiction, return {\"scoreAuditSkipped\":true,\"stageWarnings\":[]}.",
-    "If there is a contradiction, return only corrected criteria wording, strengths, mainProblems, scoreCalibration, and stageWarnings.",
-    "Band 7.5+ feedback must sound high-band and use minor refinement language, not low-band templates.",
-    "mainProblems must not contain strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, or accurate language.",
-    "Chinese *Zh fields, if returned, must accurately match the English wording and must not be generic.",
-    "Shape:",
-    JSON.stringify({ scoreAuditSkipped: false, criteria: {}, strengths: [], mainProblems: [], scoreCalibration: {}, stageWarnings: [] }),
+    "Re-audit this IELTS Writing score using the original prompt and essay. Return one valid JSON object only.",
+    "This audit is allowed to correct the overallBand and criterion bands when the current score contradicts the essay evidence.",
+    "Do not merely polish wording if the score is wrong. Re-read the original essay and recalibrate using IELTS band descriptor logic.",
+    "Do not use Band 7 as a safe default. If the essay fully satisfies the prompt, is naturally organised, uses precise vocabulary, has flexible grammar, and only rare minor errors, correct the score to Band 8-9 as appropriate.",
+    "If the current score is kept, explain exactly why it is not higher with concrete evidence from the essay.",
+    "If Band 7.5+ is awarded, feedback and advice must sound like minor refinement, not basic control problems.",
+    "mainProblems must contain only real problems, not strengths.",
+    "Chinese *Zh fields must accurately match adjacent English fields and must not be generic templates.",
+    "Return this shape. Include every key if you correct the score; otherwise return scoreAuditSkipped true with a short reason.",
+    JSON.stringify({
+      scoreAuditSkipped: false,
+      overallBand: 1,
+      estimatedLevel: "Band 1.0",
+      criteria: {
+        [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+        "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      },
+      highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
+      highBandDiagnosticsZh: { reasonZh: "" },
+      scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+      scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+      strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [],
+      taskAchievementAdvice: [], taskAchievementAdviceZh: [], coherenceAdvice: [], coherenceAdviceZh: [], lexicalAdvice: [], lexicalAdviceZh: [], grammarAdvice: [], grammarAdviceZh: [],
+      stageWarnings: []
+    }),
     "Current result:",
-    JSON.stringify(current).slice(0, 5000)
+    JSON.stringify(current).slice(0, 6000),
+    "Question:",
+    String(body.questionPrompt || "").slice(0, 2500),
+    "Essay:",
+    String(body.essay || "").slice(0, 6500)
   ].join("\n");
 }
 
@@ -2566,15 +2651,28 @@ async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
     const rawText = await callDeepSeek({
       apiKey,
       model,
-      systemPrompt: "You are a concise IELTS scoring consistency auditor. Return one valid compact JSON object only.",
+      systemPrompt: "You are a strict IELTS senior examiner. Re-audit scoring when evidence contradicts the current band. Return one valid compact JSON object only.",
       userPrompt: buildScoreAuditPrompt(body, locale),
-      maxTokens: 1200,
+      maxTokens: 4200,
       temperature: 0.0,
       jsonMode: false,
       deadline,
-      timeoutMs: Math.min(45000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+      timeoutMs: Math.min(90000, AI_SINGLE_REQUEST_TIMEOUT_MS)
     });
-    const parsed = parseJsonFromProvider(rawText);
+    const parsed = await parseOrRepairAiJson({
+      apiKey,
+      model,
+      rawText,
+      body,
+      locale,
+      maxTokens: 4200,
+      allowRepair: true,
+      deadline
+    });
+    if (parsed && typeof parsed === "object" && !parsed.scoreAuditSkipped) {
+      normalizeAiBandsOnly(parsed, body);
+      finalQualityGate(parsed, body || {});
+    }
     return {
       ...(parsed && typeof parsed === "object" ? parsed : {}),
       aiStage: "score-audit",
@@ -2602,7 +2700,6 @@ function normalizeAiStage(value) {
 
 async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
-  const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
   let result;
 
   try {
@@ -2614,10 +2711,11 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
       locale,
       deadline
     });
-    result = assertMeaningfulAiScoringResult(result, body, "Lean AI scoring");
+    result = assertMeaningfulAiScoringResult(result, body, "High-quality AI scoring");
   } catch (primaryError) {
     try {
-      result = await callAiCompactScoringRetry({
+      // Keep scoring quality above speed: use the evidence-based no-template retry before compact/minimal fallbacks.
+      result = await callAiNoTemplateScoringPass({
         apiKey,
         model,
         body,
@@ -2625,13 +2723,11 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
         locale,
         deadline
       });
-      result = assertMeaningfulAiScoringResult(result, body, "Compact AI scoring retry");
-      result.gradingWarning = isDeepSeekEmptyResponseError(primaryError)
-        ? "Primary AI scoring returned empty content, so a compact AI scoring retry was used."
-        : "Primary AI scoring failed, so a compact AI scoring retry was used.";
-    } catch (retryError) {
+      result = assertMeaningfulAiScoringResult(result, body, "High-quality no-template AI scoring retry");
+      result.gradingWarning = "Primary high-quality AI scoring was incomplete, so an evidence-based no-template scoring retry was used.";
+    } catch (noTemplateError) {
       try {
-        result = await callAiNoTemplateScoringPass({
+        result = await callAiCompactScoringRetry({
           apiKey,
           model,
           body,
@@ -2639,9 +2735,9 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
           locale,
           deadline
         });
-        result = assertMeaningfulAiScoringResult(result, body, "No-template AI scoring retry");
-        result.gradingWarning = "Primary AI scoring was incomplete, so a no-template AI scoring retry was used.";
-      } catch (noTemplateError) {
+        result = assertMeaningfulAiScoringResult(result, body, "Compact AI scoring retry");
+        result.gradingWarning = "High-quality scoring retries were incomplete, so a compact AI scoring retry was used. Score-audit will recalibrate if high-band evidence is inconsistent.";
+      } catch (compactError) {
         try {
           result = await callAiMinimalScoringPass({
             apiKey,
@@ -2652,11 +2748,9 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
             deadline
           });
           result = assertMeaningfulAiScoringResult(result, body, "Minimal AI scoring retry");
-          result.gradingWarning = isDeepSeekEmptyResponseError(primaryError) || isDeepSeekEmptyResponseError(retryError) || isDeepSeekEmptyResponseError(noTemplateError)
-            ? "Primary AI scoring returned empty content, so a minimal AI scoring retry was used."
-            : "Primary AI scoring failed, so a minimal AI scoring retry was used.";
+          result.gradingWarning = "Only a minimal AI scoring retry completed. Use score-audit and detailed stages before trusting this result.";
         } catch (minimalError) {
-          throw minimalError || noTemplateError || retryError || primaryError;
+          throw minimalError || compactError || noTemplateError || primaryError;
         }
       }
     }
