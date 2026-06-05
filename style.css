@@ -116,3 +116,16 @@
 .high-band-yes{color:var(--teal);font-weight:800}
 .high-band-no{color:var(--rose);font-weight:800}
 .copy-mini{min-height:30px;padding:0 8px;margin-left:6px;font-size:12px;border:1px solid var(--line2);border-radius:6px;background:var(--card);color:var(--ink)}
+
+/* Patch: front-end refinement for AI feedback toolbar, timer placement, and detailed advice readability */
+#gradingStatus[data-state=warning]{color:var(--amber);font-weight:800;overflow-wrap:anywhere;word-break:break-word}
+.ai-card .card-head{align-items:flex-start;min-width:0}
+.ai-card .card-head h3{min-width:150px;overflow-wrap:normal;word-break:normal}
+.ai-card #gradingStatus{max-width:100%;overflow-wrap:anywhere;word-break:break-word;text-align:right;line-height:1.35}
+.grading-tools{position:static;top:auto;z-index:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--card);padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:2px}
+.grading-tools .secondary{width:auto;min-height:38px;white-space:nowrap}
+.helper-dock{z-index:2;margin-top:16px}
+.essay-timer-dock{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 12px;padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--soft)}
+.essay-timer-title{display:grid;gap:2px;min-width:130px}.essay-timer-title span{font-weight:850}.essay-timer-title small{color:var(--muted);font-size:12px}.essay-timer-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.essay-timer-controls .timer{font-size:26px;min-width:92px;text-align:center}.essay-timer-controls .secondary,.essay-timer-controls .primary{width:auto;min-height:38px}.timer-card-emptied{display:none!important}
+.detailed-advice-list{display:grid;gap:10px;margin:0;padding-left:22px}.detailed-advice-list>li{padding-left:2px}.advice-card-inline{display:grid;gap:5px}.advice-card-inline p{margin:0;line-height:1.55}.bullet-analysis-list{display:grid;gap:10px}.bullet-analysis-item p{margin:0 0 7px}.bullet-analysis-item p:last-child{margin-bottom:0}.correction-item .copy-mini{width:auto;min-height:30px;margin-left:6px;padding:0 9px}.translation-inline{display:grid;gap:6px}.translation-inline .translation-toggle{justify-self:start}.advice-grid>div{min-width:0}.advice-grid h4{margin-top:0}.feedback-collapse-body .correction-list{display:grid;gap:10px}.feedback-collapse-body .correction-item{overflow-wrap:anywhere;word-break:break-word}
+@media(max-width:760px){.ai-card .card-head{display:grid;gap:8px}.ai-card #gradingStatus{text-align:left}.grading-tools .secondary,.essay-timer-controls .secondary,.essay-timer-controls .primary{width:100%}.essay-timer-dock{align-items:stretch;flex-direction:column}.essay-timer-controls{justify-content:stretch}.essay-timer-controls .timer{width:100%;min-width:0}.grading-tools{position:static}}
