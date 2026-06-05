@@ -892,6 +892,7 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Do not use betterExpression for a pure one-word synonym swap, a truncated sentence, or any rewrite that removes a reason, purpose, condition, contrast, result, or other task-relevant information. The betterExpression must show obvious improvement in structure, formality, clarity, cohesion, or IELTS-level phrasing, not just 1-2 changed words. If there is no useful safe upgrade, leave betterExpression and betterExpressionZh empty.",
     "detailedSentenceCorrections must contain only score-impacting issues. Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or correct salutation/closing items.",
     "If a criterion band is 7.5 or higher, its feedback must describe high-band quality and frame suggestions as minor polishing/refinement. Do not pair Band 8 with Band 5-6 template wording such as 'needs clearer control' or 'grammar needs improvement' unless the band is lowered.",
+    "For Band 7.5+ writing, improvement advice must focus on naturalness, specificity, concision, register precision, and consistency. Do not advise forced inversion, artificially complex conditionals, rare vocabulary, 'synergistic opportunities', 'holistic understanding', or flawless/perfect grammar unless there is a concrete reason.",
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
     "targetImprovementPlan.criterionUpgrades must include currentWeakness, target, action, and exampleUpgrade for each IELTS criterion. Each action should help improve about 0.5-1 band from the current level.",
     "Classify errors using categories such as Task response/achievement problem, Missing bullet point, Tone problem, Verb tense, Subject-verb agreement, Article error, Singular/plural error, Word form error, Word choice error, Collocation error, Sentence fragment, Run-on sentence, Unclear meaning, Repetition, Informal wording in formal writing, Weak linking, Paragraphing problem, and Spelling error.",
@@ -3097,6 +3098,81 @@ function hasFocusedSectionUsableContent(section, output, body) {
   return hasAiCorrectionContent(cleaned);
 }
 
+
+function stageReferenceResult(body = {}, bestOutput = {}) {
+  const candidates = [
+    body.currentResult,
+    body.result,
+    body.previousResult,
+    body.gradingResult,
+    body.aiResult,
+    bestOutput,
+    body
+  ];
+  return candidates.find((item) => item && typeof item === "object") || {};
+}
+
+function highBandStageNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function resultSuggestsHighBandForEmptySentenceStage(result) {
+  if (!result || typeof result !== "object") return false;
+  const overall = Math.max(
+    highBandStageNumber(result.overallBand),
+    highBandStageNumber(result.overallEstimatedBand),
+    highBandStageNumber(result.rawOverallBand)
+  );
+  const grammarBand = highBandStageNumber(result.criteria?.["Grammatical Range and Accuracy"]?.band);
+  const criteriaBands = Object.values(result.criteria || {})
+    .map((item) => highBandStageNumber(item?.band))
+    .filter((band) => band > 0);
+  const allCriteriaHigh = criteriaBands.length >= 4 && criteriaBands.every((band) => band >= 7.5);
+  const highBandRange = finalGateText(result.highBandDiagnostics?.recommendedHighBandRange || result.estimatedLevel || "");
+  const highBandText = /(^|[^0-9])(?:7\.5|8|8\.0|8\.5|9|9\.0)([^0-9]|$)/.test(highBandRange);
+  return overall >= 7.5 || grammarBand >= 7.5 || allCriteriaHigh || highBandText;
+}
+
+function shouldTreatEmptySentenceStageAsValid(body = {}, bestOutput = {}) {
+  const reference = stageReferenceResult(body, bestOutput);
+  return resultSuggestsHighBandForEmptySentenceStage(reference);
+}
+
+function removeNoUsableSentenceWarnings(items) {
+  return ensureArray(items).filter((item) => {
+    const text = String(item || "").toLowerCase();
+    return !/sentence stage returned no usable detailed content|sentence stage did not return enough usable detail|ai sentence stage returned no usable detailed content/.test(text);
+  });
+}
+
+function applyEmptySentenceStageHighBandFallback(bestOutput = {}, body = {}) {
+  const output = bestOutput && typeof bestOutput === "object" ? bestOutput : {};
+  output.sectionStage = "sentence";
+  output.sectionWarning = "";
+  output.stageWarnings = removeNoUsableSentenceWarnings(output.stageWarnings);
+  output.sentenceCorrections = ensureArray(output.sentenceCorrections);
+  output.detailedSentenceCorrections = ensureArray(output.detailedSentenceCorrections);
+  output.sentenceCorrectionSummary = output.sentenceCorrectionSummary && typeof output.sentenceCorrectionSummary === "object"
+    ? output.sentenceCorrectionSummary
+    : {};
+  output.sentenceCorrectionSummary.message = output.sentenceCorrectionSummary.message || "No major score-impacting sentence errors were found in this high-band response.";
+  output.sentenceCorrectionSummary.messageZh = output.sentenceCorrectionSummary.messageZh || "这篇高分作文没有发现明显影响分数的逐句错误，重点是自然度和细节润色。";
+  output.errorAnalysis = output.errorAnalysis && typeof output.errorAnalysis === "object" ? output.errorAnalysis : {};
+  output.errorAnalysis.summary = output.errorAnalysis.summary || "No major score-impacting sentence errors were returned; at this band, sentence work should focus on naturalness, concision, and register precision rather than basic correction.";
+  output.errorAnalysis.summaryZh = output.errorAnalysis.summaryZh || "未返回明显影响分数的逐句错误；这个分数段应重点润色自然度、简洁度和语气精准度，而不是基础纠错。";
+  output.correctionPriority = output.correctionPriority && typeof output.correctionPriority === "object" ? output.correctionPriority : { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] };
+  output.correctionPriority.polishLater = ensureArray(output.correctionPriority.polishLater);
+  if (!output.correctionPriority.polishLater.some((item) => /naturalness|concision|register/i.test(String(item || "")))) {
+    output.correctionPriority.polishLater.push("Polish naturalness, concision, and register precision; no major sentence-level error blocks the score.");
+  }
+  output.correctionPriority.polishLaterZh = ensureArray(output.correctionPriority.polishLaterZh);
+  if (!output.correctionPriority.polishLaterZh.some((item) => String(item || "").includes("自然度"))) {
+    output.correctionPriority.polishLaterZh.push("润色表达自然度、简洁度和语气精准度；没有明显逐句错误拉低分数。");
+  }
+  return output;
+}
+
 function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", previousIssue = "") {
   return [
     buildFocusedSectionPrompt(body, mode, section, locale),
@@ -3181,6 +3257,10 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     bestOutput.sectionStage = section;
     bestOutput.sectionWarning = "";
     return bestOutput;
+  }
+
+  if (section === "sentence" && shouldTreatEmptySentenceStageAsValid(body, bestOutput)) {
+    return applyEmptySentenceStageHighBandFallback(bestOutput, body);
   }
 
   if (section === "grammar") {
@@ -5182,6 +5262,135 @@ function isLowBandTemplateTextFinal(value) {
   ].some((signal) => text.includes(signal));
 }
 
+
+function isOverAdvancedHighBandAdviceFinal(value) {
+  const text = finalGateText(value);
+  if (!text) return false;
+  return [
+    "sophisticated lexical items",
+    "more sophisticated lexical",
+    "synergistic opportunities",
+    "holistic understanding",
+    "inversion",
+    "more complex conditional forms",
+    "complex conditional forms",
+    "flawless grammatical accuracy",
+    "punctuation is consistently perfect",
+    "perfect punctuation",
+    "aim for flawless",
+    "less common lexical items",
+    "use a wider range of linking phrases",
+    "more complex grammatical structures"
+  ].some((signal) => text.includes(signal));
+}
+
+function highBandAdviceOnlyReplacementFinal(name, task) {
+  const firstCriterion = firstCriterionName(task);
+  if (name === firstCriterion) {
+    return task === "Task 1"
+      ? {
+          howToImprove: "At this band, improve by making each detail more specific, concise, and naturally useful for the manager-reader.",
+          howToImproveZh: "这个分数段应把细节写得更具体、更简洁，并且更自然地服务于经理读者。"
+        }
+      : {
+          howToImprove: "At this band, improve by sharpening the line of reasoning, making examples more precise, and keeping the argument natural.",
+          howToImproveZh: "这个分数段应让论证线更清楚、例子更精准，并保持表达自然。"
+        };
+  }
+  if (name === "Coherence and Cohesion") {
+    return {
+      howToImprove: "Polish paragraph transitions so the progression feels effortless, rather than adding more obvious linking phrases.",
+      howToImproveZh: "润色段落过渡，让推进更自然，而不是堆更多明显连接词。"
+    };
+  }
+  if (name === "Lexical Resource") {
+    return {
+      howToImprove: task === "Task 1"
+        ? "Choose wording that is more specific to the workplace situation while keeping the letter natural and not over-formal."
+        : "Choose more precise topic wording where it genuinely clarifies the argument, without forcing rare or showy vocabulary.",
+      howToImproveZh: task === "Task 1"
+        ? "选择更贴合职场情境的措辞，同时保持书信自然，不要过度正式。"
+        : "只在能让论证更清楚时使用更精准的话题词，不要强行使用生僻或炫技词汇。"
+    };
+  }
+  if (name === "Grammatical Range and Accuracy") {
+    return {
+      howToImprove: "Polish small accuracy, punctuation, and sentence-balance details; do not add complex structures just to look advanced.",
+      howToImproveZh: "润色轻微准确性、标点和句子平衡问题，不要为了显得高级而硬加复杂结构。"
+    };
+  }
+  return {
+    howToImprove: "Focus on naturalness, precision, concision, and consistency rather than adding showy language.",
+    howToImproveZh: "重点提升自然度、精准度、简洁度和一致性，而不是增加炫技表达。"
+  };
+}
+
+function sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body = {}) {
+  if (!result?.criteria || typeof result.criteria !== "object") return;
+  if (!isHighBandResultFinal(result)) return;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  Object.entries(result.criteria).forEach(([name, item]) => {
+    if (!item || typeof item !== "object") return;
+    const band = Number(item.band);
+    if (!Number.isFinite(band) || band < 7.5) return;
+    if (!isOverAdvancedHighBandAdviceFinal([item.howToImprove, item.howToImproveZh, item.feedback].join(" "))) return;
+    const replacement = highBandAdviceOnlyReplacementFinal(name, task);
+    item.howToImprove = replacement.howToImprove;
+    item.howToImproveZh = replacement.howToImproveZh;
+  });
+}
+
+function sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body = {}) {
+  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const replacements = {
+    taskAchievementAdvice: task === "Task 1"
+      ? ["Make the workplace benefit and career-development details even more specific while keeping the letter natural and concise."]
+      : ["Sharpen the central line of reasoning and make examples more precise rather than adding more complex language."],
+    taskAchievementAdviceZh: task === "Task 1"
+      ? ["把公司受益和职业发展细节写得更具体，同时保持书信自然简洁。"]
+      : ["让核心论证线更清楚，例子更精准，而不是增加复杂语言。"],
+    coherenceAdvice: ["Make transitions feel effortless by linking each paragraph’s purpose naturally to the next."],
+    coherenceAdviceZh: ["让段落目的之间自然衔接，使过渡更顺，而不是机械增加连接词。"],
+    lexicalAdvice: task === "Task 1"
+      ? ["Use more situation-specific workplace wording only where it makes the letter clearer and more natural."]
+      : ["Use more precise topic vocabulary only where it clarifies the argument; avoid rare vocabulary for its own sake."],
+    lexicalAdviceZh: task === "Task 1"
+      ? ["只在能让书信更清楚自然时，使用更贴合职场情境的词。"]
+      : ["只在能让论证更清楚时使用更精准的话题词，避免为了高级而用生僻词。"],
+    grammarAdvice: ["Polish minor accuracy, punctuation, and sentence rhythm; avoid adding complex structures just to appear advanced."],
+    grammarAdviceZh: ["润色轻微准确性、标点和句子节奏，不要为了显得高级而硬加复杂结构。"]
+  };
+
+  [
+    ["taskAchievementAdvice", "taskAchievementAdviceZh"],
+    ["coherenceAdvice", "coherenceAdviceZh"],
+    ["lexicalAdvice", "lexicalAdviceZh"],
+    ["grammarAdvice", "grammarAdviceZh"]
+  ].forEach(([enKey, zhKey]) => {
+    const items = ensureArray(result[enKey]);
+    if (!items.some(isOverAdvancedHighBandAdviceFinal)) return;
+    result[enKey] = replacements[enKey];
+    result[zhKey] = replacements[zhKey];
+  });
+
+  if (result.targetImprovementPlan?.criterionUpgrades && Array.isArray(result.targetImprovementPlan.criterionUpgrades)) {
+    result.targetImprovementPlan.criterionUpgrades = result.targetImprovementPlan.criterionUpgrades.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const updated = { ...item };
+      if (isOverAdvancedHighBandAdviceFinal([updated.action, updated.exampleUpgrade, updated.target].join(" "))) {
+        updated.action = "Polish naturalness, specificity, concision, and consistency instead of adding showy complexity.";
+        updated.actionZh = "润色自然度、具体性、简洁度和一致性，而不是增加炫技复杂度。";
+        if (isOverAdvancedHighBandAdviceFinal(updated.exampleUpgrade)) {
+          updated.exampleUpgrade = "Make the point more specific and natural while preserving the original meaning.";
+          updated.exampleUpgradeZh = "在保留原意的基础上，把表达写得更具体、更自然。";
+        }
+      }
+      return updated;
+    });
+  }
+}
+
 function highBandCriterionReplacementFinal(name, task) {
   const firstCriterion = firstCriterionName(task);
 
@@ -5694,6 +5903,8 @@ function finalQualityGate(result, body = {}) {
 
   sanitizeStrengthProblemBucketsFinal(result);
   polishHighBandCriteriaFinal(result, body);
+  sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body);
+  sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body);
   removeHighBandContradictionsFinal(result);
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
@@ -5706,6 +5917,8 @@ function finalQualityGate(result, body = {}) {
 
   sanitizeStrengthProblemBucketsFinal(result);
   polishHighBandCriteriaFinal(result, body);
+  sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body);
+  sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body);
   removeHighBandContradictionsFinal(result);
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
