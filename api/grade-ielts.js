@@ -566,12 +566,19 @@ function buildExpectedJsonShape(task, locale = "en") {
       polishLaterZh: []
     },
     taskAchievementAdvice: ["..."],
+    taskAchievementAdviceZh: emptyForLocaleZh(["任务回应建议中文解释"], locale),
     coherenceAdvice: ["..."],
+    coherenceAdviceZh: emptyForLocaleZh(["结构衔接建议中文解释"], locale),
     lexicalAdvice: ["..."],
+    lexicalAdviceZh: emptyForLocaleZh(["词汇建议中文解释"], locale),
     grammarAdvice: ["..."],
+    grammarAdviceZh: emptyForLocaleZh(["语法建议中文解释"], locale),
     band5FixPlan: ["..."],
+    band5FixPlanZh: emptyForLocaleZh(["Band 5 建议中文解释"], locale),
     band6UpgradePlan: ["..."],
+    band6UpgradePlanZh: emptyForLocaleZh(["Band 6 建议中文解释"], locale),
     band7UpgradePlan: ["..."],
+    band7UpgradePlanZh: emptyForLocaleZh(["Band 7 建议中文解释"], locale),
     modelAnswerOutline: "...",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
@@ -703,12 +710,19 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
     targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
+    taskAchievementAdviceZh: [],
     coherenceAdvice: [],
+    coherenceAdviceZh: [],
     lexicalAdvice: [],
+    lexicalAdviceZh: [],
     grammarAdvice: [],
+    grammarAdviceZh: [],
     band5FixPlan: [],
+    band5FixPlanZh: [],
     band6UpgradePlan: [],
+    band6UpgradePlanZh: [],
     band7UpgradePlan: [],
+    band7UpgradePlanZh: [],
     modelAnswerOutline: "",
     revisedEssayBand5: isRevision ? "" : "",
     revisedEssayBand6: "",
@@ -948,12 +962,19 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
     task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     taskAchievementAdvice: [],
+    taskAchievementAdviceZh: [],
     coherenceAdvice: [],
+    coherenceAdviceZh: [],
     lexicalAdvice: [],
+    lexicalAdviceZh: [],
     grammarAdvice: [],
+    grammarAdviceZh: [],
     band5FixPlan: [],
+    band5FixPlanZh: [],
     band6UpgradePlan: [],
+    band6UpgradePlanZh: [],
     band7UpgradePlan: [],
+    band7UpgradePlanZh: [],
     revisionNotes: [],
     revisionNotesZh: []
   };
@@ -976,6 +997,8 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use exactly these keys: criterion, target, action, actionZh. The action field must be a concrete step, not blank.",
     "Write every correction and betterExpression at the target level, not far above it.",
     "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: do not give all plans equal priority. Put the most relevant plan for the target range first and make it the most detailed. If the target range is above Band 7, put the Band 7.5-9 coaching mainly in targetImprovementPlan, criterionUpgrades, practiceTasks, and band7UpgradePlan.",
+    "For every advice array, also return a matching short Chinese helper array: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. These are not full translations; they are concise explanations for Chinese learners.",
+    "Do not return blank objects in errorAnalysis.errorPatterns, targetImprovementPlan.criterionUpgrades, or developmentAdvice. Omit empty objects and return useful text instead.",
     "For each correction item, explain exactly how the change helps the user reach the target range.",
     "Chinese helper notes must be short and appear only in *Zh fields.",
     "",
@@ -1448,12 +1471,19 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
     targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", target: "", action: "", actionZh: "" }, { criterion: "Coherence and Cohesion", target: "", action: "", actionZh: "" }, { criterion: "Lexical Resource", target: "", action: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", target: "", action: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
+    taskAchievementAdviceZh: [],
     coherenceAdvice: [],
+    coherenceAdviceZh: [],
     lexicalAdvice: [],
+    lexicalAdviceZh: [],
     grammarAdvice: [],
+    grammarAdviceZh: [],
     band5FixPlan: [],
+    band5FixPlanZh: [],
     band6UpgradePlan: [],
+    band6UpgradePlanZh: [],
     band7UpgradePlan: [],
+    band7UpgradePlanZh: [],
     modelAnswerOutline: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
@@ -2106,18 +2136,27 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
       task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
       taskAchievementAdvice: [],
+      taskAchievementAdviceZh: [],
       coherenceAdvice: [],
+      coherenceAdviceZh: [],
       lexicalAdvice: [],
+      lexicalAdviceZh: [],
       grammarAdvice: [],
+      grammarAdviceZh: [],
       band5FixPlan: [],
+      band5FixPlanZh: [],
       band6UpgradePlan: [],
+      band6UpgradePlanZh: [],
       band7UpgradePlan: [],
+      band7UpgradePlanZh: [],
       errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
     }),
     "Give detailed IELTS coaching based on the current band and the next realistic target range.",
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, target, action, actionZh: one for Task Response/Task Achievement, one for Coherence and Cohesion, one for Lexical Resource, and one for Grammatical Range and Accuracy.",
     "Focus on improving 0.5-1 band at a time, with Band 5 as the first floor for very weak writing.",
     "Give concrete actions, not generic advice. Include task-specific advice.",
+    "For every English advice array, return a matching short Chinese helper array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, and band7UpgradePlanZh.",
+    "Do not return blank errorPatterns or blank criterionUpgrades. If an object has no useful text, omit it instead of returning empty labels.",
     "For Task 1: opening, closing, tone, purpose, bullet coverage.",
     "For Task 2: position, introduction, body paragraph development, examples, conclusion, relevance.",
     ...common
@@ -3523,6 +3562,61 @@ function backfillChineseHelperNotes(normalized, body) {
   if (!Array.isArray(normalized.correctionPriority.polishLaterZh) || !normalized.correctionPriority.polishLaterZh.length) {
     normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLater).map(() => "最后再优化表达自然度。").slice(0, 5);
   }
+
+  const makeAdviceZh = (items, type) => ensureArray(items).map((item) => {
+    const text = String(item || "").toLowerCase();
+    if (type === "task") {
+      if (text.includes("position") || text.includes("opinion")) return "明确表达立场。";
+      if (text.includes("example")) return "用具体例子展开。";
+      if (text.includes("word")) return "补充内容达到建议字数。";
+      return "更完整地回应题目。";
+    }
+    if (type === "coherence") {
+      if (text.includes("paragraph")) return "分段更清楚。";
+      if (text.includes("link")) return "衔接更自然。";
+      return "让文章逻辑更连贯。";
+    }
+    if (type === "lexical") {
+      if (text.includes("vocabulary") || text.includes("word")) return "替换模糊词，使用题目相关词汇。";
+      return "提升词汇准确性。";
+    }
+    if (type === "grammar") {
+      if (text.includes("tense")) return "检查动词时态。";
+      if (text.includes("article")) return "注意冠词使用。";
+      return "先保证句子语法准确。";
+    }
+    if (type === "band5") return "先把作文写完整、清楚、少错。";
+    if (type === "band6") return "再提升展开、衔接和句型变化。";
+    if (type === "band7") return "最后提升自然度、精准度和论证深度。";
+    return "按这个建议逐步提升。";
+  });
+
+  if (!Array.isArray(normalized.taskAchievementAdviceZh) || !normalized.taskAchievementAdviceZh.length) normalized.taskAchievementAdviceZh = makeAdviceZh(normalized.taskAchievementAdvice, "task").slice(0, 8);
+  if (!Array.isArray(normalized.coherenceAdviceZh) || !normalized.coherenceAdviceZh.length) normalized.coherenceAdviceZh = makeAdviceZh(normalized.coherenceAdvice, "coherence").slice(0, 8);
+  if (!Array.isArray(normalized.lexicalAdviceZh) || !normalized.lexicalAdviceZh.length) normalized.lexicalAdviceZh = makeAdviceZh(normalized.lexicalAdvice, "lexical").slice(0, 8);
+  if (!Array.isArray(normalized.grammarAdviceZh) || !normalized.grammarAdviceZh.length) normalized.grammarAdviceZh = makeAdviceZh(normalized.grammarAdvice, "grammar").slice(0, 8);
+  if (!Array.isArray(normalized.band5FixPlanZh) || !normalized.band5FixPlanZh.length) normalized.band5FixPlanZh = makeAdviceZh(normalized.band5FixPlan, "band5").slice(0, 8);
+  if (!Array.isArray(normalized.band6UpgradePlanZh) || !normalized.band6UpgradePlanZh.length) normalized.band6UpgradePlanZh = makeAdviceZh(normalized.band6UpgradePlan, "band6").slice(0, 8);
+  if (!Array.isArray(normalized.band7UpgradePlanZh) || !normalized.band7UpgradePlanZh.length) normalized.band7UpgradePlanZh = makeAdviceZh(normalized.band7UpgradePlan, "band7").slice(0, 8);
+
+  if (normalized.task2EssayCorrections && typeof normalized.task2EssayCorrections === "object") {
+    if (!hasUsefulText(normalized.task2EssayCorrections.positionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.positionComment)) normalized.task2EssayCorrections.positionCommentZh = "这里说明立场是否清楚。";
+    if (!hasUsefulText(normalized.task2EssayCorrections.introductionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.introductionComment)) normalized.task2EssayCorrections.introductionCommentZh = "这里说明开头是否直接回应题目。";
+    if (!hasUsefulText(normalized.task2EssayCorrections.bodyParagraphCommentZh) && hasUsefulText(normalized.task2EssayCorrections.bodyParagraphComment)) normalized.task2EssayCorrections.bodyParagraphCommentZh = "这里说明主体段展开是否充分。";
+    if (!hasUsefulText(normalized.task2EssayCorrections.exampleCommentZh) && hasUsefulText(normalized.task2EssayCorrections.exampleComment)) normalized.task2EssayCorrections.exampleCommentZh = "这里说明例子是否具体有效。";
+    if (!hasUsefulText(normalized.task2EssayCorrections.conclusionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.conclusionComment)) normalized.task2EssayCorrections.conclusionCommentZh = "这里说明结尾是否总结立场。";
+    if (!Array.isArray(normalized.task2EssayCorrections.developmentAdviceZh) || !normalized.task2EssayCorrections.developmentAdviceZh.length) {
+      normalized.task2EssayCorrections.developmentAdviceZh = ensureArray(normalized.task2EssayCorrections.developmentAdvice).map(() => "这个建议可以帮助观点展开更充分。").slice(0, 8);
+    }
+  }
+
+  if (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object") {
+    if (!hasUsefulText(normalized.task1LetterCorrections.openingCommentZh) && hasUsefulText(normalized.task1LetterCorrections.openingComment)) normalized.task1LetterCorrections.openingCommentZh = "这里说明开头是否合适。";
+    if (!hasUsefulText(normalized.task1LetterCorrections.closingCommentZh) && hasUsefulText(normalized.task1LetterCorrections.closingComment)) normalized.task1LetterCorrections.closingCommentZh = "这里说明结尾是否合适。";
+    if (!hasUsefulText(normalized.task1LetterCorrections.toneCommentZh) && hasUsefulText(normalized.task1LetterCorrections.toneComment)) normalized.task1LetterCorrections.toneCommentZh = "这里说明语气是否合适。";
+    if (!hasUsefulText(normalized.task1LetterCorrections.purposeCommentZh) && hasUsefulText(normalized.task1LetterCorrections.purposeComment)) normalized.task1LetterCorrections.purposeCommentZh = "这里说明写信目的是否清楚。";
+  }
+
 }
 
 function hasHardLowBandEvidence(diagnostics, words, task) {
@@ -3702,7 +3796,9 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.grammarErrors = ensureArray(cleanedNormalizedCorrections.grammarErrors).slice(0, correctionLimit);
   normalized.sentenceCorrections = ensureArray(cleanedNormalizedCorrections.sentenceCorrections).slice(0, correctionLimit);
   normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
-  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, 24);
+  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns)
+    .filter((item) => item && typeof item === "object" && (hasUsefulText(item.type) || hasUsefulText(item.impactOnBand) || hasUsefulText(item.howToFix)))
+    .slice(0, 24);
   normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 16);
   normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 16);
   normalized.detailedSentenceCorrections = ensureArray(cleanedNormalizedCorrections.detailedSentenceCorrections).slice(0, correctionLimit);
@@ -3719,13 +3815,21 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.correctionPriority.fixFirstZh = ensureArray(normalized.correctionPriority.fixFirstZh).slice(0, 5);
   normalized.correctionPriority.fixNextZh = ensureArray(normalized.correctionPriority.fixNextZh).slice(0, 5);
   normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLaterZh).slice(0, 5);
-  normalized.taskAchievementAdvice = ensureArray(normalized.taskAchievementAdvice).slice(0, 5);
-  normalized.coherenceAdvice = ensureArray(normalized.coherenceAdvice).slice(0, 5);
-  normalized.lexicalAdvice = ensureArray(normalized.lexicalAdvice).slice(0, 5);
-  normalized.grammarAdvice = ensureArray(normalized.grammarAdvice).slice(0, 5);
-  normalized.band5FixPlan = ensureArray(normalized.band5FixPlan).slice(0, 5);
-  normalized.band6UpgradePlan = ensureArray(normalized.band6UpgradePlan).slice(0, 5);
-  normalized.band7UpgradePlan = ensureArray(normalized.band7UpgradePlan).slice(0, 5);
+  const adviceLimit = 8;
+  normalized.taskAchievementAdvice = ensureArray(normalized.taskAchievementAdvice).slice(0, adviceLimit);
+  normalized.taskAchievementAdviceZh = ensureArray(normalized.taskAchievementAdviceZh).slice(0, adviceLimit);
+  normalized.coherenceAdvice = ensureArray(normalized.coherenceAdvice).slice(0, adviceLimit);
+  normalized.coherenceAdviceZh = ensureArray(normalized.coherenceAdviceZh).slice(0, adviceLimit);
+  normalized.lexicalAdvice = ensureArray(normalized.lexicalAdvice).slice(0, adviceLimit);
+  normalized.lexicalAdviceZh = ensureArray(normalized.lexicalAdviceZh).slice(0, adviceLimit);
+  normalized.grammarAdvice = ensureArray(normalized.grammarAdvice).slice(0, adviceLimit);
+  normalized.grammarAdviceZh = ensureArray(normalized.grammarAdviceZh).slice(0, adviceLimit);
+  normalized.band5FixPlan = ensureArray(normalized.band5FixPlan).slice(0, adviceLimit);
+  normalized.band5FixPlanZh = ensureArray(normalized.band5FixPlanZh).slice(0, adviceLimit);
+  normalized.band6UpgradePlan = ensureArray(normalized.band6UpgradePlan).slice(0, adviceLimit);
+  normalized.band6UpgradePlanZh = ensureArray(normalized.band6UpgradePlanZh).slice(0, adviceLimit);
+  normalized.band7UpgradePlan = ensureArray(normalized.band7UpgradePlan).slice(0, adviceLimit);
+  normalized.band7UpgradePlanZh = ensureArray(normalized.band7UpgradePlanZh).slice(0, adviceLimit);
   normalized.revisionNotes = ensureArray(normalized.revisionNotes).slice(0, 5);
   normalized.revisionNotesZh = normalized.revisionNotesZh || [];
   normalized.revisionNotesZh = ensureArray(normalized.revisionNotesZh).slice(0, 5);
