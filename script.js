@@ -279,6 +279,44 @@ function bindZhToggles(scope) {
   });
 }
 
+
+function renderFeedbackTools() {
+  return `<div class="grading-tools" role="toolbar" aria-label="AI feedback tools" style="position:sticky;top:0;z-index:5;background:var(--card, #fff);padding:8px 0;border-bottom:1px solid var(--border, #d9e2ec);">
+    <button class="secondary" type="button" data-feedback-tool="expand-zh">展开全部中文</button>
+    <button class="secondary" type="button" data-feedback-tool="collapse-zh">收起全部中文</button>
+    <button class="secondary" type="button" data-feedback-tool="expand-details">展开全部折叠</button>
+    <button class="secondary" type="button" data-feedback-tool="collapse-details">收起全部折叠</button>
+  </div>`;
+}
+
+function setAllZhPanels(scope, expanded) {
+  scope.querySelectorAll(".zh-toggle").forEach((button) => {
+    const note = button.nextElementSibling;
+    if (!note) return;
+    note.classList.toggle("hidden", !expanded);
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "收起中文" : "中文解释";
+  });
+}
+
+function setAllDetails(scope, expanded) {
+  scope.querySelectorAll("details").forEach((detail) => {
+    detail.open = expanded;
+  });
+}
+
+function bindFeedbackTools(scope) {
+  scope.querySelectorAll("[data-feedback-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.feedbackTool;
+      if (action === "expand-zh") setAllZhPanels(scope, true);
+      if (action === "collapse-zh") setAllZhPanels(scope, false);
+      if (action === "expand-details") setAllDetails(scope, true);
+      if (action === "collapse-details") setAllDetails(scope, false);
+    });
+  });
+}
+
 function resetGradingPanel() {
   setGradingStatus("等待批改");
   els.gradingResults.innerHTML = "";
@@ -337,8 +375,10 @@ function mergeAiStageResult(base, incoming) {
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const arrayFields = [
     "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
-    "taskAchievementAdvice", "coherenceAdvice", "lexicalAdvice", "grammarAdvice",
-    "band5FixPlan", "band6UpgradePlan", "band7UpgradePlan", "revisionNotes", "revisionNotesZh",
+    "taskAchievementAdvice", "taskAchievementAdviceZh", "coherenceAdvice", "coherenceAdviceZh",
+    "lexicalAdvice", "lexicalAdviceZh", "grammarAdvice", "grammarAdviceZh",
+    "band5FixPlan", "band5FixPlanZh", "band6UpgradePlan", "band6UpgradePlanZh",
+    "band7UpgradePlan", "band7UpgradePlanZh", "revisionNotes", "revisionNotesZh",
     "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "stageWarnings", "stageProgress"
   ];
   const objectFields = [
@@ -730,21 +770,22 @@ function renderCopyButton(text, label = "复制") {
 
 function renderErrorAnalysis(analysis) {
   if (!analysis || typeof analysis !== "object" || !hasAnyText(analysis)) return "";
-  const patterns = Array.isArray(analysis.errorPatterns) ? analysis.errorPatterns : [];
+  const patterns = Array.isArray(analysis.errorPatterns)
+    ? analysis.errorPatterns.filter((item) => item && (hasAnyText(item.type) || hasAnyText(item.impactOnBand) || hasAnyText(item.howToFix)))
+    : [];
   return `<section class="grading-section">
     <h4>主要错误总结</h4>
     ${analysis.summary ? `<p>${escapeHtml(analysis.summary)}</p>` : ""}
     ${analysis.summaryZh ? renderZhToggle(analysis.summaryZh) : ""}
     ${patterns.length ? `<div class="correction-list">${patterns.map((item) => `
       <div class="correction-item">
-        <p><strong>错误类型：</strong>${escapeHtml(item.type || "")}${item.typeZh ? ` / ${escapeHtml(item.typeZh)}` : ""}</p>
-        <p><strong>出现频率：</strong>${escapeHtml(item.frequency || "未说明")}</p>
-        <p><strong>对分数影响：</strong>${escapeHtml(item.impactOnBand || "")}</p>
-        <p><strong>怎么改：</strong>${escapeHtml(item.howToFix || "")}</p>
+        ${hasAnyText(item.type) || hasAnyText(item.typeZh) ? `<p><strong>错误类型：</strong>${escapeHtml(item.type || "")}${item.typeZh ? ` / ${escapeHtml(item.typeZh)}` : ""}</p>` : ""}
+        ${hasAnyText(item.frequency) ? `<p><strong>出现频率：</strong>${escapeHtml(item.frequency)}</p>` : ""}
+        ${hasAnyText(item.impactOnBand) ? `<p><strong>对分数影响：</strong>${escapeHtml(item.impactOnBand)}</p>` : ""}
+        ${hasAnyText(item.howToFix) ? `<p><strong>怎么改：</strong>${escapeHtml(item.howToFix)}</p>` : ""}
         ${renderZhToggle([item.impactOnBandZh, item.howToFixZh].filter(Boolean).join("\n"))}
       </div>`).join("")}</div>` : ""}
-    ${analysis.priorityFixes?.length ? `<h4>优先修改点</h4>${listHtml(analysis.priorityFixes)}` : ""}
-    ${analysis.priorityFixesZh?.length ? renderZhToggle(analysis.priorityFixesZh.join("\n")) : ""}
+    ${analysis.priorityFixes?.length ? `<h4>优先修改点</h4>${renderListWithTranslations(analysis.priorityFixes, analysis.priorityFixesZh, "No priority fixes are available.")}` : ""}
   </section>`;
 }
 
@@ -1036,6 +1077,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
+    ${renderFeedbackTools()}
     ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
     ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}
@@ -1106,6 +1148,7 @@ function renderGradingResult(result = {}) {
     });
   });
   bindZhToggles(els.gradingResults);
+  bindFeedbackTools(els.gradingResults);
 }
 
 async function copyText(text) {
