@@ -533,6 +533,28 @@ function renderCorrectionPriority(priority) {
   </section>`;
 }
 
+function renderTargetImprovementPlan(plan) {
+  if (!plan || typeof plan !== "object" || !hasAnyText(plan)) return "";
+  const criterionUpgrades = Array.isArray(plan.criterionUpgrades) ? plan.criterionUpgrades : [];
+  return `<section class="grading-section">
+    <h4>下一阶段提分计划 Target Improvement Plan</h4>
+    <div class="compact-facts">
+      <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || "")}</p>
+      <p><strong>目标范围：</strong>${escapeHtml(plan.targetBandRange || "")}</p>
+      ${plan.targetReason ? `<p><strong>为什么是这个目标：</strong>${escapeHtml(plan.targetReason)}</p>` : ""}
+    </div>
+    ${Array.isArray(plan.focus) && plan.focus.length ? `<h4>这次最应该提升的点</h4>${renderListWithTranslations(plan.focus, plan.focusZh, "No target focus was returned.")}` : ""}
+    ${criterionUpgrades.length ? `<h4>四项提分动作</h4><div class="correction-list">${criterionUpgrades.map((item) => `
+      <div class="correction-item">
+        <p><strong>项目：</strong>${escapeHtml(item.criterion || item.name || "")}</p>
+        <p><strong>目标：</strong>${escapeHtml(item.target || item.targetBand || "")}</p>
+        <p><strong>具体动作：</strong>${escapeHtml(item.action || item.advice || "")}</p>
+        ${renderZhToggle(item.actionZh || item.adviceZh || "")}
+      </div>`).join("")}</div>` : ""}
+    ${Array.isArray(plan.practiceTasks) && plan.practiceTasks.length ? `<h4>练习任务</h4>${renderListWithTranslations(plan.practiceTasks, plan.practiceTasksZh, "No practice tasks were returned.")}` : ""}
+  </section>`;
+}
+
 function renderTask1LetterCorrections(corrections) {
   if (!corrections || typeof corrections !== "object" || !hasAnyText(corrections)) return "";
   const bulletAdvice = Array.isArray(corrections.bulletPointAdvice) ? corrections.bulletPointAdvice : [];
@@ -673,6 +695,7 @@ function renderGradingResult(result = {}) {
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
     ${renderCorrectionPriority(result.correctionPriority)}
+    ${renderTargetImprovementPlan(result.targetImprovementPlan)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     <section class="grading-section">
       <h4>拼写错误 Spelling Corrections</h4>
