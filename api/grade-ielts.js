@@ -1386,6 +1386,7 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
   if (jsonMode) requestBody.response_format = { type: "json_object" };
 
   let response;
+  let raw = "";
   try {
     response = await fetch(DEEPSEEK_URL, {
       method: "POST",
@@ -1396,6 +1397,7 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
       body: JSON.stringify(requestBody),
       signal: controller.signal
     });
+    raw = await response.text();
   } catch (error) {
     if (error?.name === "AbortError") {
       const timeoutError = new Error("DeepSeek request timed out.");
@@ -1409,7 +1411,6 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
     clearTimeout(timeout);
   }
 
-  const raw = await response.text();
   if (!response.ok) {
     const error = new Error("DeepSeek API request failed.");
     error.status = response.status;
