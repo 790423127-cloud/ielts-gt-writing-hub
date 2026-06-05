@@ -1251,13 +1251,23 @@ function mergeAiCorrectionDetails(result, correction, body, mode) {
     "grammarErrors",
     "sentenceCorrections",
     "detailedSentenceCorrections",
+
     "taskAchievementAdvice",
+    "taskAchievementAdviceZh",
     "coherenceAdvice",
+    "coherenceAdviceZh",
     "lexicalAdvice",
+    "lexicalAdviceZh",
     "grammarAdvice",
+    "grammarAdviceZh",
+
     "band5FixPlan",
+    "band5FixPlanZh",
     "band6UpgradePlan",
+    "band6UpgradePlanZh",
     "band7UpgradePlan",
+    "band7UpgradePlanZh",
+
     "revisionNotes",
     "revisionNotesZh"
   ];
@@ -2393,7 +2403,7 @@ function adviceZhComplete(output) {
 function hasFocusedSectionUsableContent(section, output, body) {
   const cleaned = sanitizeAiCorrectionPayload(output);
   if (section === "task") {
-    return Boolean(
+    const hasTaskContent = Boolean(
       ensureArray(cleaned.taskAchievementAdvice).length ||
       ensureArray(cleaned.coherenceAdvice).length ||
       ensureArray(cleaned.task1LetterCorrections?.bulletPointAdvice).length ||
@@ -2402,6 +2412,9 @@ function hasFocusedSectionUsableContent(section, output, body) {
       hasUsefulText(cleaned.task2EssayCorrections?.bodyParagraphComment) ||
       hasUsefulText(cleaned.errorAnalysis?.summary)
     );
+    return hasTaskContent &&
+      hasMatchingZhArrayForAdvice(cleaned.taskAchievementAdvice, cleaned.taskAchievementAdviceZh) &&
+      hasMatchingZhArrayForAdvice(cleaned.coherenceAdvice, cleaned.coherenceAdviceZh);
   }
   if (section === "language") {
     return ensureArray(cleaned.grammarErrors).length > 0 ||
@@ -2421,7 +2434,10 @@ function hasFocusedSectionUsableContent(section, output, body) {
     return ensureArray(cleaned.spellingCorrections).length > 0 || hasUsefulText(cleaned.errorAnalysis?.summary);
   }
   if (section === "grammar") {
-    return ensureArray(cleaned.grammarErrors).length > 0 || ensureArray(cleaned.detailedSentenceCorrections).length > 0;
+    return ensureArray(cleaned.grammarErrors).length > 0 ||
+      ensureArray(cleaned.detailedSentenceCorrections).length > 0 ||
+      ensureArray(cleaned.grammarAdvice).length > 0 ||
+      hasUsefulText(cleaned.errorAnalysis?.summary);
   }
   if (section === "sentence") {
     return ensureArray(cleaned.sentenceCorrections).length > 0 || ensureArray(cleaned.detailedSentenceCorrections).length > 0;
@@ -2460,7 +2476,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "task" ? "Return task-specific correction content: Task 1 bullet/tone/purpose advice or Task 2 position/development/conclusion advice, plus taskAchievementAdvice and coherenceAdvice." : "",
     section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
-    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text." : "",
+    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
     section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence and betterExpression." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
@@ -4702,6 +4718,62 @@ function ensureTaskCorrectionZhFieldsFinal(result) {
   result.modelAnswerOutlineZh = result.modelAnswerOutlineZh || "";
 }
 
+function bulletRequirementText(item) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  if (typeof item === "object") return String(item.requirement || item.bulletPoint || item.point || item.taskRequirement || item.text || "");
+  return String(item || "");
+}
+
+function isPlaceholderBulletRequirement(item) {
+  const text = bulletRequirementText(item).trim();
+  return !text || /^bullet\s*point\s*\d+$/i.test(text) || /^point\s*\d+$/i.test(text);
+}
+
+function promptBulletRequirements(body) {
+  const fromPayload = ensureArray(body?.task1BulletPoints)
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if (fromPayload.length) return fromPayload.slice(0, 5);
+  return extractPromptBulletPoints(body?.questionPrompt).slice(0, 5);
+}
+
+function repairTaskRequirementAnalysisFinal(result, body = {}) {
+  if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
+  const points = promptBulletRequirements(body);
+  if (!points.length) return;
+
+  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object"
+    ? result.taskRequirementAnalysis
+    : {};
+  const bullets = ensureArray(analysis.bulletPoints);
+  const hasPlaceholder = !bullets.length || bullets.some((item) => isPlaceholderBulletRequirement(item));
+  const hasTooFewRealBullets = bullets.filter((item) => !isPlaceholderBulletRequirement(item)).length < Math.min(points.length, 3);
+
+  if (hasPlaceholder || hasTooFewRealBullets) {
+    analysis.taskType = "task1";
+    analysis.bulletPoints = points.map((requirement) => ({
+      requirement,
+      covered: null,
+      evidence: "AI did not return reliable bullet-point coverage evidence for this item.",
+      problem: "Coverage is unknown rather than confirmed missing.",
+      suggestion: "Retry or check the letter manually to confirm whether this bullet point is directly answered with concrete detail.",
+      coverageUnknown: true
+    }));
+    analysis.missingRequirements = [];
+    analysis.taskMatchSummary = analysis.taskMatchSummary || "The prompt bullet points were extracted, but reliable AI coverage evidence was not returned for every point.";
+    result.taskRequirementAnalysis = analysis;
+
+    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object"
+      ? result.taskRequirementAnalysisZh
+      : {};
+    if (!Array.isArray(result.taskRequirementAnalysisZh.bulletPointsZh) || !result.taskRequirementAnalysisZh.bulletPointsZh.length) {
+      result.taskRequirementAnalysisZh.bulletPointsZh = points.map(() => "系统已提取该题目要点，但本次 AI 没有可靠返回覆盖证据；这里不能直接判定为未覆盖。");
+    }
+    result.taskRequirementAnalysisZh.taskMatchSummaryZh = result.taskRequirementAnalysisZh.taskMatchSummaryZh || "题目要点已提取，但覆盖情况需要更可靠的 AI 证据。";
+  }
+}
+
 function finalQualityGate(result, body = {}) {
   if (!result || typeof result !== "object") return result;
 
@@ -4710,6 +4782,7 @@ function finalQualityGate(result, body = {}) {
   removeHighBandContradictionsFinal(result);
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
+  repairTaskRequirementAnalysisFinal(result, body);
   cleanGenericChineseFieldsFinal(result);
 
   sanitizeStrengthProblemBucketsFinal(result);
@@ -4717,6 +4790,7 @@ function finalQualityGate(result, body = {}) {
   removeHighBandContradictionsFinal(result);
   removeContradictoryLowBandDiagnosticsFinal(result);
   ensureTaskCorrectionZhFieldsFinal(result);
+  repairTaskRequirementAnalysisFinal(result, body);
   cleanGenericChineseFieldsFinal(result);
 
   return result;
