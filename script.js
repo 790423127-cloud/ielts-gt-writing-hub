@@ -331,6 +331,72 @@ function gradingPayload() {
   };
 }
 
+
+function mergeAiStageResult(base, incoming) {
+  const output = base && typeof base === "object" ? { ...base } : {};
+  const data = incoming && typeof incoming === "object" ? incoming : {};
+  const arrayFields = [
+    "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
+    "taskAchievementAdvice", "coherenceAdvice", "lexicalAdvice", "grammarAdvice",
+    "band5FixPlan", "band6UpgradePlan", "band7UpgradePlan", "revisionNotes", "revisionNotesZh",
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh"
+  ];
+  const objectFields = [
+    "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
+    "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
+    "scoreCalibration", "scoreCalibrationZh", "lowBandDiagnostics", "lowBandDiagnosticsZh",
+    "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck"
+  ];
+  arrayFields.forEach((field) => {
+    if (Array.isArray(data[field]) && data[field].length) output[field] = data[field];
+  });
+  objectFields.forEach((field) => {
+    if (data[field] && typeof data[field] === "object") output[field] = { ...(output[field] || {}), ...data[field] };
+  });
+  [
+    "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline",
+    "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "disclaimer"
+  ].forEach((field) => {
+    if (typeof data[field] === "string" && data[field].trim()) output[field] = data[field];
+  });
+  if (data.criteria && typeof data.criteria === "object") output.criteria = data.criteria;
+  const mayReplaceScore = !output.overallBand || data.aiStage === "score" || data.aiStage === "all" || !data.aiStage;
+  if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
+  if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
+  if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
+  if (typeof data.wordCountThresholdUsed !== "undefined") output.wordCountThresholdUsed = data.wordCountThresholdUsed;
+  if (typeof data.wordCountStatus !== "undefined") output.wordCountStatus = data.wordCountStatus;
+  output.overallEstimatedBand = output.overallBand;
+  output.revisedEssay = output.revisedEssayBand7 || output.revisedEssayBand6 || output.revisedEssayBand5 || output.revisedEssay || "";
+  return output;
+}
+
+async function postAiStage(endpoint, payload, aiStage, statusText) {
+  setGradingStatus(statusText, "loading");
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 240000) : null;
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, aiStage }),
+      signal: controller ? controller.signal : undefined
+    });
+    if (!response.ok) {
+      const errorInfo = await buildResponseError(response);
+      throw new Error(errorInfo.message);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error(`${statusText} timed out after waiting. Please try again.`);
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function startGrading() {
   if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
   const endpoint = els.gradingEndpointInput.value.trim();
@@ -346,29 +412,52 @@ async function startGrading() {
     setGradingStatus("当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。", "error");
   }
 
-  setGradingStatus("批改中", "loading");
+  setGradingStatus("AI 正在评分，请等待。", "loading");
   els.gradeBtn.disabled = true;
   els.gradingResults.innerHTML = isUnderMinimum
     ? `<p class="ai-warning">当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。</p>`
     : "";
   els.revisionCompareArea.classList.add("hidden");
 
+  const payload = gradingPayload();
+  let result = null;
+  const stageWarnings = [];
+
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(gradingPayload())
-    });
-    if (!response.ok) {
-      const errorInfo = await buildResponseError(response);
-      renderErrorDetails(errorInfo);
-      throw new Error(errorInfo.message);
-    }
-    const result = await response.json();
+    const scoreResult = await postAiStage(endpoint, payload, "score", "第 1 步/3：AI 正在评分与分析题目，请等待。");
+    result = mergeAiStageResult({}, scoreResult);
     renderGradingResult(result);
-    setGradingStatus("批改完成", "done");
+
+    try {
+      const correctionResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result.overallBand }, "correction", "第 2 步/3：AI 正在逐句检查拼写、语法、词汇和结构错误，请等待。");
+      result = mergeAiStageResult(result, correctionResult);
+      renderGradingResult(result);
+    } catch (correctionError) {
+      stageWarnings.push(`详细错误批改未完成：${correctionError.message}`);
+      result.correctionWarning = stageWarnings[stageWarnings.length - 1];
+      renderGradingResult(result);
+    }
+
+    if (payload.mode === "revision") {
+      try {
+        const revisionResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result.overallBand }, "revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。");
+        result = mergeAiStageResult(result, revisionResult);
+        renderGradingResult(result);
+      } catch (revisionError) {
+        stageWarnings.push(`范文/修改版未完成：${revisionError.message}`);
+        result.revisionWarning = stageWarnings[stageWarnings.length - 1];
+        renderGradingResult(result);
+      }
+    }
+
+    if (stageWarnings.length) {
+      setGradingStatus(`批改完成，但部分阶段需要重试：${stageWarnings.join("；")}`, "error");
+    } else {
+      setGradingStatus("批改完成", "done");
+    }
   } catch (error) {
     setGradingStatus(`批改失败：${error.message}`, "error");
+    if (result) renderGradingResult(result);
   } finally {
     els.gradeBtn.disabled = false;
   }
