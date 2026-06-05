@@ -1076,6 +1076,10 @@ function addRevisionTimeoutWarning(result) {
   return updated;
 }
 
+function isDeepSeekTimeoutError(error) {
+  return error?.code === "DEEPSEEK_TIMEOUT" || error?.message === "DeepSeek request timed out.";
+}
+
 async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
   const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
@@ -1107,21 +1111,26 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
   if (correctionSettled.status === "fulfilled") {
     result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
   } else {
-    try {
-      const correctionRetry = await callAiCorrectionPass({
-        apiKey,
-        model,
-        body: { ...body, mode: gradingMode },
-        effectiveMode: gradingMode,
-        locale,
-        deadline,
-        maxTokensOverride: 1800,
-        timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
-      });
-      result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
-    } catch {
-      result.correctionWarning = "AI sentence-level correction timed out. Please retry detailed grading.";
+    if (isDeepSeekTimeoutError(correctionSettled.reason)) {
+      result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
       result.correctionPassWarning = result.correctionWarning;
+    } else {
+      try {
+        const correctionRetry = await callAiCorrectionPass({
+          apiKey,
+          model,
+          body: { ...body, mode: gradingMode },
+          effectiveMode: gradingMode,
+          locale,
+          deadline,
+          maxTokensOverride: 1800,
+          timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+        });
+        result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
+      } catch {
+        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+        result.correctionPassWarning = result.correctionWarning;
+      }
     }
   }
 
@@ -1138,8 +1147,12 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         veryShort
       });
       result = mergeRevisionPassIntoResult(result, revision);
-    } catch {
+    } catch (error) {
       result = addRevisionTimeoutWarning(result);
+      if (isDeepSeekTimeoutError(error)) {
+        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+        result.correctionPassWarning = result.correctionWarning;
+      }
     }
   }
 
