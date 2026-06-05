@@ -28,7 +28,7 @@ const DISCLAIMER = "This is an AI-generated estimated score and revision, not an
 
 const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
   12000,
-  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 25000, 30000)
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 30000, 30000)
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
   30000,
