@@ -28,11 +28,11 @@ const DISCLAIMER = "This is an AI-generated estimated score and revision, not an
 
 const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
   60000,
-  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 150000, 240000)
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 230000, 240000)
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
   120000,
-  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 260000, 290000)
+  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 285000, 290000)
 );
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
@@ -48,6 +48,29 @@ function resolveAiTimeout(deadline, requestedTimeout) {
     ? Math.min(requestedTimeout, AI_SINGLE_REQUEST_TIMEOUT_MS)
     : AI_SINGLE_REQUEST_TIMEOUT_MS;
   return Math.max(1000, Math.min(base, remainingAiTime(deadline)));
+}
+
+const AI_RESPONSE_SAFETY_BUFFER_MS = Math.max(
+  6000,
+  Math.min(Number(process.env.AI_RESPONSE_SAFETY_BUFFER_MS) || 14000, 30000)
+);
+
+function hasEnoughAiTime(deadline, requiredMs) {
+  return remainingAiTime(deadline) > Math.max(1000, Number(requiredMs) || 0) + AI_RESPONSE_SAFETY_BUFFER_MS;
+}
+
+function safePassTimeout(deadline, preferredMs, fallbackMs = 45000) {
+  const preferred = Math.max(1000, Number(preferredMs) || fallbackMs);
+  const remaining = remainingAiTime(deadline) - AI_RESPONSE_SAFETY_BUFFER_MS;
+  return Math.max(1000, Math.min(preferred, AI_SINGLE_REQUEST_TIMEOUT_MS, remaining));
+}
+
+function markAiPassDeferred(output, message) {
+  const target = output && typeof output === "object" ? output : {};
+  target.correctionWarning = target.correctionWarning || message;
+  target.correctionPassWarning = target.correctionPassWarning || message;
+  target.stageWarnings = ensureArray(target.stageWarnings).concat([message]);
+  return target;
 }
 
 
@@ -791,7 +814,7 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
     // Prefer an AI repair call before showing a partial recovery.
     // Earlier versions returned partial data immediately, which caused user-visible
     // messages such as "AI partial output recovered this score" and removed Chinese buttons.
-    if (allowRepair) {
+    if (allowRepair && hasEnoughAiTime(deadline, 12000)) {
       try {
         const repairedText = await callDeepSeek({
           apiKey,
@@ -1422,7 +1445,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
   ].join("\n");
 }
 
-async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline }) {
+async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline, timeoutMs }) {
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   if (!String(body.essay || "").trim()) return {};
   const maxTokens = Math.min(words < 80 ? 4200 : (words < 180 ? 7200 : 10000), 12000);
@@ -1435,7 +1458,7 @@ async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode,
     temperature: 0.0,
     jsonMode: false,
     deadline,
-    timeoutMs: Math.min(28000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    timeoutMs: safePassTimeout(deadline, timeoutMs || Math.min(45000, AI_SINGLE_REQUEST_TIMEOUT_MS), 28000)
   });
   const parsed = await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
   return sanitizeAiCorrectionPayload(parsed);
@@ -1451,13 +1474,17 @@ async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingM
   // only returned errorAnalysis/advice text, force a focused AI correction pass.
   if (hasConcreteAiCorrectionItems(output)) return output;
 
-  if (remainingAiTime(deadline) < 7000) {
-    output.correctionWarning = "AI detailed correction did not complete before the server deadline. Please retry detailed grading.";
-    output.correctionPassWarning = output.correctionWarning;
-    return output;
+  const focusedCorrectionTimeout = safePassTimeout(
+    deadline,
+    Math.max(30000, Number(process.env.AI_FOCUSED_CORRECTION_TIMEOUT_MS) || 45000),
+    30000
+  );
+
+  if (!hasEnoughAiTime(deadline, focusedCorrectionTimeout)) {
+    return markAiPassDeferred(output, "AI detailed correction was deferred because the scoring result needed to be returned before the server deadline. Retry the correction stage for full sentence-level detail.");
   }
 
-  const retryAttempts = remainingAiTime(deadline) > 17000 ? 2 : 1;
+  const retryAttempts = Math.max(1, Math.min(Number(process.env.AI_FOCUSED_CORRECTION_RETRY_ATTEMPTS) || 1, 2));
   let lastError = null;
 
   for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
@@ -1468,7 +1495,8 @@ async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingM
         body: { ...body, mode: gradingMode, correctionRetryAttempt: attempt },
         effectiveMode: gradingMode,
         locale,
-        deadline
+        deadline,
+        timeoutMs: focusedCorrectionTimeout
       });
 
       if (hasConcreteAiCorrectionItems(focusedCorrection)) {
@@ -2414,16 +2442,17 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     sentence: 12000,
     advice: 11000
   };
-  const sectionTimeout = Math.min(
-    AI_SINGLE_REQUEST_TIMEOUT_MS,
-    Math.max(120000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 210000)
+  const sectionTimeout = safePassTimeout(
+    deadline,
+    Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 135000),
+    90000
   );
-  const maxAttempts = section === "spelling" ? 1 : 2;
+  const maxAttempts = Math.max(1, Math.min(Number(process.env.AI_SECTION_RETRY_ATTEMPTS) || 1, 2));
   let lastError = null;
   let bestOutput = { disclaimer: DISCLAIMER };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    if (remainingAiTime(deadline) < 15000) break;
+    if (!hasEnoughAiTime(deadline, sectionTimeout)) break;
     try {
       const userPrompt = attempt === 1
         ? buildFocusedSectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, section, locale)
@@ -2760,7 +2789,13 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
     }
   }
 
-  if (remainingAiTime(deadline) > 9000) {
+  const correctionTimeout = safePassTimeout(
+    deadline,
+    Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000),
+    60000
+  );
+
+  if (hasEnoughAiTime(deadline, correctionTimeout)) {
     try {
       const correction = await callAiCorrectionPass({
         apiKey,
@@ -2768,32 +2803,41 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         body: { ...body, mode: gradingMode, currentOverallBand: result?.overallBand },
         effectiveMode: gradingMode,
         locale,
-        deadline
+        deadline,
+        timeoutMs: correctionTimeout
       });
       result = mergeAiCorrectionDetails(result, correction, body, gradingMode);
     } catch (correctionError) {
-      try {
-        const correctionRetry = await callAiCorrectionPass({
-          apiKey,
-          model,
-          body: { ...body, mode: gradingMode, currentOverallBand: result?.overallBand },
-          effectiveMode: gradingMode,
-          locale,
-          deadline,
-          maxTokensOverride: 4200,
-          timeoutMs: Math.min(10000, AI_SINGLE_REQUEST_TIMEOUT_MS)
-        });
-        result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
-      } catch {
-        result.correctionWarning = isDeepSeekEmptyResponseError(correctionError)
-          ? "AI correction pass returned empty content. The score was returned first. Please retry detailed corrections."
-          : "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
-        result.correctionPassWarning = result.correctionWarning;
+      const canRetryCorrection = !isDeepSeekTimeoutError(correctionError) &&
+        hasEnoughAiTime(deadline, Math.max(12000, Number(process.env.AI_CORRECTION_RETRY_TIMEOUT_MS) || 18000));
+
+      if (canRetryCorrection) {
+        try {
+          const correctionRetry = await callAiCorrectionPass({
+            apiKey,
+            model,
+            body: { ...body, mode: gradingMode, currentOverallBand: result?.overallBand },
+            effectiveMode: gradingMode,
+            locale,
+            deadline,
+            maxTokensOverride: 4200,
+            timeoutMs: safePassTimeout(deadline, Math.max(12000, Number(process.env.AI_CORRECTION_RETRY_TIMEOUT_MS) || 18000), 12000)
+          });
+          result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
+        } catch {
+          result = markAiPassDeferred(result, "AI correction retry did not complete. The AI score was returned first; retry the correction stage for the remaining detail.");
+        }
+      } else {
+        result = markAiPassDeferred(
+          result,
+          isDeepSeekEmptyResponseError(correctionError)
+            ? "AI correction pass returned empty content. The AI score was returned first; retry the correction stage for full detail."
+            : "AI correction pass timed out. The AI score was returned first; retry the correction stage for full detail."
+        );
       }
     }
   } else {
-    result.correctionWarning = "Not enough server time remained for AI detailed correction. The score was returned first. Please retry detailed corrections.";
-    result.correctionPassWarning = result.correctionWarning;
+    result = markAiPassDeferred(result, "Not enough protected server time remained for AI detailed correction. The AI score was returned first; retry the correction stage for full detail.");
   }
 
   result = await ensureAiCorrectionDetails({
@@ -3184,8 +3228,15 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
   let lastError;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
     const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
+    if (!hasEnoughAiTime(deadline, Math.min(requestTimeoutMs, 3000))) {
+      const timeoutError = new Error("DeepSeek request was skipped because the protected server deadline was too close.");
+      timeoutError.code = "DEEPSEEK_TIMEOUT";
+      timeoutError.provider = "deepseek";
+      timeoutError.detail = "The backend stopped before Vercel could generate a 504 timeout.";
+      throw timeoutError;
+    }
+    const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
     const requestBody = {
@@ -3276,11 +3327,11 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
 
 function sendProviderError(req, res, error) {
   if (error.code === "DEEPSEEK_TIMEOUT" || error.message === "DeepSeek request timed out.") {
-    sendJson(req, res, 504, {
-      error: "DeepSeek request timed out.",
+    sendJson(req, res, 503, {
+      error: "DeepSeek request timed out before any AI score could be returned.",
       provider: "deepseek",
-      detail: "The AI provider did not respond before the server timeout.",
-      suggestion: "Please retry, or use the non-revision detailed mode first."
+      detail: "The provider did not return the required scoring result within the protected backend time budget. The request was stopped before Vercel generated a 504.",
+      suggestion: "Retry once. If this repeats, check DeepSeek latency or run the score stage first."
     });
     return true;
   }
