@@ -457,9 +457,18 @@ function gradingPayload() {
 }
 
 
+function scoreAuditHasUsableCorrections(data = {}) {
+  if (!data || typeof data !== "object" || data.scoreAuditSkipped) return false;
+  if (data.aiStage !== "score-audit") return false;
+  const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
+  return Object.values(criteria).some((item) => item && typeof item === "object" && (hasAnyText(item.feedback) || hasAnyText(item.howToImprove)) && Number(item.band) > 1);
+}
+
 function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
+  const incomingStage = data.aiStage || "";
+  const usefulScoreAudit = scoreAuditHasUsableCorrections(data);
   const arrayFields = [
     "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
     "taskAchievementAdvice", "taskAchievementAdviceZh", "coherenceAdvice", "coherenceAdviceZh",
@@ -486,8 +495,11 @@ function mergeAiStageResult(base, incoming) {
   ].forEach((field) => {
     if (typeof data[field] === "string" && data[field].trim()) output[field] = data[field];
   });
-  if (data.criteria && typeof data.criteria === "object") output.criteria = data.criteria;
-  const mayReplaceScore = !output.overallBand || data.aiStage === "score" || data.aiStage === "score-audit" || data.aiStage === "all" || !data.aiStage;
+  const canReplaceCriteria = data.criteria && typeof data.criteria === "object" && (
+    incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
+  );
+  if (canReplaceCriteria) output.criteria = data.criteria;
+  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
@@ -505,7 +517,8 @@ function hasUsefulItemArray(value) {
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
   if (aiStage === "score-audit") {
-    return Boolean(data.criteria || data.scoreCalibration || hasUsefulItemArray(data.strengths) || hasUsefulItemArray(data.mainProblems));
+    if (data.scoreAuditSkipped || Array.isArray(data.stageWarnings)) return true;
+    return scoreAuditHasUsableCorrections(data);
   }
   if (aiStage === "correction-task") {
     return Boolean(
@@ -748,7 +761,7 @@ async function startGrading() {
     }
 
     if (stageWarnings.length) {
-      setGradingStatus(`批改完成，但部分详细阶段需要重试：${stageWarnings.join("；")}`, "warning");
+      setGradingStatus("批改完成，但部分详细阶段需要重试。可在下方“AI 批改进度与提示”中查看详情。", "warning");
     } else {
       setGradingStatus("批改完成", "done");
     }
@@ -1309,9 +1322,9 @@ function renderGradingResult(result = {}) {
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   const mainProblems = filteredMainProblems(result.mainProblems, result.mainProblemsZh);
   els.gradingResults.innerHTML = `
+    ${renderFeedbackTools()}
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
-    ${renderFeedbackTools()}
     ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
     ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}

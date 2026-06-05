@@ -3369,9 +3369,24 @@ function extractAiString(rawText, key) {
   }
 }
 
+function rawTextLooksLikeSchemaOnly(rawText = "") {
+  const text = String(rawText || "").toLowerCase();
+  if (!text.trim()) return true;
+  const schemaSignals = [
+    '"overallband": 1', '"estimatedlevel": "band 1.0"', '"feedback": ""', '"howtoimprove": ""',
+    'replace band 1 placeholders', 'do not copy template values', 'return exactly one valid json object matching this shape'
+  ].filter((signal) => text.includes(signal)).length;
+  const essaySpecificSignals = [
+    'because', 'evidence', 'original', 'corrected', 'this response', 'the essay', 'the letter', 'the candidate', 'the writer'
+  ].filter((signal) => text.includes(signal)).length;
+  return schemaSignals >= 3 && essaySpecificSignals < 2;
+}
+
 function buildAiPartialResultFromText(rawText, body, issue = "") {
+  if (rawTextLooksLikeSchemaOnly(rawText)) return null;
   const overall = extractAiNumber(rawText, "overallBand");
   if (!Number.isFinite(overall)) return null;
+  if (Number(overall) === 1 && !/band\s*[2-9]|overall\s*band|criterion|scorecalibration|whyNotHigher|why not higher/i.test(String(rawText || ""))) return null;
 
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   const firstCriterion = firstCriterionName(task);
@@ -3500,10 +3515,14 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
     detailedSentenceCorrections: [],
     task1LetterCorrections: task === "Task 1" ? {
       openingComment: "Make the letter purpose clear at the start.",
+      openingCommentZh: "开头要直接说明写信目的，让收信人马上明白你为什么写这封信。",
       closingComment: "Use a suitable closing sentence.",
+      closingCommentZh: "结尾要符合书信对象和语气，并礼貌收束请求或说明。",
       toneComment: "Match the tone to the recipient.",
+      toneCommentZh: "语气要符合你和收信人的关系，正式信不能过于随意。",
       purposeComment: "State why you are writing.",
-      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Address this requirement directly.", suggestedSentence: "Add one sentence that answers this bullet point." })).slice(0, 5)
+      purposeCommentZh: "第一段应明确交代写信目的，避免让任务回应显得含糊。",
+      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Address this requirement directly.", suggestedSentence: "Add one sentence that answers this bullet point.", explanationZh: "这一要点需要用一句具体内容直接回应，不能只暗示或省略。" })).slice(0, 5)
     } : null,
     task2EssayCorrections: task === "Task 2" ? {
       positionComment: "State your opinion or position clearly.",
