@@ -287,10 +287,20 @@ function resetGradingPanel() {
   els.compareRevisedText.textContent = "";
 }
 
+function setupGradingModes() {
+  if (!els.gradingModeSelect) return;
+  const current = els.gradingModeSelect.value;
+  els.gradingModeSelect.innerHTML = `
+    <option value="full">详细批改（不带范文）</option>
+    <option value="revision">详细批改 + 范文</option>`;
+  els.gradingModeSelect.value = current === "revision" ? "revision" : "full";
+}
+
 function gradingPayload() {
   const essay = els.essayInput.value.trim();
   const wordCount = countWords(essay);
-  const mode = els.gradingModeSelect.value || "quick";
+  const rawMode = els.gradingModeSelect.value || "full";
+  const mode = rawMode === "revision" ? "revision" : "full";
   const targetWordCount = targetWordsForPrompt(selected);
   const includeRevision = mode === "revision";
   return {
@@ -573,9 +583,27 @@ function renderRevisionLimitWarning(result = {}) {
   return "";
 }
 
+function renderSpellingCorrections(items = []) {
+  const list = Array.isArray(items)
+    ? items.filter((item) => item && (String(item.originalWord || "").trim() || String(item.correctedWord || "").trim() || String(item.sentence || "").trim() || String(item.explanation || "").trim()))
+    : [];
+  if (!list.length) return `<p class="muted">暂无拼写错误列表。</p>`;
+  return `<div class="correction-list">${list.map((item) => `
+    <div class="correction-item">
+      <p><strong>Original word:</strong> ${escapeHtml(item.originalWord || "")}</p>
+      <p><strong>Correct spelling:</strong> ${escapeHtml(item.correctedWord || "")} ${renderCopyButton(item.correctedWord || "")}</p>
+      ${item.sentence ? `<p><strong>Sentence:</strong> ${escapeHtml(item.sentence)}</p>` : ""}
+      <p><strong>Explanation:</strong> ${escapeHtml(item.explanation || "")}</p>
+      ${renderZhToggle(item.explanationZh)}
+    </div>`).join("")}</div>`;
+}
+
 function renderGrammarErrors(items = []) {
-  if (!Array.isArray(items) || !items.length) return `<p class="muted">暂无语法错误列表。</p>`;
-  return `<div class="correction-list">${items.map((item) => `
+  const list = Array.isArray(items)
+    ? items.filter((item) => item && (String(item.original || "").trim() || String(item.corrected || "").trim() || String(item.explanation || "").trim()))
+    : [];
+  if (!list.length) return `<p class="muted">暂无语法错误列表。</p>`;
+  return `<div class="correction-list">${list.map((item) => `
     <div class="correction-item">
       <p><strong>Type:</strong> ${escapeHtml(item.type || "other")}</p>
       <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
@@ -586,8 +614,11 @@ function renderGrammarErrors(items = []) {
 }
 
 function renderSentenceCorrections(items = []) {
-  if (!Array.isArray(items) || !items.length) return `<p class="muted">暂无句子级修改。</p>`;
-  return `<div class="correction-list">${items.map((item) => `
+  const list = Array.isArray(items)
+    ? items.filter((item) => item && (String(item.original || "").trim() || String(item.corrected || "").trim() || String(item.reason || "").trim()))
+    : [];
+  if (!list.length) return `<p class="muted">暂无句子级修改。</p>`;
+  return `<div class="correction-list">${list.map((item) => `
     <div class="correction-item">
       <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
       <p><strong>Corrected:</strong> ${escapeHtml(item.corrected || "")}</p>
@@ -643,6 +674,10 @@ function renderGradingResult(result = {}) {
     ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
     ${renderCorrectionPriority(result.correctionPriority)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
+    <section class="grading-section">
+      <h4>拼写错误 Spelling Corrections</h4>
+      ${renderSpellingCorrections(result.spellingCorrections)}
+    </section>
     <section class="grading-section">
       <h4>语法错误</h4>
       ${renderGrammarErrors(result.grammarErrors)}
@@ -762,6 +797,7 @@ function bind() {
 
 function init() {
   initFilters();
+  setupGradingModes();
   bind();
   els.gradingEndpointInput.value = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
   const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
