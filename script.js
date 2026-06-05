@@ -374,7 +374,7 @@ function mergeAiStageResult(base, incoming) {
 async function postAiStage(endpoint, payload, aiStage, statusText) {
   setGradingStatus(statusText, "loading");
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), 240000) : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 285000) : null;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -399,6 +399,8 @@ async function postAiStage(endpoint, payload, aiStage, statusText) {
 
 async function startGrading() {
   if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
+  if (els.gradeBtn.disabled) return;
+
   const endpoint = els.gradingEndpointInput.value.trim();
   if (!endpoint) {
     setGradingStatus("请先填写批改接口地址。不要把 API key 放在前端网页中。", "error");
@@ -408,12 +410,15 @@ async function startGrading() {
   const wordCount = countWords(essay);
   const targetWordCount = targetWordsForPrompt(selected);
   const isUnderMinimum = wordCount < targetWordCount;
-  if (isUnderMinimum) {
-    setGradingStatus("当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。", "error");
-  }
 
-  setGradingStatus("AI 正在评分，请等待。", "loading");
+  const originalButtonText = els.gradeBtn.textContent;
   els.gradeBtn.disabled = true;
+  els.gradeBtn.textContent = "AI 批改中...";
+  els.gradeBtn.setAttribute("aria-busy", "true");
+  if (els.gradingModeSelect) els.gradingModeSelect.disabled = true;
+  if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
+
+  setGradingStatus("第 1 步/3：AI 正在评分与分析题目，请等待。", "loading");
   els.gradingResults.innerHTML = isUnderMinimum
     ? `<p class="ai-warning">当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。</p>`
     : "";
@@ -423,35 +428,48 @@ async function startGrading() {
   let result = null;
   const stageWarnings = [];
 
+  async function runMergeStage(aiStage, statusText, warningPrefix) {
+    try {
+      const stageResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result?.overallBand }, aiStage, statusText);
+      result = mergeAiStageResult(result || {}, stageResult);
+      renderGradingResult(result);
+      return true;
+    } catch (stageError) {
+      const warning = `${warningPrefix}：${stageError.message}`;
+      stageWarnings.push(warning);
+      if (result) {
+        if (aiStage.startsWith("correction")) result.correctionWarning = warning;
+        if (aiStage === "revision") result.revisionWarning = warning;
+        renderGradingResult(result);
+      }
+      return false;
+    }
+  }
+
   try {
     const scoreResult = await postAiStage(endpoint, payload, "score", "第 1 步/3：AI 正在评分与分析题目，请等待。");
     result = mergeAiStageResult({}, scoreResult);
     renderGradingResult(result);
 
-    try {
-      const correctionResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result.overallBand }, "correction", "第 2 步/3：AI 正在逐句检查拼写、语法、词汇和结构错误，请等待。");
-      result = mergeAiStageResult(result, correctionResult);
-      renderGradingResult(result);
-    } catch (correctionError) {
-      stageWarnings.push(`详细错误批改未完成：${correctionError.message}`);
-      result.correctionWarning = stageWarnings[stageWarnings.length - 1];
-      renderGradingResult(result);
+    const correctionStages = [
+      ["correction-spelling", "第 2 步/3：AI 正在逐词检查拼写和明显拼写错误，请等待。", "拼写错误检查未完成"],
+      ["correction-grammar", "第 2 步/3：AI 正在检查语法、词形、时态、冠词和搭配问题，请等待。", "语法错误检查未完成"],
+      ["correction-sentence", "第 2 步/3：AI 正在逐句修改原句、修改句和更好表达，请等待。", "句子级修改未完成"],
+      ["correction-advice", "第 2 步/3：AI 正在生成提分计划、错误优先级和专项建议，请等待。", "提分建议生成未完成"]
+    ];
+
+    for (const [stage, statusText, warningPrefix] of correctionStages) {
+      await runMergeStage(stage, statusText, warningPrefix);
     }
 
     if (payload.mode === "revision") {
-      try {
-        const revisionResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result.overallBand }, "revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。");
-        result = mergeAiStageResult(result, revisionResult);
-        renderGradingResult(result);
-      } catch (revisionError) {
-        stageWarnings.push(`范文/修改版未完成：${revisionError.message}`);
-        result.revisionWarning = stageWarnings[stageWarnings.length - 1];
-        renderGradingResult(result);
-      }
+      await runMergeStage("revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。", "范文/修改版未完成");
+    } else {
+      setGradingStatus("第 3 步/3：AI 正在整理最终批改结果。", "loading");
     }
 
     if (stageWarnings.length) {
-      setGradingStatus(`批改完成，但部分阶段需要重试：${stageWarnings.join("；")}`, "error");
+      setGradingStatus(`批改完成，但部分详细阶段需要重试：${stageWarnings.join("；")}`, "error");
     } else {
       setGradingStatus("批改完成", "done");
     }
@@ -460,6 +478,10 @@ async function startGrading() {
     if (result) renderGradingResult(result);
   } finally {
     els.gradeBtn.disabled = false;
+    els.gradeBtn.textContent = originalButtonText || "开始批改";
+    els.gradeBtn.removeAttribute("aria-busy");
+    if (els.gradingModeSelect) els.gradingModeSelect.disabled = false;
+    if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
   }
 }
 
