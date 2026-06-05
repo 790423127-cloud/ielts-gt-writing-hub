@@ -1486,6 +1486,8 @@ function buildMinimalAiScoringPrompt(body, gradingMode, locale = "en") {
 
   return [
     "Return one valid JSON object matching this shape. Fill scoring fields with real IELTS judgement.",
+    "Do not copy the template values. Replace overallBand, criteria bands, feedback, howToImprove, strengths, mainProblems, and scoreCalibration with real essay-specific content.",
+    "If the essay has any English content, feedback fields must not be blank and overallBand must not default to 1 unless the essay truly deserves Band 1.",
     JSON.stringify(shape),
     "Keep feedback very short. Arrays max 3 items. Do not use markdown.",
     `Task: ${task}`,
@@ -1523,6 +1525,149 @@ async function callAiMinimalScoringPass({ apiKey, model, body, gradingMode, loca
   });
 }
 
+
+function isScoringPlaceholderText(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return true;
+  if (["...", "-", "n/a", "na", "null", "undefined"].includes(text)) return true;
+  if (text.includes("must_fill") || text.includes("replace_with") || text.includes("fill scoring")) return true;
+  if (text.includes("no feedback is available")) return true;
+  if (text === "brief chinese explanation" || text === "brief chinese suggestion") return true;
+  return false;
+}
+
+function collectScoringText(result, body) {
+  if (!result || typeof result !== "object") return [];
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const names = [firstCriterion, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+  const values = [];
+  names.forEach((name) => {
+    const item = criteria[name];
+    if (!item || typeof item !== "object") return;
+    values.push(item.feedback, item.howToImprove, item.feedbackZh, item.howToImproveZh);
+  });
+  values.push(
+    result.scoreCalibration?.whyNotHigher,
+    result.scoreCalibration?.whyNotLower,
+    result.scoreCalibration?.capReason,
+    result.lowBandDiagnostics?.reason,
+    result.highBandDiagnostics?.reason,
+    result.taskRequirementAnalysis?.taskMatchSummary,
+    result.errorAnalysis?.summary
+  );
+  ensureArray(result.strengths).forEach((item) => values.push(item));
+  ensureArray(result.mainProblems).forEach((item) => values.push(item));
+  ensureArray(result.taskAchievementAdvice).forEach((item) => values.push(item));
+  ensureArray(result.coherenceAdvice).forEach((item) => values.push(item));
+  ensureArray(result.lexicalAdvice).forEach((item) => values.push(item));
+  ensureArray(result.grammarAdvice).forEach((item) => values.push(item));
+  return values.map((value) => String(value ?? "").trim()).filter((value) => value);
+}
+
+function hasMeaningfulAiScoringResult(result, body) {
+  if (!result || typeof result !== "object") return false;
+  const overall = Number(result.overallBand ?? result.overallEstimatedBand);
+  if (!Number.isFinite(overall) || overall < 1 || overall > 9) return false;
+
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const criterionNames = [firstCriterion, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+  const criteriaWithBands = criterionNames.filter((name) => Number.isFinite(Number(criteria[name]?.band))).length;
+  if (criteriaWithBands < 3) return false;
+
+  const usefulTexts = collectScoringText(result, body).filter((value) => !isScoringPlaceholderText(value));
+  if (usefulTexts.length < 3) return false;
+
+  const allCriterionFeedbackBlank = criterionNames.every((name) => {
+    const item = criteria[name] || {};
+    return isScoringPlaceholderText(item.feedback) && isScoringPlaceholderText(item.howToImprove);
+  });
+
+  const arraysBlank = !ensureArray(result.strengths).some((item) => !isScoringPlaceholderText(item)) &&
+    !ensureArray(result.mainProblems).some((item) => !isScoringPlaceholderText(item));
+
+  if (overall === 1 && allCriterionFeedbackBlank && arraysBlank) return false;
+  return true;
+}
+
+function assertMeaningfulAiScoringResult(result, body, sourceLabel) {
+  if (!hasMeaningfulAiScoringResult(result, body)) {
+    const error = new Error(`${sourceLabel || "AI scoring"} returned placeholder or incomplete scoring JSON.`);
+    error.name = "InvalidAiScoringResult";
+    error.provider = "deepseek";
+    throw error;
+  }
+  return result;
+}
+
+function buildNoTemplateAiScoringSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use short Chinese helper notes only in fields ending with Zh."
+    : "Main fields must be English. Use short Chinese helper notes only in fields ending with Zh.";
+  return [
+    "You are a strict IELTS Writing examiner.",
+    "Return exactly one valid JSON object only. No markdown. No code fences.",
+    "Do not copy any template values. Do not leave feedback fields blank.",
+    "Score from Band 1 to Band 9 only and allow half bands.",
+    "If the response is not blank, do not default to Band 1. Use the actual essay evidence.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildNoTemplateAiScoringPrompt(body, gradingMode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  return [
+    "Grade the essay and return JSON with these exact top-level keys:",
+    "actualWordCount, taskTypeDetected, wordCountThresholdUsed, wordCountStatus, taskRequirementAnalysis, taskMatchCheck, overallBand, estimatedLevel, criteria, strengths, mainProblems, lowBandDiagnostics, highBandDiagnostics, scoreCalibration, errorAnalysis, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, disclaimer.",
+    `criteria must contain exactly these four keys: ${firstCriterion}, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy.`,
+    "Each criterion object must contain: band, feedback, feedbackZh, howToImprove, howToImproveZh.",
+    "Every English feedback/howToImprove field must be filled with a concrete sentence based on the essay.",
+    "strengths and mainProblems must each contain at least 2 concrete items if the essay has English content.",
+    "scoreCalibration must contain strictness, capApplied, capReason, whyNotHigher, whyNotLower, evidence.",
+    "Do not output empty strings for scoring feedback. Do not return the schema only.",
+    "Use underlength as a penalty only when relevant; it is not automatically Band 1.",
+    `Task: ${task}`,
+    `Mode: ${gradingMode}`,
+    `Word count: ${words}/${threshold}`,
+    "Question:",
+    String(body.questionPrompt || "").slice(0, 1800),
+    "Essay:",
+    String(body.essay || "").slice(0, 4500)
+  ].join("\n");
+}
+
+async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, locale, deadline }) {
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildNoTemplateAiScoringSystemPrompt(locale),
+    userPrompt: buildNoTemplateAiScoringPrompt({ ...body, mode: gradingMode }, gradingMode, locale),
+    maxTokens: 2200,
+    temperature: 0.0,
+    jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(16000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+  });
+
+  return await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: gradingMode },
+    locale,
+    maxTokens: 2200,
+    allowRepair: true,
+    deadline
+  });
+}
+
+
 async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
   const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
@@ -1539,6 +1684,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
       deadline,
       veryShort
     });
+    result = assertMeaningfulAiScoringResult(result, body, "Primary AI scoring");
   } catch (primaryError) {
     try {
       result = await callAiCompactScoringRetry({
@@ -1549,12 +1695,13 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         locale,
         deadline
       });
+      result = assertMeaningfulAiScoringResult(result, body, "Compact AI scoring retry");
       result.gradingWarning = isDeepSeekEmptyResponseError(primaryError)
         ? "Primary AI scoring returned empty content, so a compact AI scoring retry was used."
         : "Primary AI scoring failed, so a compact AI scoring retry was used.";
     } catch (retryError) {
       try {
-        result = await callAiMinimalScoringPass({
+        result = await callAiNoTemplateScoringPass({
           apiKey,
           model,
           body,
@@ -1562,11 +1709,25 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
           locale,
           deadline
         });
-        result.gradingWarning = isDeepSeekEmptyResponseError(primaryError) || isDeepSeekEmptyResponseError(retryError)
-          ? "Primary AI scoring returned empty content, so a minimal AI scoring retry was used."
-          : "Primary AI scoring failed, so a minimal AI scoring retry was used.";
-      } catch (minimalError) {
-        throw retryError || primaryError || minimalError;
+        result = assertMeaningfulAiScoringResult(result, body, "No-template AI scoring retry");
+        result.gradingWarning = "Primary AI scoring was incomplete, so a no-template AI scoring retry was used.";
+      } catch (noTemplateError) {
+        try {
+          result = await callAiMinimalScoringPass({
+            apiKey,
+            model,
+            body,
+            gradingMode,
+            locale,
+            deadline
+          });
+          result = assertMeaningfulAiScoringResult(result, body, "Minimal AI scoring retry");
+          result.gradingWarning = isDeepSeekEmptyResponseError(primaryError) || isDeepSeekEmptyResponseError(retryError) || isDeepSeekEmptyResponseError(noTemplateError)
+            ? "Primary AI scoring returned empty content, so a minimal AI scoring retry was used."
+            : "Primary AI scoring failed, so a minimal AI scoring retry was used.";
+        } catch (minimalError) {
+          throw minimalError || noTemplateError || retryError || primaryError;
+        }
       }
     }
   }
