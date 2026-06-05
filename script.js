@@ -339,7 +339,7 @@ function mergeAiStageResult(base, incoming) {
     "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
     "taskAchievementAdvice", "coherenceAdvice", "lexicalAdvice", "grammarAdvice",
     "band5FixPlan", "band6UpgradePlan", "band7UpgradePlan", "revisionNotes", "revisionNotesZh",
-    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh"
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "stageWarnings", "stageProgress"
   ];
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
@@ -355,7 +355,7 @@ function mergeAiStageResult(base, incoming) {
   });
   [
     "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline",
-    "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "disclaimer"
+    "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "sectionWarning", "disclaimer"
   ].forEach((field) => {
     if (typeof data[field] === "string" && data[field].trim()) output[field] = data[field];
   });
@@ -370,6 +370,71 @@ function mergeAiStageResult(base, incoming) {
   output.revisedEssay = output.revisedEssayBand7 || output.revisedEssayBand6 || output.revisedEssayBand5 || output.revisedEssay || "";
   return output;
 }
+
+function hasUsefulItemArray(value) {
+  return Array.isArray(value) && value.some((item) => hasAnyText(item));
+}
+
+function stageResultHasExpectedContent(aiStage, data = {}) {
+  if (!data || typeof data !== "object") return false;
+  if (aiStage === "correction-spelling") {
+    return hasUsefulItemArray(data.spellingCorrections) || hasAnyText(data.errorAnalysis?.summary);
+  }
+  if (aiStage === "correction-grammar") {
+    return hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.detailedSentenceCorrections);
+  }
+  if (aiStage === "correction-sentence") {
+    return hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections);
+  }
+  if (aiStage === "correction-advice") {
+    return Boolean(
+      hasUsefulItemArray(data.taskAchievementAdvice) ||
+      hasUsefulItemArray(data.coherenceAdvice) ||
+      hasUsefulItemArray(data.lexicalAdvice) ||
+      hasUsefulItemArray(data.grammarAdvice) ||
+      hasUsefulItemArray(data.band5FixPlan) ||
+      hasUsefulItemArray(data.band6UpgradePlan) ||
+      hasUsefulItemArray(data.band7UpgradePlan) ||
+      hasAnyText(data.targetImprovementPlan) ||
+      hasAnyText(data.correctionPriority) ||
+      hasAnyText(data.task1LetterCorrections) ||
+      hasAnyText(data.task2EssayCorrections)
+    );
+  }
+  if (aiStage === "correction") {
+    return hasDetailedFeedbackContent(data) || hasDetailedAdviceContent(data);
+  }
+  if (aiStage === "revision") {
+    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline);
+  }
+  return true;
+}
+
+function hasDetailedFeedbackContent(result = {}) {
+  return Boolean(
+    hasUsefulItemArray(result.spellingCorrections) ||
+    hasUsefulItemArray(result.grammarErrors) ||
+    hasUsefulItemArray(result.sentenceCorrections) ||
+    hasUsefulItemArray(result.detailedSentenceCorrections)
+  );
+}
+
+function hasDetailedAdviceContent(result = {}) {
+  return Boolean(
+    hasUsefulItemArray(result.taskAchievementAdvice) ||
+    hasUsefulItemArray(result.coherenceAdvice) ||
+    hasUsefulItemArray(result.lexicalAdvice) ||
+    hasUsefulItemArray(result.grammarAdvice) ||
+    hasUsefulItemArray(result.band5FixPlan) ||
+    hasUsefulItemArray(result.band6UpgradePlan) ||
+    hasUsefulItemArray(result.band7UpgradePlan) ||
+    hasAnyText(result.targetImprovementPlan) ||
+    hasAnyText(result.correctionPriority) ||
+    hasAnyText(result.task1LetterCorrections) ||
+    hasAnyText(result.task2EssayCorrections)
+  );
+}
+
 
 async function postAiStage(endpoint, payload, aiStage, statusText) {
   setGradingStatus(statusText, "loading");
@@ -427,19 +492,47 @@ async function startGrading() {
   const payload = gradingPayload();
   let result = null;
   const stageWarnings = [];
+  const stageProgress = [];
+
+  function syncStageMeta() {
+    if (!result) return;
+    result.stageWarnings = stageWarnings.slice();
+    result.stageProgress = stageProgress.slice();
+  }
+
+  function markStage(label, state, message) {
+    stageProgress.push({ label, state, message });
+    syncStageMeta();
+  }
 
   async function runMergeStage(aiStage, statusText, warningPrefix) {
+    markStage(warningPrefix, "running", statusText);
     try {
       const stageResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result?.overallBand }, aiStage, statusText);
+      const hasExpectedContent = stageResultHasExpectedContent(aiStage, stageResult);
       result = mergeAiStageResult(result || {}, stageResult);
+
+      if (!hasExpectedContent) {
+        const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的具体内容，系统会尝试补充完整详细反馈。`;
+        stageWarnings.push(warning);
+        if (aiStage.startsWith("correction")) result.correctionWarning = warning;
+        if (aiStage === "revision") result.revisionWarning = warning;
+        markStage(warningPrefix, "warning", warning);
+      } else {
+        markStage(warningPrefix, "done", `${warningPrefix}已完成。`);
+      }
+
+      syncStageMeta();
       renderGradingResult(result);
-      return true;
+      return hasExpectedContent;
     } catch (stageError) {
       const warning = `${warningPrefix}：${stageError.message}`;
       stageWarnings.push(warning);
       if (result) {
         if (aiStage.startsWith("correction")) result.correctionWarning = warning;
         if (aiStage === "revision") result.revisionWarning = warning;
+        markStage(warningPrefix, "error", warning);
+        syncStageMeta();
         renderGradingResult(result);
       }
       return false;
@@ -449,23 +542,51 @@ async function startGrading() {
   try {
     const scoreResult = await postAiStage(endpoint, payload, "score", "第 1 步/3：AI 正在评分与分析题目，请等待。");
     result = mergeAiStageResult({}, scoreResult);
+    markStage("评分与题目分析", "done", "第 1 步/3 已完成：AI 已返回分数和题目分析。");
+    syncStageMeta();
     renderGradingResult(result);
 
     const correctionStages = [
-      ["correction-spelling", "第 2 步/3：AI 正在逐词检查拼写和明显拼写错误，请等待。", "拼写错误检查未完成"],
-      ["correction-grammar", "第 2 步/3：AI 正在检查语法、词形、时态、冠词和搭配问题，请等待。", "语法错误检查未完成"],
-      ["correction-sentence", "第 2 步/3：AI 正在逐句修改原句、修改句和更好表达，请等待。", "句子级修改未完成"],
-      ["correction-advice", "第 2 步/3：AI 正在生成提分计划、错误优先级和专项建议，请等待。", "提分建议生成未完成"]
+      ["correction-spelling", "第 2 步/3：AI 正在逐词检查拼写和明显拼写错误，请等待。", "拼写错误检查"],
+      ["correction-grammar", "第 2 步/3：AI 正在检查语法、词形、时态、冠词和搭配问题，请等待。", "语法错误检查"],
+      ["correction-sentence", "第 2 步/3：AI 正在逐句修改原句、修改句和更好表达，请等待。", "句子级修改"],
+      ["correction-advice", "第 2 步/3：AI 正在生成提分计划、错误优先级和专项建议，请等待。", "提分建议生成"]
     ];
 
     for (const [stage, statusText, warningPrefix] of correctionStages) {
       await runMergeStage(stage, statusText, warningPrefix);
     }
 
+    if (!hasDetailedFeedbackContent(result) || !hasDetailedAdviceContent(result)) {
+      await runMergeStage(
+        "correction",
+        "第 2 步/3：AI 正在补充完整详细反馈，包含错误订正和提分建议，请等待。",
+        "完整详细反馈补充"
+      );
+    }
+
+    if (!hasDetailedFeedbackContent(result)) {
+      const warning = "详细错误订正仍不完整：AI 没有返回足够的原句、修改句和错误原因。请再次点击开始批改重试详细订正阶段。";
+      stageWarnings.push(warning);
+      result.correctionWarning = warning;
+      markStage("详细错误订正完整性检查", "warning", warning);
+    }
+    if (!hasDetailedAdviceContent(result)) {
+      const warning = "提分建议仍不完整：AI 没有返回足够的下一阶段目标、四项提分动作或练习任务。请再次点击开始批改重试提分建议阶段。";
+      stageWarnings.push(warning);
+      result.correctionWarning = warning;
+      markStage("提分建议完整性检查", "warning", warning);
+    }
+    syncStageMeta();
+    renderGradingResult(result);
+
     if (payload.mode === "revision") {
-      await runMergeStage("revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。", "范文/修改版未完成");
+      await runMergeStage("revision", "第 3 步/3：AI 正在生成修改版/范文，请等待。", "范文/修改版生成");
     } else {
       setGradingStatus("第 3 步/3：AI 正在整理最终批改结果。", "loading");
+      markStage("最终整理", "done", "第 3 步/3 已完成：结果已整理。");
+      syncStageMeta();
+      renderGradingResult(result);
     }
 
     if (stageWarnings.length) {
@@ -483,6 +604,24 @@ async function startGrading() {
     if (els.gradingModeSelect) els.gradingModeSelect.disabled = false;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
   }
+}
+
+
+function renderStageProgress(result = {}) {
+  const progress = Array.isArray(result.stageProgress) ? result.stageProgress : [];
+  const warnings = Array.isArray(result.stageWarnings) ? result.stageWarnings : [];
+  const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
+    .filter((item) => String(item || "").trim());
+  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
+  if (!progress.length && !allWarnings.length) return "";
+  return `<section class="grading-section">
+    <h4>AI 批改进度与提示</h4>
+    ${progress.length ? `<ul>${progress.map((item) => {
+      const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? "需注意" : "未完成";
+      return `<li><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}</li>`;
+    }).join("")}</ul>` : ""}
+    ${allWarnings.length ? `<div class="ai-warning">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
+  </section>`;
 }
 
 function renderCriteria(criteria = {}) {
@@ -787,6 +926,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.innerHTML = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
+    ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
     ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
