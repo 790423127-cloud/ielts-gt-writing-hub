@@ -361,7 +361,7 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Coherence caps: no paragraphing normally no higher than 4.0-5.0; ideas listed without progression no higher than 5.0; missing/unnatural linking or repeated and/so/because should not receive high CC; Band 6+ requires clear paragraphing and mostly logical progression.",
     "Lexical caps: extremely basic vocabulary normally no higher than 4.0; frequent word-choice errors affecting meaning normally no higher than 4.0-5.0; heavy repetition or inappropriate register reduces LR; Band 6+ requires enough topic vocabulary and mostly appropriate word choice.",
     "Grammar caps: if most sentences contain serious grammar errors or errors often reduce meaning, GRA normally no higher than 4.0; only simple sentence patterns normally no higher than 5.0; frequent tense/article/plural/word-order/sentence-structure errors should not receive Band 5.5+ unless meaning remains generally clear.",
-    "First assign four criterion bands, then estimate overallBand from the criteria, round to nearest 0.5, then apply cap rules. Do not allow overallBand to contradict criterion scores.",
+    "First assign four criterion bands independently, then estimate overallBand from the criteria, round to nearest 0.5, then apply cap rules. Do not copy overallBand into all four criteria. Identical criterion bands are allowed only when the evidence for all four criteria is genuinely similar; if all four criteria are the same, scoreCalibration.evidence must explain why.",
     "Do not give Band 5.5+ when Task Achievement/Task Response is capped at 4.0 or below. Do not give Band 6.0+ if two or more criteria are 5.0 or below. Extremely short essays should normally stay below Band 4.0.",
     "Band 5.5+ is not a minimum. Do not award Band 5.5+ if the essay has two or more serious weaknesses: far below word count, missing major task requirements, no clear paragraphing, frequent grammar errors, unclear meaning, very limited vocabulary, mostly copied prompt, only one or two simple sentences, no Task 2 argument, or fewer than three Task 1 bullet points.",
     "Also do not award Band 5.5+ if Task 1 has 80 words or fewer, Task 2 has 150 words or fewer, only one Task 1 bullet is addressed, Task 2 has no relevant position, response is mostly copied, meaning is blocked, vocabulary is mostly isolated/memorised, little relevant message, or no organisation.",
@@ -854,12 +854,9 @@ function targetImprovementRangeFromBand(bandValue) {
   let upper;
   let maintenance = false;
 
-  if (band <= 3.5) {
+  if (band <= 4.5) {
     lower = 5;
     upper = 5;
-  } else if (band <= 4.5) {
-    lower = 5;
-    upper = 5.5;
   } else if (band === 5) {
     lower = 5.5;
     upper = 6;
@@ -905,7 +902,7 @@ function buildTargetImprovementInstruction(body) {
   if (!Number.isFinite(currentBand) || currentBand <= 0) {
     return [
       "Targeted improvement rule: first infer the current IELTS band from the grading result, then give advice for a realistic next step.",
-      "Use the full target ladder: Band 1.0-3.5 -> Band 5.0; Band 4.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+      "Use the full target ladder: Band 0.0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
       "Do not give advice that jumps too far beyond the current level. A Band 3 essay should not receive Band 6-9 style advice; a Band 5 essay should not receive Band 8-9 style advice."
     ].join("\n");
   }
@@ -916,9 +913,9 @@ function buildTargetImprovementInstruction(body) {
     `Current estimated band from the AI scoring pass: Band ${formatBand(roundedBand)}.`,
     `Target improvement range for advice: ${range.label}.`,
     "Use this target range when writing all correction advice, band plans, betterExpression, model answer outline, and task-specific coaching.",
-    "Full target ladder: Band 1.0-3.5 -> Band 5.0; Band 4.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
-    "Important coaching rule: advice should normally target only +0.5 to +1.0 band above the current level, with a minimum practical target of Band 5.0 for very weak essays.",
-    "If the current essay is below Band 5, give detailed Band 5 survival/pass advice first, not Band 6-9 advice.",
+    "Full target ladder: Band 0.0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
+    "Important coaching rule: advice should normally target only +0.5 to +1.0 band above the current level, with Band 5.0 as the minimum practical target for any essay scored Band 0-4.5.",
+    "If the current essay is Band 0-4.5, give practical Band 5.0 survival/pass advice and Band 5.0-level betterExpression first, not Band 5.5+ or Band 6-9 advice.",
     "If the current essay is Band 5.0, give Band 5.5-6.0 advice.",
     "If the current essay is Band 5.5, give Band 6.0-6.5 advice.",
     "If the current essay is Band 6.0, give Band 6.5-7.0 advice.",
@@ -1041,7 +1038,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
     "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
-    "Do not fill betterExpression if it is almost the same as correctedSentence, only swaps one word/phrase, or keeps the same sentence structure. betterExpression must be a clearly upgraded alternative: changed structure, clearer logic, stronger formal tone, better cohesion, or more natural IELTS-level phrasing. Otherwise leave betterExpression and betterExpressionZh empty.",
+    "Do not fill betterExpression if it is the same as correctedSentence, only swaps one word/phrase without improving clarity, or deletes important information. betterExpression should be a realistic next-step rewrite at the target band range; it may be a modest upgrade for low-band essays, but it must be complete, natural, and more useful than the direct correction.",
     "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
     "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
     buildTargetImprovementInstruction(body),
@@ -1130,6 +1127,7 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"]),
     scoreImpacting: scoreImpactingRaw === undefined ? true : scoreImpactingRaw !== false && String(scoreImpactingRaw).toLowerCase() !== "false",
     whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]),
+    betterExpressionTargetBand: pickFirstUsefulValue(item, ["betterExpressionTargetBand", "targetBandRange", "targetRange", "targetBand"]),
     targetBandExpression: pickFirstUsefulValue(item, ["targetBandExpression", "targetExpression", "bandTargetExpression"])
   };
 }
@@ -1207,6 +1205,29 @@ function expressionTokenEditDistance(a, b) {
   return dp[left.length][right.length];
 }
 
+function importantMeaningSegments(text) {
+  return String(text || "")
+    .split(/\b(?:because|as|since|although|though|if|when|while|which|that|so that|in order to|therefore|as a result)\b/i)
+    .map((segment) => segment.trim())
+    .filter((segment) => tokenizeExpressionForComparison(segment).length >= 4);
+}
+
+function losesImportantMeaning(correctedSentence, betterExpression) {
+  const correctedTokens = tokenizeExpressionForComparison(correctedSentence);
+  const betterTokens = tokenizeExpressionForComparison(betterExpression);
+  if (!correctedTokens.length || !betterTokens.length) return false;
+  const correctedNorm = correctedTokens.join(" ");
+  const betterNorm = betterTokens.join(" ");
+  if (correctedNorm.startsWith(betterNorm) && betterTokens.length <= Math.ceil(correctedTokens.length * 0.78)) return true;
+  if (betterTokens.length < Math.max(5, Math.floor(correctedTokens.length * 0.65))) return true;
+  return importantMeaningSegments(correctedSentence).some((segment) => {
+    const segTokens = tokenizeExpressionForComparison(segment);
+    if (segTokens.length < 4) return false;
+    const preserved = segTokens.filter((token) => betterTokens.includes(token)).length;
+    return preserved / segTokens.length < 0.45;
+  });
+}
+
 function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const corrected = String(correctedSentence || "").toLowerCase();
   const better = String(betterExpression || "").toLowerCase();
@@ -1220,21 +1241,13 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
 
-  // "Better expression" must be a real upgrade, not a synonym swap.
-  // A few word replacements such as "take on" -> "embrace" are still too close.
-  if (similarity >= 0.74) return false;
-  if (editDistance <= 4 && lengthGap <= 4) return false;
+  // Hide only fake upgrades: identical wording, meaningless tiny swaps, or obvious truncation.
+  if (similarity >= 0.92) return false;
+  if (editDistance <= 2 && lengthGap <= 2) return false;
+  if (editDistance <= 3 && lengthGap <= 1 && similarity >= 0.82) return false;
+  if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
-  const structureMarkers = [
-    "not because", "but because", "rather than", "instead of", "so that", "in order to",
-    "which", "while", "although", "whereas", "because", "therefore", "as a result",
-    "this would", "i would be grateful", "i am seeking", "i hope to", "my aim is", "with the aim of"
-  ];
-  const hasStructureMarker = structureMarkers.some((marker) => better.includes(marker) && !corrected.includes(marker));
-  const hasClearLengthUpgrade = betterTokens.length >= correctedTokens.length + 5 || correctedTokens.length >= betterTokens.length + 5;
-  const hasClearRewrite = editDistance >= 6 && similarity < 0.72;
-
-  return hasStructureMarker || hasClearLengthUpgrade || hasClearRewrite;
+  return true;
 }
 
 function shouldShowBetterExpression(correctedSentence, betterExpression) {
@@ -1526,7 +1539,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     JSON.stringify(shape),
     `Target: provide ${itemTarget} concrete corrections if the essay contains that many visible errors. Use the full target when the essay has many clear issues. Do not stop at two and do not return only generic advice.`,
     "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
-    "For each corrected sentence, include correctedSentence as the direct fix. Include betterExpression only when it is a visibly stronger alternative with improved structure, logic, cohesion, tone, or naturalness; do not include it for small vocabulary swaps.",
+    "For each corrected sentence, include correctedSentence as the direct fix. Include betterExpression when it gives a useful next-step rewrite at the target band range. Do not include it for identical wording, meaningless synonym swaps, incomplete/truncated sentences, or rewrites that delete reasons, purpose, conditions, results, or task content.",
     "Include spelling errors if any misspelled words appear.",
     "Include grammar and sentence-control problems if any are visible.",
     task === "Task 1"
@@ -2335,7 +2348,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     return [
       "Return JSON with this exact shape:",
       JSON.stringify({
-        task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [{ bulletPoint: "", covered: false, evidenceFromEssay: "", problem: "", comment: "", suggestedSentence: "", explanationZh: "" }] } : null,
+        task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [{ bulletPoint: "", covered: null, coverageUnknown: true, evidenceFromEssay: "", problem: "", comment: "", suggestedSentence: "", explanationZh: "" }] } : null,
         task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
         taskAchievementAdvice: [],
         taskAchievementAdviceZh: [],
@@ -2564,7 +2577,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
     section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
-    section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence as the direct fix. Provide betterExpression only if it is a visibly stronger rewrite with improved structure, logic, tone, cohesion, or naturalness; do not include it for one-word synonym changes." : "",
+    section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence as the direct fix. Provide betterExpression when it gives a realistic next-step rewrite at the target band range. Do not include it for identical wording, meaningless one-word synonym changes, incomplete/truncated sentences, or rewrites that delete important meaning." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
   ].filter(Boolean).join("\n");
@@ -2694,6 +2707,15 @@ function scoreAuditLooksNecessary(currentResult) {
   if (bands.length && Number.isFinite(overall)) {
     const avg = bands.reduce((sum, value) => sum + value, 0) / bands.length;
     if (Math.abs(avg - overall) > 0.75) return true;
+    const allSame = bands.length >= 4 && new Set(bands.map((value) => formatBand(roundHalf(value)))).size === 1;
+    if (allSame) {
+      const differentiationSignals = [
+        "underlength", "all three bullet points", "minimally developed", "limited development",
+        "basic structure", "cohesive devices", "progression", "vocabulary is basic", "repetitive",
+        "word choice", "frequent grammatical errors", "grammar errors", "mostly simple", "subject-verb", "articles"
+      ];
+      if (differentiationSignals.some((signal) => combined.includes(signal))) return true;
+    }
   }
 
   const highBandSignals = [
@@ -2721,10 +2743,10 @@ function buildScoreAuditPrompt(body, locale = "en") {
   const firstCriterion = firstCriterionName(task);
   return [
     "Re-audit this IELTS Writing score using the original prompt and essay. Return one valid JSON object only.",
-    "This audit is allowed to correct the overallBand and criterion bands when the current score contradicts the essay evidence.",
+    "This audit is allowed to correct the overallBand and criterion bands when the current score contradicts the essay evidence, including cases where all four criterion bands were mechanically copied from the overall band.",
     "Do not merely polish wording if the score is wrong. Re-read the original essay and recalibrate using IELTS band descriptor logic.",
     "Do not use Band 7 as a safe default. If the essay fully satisfies the prompt, is naturally organised, uses precise vocabulary, has flexible grammar, and only rare minor errors, correct the score to Band 8-9 as appropriate.",
-    "If the current score is kept, explain exactly why it is not higher with concrete evidence from the essay.",
+    "Score each IELTS criterion independently. Do not keep four identical criterion bands unless the essay evidence genuinely supports equal performance in all four criteria. If the current score is kept, explain exactly why it is not higher with concrete evidence from the essay.",
     "If Band 7.5+ is awarded, feedback and advice must sound like minor refinement, not basic control problems.",
     "mainProblems must contain only real problems, not strengths.",
     "Chinese *Zh fields must accurately match adjacent English fields and must not be generic templates.",
@@ -3338,7 +3360,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
     revisionNotesZh: emptyForLocaleZh([normalLength ? "AI 返回内容不完整；当前只是临时估分，请重试获取完整批改。" : "作文太短，因此这里只提供基础诊断评分。"], locale),
     errorAnalysis: buildFallbackErrorAnalysis(body, words, locale),
     detailedSentenceCorrections: [],
-    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "The opening could not be fully checked in fallback mode.", closingComment: "The closing could not be fully checked in fallback mode.", toneComment: "Use a tone suitable for the recipient in the selected prompt.", purposeComment: normalLength ? "Retry for a full purpose and bullet-point check." : "The response is underlength, so the purpose and bullet points need fuller development.", bulletPointAdvice: extractPromptBulletPoints(body.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Coverage could not be fully checked in fallback mode.", suggestedSentence: "" })) } : null,
+    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "The opening could not be fully checked in fallback mode.", closingComment: "The closing could not be fully checked in fallback mode.", toneComment: "Use a tone suitable for the recipient in the selected prompt.", purposeComment: normalLength ? "Retry for a full purpose and bullet-point check." : "The response is underlength, so the purpose and bullet points need fuller development.", bulletPointAdvice: extractPromptBulletPoints(body.questionPrompt).map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, comment: "Coverage could not be fully checked in fallback mode.", suggestedSentence: "" })) } : null,
     task2EssayCorrections: body.task === "Task 2" ? { positionComment: "State a clear position if the question asks for your opinion.", introductionComment: "The introduction could not be fully checked in fallback mode.", bodyParagraphComment: "Develop each body paragraph with a clear main idea and support.", exampleComment: "Add specific examples where useful.", conclusionComment: "End with a clear summary or final opinion.", developmentAdvice: ["Expand the essay to meet the recommended word count."] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: emptyForLocaleZh([], locale), fixNextZh: emptyForLocaleZh([], locale), polishLaterZh: emptyForLocaleZh([], locale) },
     scoreUnavailable: false,
@@ -3744,7 +3766,7 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
           relationship: "",
           requiredTone: "Use the tone required by the prompt.",
           letterType: "General Training Task 1 letter.",
-          bulletPoints: extractPromptBulletPoints(body?.questionPrompt).map((requirement) => ({ requirement, covered: false, evidence: "AI output was repaired; retry for precise coverage evidence." })),
+          bulletPoints: extractPromptBulletPoints(body?.questionPrompt).map((requirement) => ({ requirement, covered: null, coverageUnknown: true, evidence: "AI output was repaired; retry for precise coverage evidence." })),
           missingRequirements: [],
           taskMatchSummary: "AI scoring was recovered from incomplete JSON; task analysis is limited but not empty."
         }
@@ -3821,7 +3843,7 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
       toneCommentZh: "语气要符合你和收信人的关系，正式信不能过于随意。",
       purposeComment: "State why you are writing.",
       purposeCommentZh: "第一段应明确交代写信目的，避免让任务回应显得含糊。",
-      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Address this requirement directly.", suggestedSentence: "Add one sentence that answers this bullet point.", explanationZh: "这一要点需要用一句具体内容直接回应，不能只暗示或省略。" })).slice(0, 5)
+      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, comment: "Check this requirement directly with evidence before deciding coverage.", suggestedSentence: "Add one sentence that answers this bullet point if it is missing.", explanationZh: "需要先核验原文证据，再判断这一要点是否覆盖。" })).slice(0, 5)
     } : null,
     task2EssayCorrections: task === "Task 2" ? {
       positionComment: "State your opinion or position clearly.",
@@ -4053,7 +4075,7 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
     normalized.task1LetterCorrections.purposeComment = hasUsefulText(normalized.task1LetterCorrections.purposeComment) ? normalized.task1LetterCorrections.purposeComment : "Make the purpose clear in the first paragraph.";
     normalized.task1LetterCorrections.bulletPointAdvice = cleanObjectArray(normalized.task1LetterCorrections.bulletPointAdvice, ["bulletPoint", "comment", "suggestedSentence"]);
     if (!normalized.task1LetterCorrections.bulletPointAdvice.length && points.length) {
-      normalized.task1LetterCorrections.bulletPointAdvice = points.map((point) => ({ bulletPoint: point, covered: false, evidenceFromEssay: "", problem: "No clear evidence for this bullet point was returned by AI.", comment: "Check whether this bullet point is directly answered with a concrete detail, not just implied.", suggestedSentence: "Add one specific sentence that directly answers this requirement and includes a concrete detail.", explanationZh: "请检查这一要点是否被直接回答，并补充具体细节。" })).slice(0, 5);
+      normalized.task1LetterCorrections.bulletPointAdvice = points.map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, evidenceFromEssay: "", problem: "AI did not return reliable coverage evidence for this bullet point.", comment: "Do not treat this as missing until the essay evidence is checked.", suggestedSentence: "If this requirement is not clearly answered, add one specific sentence with concrete detail.", explanationZh: "AI 没有返回可靠覆盖证据；不能直接判定为未覆盖。" })).slice(0, 5);
     }
   }
 

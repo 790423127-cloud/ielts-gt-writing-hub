@@ -985,23 +985,28 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
         <div><strong>语气：</strong>${renderTextWithTranslation(analysis.requiredTone || "Not returned.", analysisZh.requiredToneZh, { tag: "span" })}</div>
         <div><strong>信件类型：</strong>${renderTextWithTranslation(analysis.letterType || "Not returned.", analysisZh.letterTypeZh, { tag: "span" })}</div>
         <div><strong>写作目的：</strong>${renderTextWithTranslation(analysis.taskPurpose || "No detailed task analysis is available for this response.", analysisZh.taskPurposeZh, { tag: "span" })}</div>
-        <div><strong>Bullet points：</strong>${bullets.length ? `<div class="correction-list bullet-analysis-list">${bullets.map((item, index) => {
-          const rawRequirement = firstNonEmpty(item.requirement, item.bulletPoint, item.point, item.taskRequirement, item.text);
-          const placeholder = isPlaceholderBulletLabel(rawRequirement) || item.coverageUnknown;
-          const requirement = placeholder ? "AI 未可靠返回该题目要点" : rawRequirement;
-          const evidence = firstNonEmpty(item.evidence, item.evidenceFromEssay, item.originalEvidence, item.quote);
-          const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason, item.comment) || (placeholder ? "该项是占位结果，不能判定为未覆盖。" : "");
-          const suggestion = firstNonEmpty(item.suggestion, item.suggestedSentence, item.howToFix, item.advice, item.recommendation);
-          const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh || (placeholder ? "AI 只返回了占位要点，不能直接判定为未覆盖；需要重新核验题目和原文证据。" : ""), [requirement, evidence, problem, suggestion].join(" "));
-          return `<div class="correction-item bullet-analysis-item">
-            <p><strong>要点：</strong>${escapeHtml(requirement)}</p>
-            <p><strong>是否覆盖：</strong>${placeholder ? "待 AI 核验" : coverageText(item.covered)}</p>
-            ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
-            ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
-            ${suggestion ? `<p><strong>建议：</strong>${escapeHtml(suggestion)} ${renderCopyButton(suggestion)}</p>` : ""}
-            ${renderZhToggle(zh)}
-          </div>`;
-        }).join("")}</div>` : `<p class="muted">No detailed task analysis is available for this response.</p>`}</div>
+        <div><strong>Bullet points：</strong>${(() => {
+          const reliableBullets = bullets.map((item, index) => {
+            const rawRequirement = firstNonEmpty(item.requirement, item.bulletPoint, item.point, item.taskRequirement, item.text);
+            const placeholder = isPlaceholderBulletLabel(rawRequirement) || item.coverageUnknown;
+            const evidence = firstNonEmpty(item.evidence, item.evidenceFromEssay, item.originalEvidence, item.quote);
+            const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason, item.comment);
+            const suggestion = firstNonEmpty(item.suggestion, item.suggestedSentence, item.howToFix, item.advice, item.recommendation);
+            return { item, index, requirement: rawRequirement, placeholder, evidence, problem, suggestion };
+          }).filter((entry) => !entry.placeholder && entry.requirement && (entry.evidence || entry.problem || entry.suggestion || entry.item.covered !== null && entry.item.covered !== undefined));
+          if (!reliableBullets.length) return `<p class="muted">题目要点覆盖分析暂未生成可靠结果。本次不显示 bullet-point 覆盖判断，以避免误判。</p>`;
+          return `<div class="correction-list bullet-analysis-list">${reliableBullets.map(({ item, index, requirement, evidence, problem, suggestion }) => {
+            const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh || "", [requirement, evidence, problem, suggestion].join(" "));
+            return `<div class="correction-item bullet-analysis-item">
+              <p><strong>要点：</strong>${escapeHtml(requirement)}</p>
+              <p><strong>是否覆盖：</strong>${coverageText(item.covered)}</p>
+              ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
+              ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
+              ${suggestion ? `<p><strong>建议：</strong>${escapeHtml(suggestion)} ${renderCopyButton(suggestion)}</p>` : ""}
+              ${renderZhToggle(zh)}
+            </div>`;
+          }).join("")}</div>`;
+        })()}</div>
       ` : `
         <div><strong>题目类型：</strong>${renderTextWithTranslation(analysis.questionType || "Not returned.", analysisZh.questionTypeZh, { tag: "span" })}</div>
         <p><strong>话题：</strong>${escapeHtml(analysis.topic || "未返回")}</p>
@@ -1133,6 +1138,29 @@ function expressionTokenEditDistance(a, b) {
   return dp[left.length][right.length];
 }
 
+function importantMeaningSegments(text) {
+  return String(text || "")
+    .split(/\b(?:because|as|since|although|though|if|when|while|which|that|so that|in order to|therefore|as a result)\b/i)
+    .map((segment) => segment.trim())
+    .filter((segment) => tokenizeExpressionForComparison(segment).length >= 4);
+}
+
+function losesImportantMeaning(correctedSentence, betterExpression) {
+  const correctedTokens = tokenizeExpressionForComparison(correctedSentence);
+  const betterTokens = tokenizeExpressionForComparison(betterExpression);
+  if (!correctedTokens.length || !betterTokens.length) return false;
+  const correctedNorm = correctedTokens.join(" ");
+  const betterNorm = betterTokens.join(" ");
+  if (correctedNorm.startsWith(betterNorm) && betterTokens.length <= Math.ceil(correctedTokens.length * 0.78)) return true;
+  if (betterTokens.length < Math.max(5, Math.floor(correctedTokens.length * 0.65))) return true;
+  return importantMeaningSegments(correctedSentence).some((segment) => {
+    const segTokens = tokenizeExpressionForComparison(segment);
+    if (segTokens.length < 4) return false;
+    const preserved = segTokens.filter((token) => betterTokens.includes(token)).length;
+    return preserved / segTokens.length < 0.45;
+  });
+}
+
 function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const corrected = String(correctedSentence || "").toLowerCase();
   const better = String(betterExpression || "").toLowerCase();
@@ -1146,20 +1174,13 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
 
-  // "更好表达"必须是明显升级，不只是换几个单词。
-  if (similarity >= 0.74) return false;
-  if (editDistance <= 4 && lengthGap <= 4) return false;
+  // 只拦截假升级：完全重复、无意义小替换、截断或丢信息。
+  if (similarity >= 0.92) return false;
+  if (editDistance <= 2 && lengthGap <= 2) return false;
+  if (editDistance <= 3 && lengthGap <= 1 && similarity >= 0.82) return false;
+  if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
-  const structureMarkers = [
-    "not because", "but because", "rather than", "instead of", "so that", "in order to",
-    "which", "while", "although", "whereas", "because", "therefore", "as a result",
-    "this would", "i would be grateful", "i am seeking", "i hope to", "my aim is", "with the aim of"
-  ];
-  const hasStructureMarker = structureMarkers.some((marker) => better.includes(marker) && !corrected.includes(marker));
-  const hasClearLengthUpgrade = betterTokens.length >= correctedTokens.length + 5 || correctedTokens.length >= betterTokens.length + 5;
-  const hasClearRewrite = editDistance >= 6 && similarity < 0.72;
-
-  return hasStructureMarker || hasClearLengthUpgrade || hasClearRewrite;
+  return true;
 }
 
 function shouldShowBetterExpression(correctedSentence, betterExpression) {
@@ -1271,7 +1292,7 @@ function renderDetailedSentenceCorrections(items = []) {
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         <p><strong>原句：</strong>${escapeHtml(original)}</p>
         <p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>
-        ${better ? `<p><strong>更好表达：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        ${better ? `<p><strong>更好表达${item.betterExpressionTargetBand ? `（目标 ${escapeHtml(item.betterExpressionTargetBand)}）` : ""}：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
         <p><strong>错误类型：</strong>${escapeHtml(item.errorType || "")}${item.errorTypeZh ? ` / ${escapeHtml(item.errorTypeZh)}` : ""}</p>
         ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
         ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
@@ -1428,8 +1449,8 @@ function renderTargetImprovementPlan(plan, result = {}) {
   return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
     <div class="compact-facts">
       <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || result.overallBand || "")}</p>
-      <p><strong>目标范围：</strong>${escapeHtml(plan.targetBandRange || plan.targetRange || plan.target || "")}</p>
-      ${plan.targetReason ? `<p><strong>为什么是这个目标：</strong>${escapeHtml(plan.targetReason)}</p>` : ""}
+      <div><strong>目标范围：</strong>${renderTextWithTranslation(plan.targetBandRange || plan.targetRange || plan.target || "", plan.targetBandRangeZh, { tag: "span" })}</div>
+      ${plan.targetReason ? `<div><strong>为什么是这个目标：</strong>${renderTextWithTranslation(plan.targetReason, plan.targetReasonZh, { tag: "span" })}</div>` : ""}
     </div>
     ${Array.isArray(plan.focus) && plan.focus.length ? `<h4>这次最应该提升的点</h4>${renderListWithTranslations(plan.focus, plan.focusZh, "No target focus was returned.")}` : ""}
     ${collapsibleSection("四项提分动作", criterionUpgrades.length ? `<div class="correction-list">${criterionUpgrades.map((item) => `
@@ -1457,23 +1478,32 @@ function renderTask1LetterCorrections(corrections) {
       <div><strong>Tone：</strong>${renderTextWithTranslation(corrections.toneComment || "暂无", corrections.toneCommentZh, { tag: "span" })}</div>
       <div><strong>Purpose：</strong>${renderTextWithTranslation(corrections.purposeComment || "暂无", corrections.purposeCommentZh, { tag: "span" })}</div>
     </div>
-    ${bulletAdvice.length ? `<h4>Bullet point 建议</h4><div class="correction-list bullet-analysis-list">${bulletAdvice.map((item, index) => {
-      const bulletPoint = firstNonEmpty(item.bulletPoint, item.requirement, item.point, item.taskRequirement, item.text) || `Bullet point ${index + 1}`;
-      const evidence = firstNonEmpty(item.evidenceFromEssay, item.evidence, item.originalEvidence, item.quote);
-      const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason);
-      const comment = firstNonEmpty(item.comment, item.advice, item.suggestion, item.howToFix, item.recommendation);
-      const sentence = firstNonEmpty(item.suggestedSentence, item.modelSentence, item.exampleSentence, item.fixSentence);
-      const zh = safeChineseHelper(firstNonEmpty(item.explanationZh, item.commentZh, item.suggestionZh, item.reasonZh, item.suggestedSentenceZh), [bulletPoint, evidence, problem, comment, sentence].join(" "));
-      return `<div class="correction-item bullet-analysis-item">
-        <p><strong>要点：</strong>${escapeHtml(bulletPoint)}</p>
-        <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
-        ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
-        ${problem ? `<p><strong>具体问题：</strong>${escapeHtml(problem)}</p>` : ""}
-        ${comment ? `<p><strong>建议：</strong>${escapeHtml(comment)}</p>` : ""}
-        ${sentence ? `<p><strong>可用句：</strong>${escapeHtml(sentence)} ${renderCopyButton(sentence)}</p>` : ""}
-        ${renderZhToggle(zh)}
-      </div>`;
-    }).join("")}</div>` : ""}
+    ${(() => {
+      const reliableAdvice = bulletAdvice.map((item, index) => {
+        const bulletPoint = firstNonEmpty(item.bulletPoint, item.requirement, item.point, item.taskRequirement, item.text) || `Bullet point ${index + 1}`;
+        const placeholder = isPlaceholderBulletLabel(bulletPoint) || item.coverageUnknown;
+        const evidence = firstNonEmpty(item.evidenceFromEssay, item.evidence, item.originalEvidence, item.quote);
+        const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason);
+        const comment = firstNonEmpty(item.comment, item.advice, item.suggestion, item.howToFix, item.recommendation);
+        const sentence = firstNonEmpty(item.suggestedSentence, item.modelSentence, item.exampleSentence, item.fixSentence);
+        return { item, bulletPoint, placeholder, evidence, problem, comment, sentence };
+      }).filter((entry) => !entry.placeholder && (entry.evidence || entry.problem || entry.comment || entry.sentence));
+      if (!reliableAdvice.length) {
+        return `<h4>Bullet point 建议</h4><p class="muted">Task 1 bullet-point 专项建议暂未生成可靠结果。本次不显示覆盖判断，以避免误判。</p>`;
+      }
+      return `<h4>Bullet point 建议</h4><div class="correction-list bullet-analysis-list">${reliableAdvice.map(({ item, bulletPoint, evidence, problem, comment, sentence }) => {
+        const zh = safeChineseHelper(firstNonEmpty(item.explanationZh, item.commentZh, item.suggestionZh, item.reasonZh, item.suggestedSentenceZh), [bulletPoint, evidence, problem, comment, sentence].join(" "));
+        return `<div class="correction-item bullet-analysis-item">
+          <p><strong>要点：</strong>${escapeHtml(bulletPoint)}</p>
+          <p><strong>是否覆盖：</strong>${coverageText(item.covered)}</p>
+          ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
+          ${problem ? `<p><strong>具体问题：</strong>${escapeHtml(problem)}</p>` : ""}
+          ${comment ? `<p><strong>建议：</strong>${escapeHtml(comment)}</p>` : ""}
+          ${sentence ? `<p><strong>可用句：</strong>${escapeHtml(sentence)} ${renderCopyButton(sentence)}</p>` : ""}
+          ${renderZhToggle(zh)}
+        </div>`;
+      }).join("")}</div>`;
+    })()}
   `);
 }
 
