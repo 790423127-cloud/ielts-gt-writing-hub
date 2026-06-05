@@ -26,7 +26,7 @@ const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
-const AI_REQUEST_TIMEOUT_MS = Math.max(3500, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 8500, 15000));
+const AI_REQUEST_TIMEOUT_MS = Math.max(3500, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 7500, 8000));
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
 globalThis.__IELTS_AI_RESPONSE_CACHE__ = AI_RESPONSE_CACHE;
@@ -1396,6 +1396,15 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
       body: JSON.stringify(requestBody),
       signal: controller.signal
     });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error("DeepSeek request timed out.");
+      timeoutError.code = "DEEPSEEK_TIMEOUT";
+      timeoutError.provider = "deepseek";
+      timeoutError.detail = "The AI provider did not respond before the server timeout.";
+      throw timeoutError;
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -1427,6 +1436,16 @@ async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens
 }
 
 function sendProviderError(req, res, error) {
+  if (error.code === "DEEPSEEK_TIMEOUT" || error.message === "DeepSeek request timed out.") {
+    sendJson(req, res, 504, {
+      error: "DeepSeek request timed out.",
+      provider: "deepseek",
+      detail: "The AI provider did not respond before the server timeout.",
+      suggestion: "Please retry, or use the non-revision detailed mode first."
+    });
+    return true;
+  }
+
   if (error.message !== "DeepSeek API request failed.") return false;
 
   if (error.status === 429) {
@@ -2265,7 +2284,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   return localizeResultForOutput(normalized, locale);
 }
 
-module.exports = async function handler(req, res) {
+async function handleRequest(req, res) {
   if (req.method === "OPTIONS") {
     Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
     res.statusCode = 204;
@@ -2353,6 +2372,23 @@ module.exports = async function handler(req, res) {
       error: "AI grading failed. No local score was generated.",
       provider: "deepseek",
       detail: error.message || error.name || "DeepSeek did not return valid JSON after AI-only repair attempts."
+    });
+  }
+}
+
+module.exports = async function handler(req, res) {
+  try {
+    await handleRequest(req, res);
+  } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    sendJson(req, res, 500, {
+      error: "Server error while grading IELTS writing.",
+      provider: "deepseek",
+      detail: error?.message || String(error),
+      suggestion: "Please retry later or check Vercel runtime logs."
     });
   }
 };
