@@ -1,0 +1,43 @@
+name: Codex timeout default patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.codex-timeout-30-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Increase DeepSeek default single-request timeout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('api/grade-ielts.js')
+          text = path.read_text(encoding='utf-8')
+          old = "Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 25000, 30000)"
+          new = "Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 30000, 30000)"
+          if old not in text and new not in text:
+              raise SystemExit('target timeout expression not found')
+          text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Syntax check
+        run: node --check api/grade-ielts.js
+      - name: Clean temporary files
+        run: |
+          rm -f .codex-timeout-30-trigger
+          rm -f .github/workflows/codex-timeout-default-30.yml
+      - name: Commit changes
+        run: |
+          git config user.name "codex-bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+          git add api/grade-ielts.js .github/workflows/codex-timeout-default-30.yml .codex-timeout-30-trigger
+          git commit -m "Increase DeepSeek timeout default" || exit 0
+          git push
