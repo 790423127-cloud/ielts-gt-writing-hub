@@ -912,12 +912,21 @@ function isNonBlockingStageWarning(text) {
   return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON/i.test(String(text || ""));
 }
 
+function isWordCountWarningText(text) {
+  return /\bword count\b|\bunderlength\b|below the recommended|under the recommended|recommended minimum|\b150 words\b|\b250 words\b|significantly under|字数|低于.*建议/i.test(String(text || ""));
+}
+
+function isUserVisibleSystemWarning(text) {
+  const value = String(text || "").trim();
+  return value && !isNonBlockingStageWarning(value) && !isWordCountWarningText(value);
+}
+
 function renderStageProgress(result = {}) {
   const progress = Array.isArray(result.stageProgress) ? result.stageProgress : [];
   const warnings = Array.isArray(result.stageWarnings) ? result.stageWarnings : [];
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
-  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && !isNonBlockingStageWarning(item) && arr.indexOf(item) === index);
+  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => isUserVisibleSystemWarning(item) && arr.indexOf(item) === index);
   if (!progress.length && !allWarnings.length) return "";
   return collapsibleSection("AI 批改进度与提示", `
     ${progress.length ? `<ul>${progress.map((item) => {
@@ -938,6 +947,16 @@ function renderCriteria(criteria = {}) {
       ${renderTextWithTranslation(item?.feedback || "", item?.feedbackZh, { fallback: "No feedback is available." })}
       ${item?.howToImprove ? renderTextWithTranslation(`How to improve: ${item.howToImprove}`, item?.howToImproveZh, { className: "improve" }) : ""}
     </div>`).join("")}</div>`;
+}
+
+
+function renderWordCountWarningNote(result = {}) {
+  const note = result.wordCountWarning && typeof result.wordCountWarning === "object" ? result.wordCountWarning : {};
+  const candidates = [note.message, note.warning, note.note, result.lowBandDiagnostics?.reason, result.scoreCalibration?.capReason, result.scoreCalibration?.whyNotHigher];
+  const message = candidates.map((item) => String(item || "").trim()).find((item) => isWordCountWarningText(item)) || "";
+  if (!message) return "";
+  const zh = note.messageZh || note.warningZh || "字数不足会限制内容展开和任务完成度，但这不是答错题；匹配检查只判断是否回答了当前题目。";
+  return `<section class="grading-section word-count-note"><h4>字数与限分说明</h4>${renderTextWithTranslation(message, zh)}</section>`;
 }
 
 function renderScoreCalibration(calibration, calibrationZh = {}) {
@@ -1016,7 +1035,7 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
       `}
       <div><strong>缺失要求：</strong>${listHtml(analysis.missingRequirements)}</div>
       <div><strong>匹配检查：</strong>${renderTextWithTranslation(match.reason || analysis.taskMatchSummary || "No detailed task analysis is available for this response.", analysisZh.taskMatchSummaryZh, { tag: "span" })}</div>
-      ${match.warning && !isNonBlockingStageWarning(match.warning) ? `<p class="ai-warning">${escapeHtml(match.warning)}</p>` : ""}
+      ${match.warning && isUserVisibleSystemWarning(match.warning) ? `<p class="ai-warning">${escapeHtml(match.warning)}</p>` : ""}
   `);
 }
 
@@ -1647,6 +1666,7 @@ function renderGradingResult(result = {}) {
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
     ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
+    ${renderWordCountWarningNote(result)}
     ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
     ${renderHighBandDiagnostics(result.highBandDiagnostics, result.highBandDiagnosticsZh)}
