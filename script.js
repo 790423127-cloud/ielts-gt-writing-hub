@@ -395,7 +395,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasUsefulItemArray(data.band5FixPlan) ||
       hasUsefulItemArray(data.band6UpgradePlan) ||
       hasUsefulItemArray(data.band7UpgradePlan) ||
-      hasAnyText(data.targetImprovementPlan) ||
+      targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
       hasAnyText(data.correctionPriority) ||
       hasAnyText(data.task1LetterCorrections) ||
       hasAnyText(data.task2EssayCorrections)
@@ -428,7 +428,7 @@ function hasDetailedAdviceContent(result = {}) {
     hasUsefulItemArray(result.band5FixPlan) ||
     hasUsefulItemArray(result.band6UpgradePlan) ||
     hasUsefulItemArray(result.band7UpgradePlan) ||
-    hasAnyText(result.targetImprovementPlan) ||
+    targetImprovementPlanHasUsefulContent(result.targetImprovementPlan) ||
     hasAnyText(result.correctionPriority) ||
     hasAnyText(result.task1LetterCorrections) ||
     hasAnyText(result.task2EssayCorrections)
@@ -783,22 +783,132 @@ function renderCorrectionPriority(priority) {
   </section>`;
 }
 
-function renderTargetImprovementPlan(plan) {
-  if (!plan || typeof plan !== "object" || !hasAnyText(plan)) return "";
-  const criterionUpgrades = Array.isArray(plan.criterionUpgrades) ? plan.criterionUpgrades : [];
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const text = value.map((item) => typeof item === "object" ? flattenObjectText(item) : String(item || "").trim()).filter(Boolean).join("; ");
+      if (text) return text;
+      continue;
+    }
+    if (value && typeof value === "object") {
+      const text = flattenObjectText(value);
+      if (text) return text;
+      continue;
+    }
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function flattenObjectText(value, limit = 6) {
+  if (!value || typeof value !== "object") return String(value ?? "").trim();
+  const parts = [];
+  Object.values(value).forEach((item) => {
+    if (parts.length >= limit) return;
+    if (Array.isArray(item)) {
+      const text = item.map((x) => typeof x === "object" ? flattenObjectText(x, 3) : String(x || "").trim()).filter(Boolean).join("; ");
+      if (text) parts.push(text);
+    } else if (item && typeof item === "object") {
+      const text = flattenObjectText(item, 3);
+      if (text) parts.push(text);
+    } else {
+      const text = String(item ?? "").trim();
+      if (text) parts.push(text);
+    }
+  });
+  return parts.join("; ");
+}
+
+function normalizeCriterionUpgradeItem(item) {
+  if (typeof item === "string") return { criterion: "", target: "", action: item.trim(), actionZh: "" };
+  if (Array.isArray(item)) return { criterion: "", target: "", action: item.map((x) => String(x || "").trim()).filter(Boolean).join("; "), actionZh: "" };
+  if (!item || typeof item !== "object") return null;
+  const criterion = firstNonEmpty(
+    item.criterion, item.name, item.item, item.project, item.category, item.area,
+    item.skill, item.criteria, item.criterionName, item.bandCriterion, item.focusArea, item.section
+  );
+  const target = firstNonEmpty(
+    item.target, item.targetBand, item.targetRange, item.goal, item.objective,
+    item.aim, item.nextBand, item.bandTarget, item.targetLevel
+  );
+  let action = firstNonEmpty(
+    item.action, item.advice, item.specificAction, item.specificActions,
+    item.actionStep, item.actionSteps, item.steps, item.howToImprove,
+    item.whatToDo, item.recommendation, item.suggestion, item.plan, item.detail, item.details
+  );
+  if (!action && hasAnyText(item)) action = flattenObjectText(item);
+  const actionZh = firstNonEmpty(item.actionZh, item.adviceZh, item.specificActionZh, item.suggestionZh, item.howToImproveZh);
+  if (!criterion && !target && !action) return null;
+  return { criterion, target, action, actionZh };
+}
+
+function getPlanUpgradeSource(plan) {
+  if (!plan || typeof plan !== "object") return [];
+  const candidates = [
+    plan.criterionUpgrades,
+    plan.criteriaUpgrades,
+    plan.criterionActions,
+    plan.criteriaActions,
+    plan.fourCriteriaActions,
+    plan.fourCriterionActions,
+    plan.upgrades,
+    plan.actions,
+    plan.actionPlan,
+    plan.nextSteps
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length) return candidate;
+  }
+  return [];
+}
+
+function fallbackCriterionUpgrades(plan, result = {}) {
+  const target = plan?.targetBandRange || plan?.target || "Next realistic band range";
+  const first = selected?.task === "Task 1" ? "Task Achievement" : "Task Response";
+  const criteriaNames = [first, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+  const adviceMap = {
+    [first]: result.taskAchievementAdvice,
+    "Coherence and Cohesion": result.coherenceAdvice,
+    "Lexical Resource": result.lexicalAdvice,
+    "Grammatical Range and Accuracy": result.grammarAdvice
+  };
+  return criteriaNames.map((criterion) => {
+    const criterionFeedback = result.criteria?.[criterion]?.howToImprove || result.criteria?.[criterion]?.feedback || "";
+    const advice = Array.isArray(adviceMap[criterion]) ? adviceMap[criterion].filter(Boolean).join("; ") : "";
+    const action = advice || criterionFeedback || "Use the criterion feedback above to make one concrete improvement in this area.";
+    return { criterion, target, action, actionZh: "" };
+  });
+}
+
+function targetImprovementPlanHasUsefulContent(plan) {
+  if (!plan || typeof plan !== "object") return false;
+  const upgrades = getPlanUpgradeSource(plan).map(normalizeCriterionUpgradeItem).filter(Boolean).filter((item) => item.action || item.criterion || item.target);
+  return Boolean(
+    String(plan.currentBand || plan.targetBandRange || plan.targetReason || "").trim() ||
+    hasUsefulItemArray(plan.focus) ||
+    hasUsefulItemArray(plan.practiceTasks) ||
+    upgrades.length
+  );
+}
+
+function renderTargetImprovementPlan(plan, result = {}) {
+  if (!plan || typeof plan !== "object" || !targetImprovementPlanHasUsefulContent(plan)) return "";
+  let criterionUpgrades = getPlanUpgradeSource(plan).map(normalizeCriterionUpgradeItem).filter(Boolean).filter((item) => item.action || item.criterion || item.target);
+  if (!criterionUpgrades.length) criterionUpgrades = fallbackCriterionUpgrades(plan, result);
   return `<section class="grading-section">
     <h4>下一阶段提分计划 Target Improvement Plan</h4>
     <div class="compact-facts">
-      <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || "")}</p>
-      <p><strong>目标范围：</strong>${escapeHtml(plan.targetBandRange || "")}</p>
+      <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || result.overallBand || "")}</p>
+      <p><strong>目标范围：</strong>${escapeHtml(plan.targetBandRange || plan.targetRange || plan.target || "")}</p>
       ${plan.targetReason ? `<p><strong>为什么是这个目标：</strong>${escapeHtml(plan.targetReason)}</p>` : ""}
     </div>
     ${Array.isArray(plan.focus) && plan.focus.length ? `<h4>这次最应该提升的点</h4>${renderListWithTranslations(plan.focus, plan.focusZh, "No target focus was returned.")}` : ""}
     ${criterionUpgrades.length ? `<h4>四项提分动作</h4><div class="correction-list">${criterionUpgrades.map((item) => `
       <div class="correction-item">
-        <p><strong>项目：</strong>${escapeHtml(item.criterion || item.name || "")}</p>
-        <p><strong>目标：</strong>${escapeHtml(item.target || item.targetBand || "")}</p>
-        <p><strong>具体动作：</strong>${escapeHtml(item.action || item.advice || "")}</p>
+        <p><strong>项目：</strong>${escapeHtml(item.criterion || "General improvement")}</p>
+        <p><strong>目标：</strong>${escapeHtml(item.target || plan.targetBandRange || "Next realistic band range")}</p>
+        <p><strong>具体动作：</strong>${escapeHtml(item.action || "Use the feedback above to make this criterion stronger.")}</p>
         ${renderZhToggle(item.actionZh || item.adviceZh || "")}
       </div>`).join("")}</div>` : ""}
     ${Array.isArray(plan.practiceTasks) && plan.practiceTasks.length ? `<h4>练习任务</h4>${renderListWithTranslations(plan.practiceTasks, plan.practiceTasksZh, "No practice tasks were returned.")}` : ""}
@@ -946,7 +1056,7 @@ function renderGradingResult(result = {}) {
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
     ${renderCorrectionPriority(result.correctionPriority)}
-    ${renderTargetImprovementPlan(result.targetImprovementPlan)}
+    ${renderTargetImprovementPlan(result.targetImprovementPlan, result)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     <section class="grading-section">
       <h4>拼写错误 Spelling Corrections</h4>
