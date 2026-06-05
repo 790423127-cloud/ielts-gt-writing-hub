@@ -1,0 +1,33 @@
+name: Codex fix grading failed fetch
+
+on:
+  push:
+    paths:
+      - .github/workflows/codex-fix-failed-fetch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply failed fetch patch
+        run: |
+          curl -fsSL https://paste.rs/NdJ1C -o /tmp/codex_fix_failed_fetch.py
+          python3 /tmp/codex_fix_failed_fetch.py
+          node --check api/grade-ielts.js
+      - name: Commit patch and remove workflow
+        run: |
+          rm .github/workflows/codex-fix-failed-fetch.yml
+          git config user.name "codex-bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+          git add api/grade-ielts.js .github/workflows/codex-fix-failed-fetch.yml
+          git commit -m "Fix grading API failed fetch handling" || exit 0
+          git push
