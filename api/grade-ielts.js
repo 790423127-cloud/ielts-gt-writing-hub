@@ -209,6 +209,7 @@ function buildTaskSpecificScoringRubric(task) {
       "Task-specific scoring engine: IELTS General Training Writing Task 1 letter.",
       "Use Task Achievement as the first criterion, not Task Response.",
       "Task Achievement must assess: clear letter purpose, coverage of all prompt bullet points, development of each bullet point, recipient relationship, formal/semi-formal/informal tone, opening/closing, letter format, relevance, and word-count impact.",
+      "For Task 1, differentiate criterion bands: a letter may mention all bullet points but still have weaker vocabulary or grammar. Do not let Task Achievement automatically raise Coherence, Lexical Resource, or Grammar.",
       "Do not assess Task 1 as an essay. Do not require thesis statement, argument, counterargument, essay conclusion, or a clear opinion position unless the prompt itself asks for an opinion in a letter context.",
       "Coherence and Cohesion for Task 1 must assess letter organisation, paragraphing by purpose/bullet point, logical ordering of request/explanation/thanks/apology/invitation details, natural linking, and referencing.",
       "Lexical Resource for Task 1 must assess letter-function vocabulary, register, precision, collocation, spelling, word formation, and whether the wording fits the recipient relationship.",
@@ -219,6 +220,8 @@ function buildTaskSpecificScoringRubric(task) {
     "Task-specific scoring engine: IELTS Writing Task 2 essay.",
     "Use Task Response as the first criterion, not Task Achievement.",
     "Task Response must assess: whether all parts of the question are answered, whether a clear position is present when required, relevance of main ideas, depth of development, reasoning, examples, conclusion, and whether the response matches the question type.",
+    "Task Response must be capped conservatively when the essay is short, only lists ideas, lacks clear examples, fails to answer both sides/parts of the question, has no clear position where required, or has a conclusion that does not reflect the argument.",
+    "For Task 2, differentiate criterion bands: a response may answer the task better than it controls grammar, or have basic organisation but weaker vocabulary. Do not assign all four bands the same value unless the evidence is genuinely equal across all four criteria.",
     "Do not assess Task 2 as a letter. Do not use recipient relationship, letter opening/closing, formal letter tone, or bullet-point coverage as Task Response evidence.",
     "Coherence and Cohesion for Task 2 must assess introduction/body/conclusion organisation, clear paragraph central ideas, progression of argument, logical sequencing, cohesive devices, referencing, and paragraph unity.",
     "Lexical Resource for Task 2 must assess topic vocabulary, abstract/general academic wording, precision, collocation, repetition, spelling, word formation, and whether vocabulary expresses argument clearly.",
@@ -334,10 +337,274 @@ function shouldReauditMechanicalSameBands(result, task) {
   return mechanicalSameBandSignals(result, task) >= 3;
 }
 
+
+function countRegexMatches(text, regex) {
+  const source = String(text || "");
+  if (!source) return 0;
+  const matches = source.match(regex);
+  return matches ? matches.length : 0;
+}
+
+function sentenceCountServer(text) {
+  const sentences = String(text || "")
+    .split(/[.!?]+|\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return sentences.length;
+}
+
+function paragraphCountServer(text) {
+  return String(text || "")
+    .split(/\n\s*\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean).length;
+}
+
+function averageCriterionBand(result, task) {
+  const bands = getCriterionBandsForTask(result, task);
+  if (!bands.length) return clampAiBand(result?.overallBand, 1);
+  return bands.reduce((sum, band) => sum + band, 0) / bands.length;
+}
+
+function appendCalibrationEvidence(result, message) {
+  if (!message) return;
+  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
+    ? result.scoreCalibration
+    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
+  const evidence = ensureArray(result.scoreCalibration.evidence).filter(Boolean);
+  if (!evidence.includes(message)) evidence.push(message);
+  result.scoreCalibration.evidence = evidence.slice(0, 7);
+}
+
+function appendCriterionLimitEvidence(criterion, message) {
+  if (!criterion || typeof criterion !== "object" || !message) return;
+  const limiting = ensureArray(criterion.limitingEvidence).filter(Boolean);
+  if (!limiting.includes(message)) limiting.push(message);
+  criterion.limitingEvidence = limiting.slice(0, 5);
+  if (!criterion.whyNotHigher) criterion.whyNotHigher = message;
+}
+
+function capCriterionBand(result, criterionName, capBand, reason, source = "local_criterion_differentiation") {
+  const criterion = result?.criteria?.[criterionName];
+  if (!criterion || !Number.isFinite(Number(capBand))) return false;
+  const current = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+  const cap = clampAiBand(capBand, current);
+  if (current <= cap) return false;
+  criterion.band = cap;
+  criterion.localDifferentiationCap = { source, cap, reason };
+  appendCriterionLimitEvidence(criterion, reason);
+  appendCalibrationEvidence(result, `${criterionName} capped at Band ${formatBand(cap)}: ${reason}`);
+  return true;
+}
+
+function task1BulletCoverageFromResult(result) {
+  const bullets = result?.taskRequirementAnalysis?.bulletPoints;
+  if (!Array.isArray(bullets) || !bullets.length) return { known: false, covered: 0, total: 0 };
+  let known = 0;
+  let covered = 0;
+  bullets.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const value = item.covered;
+    if (value === null || value === undefined || String(value).toLowerCase() === "unknown") return;
+    known += 1;
+    if (value === true || /^(yes|true|covered|partly covered|partially covered)$/i.test(String(value))) covered += 1;
+  });
+  return { known: known > 0, covered, total: known || bullets.length };
+}
+
+function extractEssaySignals(body = {}, result = {}) {
+  const essay = String(body.essay || result.essay || "");
+  const lower = essay.toLowerCase();
+  const words = Number(body.wordCount || body.actualWordCount || result.actualWordCount) || countWordsServer(essay);
+  const sentences = sentenceCountServer(essay);
+  const paragraphs = paragraphCountServer(essay);
+  const commonBasicWords = countRegexMatches(lower, /\b(good|nice|job|thing|things|people|work|help|do|make|go|get|know|learn|want)\b/g);
+  const repeatedBasicWords = commonBasicWords >= Math.max(8, Math.ceil(words * 0.08));
+  const weakCollocationHits = countRegexMatches(lower, /\b(want go|want leave|want try|learn talk|learn many thing|many thing\b|some customer\b|do some job|career need|need grow|people is|company is nice|company is good|other department\b|make better use|move department)\b/g);
+  const seriousGrammarHits = countRegexMatches(lower, /\b(want\s+(?:go|leave|try|change|move)|learn\s+(?:talk|do|work)|need\s+(?:grow|go|improve)|people\s+is|company\s+are|many\s+thing\b|some\s+customer\b|two\s+year\b|I\s+write\s+this\s+letter)\b/g);
+  const grammarErrorObjects = ensureArray(result.grammarErrors).length + ensureArray(result.detailedSentenceCorrections).filter((item) => {
+    const text = JSON.stringify(item || {}).toLowerCase();
+    return /grammar|verb|article|plural|subject|tense|sentence|word form|agreement/.test(text);
+  }).length;
+  const grammarPressure = seriousGrammarHits + grammarErrorObjects;
+  const weakLinkingHits = countRegexMatches(lower, /\b(firstly|secondly|finally|therefore|however|moreover|furthermore|in addition|as a result|because|so|also)\b/g);
+  const hasOnlyBasicLinking = weakLinkingHits <= 4 && words >= 70;
+  const hasFormalSalutation = /^\s*dear\s+(mr\.?|ms\.?|mrs\.?|dr\.?|manager|sir|madam|[a-z]+\s*[a-z]*)/i.test(essay);
+  const hasBareDear = /^\s*dear\s*\n/i.test(essay) || /^\s*dear\s*$/im.test(essay);
+  const hasLetterClosing = /\b(yours sincerely|yours faithfully|kind regards|best regards|regards|thank you|thank you for your consideration)\b/i.test(essay);
+  const task2PositionSignals = /\b(i believe|i agree|i disagree|in my opinion|my view|this essay will|i think|overall,? i|to conclude|in conclusion)\b/i.test(essay);
+  const hasExamples = /\b(for example|for instance|such as|for example,|e\.g\.|for example\b)\b/i.test(essay);
+  return {
+    essay,
+    lower,
+    words,
+    sentences,
+    paragraphs,
+    repeatedBasicWords,
+    commonBasicWords,
+    weakCollocationHits,
+    seriousGrammarHits,
+    grammarErrorObjects,
+    grammarPressure,
+    hasOnlyBasicLinking,
+    weakLinkingHits,
+    hasFormalSalutation,
+    hasBareDear,
+    hasLetterClosing,
+    task2PositionSignals,
+    hasExamples
+  };
+}
+
+function shouldApplyHardDifferentiation(result, body, task, signals) {
+  const bands = getCriterionBandsForTask(result, task);
+  const allSame = bands.length === 4 && new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
+  const avg = averageCriterionBand(result, task);
+  const underMinimum = task === "Task 1" ? signals.words < 150 : signals.words < 250;
+  const weakLanguage = signals.grammarPressure >= 3 || signals.weakCollocationHits >= 2 || signals.repeatedBasicWords;
+  return Boolean(
+    shouldReauditMechanicalSameBands(result, task) ||
+    (allSame && (underMinimum || weakLanguage || avg <= 5)) ||
+    (avg <= 5.5 && underMinimum && weakLanguage)
+  );
+}
+
+function applyTask1CriterionDifferentiationCaps(result, body, signals) {
+  const first = "Task Achievement";
+  const bulletCoverage = task1BulletCoverageFromResult(result);
+  let changed = false;
+
+  if (signals.words < 50) {
+    changed = capCriterionBand(result, first, 3, "Task 1 is far below 50 words, so task fulfilment and development are severely limited.") || changed;
+  } else if (signals.words < 80) {
+    changed = capCriterionBand(result, first, 4, "Task 1 is 50-79 words; the response cannot develop the letter functions enough for a higher Task Achievement score.") || changed;
+  } else if (signals.words < 120) {
+    changed = capCriterionBand(result, first, 4.5, "Task 1 is under 120 words and the bullet-point development is very limited.") || changed;
+  } else if (signals.words < 150) {
+    changed = capCriterionBand(result, first, 5, "Task 1 is below the recommended 150 words, so development may be limited.") || changed;
+  }
+
+  if (bulletCoverage.known && bulletCoverage.total >= 2) {
+    if (bulletCoverage.covered <= 1) {
+      changed = capCriterionBand(result, first, 4, "Only one Task 1 bullet point is clearly addressed.") || changed;
+    } else if (bulletCoverage.covered === 2 && bulletCoverage.total >= 3) {
+      changed = capCriterionBand(result, first, 5, "One major Task 1 bullet point appears missing or insufficiently covered.") || changed;
+    }
+  }
+
+  if ((signals.hasBareDear || !signals.hasFormalSalutation || !signals.hasLetterClosing) && signals.words < 130) {
+    changed = capCriterionBand(result, first, 4.5, "Letter format and register are incomplete: the salutation/closing or manager-facing tone is not fully controlled.") || changed;
+  }
+
+  if (signals.paragraphs >= 2 && signals.hasOnlyBasicLinking) {
+    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "Paragraphing is present, but progression is simple and cohesive devices are very limited.") || changed;
+  } else if (signals.paragraphs <= 1 && signals.words >= 80) {
+    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "The letter lacks clear paragraphing for separate letter functions.") || changed;
+  }
+
+  if (signals.repeatedBasicWords || signals.weakCollocationHits >= 2) {
+    changed = capCriterionBand(result, "Lexical Resource", 4, "Vocabulary is very basic and several collocations or word choices are inaccurate.") || changed;
+  } else if (signals.commonBasicWords >= 8 && signals.words < 130) {
+    changed = capCriterionBand(result, "Lexical Resource", 4.5, "Vocabulary range is narrow and relies heavily on basic words.") || changed;
+  }
+
+  if (signals.grammarPressure >= 5) {
+    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 3.5, "Frequent basic grammar errors in verb patterns, plurals, and agreement reduce sentence control.") || changed;
+  } else if (signals.grammarPressure >= 3) {
+    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4, "Several basic grammar errors are repeated across short sentences.") || changed;
+  }
+
+  return changed;
+}
+
+function applyTask2CriterionDifferentiationCaps(result, body, signals) {
+  const first = "Task Response";
+  let changed = false;
+  const analysis = result?.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
+  const positionPresent = analysis.positionPresent === true || signals.task2PositionSignals;
+  const requiredParts = ensureArray(analysis.requiredParts);
+  const missingRequirements = ensureArray(analysis.missingRequirements);
+
+  if (signals.words < 80) {
+    changed = capCriterionBand(result, first, 3, "Task 2 is under 80 words, so there is too little argument development for a higher Task Response score.") || changed;
+  } else if (signals.words < 150) {
+    changed = capCriterionBand(result, first, 4, "Task 2 is 80-149 words; the response is too short for adequate argument development.") || changed;
+  } else if (signals.words < 200) {
+    changed = capCriterionBand(result, first, 5, "Task 2 is 150-199 words, so idea development is normally too limited for Band 6 Task Response.") || changed;
+  }
+
+  if (!positionPresent && /agree|disagree|opinion|extent|advantages|disadvantages|discuss|views|problem|solution/i.test(String(body.questionPrompt || ""))) {
+    changed = capCriterionBand(result, first, 4, "A clear Task 2 position is not evident for a question type that requires one.") || changed;
+  }
+
+  if (missingRequirements.length || (requiredParts.length >= 2 && analysis.allPartsAnswered === false)) {
+    changed = capCriterionBand(result, first, 5, "One or more required parts of the Task 2 question are missing or only partly answered.") || changed;
+  }
+
+  if (!signals.hasExamples && signals.words < 230) {
+    changed = capCriterionBand(result, first, 5, "Ideas are not supported with a clear example or developed explanation.") || changed;
+  }
+
+  if (signals.paragraphs <= 1 && signals.words >= 120) {
+    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "The essay has little clear paragraphing, so argument organisation is weak.") || changed;
+  } else if (signals.paragraphs < 4 && signals.words >= 180) {
+    changed = capCriterionBand(result, "Coherence and Cohesion", 5, "Essay organisation is basic and does not show a fully controlled introduction, body paragraphs, and conclusion.") || changed;
+  }
+
+  if (signals.repeatedBasicWords || signals.weakCollocationHits >= 2) {
+    changed = capCriterionBand(result, "Lexical Resource", 4.5, "Vocabulary is narrow or repetitive and does not provide enough topic-specific precision for a higher essay score.") || changed;
+  }
+
+  if (signals.grammarPressure >= 5) {
+    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4, "Frequent grammar errors reduce control of argument sentences.") || changed;
+  } else if (signals.grammarPressure >= 3) {
+    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4.5, "Repeated grammar errors prevent a higher grammar band.") || changed;
+  }
+
+  return changed;
+}
+
+function applyCriterionDifferentiationCaps(result, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
+    ? result.scoreCalibration
+    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
+
+  const signals = extractEssaySignals(body, result);
+  if (!shouldApplyHardDifferentiation(result, body, task, signals)) {
+    return result;
+  }
+
+  const beforeBands = getCriterionBandsForTask(result, task);
+  const changed = task === "Task 1"
+    ? applyTask1CriterionDifferentiationCaps(result, body, signals)
+    : applyTask2CriterionDifferentiationCaps(result, body, signals);
+
+  const afterBands = getCriterionBandsForTask(result, task);
+  const wasSame = beforeBands.length === 4 && new Set(beforeBands.map((band) => formatBand(roundHalf(band)))).size === 1;
+  const isNowDifferent = afterBands.length === 4 && new Set(afterBands.map((band) => formatBand(roundHalf(band)))).size > 1;
+
+  if (changed) {
+    result.scoreCalibration.criterionDifferentiationApplied = true;
+    result.scoreCalibration.criteriaDifferentiationReason = task === "Task 1"
+      ? "Task 1 criterion bands were locally differentiated because the evidence showed different levels of task fulfilment, cohesion, vocabulary, and grammar control."
+      : "Task 2 criterion bands were locally differentiated because the evidence showed different levels of response development, organisation, vocabulary, and grammar control.";
+    appendCalibrationEvidence(result, result.scoreCalibration.criteriaDifferentiationReason);
+    if (wasSame && isNowDifferent) {
+      appendCalibrationEvidence(result, "Identical criterion bands were adjusted because the essay evidence did not support all four criteria being at the same level.");
+    }
+  }
+
+  return result;
+}
+
 function finalizeTaskScoringEngine(result, body = {}) {
   if (!result || typeof result !== "object") return result;
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   normalizeTaskSpecificCriteria(result, task);
+  applyCriterionDifferentiationCaps(result, { ...body, task });
 
   const diagnostics = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object"
     ? result.lowBandDiagnostics
@@ -2351,7 +2618,7 @@ function buildNoTemplateAiScoringPrompt(body, gradingMode, locale = "en") {
     "strengths and mainProblems must each contain at least 2 concrete items if the essay has English content.",
     "scoreCalibration must contain strictness, capApplied, capReason, whyNotHigher, whyNotLower, evidence.",
     "Do not output empty strings for scoring feedback. Do not return the schema only.",
-    body.currentResult ? "This is a score-audit pass. Check that bands, feedback, strengths, mainProblems, highBandDiagnostics, lowBandDiagnostics, and scoreCalibration are internally consistent. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
+    body.currentResult ? "This is a score-audit pass. Check that bands, feedback, strengths, mainProblems, highBandDiagnostics, lowBandDiagnostics, and scoreCalibration are internally consistent. If all four criterion bands are identical, keep them identical only when concrete evidence proves all four criteria are genuinely the same level; otherwise differentiate the bands. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "Use underlength as a penalty only when relevant; it is not automatically Band 1.",
     `Task: ${task}`,
     `Mode: ${gradingMode}`,
@@ -2499,7 +2766,7 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     buildTaskSpecificScoringRubric(task),
     "- Do not copy template values. Replace Band 1 placeholders with real criterion bands.",
     "- Give specific evidence from the essay for each criterion.",
-    body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
+    body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If all four criterion bands are identical, keep them identical only when concrete evidence proves all four criteria are genuinely the same level; otherwise differentiate the bands. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
