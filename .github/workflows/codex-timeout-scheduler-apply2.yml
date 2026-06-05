@@ -1,0 +1,40 @@
+name: Codex timeout scheduler apply2
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract and apply normalized patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, re
+          from pathlib import Path
+          wf = Path('.github/workflows/codex-timeout-scheduler-fix.yml').read_text(encoding='utf-8')
+          match = re.search(r'data = "([^"]+)"', wf)
+          if not match:
+              raise SystemExit('patch data not found')
+          patch = base64.b64decode(match.group(1)).decode('utf-8').replace('\r\n', '\n')
+          Path('/tmp/api-timeout.patch').write_text(patch, encoding='utf-8', newline='\n')
+          PY
+          git apply --ignore-whitespace --recount /tmp/api-timeout.patch
+      - name: Verify syntax
+        run: node --check api/grade-ielts.js
+      - name: Commit patch and remove temporary files
+        shell: bash
+        run: |
+          rm -f .github/workflows/codex-timeout-scheduler-fix.yml .github/workflows/codex-timeout-scheduler-apply2.yml .codex-timeout-trigger .codex-timeout-trigger-2
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/grade-ielts.js .github/workflows/codex-timeout-scheduler-fix.yml .github/workflows/codex-timeout-scheduler-apply2.yml .codex-timeout-trigger .codex-timeout-trigger-2
+          git commit -m "Fix DeepSeek timeout scheduling" || exit 0
+          git push
