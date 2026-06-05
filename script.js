@@ -335,7 +335,24 @@ function renderAdviceObject(item, zhFallback = "") {
   const action = firstNonEmpty(item.action, item.advice, item.suggestion, item.howToImprove, item.howToFix, item.specificAction, item.recommendation, item.comment);
   const example = firstNonEmpty(item.example, item.exampleUpgrade, item.suggestedSentence, item.modelSentence, item.betterExpression, item.targetBandExpression);
   const impact = firstNonEmpty(item.bandImpact, item.impactOnBand, item.whyThisAffectsBand, item.scoreImpact, item.reason);
-  const zh = safeChineseHelper(firstNonEmpty(item.actionZh, item.adviceZh, item.suggestionZh, item.howToImproveZh, item.howToFixZh, item.commentZh, item.problemZh, item.reasonZh, zhFallback), [title, weakness, target, action, example, impact].join(" "));
+  const zh = safeChineseHelper([
+    item.currentWeaknessZh,
+    item.weaknessZh,
+    item.problemZh,
+    item.targetZh,
+    item.actionZh,
+    item.adviceZh,
+    item.suggestionZh,
+    item.howToImproveZh,
+    item.howToFixZh,
+    item.commentZh,
+    item.exampleUpgradeZh,
+    item.exampleZh,
+    item.impactOnBandZh,
+    item.bandImpactZh,
+    item.reasonZh,
+    zhFallback
+  ].filter(Boolean).join("\n"), [title, weakness, target, action, example, impact].join(" "));
   const lines = [
     title ? `<p><strong>项目：</strong>${escapeHtml(title)}</p>` : "",
     weakness ? `<p><strong>当前问题：</strong>${escapeHtml(weakness)}</p>` : "",
@@ -962,22 +979,53 @@ function looksLikeStrengthInProblem(value) {
   const text = compactFeedbackText(value);
   return Boolean(text && (
     text.includes("fully addresses") ||
+    text.includes("fully satisfies") ||
+    text.includes("satisfies all task requirements") ||
+    text.includes("fully answers") ||
+    text.includes("fully fulfils") ||
+    text.includes("fully fulfills") ||
     text.includes("addresses all") ||
     text.includes("covers all") ||
+    text.includes("all bullet points are covered") ||
+    text.includes("all task requirements") ||
     text.includes("clear purpose") ||
+    text.includes("purpose is clear") ||
     text.includes("appropriate tone") ||
+    text.includes("appropriately formal") ||
+    text.includes("appropriately polite") ||
+    text.includes("formal and polite") ||
+    text.includes("clear and polite") ||
     text.includes("well-developed") ||
     text.includes("well developed") ||
+    text.includes("specific content") ||
     text.includes("clear progression") ||
+    text.includes("logical progression") ||
+    text.includes("logically ordered") ||
+    text.includes("coherent") ||
     text.includes("accurate language") ||
-    text.includes("few errors")
+    text.includes("high grammatical accuracy") ||
+    text.includes("grammatical accuracy is high") ||
+    text.includes("precise and natural") ||
+    text.includes("vocabulary is precise") ||
+    text.includes("natural vocabulary") ||
+    text.includes("few errors") ||
+    text.includes("strong control") ||
+    text.includes("minor polishing") ||
+    text.includes("minor refinement")
   ) && !(
     text.includes("but") ||
     text.includes("however") ||
     text.includes("although") ||
     text.includes("needs") ||
+    text.includes("need improvement") ||
     text.includes("missing") ||
-    text.includes("limited")
+    text.includes("limited") ||
+    text.includes("underdeveloped") ||
+    text.includes("unclear") ||
+    text.includes("inaccurate") ||
+    text.includes("error") ||
+    text.includes("weak") ||
+    text.includes("lack")
   ));
 }
 
@@ -1183,7 +1231,7 @@ function renderTargetImprovementPlan(plan, result = {}) {
           <p><strong>目标：</strong>${escapeHtml(item.target || plan.targetBandRange || "Next realistic band range")}</p>
           <p><strong>具体动作：</strong>${escapeHtml(item.action || "Use the feedback above to make this criterion stronger.")}</p>
           ${item.exampleUpgrade ? `<p><strong>Example upgrade:</strong> ${escapeHtml(item.exampleUpgrade)}</p>` : ""}
-          ${renderZhToggle(item.actionZh || item.adviceZh || "")}
+          ${renderZhToggle([item.currentWeaknessZh, item.targetZh, item.actionZh, item.adviceZh, item.exampleUpgradeZh].filter(Boolean).join("\n"))}
         </div>`).join("")}</div>` : `<p class="muted">No criterion upgrades were returned.</p>`)}
     ${collapsibleSection("练习任务", Array.isArray(plan.practiceTasks) && plan.practiceTasks.length ? renderListWithTranslations(plan.practiceTasks, plan.practiceTasksZh, "No practice tasks were returned.") : `<p class="muted">No practice tasks were returned.</p>`)}
   `);
@@ -1321,8 +1369,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   const mainProblems = filteredMainProblems(result.mainProblems, result.mainProblemsZh);
-  els.gradingResults.innerHTML = `
-    ${renderFeedbackTools()}
+  const feedbackContentHtml = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
     ${renderStageProgress(result)}
@@ -1359,7 +1406,7 @@ function renderGradingResult(result = {}) {
       <div><h4>Band 6+ 提升建议</h4>${renderListWithTranslations(result.band6UpgradePlan, result.band6UpgradePlanZh, "No Band 6 plan is available.")}</div>
       <div><h4>Band 7+ 高分建议</h4>${renderListWithTranslations(result.band7UpgradePlan, result.band7UpgradePlanZh, "No Band 7 plan is available.")}</div>
     </div>`)}
-    ${collapsibleSection("Model answer outline", proseHtml(result.modelAnswerOutline) || `<p class="muted">No model answer outline was returned.</p>`)}
+    ${collapsibleSection("Model answer outline", renderTextWithTranslation(result.modelAnswerOutline || "", result.modelAnswerOutlineZh, { fallback: "No model answer outline was returned." }))}
     ${collapsibleSection("AI 修改版作文 / Revised Essays", `
       <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>
       ${renderRevisionLimitWarning(result)}
@@ -1368,6 +1415,17 @@ function renderGradingResult(result = {}) {
       ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
       ${collapsibleSection("Revision notes", `${listHtml(result.revisionNotes)}${revisionNotesZh ? `<h4>修改重点中文说明</h4>${renderZhToggle(revisionNotesZh)}` : ""}`)}
     `)}`;
+
+  els.gradingResults.innerHTML = `
+    <div class="grading-result-layout">
+      <aside class="grading-side-tools">
+        ${renderFeedbackTools()}
+      </aside>
+      <div class="grading-result-main">
+        ${feedbackContentHtml}
+      </div>
+    </div>`;
+
   els.gradingResults.querySelectorAll("[data-revision-action]").forEach((button) => {
     button.addEventListener("click", () => handleRevisionAction(button.dataset.revisionAction, button.dataset.target));
   });

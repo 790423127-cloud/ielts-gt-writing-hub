@@ -551,18 +551,28 @@ function buildExpectedJsonShape(task, locale = "en") {
     ],
     task1LetterCorrections: task === "Task 1" ? {
       openingComment: "",
+      openingCommentZh: emptyForLocaleZh("", locale),
       closingComment: "",
+      closingCommentZh: emptyForLocaleZh("", locale),
       toneComment: "",
+      toneCommentZh: emptyForLocaleZh("", locale),
       purposeComment: "",
+      purposeCommentZh: emptyForLocaleZh("", locale),
       bulletPointAdvice: []
     } : null,
     task2EssayCorrections: task === "Task 2" ? {
       positionComment: "",
+      positionCommentZh: emptyForLocaleZh("", locale),
       introductionComment: "",
+      introductionCommentZh: emptyForLocaleZh("", locale),
       bodyParagraphComment: "",
+      bodyParagraphCommentZh: emptyForLocaleZh("", locale),
       exampleComment: "",
+      exampleCommentZh: emptyForLocaleZh("", locale),
       conclusionComment: "",
-      developmentAdvice: []
+      conclusionCommentZh: emptyForLocaleZh("", locale),
+      developmentAdvice: [],
+      developmentAdviceZh: []
     } : null,
     correctionPriority: {
       fixFirst: [],
@@ -587,6 +597,7 @@ function buildExpectedJsonShape(task, locale = "en") {
     band7UpgradePlan: ["..."],
     band7UpgradePlanZh: emptyForLocaleZh(["Band 7 建议中文解释"], locale),
     modelAnswerOutline: "...",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -731,6 +742,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     band7UpgradePlan: [],
     band7UpgradePlanZh: [],
     modelAnswerOutline: "",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: isRevision ? "" : "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -971,8 +983,8 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
     targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
-    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
     taskAchievementAdvice: [],
     taskAchievementAdviceZh: [],
     coherenceAdvice: [],
@@ -1551,8 +1563,8 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     sentenceCorrections: [],
     detailedSentenceCorrections: [],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
-    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
     targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
     taskAchievementAdvice: [],
@@ -1570,6 +1582,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     band7UpgradePlan: [],
     band7UpgradePlanZh: [],
     modelAnswerOutline: "",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -1623,6 +1636,7 @@ function buildFastRevisionPrompt(body, locale = "en") {
     revisedEssayBand6: "",
     revisedEssayBand7: "",
     modelAnswerOutline: "",
+    modelAnswerOutlineZh: "",
     revisedEssayMeta: {
       band5Target: "Basic but complete response; simple grammar; suitable for Band 5.",
       band6Target: "Clear and complete response with better organisation and vocabulary; suitable for Band 6.",
@@ -2059,9 +2073,10 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     detailedSentenceCorrections: [],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
     modelAnswerOutline: "",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -2185,7 +2200,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       "Return JSON with this exact shape:",
       JSON.stringify({
         task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [{ bulletPoint: "", covered: false, evidenceFromEssay: "", problem: "", comment: "", suggestedSentence: "", explanationZh: "" }] } : null,
-        task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+        task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
         taskAchievementAdvice: [],
         taskAchievementAdviceZh: [],
         coherenceAdvice: [],
@@ -2283,8 +2298,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     JSON.stringify({
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
       targetImprovementPlan: { currentBand: "", targetBandRange: "", targetReason: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
-      task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-      task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+      task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [] } : null,
+      task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
       taskAchievementAdvice: [],
       taskAchievementAdviceZh: [],
       coherenceAdvice: [],
@@ -3038,6 +3053,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
     band6UpgradePlan: ["Add supporting details and examples."],
     band7UpgradePlan: ["Use more precise vocabulary and varied sentence structures."],
     modelAnswerOutline: "Write a fuller answer with an opening, clear body points, and a suitable closing.",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -3550,6 +3566,7 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
     modelAnswerOutline: task === "Task 1"
       ? "Opening: state the purpose. Body: cover each bullet point. Closing: end politely."
       : "Introduction: answer the question. Body paragraphs: develop two ideas. Conclusion: restate the position.",
+    modelAnswerOutlineZh: "",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -3984,6 +4001,584 @@ function polishHighBandCriteria(result, body) {
   });
 }
 
+function finalGateText(value, limit = 12) {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, limit)
+      .map((item) => finalGateText(item, 4))
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  if (typeof value === "object") {
+    return Object.values(value)
+      .slice(0, limit)
+      .map((item) => finalGateText(item, 4))
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  return "";
+}
+
+function finalGateList(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => {
+    if (item === null || item === undefined) return false;
+    if (typeof item === "string") return item.trim();
+    return finalGateText(item);
+  });
+}
+
+function finalGateDedupe(items) {
+  const seen = new Set();
+  return finalGateList(items).filter((item) => {
+    const key = finalGateText(item).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isStrengthLikeFeedbackFinal(value) {
+  const text = finalGateText(value);
+  if (!text) return false;
+
+  const positiveSignals = [
+    "fully addresses",
+    "fully address",
+    "fully satisfies",
+    "satisfies all task requirements",
+    "satisfies the task requirements",
+    "fully answers",
+    "fully fulfils",
+    "fully fulfills",
+    "addresses all",
+    "covers all",
+    "all bullet points are covered",
+    "all task requirements",
+    "clear purpose",
+    "purpose is clear",
+    "appropriate tone",
+    "appropriately formal",
+    "appropriately polite",
+    "formal and polite",
+    "clear and polite",
+    "well-developed",
+    "well developed",
+    "specific content",
+    "clear progression",
+    "logical progression",
+    "logically ordered",
+    "coherent",
+    "well organised",
+    "well organized",
+    "accurate language",
+    "high grammatical accuracy",
+    "grammatical accuracy is high",
+    "precise and natural",
+    "vocabulary is precise",
+    "natural vocabulary",
+    "strong control",
+    "effective",
+    "minor polishing",
+    "minor refinement"
+  ];
+
+  const problemSignals = [
+    "but",
+    "however",
+    "although",
+    "needs",
+    "need to",
+    "need improvement",
+    "needs improvement",
+    "missing",
+    "limited",
+    "underdeveloped",
+    "unclear",
+    "inaccurate",
+    "error",
+    "errors",
+    "weak",
+    "lack",
+    "lacks",
+    "not fully",
+    "does not",
+    "fails to",
+    "problem"
+  ];
+
+  return positiveSignals.some((signal) => text.includes(signal)) &&
+    !problemSignals.some((signal) => text.includes(signal));
+}
+
+function isProblemLikeFeedbackFinal(value) {
+  const text = finalGateText(value);
+  if (!text) return false;
+
+  return [
+    "missing",
+    "unclear",
+    "limited",
+    "underdeveloped",
+    "inaccurate",
+    "error",
+    "errors",
+    "weak",
+    "needs",
+    "need improvement",
+    "needs improvement",
+    "lack",
+    "lacks",
+    "not fully",
+    "does not",
+    "fails to",
+    "inappropriate",
+    "wrong tone",
+    "off-topic",
+    "copied",
+    "repetitive",
+    "mechanical",
+    "fragment",
+    "run-on"
+  ].some((signal) => text.includes(signal));
+}
+
+function sanitizeStrengthProblemBucketsFinal(result) {
+  if (!result || typeof result !== "object") return;
+
+  const rawStrengths = finalGateDedupe(result.strengths);
+  const rawStrengthsZh = Array.isArray(result.strengthsZh) ? result.strengthsZh : [];
+  const rawProblems = finalGateDedupe(result.mainProblems);
+  const rawProblemsZh = Array.isArray(result.mainProblemsZh) ? result.mainProblemsZh : [];
+
+  const keptProblems = [];
+  const keptProblemsZh = [];
+  const movedStrengths = [];
+  const movedStrengthsZh = [];
+
+  rawProblems.forEach((item, index) => {
+    if (isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item)) {
+      movedStrengths.push(item);
+      if (rawProblemsZh[index]) movedStrengthsZh.push(rawProblemsZh[index]);
+      return;
+    }
+
+    keptProblems.push(item);
+    if (rawProblemsZh[index]) keptProblemsZh.push(rawProblemsZh[index]);
+  });
+
+  result.mainProblems = finalGateDedupe(keptProblems).slice(0, 6);
+  result.mainProblemsZh = keptProblemsZh.slice(0, result.mainProblems.length);
+
+  result.strengths = finalGateDedupe(rawStrengths.concat(movedStrengths))
+    .filter((item) => isStrengthLikeFeedbackFinal(item) || !isProblemLikeFeedbackFinal(item))
+    .slice(0, 6);
+
+  result.strengthsZh = rawStrengthsZh.concat(movedStrengthsZh).slice(0, result.strengths.length);
+}
+
+function isGenericChineseNoteFinal(value) {
+  const text = String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/[，。！？；：“”‘’、,.!?;:'"]/g, "")
+    .trim()
+    .toLowerCase();
+
+  if (!text) return false;
+
+  const genericNotes = new Set([
+    "更完整地回应题目",
+    "任务回应需要更完整",
+    "观点和展开需要更清楚",
+    "明确立场并展开理由",
+    "这里说明开头是否合适",
+    "这里说明结尾是否合适",
+    "逐条覆盖题目要点",
+    "结构和衔接需要更清楚",
+    "分段并自然使用连接词",
+    "词汇需要更准确更多样",
+    "使用更准确的题目词汇",
+    "语法准确性和句子控制需提升",
+    "先写完整准确的句子",
+    "先保证句子语法准确",
+    "替换模糊词使用题目相关词汇",
+    "衔接更自然",
+    "内容和语言仍需加强",
+    "这个问题会影响写作分数",
+    "这是评分依据之一",
+    "高分证据尚不充分",
+    "有尝试回应题目",
+    "有一些相关内容",
+    "字数不足会影响展开",
+    "语法错误影响清晰度",
+    "词汇准确性需要提升",
+    "结构和衔接需要加强",
+    "主要问题集中在任务回应结构词汇或语法",
+    "先修改最影响分数的问题",
+    "简短优点解释",
+    "简短问题解释",
+    "简短低分原因解释",
+    "简短高分证据解释",
+    "简短限分原因解释",
+    "简短说明为什么不能更高",
+    "简短说明为什么没有更低",
+    "简短证据解释",
+    "briefchineseexplanation",
+    "briefchinesesuggestion",
+    "briefchinesesummary"
+  ]);
+
+  return genericNotes.has(text);
+}
+
+function cleanChineseHelperValueFinal(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cleanChineseHelperValueFinal(item))
+      .filter((item) => {
+        if (Array.isArray(item)) return item.length > 0;
+        if (item && typeof item === "object") return Object.keys(item).length > 0;
+        return String(item || "").trim();
+      });
+  }
+
+  if (value && typeof value === "object") {
+    const cleaned = { ...value };
+    Object.keys(cleaned).forEach((key) => {
+      cleaned[key] = cleanChineseHelperValueFinal(cleaned[key]);
+    });
+    return cleaned;
+  }
+
+  if (typeof value === "string" && isGenericChineseNoteFinal(value)) return "";
+  return value;
+}
+
+function cleanGenericChineseFieldsFinal(value) {
+  if (!value || typeof value !== "object") return value;
+
+  if (Array.isArray(value)) {
+    return value.map((item) => cleanGenericChineseFieldsFinal(item));
+  }
+
+  Object.keys(value).forEach((key) => {
+    const fieldValue = value[key];
+
+    if (key.endsWith("Zh")) {
+      value[key] = cleanChineseHelperValueFinal(fieldValue);
+      return;
+    }
+
+    if (fieldValue && typeof fieldValue === "object") {
+      value[key] = cleanGenericChineseFieldsFinal(fieldValue);
+    }
+  });
+
+  return value;
+}
+
+function isHighBandResultFinal(result) {
+  const overall = Number(result?.overallBand || 0);
+  if (Number.isFinite(overall) && overall >= 7.5) return true;
+
+  const criteriaBands = Object.values(result?.criteria || {})
+    .map((item) => Number(item?.band))
+    .filter((band) => Number.isFinite(band));
+
+  if (criteriaBands.length >= 4 && criteriaBands.every((band) => band >= 7.5)) return true;
+
+  const highBandRange = finalGateText(result?.highBandDiagnostics?.recommendedHighBandRange);
+  return /(^|[^0-9])(?:8|8\.0|8\.5|9|9\.0)([^0-9]|$)/.test(highBandRange);
+}
+
+function isLowBandTemplateTextFinal(value) {
+  const text = finalGateText(value);
+  if (!text) return false;
+
+  return [
+    "task development is limited",
+    "task response is limited",
+    "task achievement is limited",
+    "development is limited",
+    "grammar accuracy and sentence control need improvement",
+    "grammar accuracy and sentence control needs improvement",
+    "grammar needs improvement",
+    "grammar need improvement",
+    "needs improvement",
+    "need improvement",
+    "needs clearer control",
+    "need clearer control",
+    "needs more precision and range",
+    "vocabulary is limited",
+    "lexical resource is limited",
+    "organisation is basic",
+    "organization is basic",
+    "grammar errors reduce clarity",
+    "limited task response",
+    "limited task achievement",
+    "ideas are underdeveloped",
+    "paragraphing is weak",
+    "meaning is unclear"
+  ].some((signal) => text.includes(signal));
+}
+
+function highBandCriterionReplacementFinal(name, task) {
+  const firstCriterion = firstCriterionName(task);
+
+  if (name === firstCriterion) {
+    return task === "Task 1"
+      ? {
+          feedback: "The letter shows strong task fulfilment, clear purpose, appropriate tone, and effective coverage of the required bullet points.",
+          feedbackZh: "这封信任务完成度高，目的清楚，语气合适，并且有效覆盖了题目要点。",
+          howToImprove: "At this band, improvement should focus on making details even more natural, concise, and consistently purposeful.",
+          howToImproveZh: "这个分数段的提升重点是让细节更自然、更简洁，并始终服务于写信目的。"
+        }
+      : {
+          feedback: "The essay addresses the task strongly, presents a clear position, and develops relevant ideas with good control.",
+          feedbackZh: "这篇文章回应题目较充分，立场清楚，观点展开相关且控制较好。",
+          howToImprove: "At this band, improvement should focus on sharper idea development, more precise examples, and more natural progression.",
+          howToImproveZh: "这个分数段的提升重点是观点展开更深入、例子更精准、推进更自然。"
+        };
+  }
+
+  if (name === "Coherence and Cohesion") {
+    return {
+      feedback: "Organisation is clear and progression is effective; any cohesion issue is a minor polishing point rather than a basic control problem.",
+      feedbackZh: "文章结构清楚，推进有效；衔接方面即使有问题，也属于润色层面，不是基础结构问题。",
+      howToImprove: "Refine paragraph transitions and avoid any slightly mechanical linking.",
+      howToImproveZh: "可以进一步润色段落过渡，避免连接词显得机械。"
+    };
+  }
+
+  if (name === "Lexical Resource") {
+    return {
+      feedback: "Vocabulary is generally precise, natural, and suitable for the task, with enough range for a high-band response.",
+      feedbackZh: "词汇整体准确自然，适合题目语境，已经具备高分作文所需的词汇范围。",
+      howToImprove: "Improve by choosing even more topic-specific collocations and avoiding any repeated safe wording.",
+      howToImproveZh: "提升重点是使用更贴合话题的搭配，并减少重复的安全表达。"
+    };
+  }
+
+  if (name === "Grammatical Range and Accuracy") {
+    return {
+      feedback: "Grammar control is strong, with varied sentence structures and only minor issues, if any.",
+      feedbackZh: "语法控制较强，句式有变化，即使有问题也多为轻微问题。",
+      howToImprove: "Polish sentence variety and punctuation consistency rather than fixing basic grammar control.",
+      howToImproveZh: "提升重点是句式变化和标点一致性，而不是基础语法控制。"
+    };
+  }
+
+  return {
+    feedback: "This criterion is generally well controlled, with only minor refinement needed.",
+    feedbackZh: "这一项整体控制较好，只需要做细节润色。",
+    howToImprove: "Focus on precision, naturalness, and consistency.",
+    howToImproveZh: "重点提升表达精准度、自然度和一致性。"
+  };
+}
+
+function polishHighBandCriteriaFinal(result, body) {
+  if (!result?.criteria || typeof result.criteria !== "object") return;
+
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+
+  Object.entries(result.criteria).forEach(([name, item]) => {
+    if (!item || typeof item !== "object") return;
+
+    const band = Number(item.band);
+    if (!Number.isFinite(band) || band < 7.5) return;
+
+    const combined = finalGateText([item.feedback, item.howToImprove, item.feedbackZh, item.howToImproveZh]);
+    if (!isLowBandTemplateTextFinal(combined) && !isGenericChineseNoteFinal(item.feedbackZh) && !isGenericChineseNoteFinal(item.howToImproveZh)) return;
+
+    const replacement = highBandCriterionReplacementFinal(name, task);
+    item.feedback = replacement.feedback;
+    item.feedbackZh = replacement.feedbackZh;
+    item.howToImprove = replacement.howToImprove;
+    item.howToImproveZh = replacement.howToImproveZh;
+  });
+}
+
+function removeHighBandContradictionsFinal(result) {
+  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
+
+  const cleanAdviceArray = (items, zhItems, { removeStrengths = false } = {}) => {
+    const source = finalGateList(items);
+    const zhSource = Array.isArray(zhItems) ? zhItems : [];
+    const kept = [];
+    const keptZh = [];
+
+    source.forEach((item, index) => {
+      if (isLowBandTemplateTextFinal(item)) return;
+      if (removeStrengths && isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item)) return;
+      kept.push(item);
+      if (zhSource[index] && !isGenericChineseNoteFinal(zhSource[index])) keptZh.push(zhSource[index]);
+    });
+
+    return { items: finalGateDedupe(kept), zh: keptZh.slice(0, kept.length) };
+  };
+
+  const mainProblems = cleanAdviceArray(result.mainProblems, result.mainProblemsZh, { removeStrengths: true });
+  result.mainProblems = mainProblems.items;
+  result.mainProblemsZh = mainProblems.zh;
+
+  const taskAdvice = cleanAdviceArray(result.taskAchievementAdvice, result.taskAchievementAdviceZh);
+  result.taskAchievementAdvice = taskAdvice.items;
+  result.taskAchievementAdviceZh = taskAdvice.zh;
+
+  const coherenceAdvice = cleanAdviceArray(result.coherenceAdvice, result.coherenceAdviceZh);
+  result.coherenceAdvice = coherenceAdvice.items;
+  result.coherenceAdviceZh = coherenceAdvice.zh;
+
+  const lexicalAdvice = cleanAdviceArray(result.lexicalAdvice, result.lexicalAdviceZh);
+  result.lexicalAdvice = lexicalAdvice.items;
+  result.lexicalAdviceZh = lexicalAdvice.zh;
+
+  const grammarAdvice = cleanAdviceArray(result.grammarAdvice, result.grammarAdviceZh);
+  result.grammarAdvice = grammarAdvice.items;
+  result.grammarAdviceZh = grammarAdvice.zh;
+
+  if (!result.mainProblems.length) {
+    result.mainProblems = [
+      "No major score-limiting problem was identified at this band; focus on minor refinement, naturalness, and consistency."
+    ];
+    result.mainProblemsZh = [
+      "这个分数段没有明显拉低分数的大问题，重点应放在细节润色、表达自然度和一致性上。"
+    ];
+  }
+
+  if (result.targetImprovementPlan?.criterionUpgrades && Array.isArray(result.targetImprovementPlan.criterionUpgrades)) {
+    result.targetImprovementPlan.criterionUpgrades = result.targetImprovementPlan.criterionUpgrades.map((item) => {
+      if (!item || typeof item !== "object") return item;
+
+      const updated = { ...item };
+
+      if (isLowBandTemplateTextFinal(updated.currentWeakness)) {
+        updated.currentWeakness = "Only minor refinement is still possible in this criterion.";
+        updated.currentWeaknessZh = "这一项主要是细节润色空间，不是基础能力问题。";
+      }
+
+      if (isLowBandTemplateTextFinal(updated.action)) {
+        updated.action = "Polish precision, naturalness, and consistency rather than fixing basic control problems.";
+        updated.actionZh = "重点润色精准度、自然度和一致性，而不是修基础控制问题。";
+      }
+
+      if (isLowBandTemplateTextFinal(updated.exampleUpgrade)) {
+        updated.exampleUpgrade = "";
+        updated.exampleUpgradeZh = "";
+      }
+
+      return updated;
+    });
+  }
+}
+
+function removeContradictoryLowBandDiagnosticsFinal(result) {
+  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
+
+  const diagnostics = result.lowBandDiagnostics;
+  if (diagnostics && typeof diagnostics === "object") {
+    const hasRealLowBandTrigger =
+      diagnostics.isBlank ||
+      diagnostics.wordCount20OrFewer ||
+      diagnostics.mostlyNonEnglish ||
+      diagnostics.mostlyCopiedFromPrompt ||
+      diagnostics.mostlyMemorised ||
+      diagnostics.whollyUnrelated ||
+      diagnostics.barelyRelated ||
+      diagnostics.littleRelevantMessage ||
+      diagnostics.noClearPositionTask2 ||
+      diagnostics.noBulletPointCoverageTask1 ||
+      diagnostics.meaningMostlyBlocked;
+
+    if (!hasRealLowBandTrigger) {
+      diagnostics.recommendedLowBandRange = "";
+      diagnostics.reason = "No low-band trigger was detected.";
+      if (result.lowBandDiagnosticsZh && typeof result.lowBandDiagnosticsZh === "object") {
+        result.lowBandDiagnosticsZh.reasonZh = "没有发现明显低分段触发原因。";
+      }
+    }
+  }
+
+  const calibration = result.scoreCalibration;
+  if (calibration && typeof calibration === "object") {
+    const capText = finalGateText(calibration.capReason);
+    const falseCap =
+      !capText ||
+      capText.includes("no low-band trigger") ||
+      capText.includes("task coverage, word count, organisation, vocabulary, or grammar evidence");
+
+    if (calibration.capApplied && falseCap) {
+      calibration.capApplied = false;
+      calibration.capReason = "";
+      if (result.scoreCalibrationZh && typeof result.scoreCalibrationZh === "object") {
+        result.scoreCalibrationZh.capReasonZh = "";
+      }
+    }
+  }
+}
+
+function ensureTaskCorrectionZhFieldsFinal(result) {
+  if (!result || typeof result !== "object") return;
+
+  if (result.task1LetterCorrections && typeof result.task1LetterCorrections === "object") {
+    const c = result.task1LetterCorrections;
+    c.openingCommentZh = c.openingCommentZh || "";
+    c.closingCommentZh = c.closingCommentZh || "";
+    c.toneCommentZh = c.toneCommentZh || "";
+    c.purposeCommentZh = c.purposeCommentZh || "";
+    if (!Array.isArray(c.bulletPointAdvice)) c.bulletPointAdvice = [];
+  }
+
+  if (result.task2EssayCorrections && typeof result.task2EssayCorrections === "object") {
+    const c = result.task2EssayCorrections;
+    c.positionCommentZh = c.positionCommentZh || "";
+    c.introductionCommentZh = c.introductionCommentZh || "";
+    c.bodyParagraphCommentZh = c.bodyParagraphCommentZh || "";
+    c.exampleCommentZh = c.exampleCommentZh || "";
+    c.conclusionCommentZh = c.conclusionCommentZh || "";
+    if (!Array.isArray(c.developmentAdvice)) c.developmentAdvice = [];
+    if (!Array.isArray(c.developmentAdviceZh)) c.developmentAdviceZh = [];
+  }
+
+  result.modelAnswerOutlineZh = result.modelAnswerOutlineZh || "";
+}
+
+function finalQualityGate(result, body = {}) {
+  if (!result || typeof result !== "object") return result;
+
+  sanitizeStrengthProblemBucketsFinal(result);
+  polishHighBandCriteriaFinal(result, body);
+  removeHighBandContradictionsFinal(result);
+  removeContradictoryLowBandDiagnosticsFinal(result);
+  ensureTaskCorrectionZhFieldsFinal(result);
+  cleanGenericChineseFieldsFinal(result);
+
+  sanitizeStrengthProblemBucketsFinal(result);
+  polishHighBandCriteriaFinal(result, body);
+  removeHighBandContradictionsFinal(result);
+  removeContradictoryLowBandDiagnosticsFinal(result);
+  ensureTaskCorrectionZhFieldsFinal(result);
+  cleanGenericChineseFieldsFinal(result);
+
+  return result;
+}
+
+
+
 function ensureTargetImprovementPlan(result, body) {
   if (!result || typeof result !== "object") return;
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
@@ -4301,6 +4896,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   ensureTargetImprovementPlan(normalized, body || {});
   backfillChineseHelperNotes(normalized, body || {});
   sanitizeStrengthProblemBuckets(normalized);
+  finalQualityGate(normalized, body || {});
 
   normalized.scoringCalibration = normalized.scoreCalibration;
   normalized.lowBandEvidence = normalized.lowBandDiagnostics;
