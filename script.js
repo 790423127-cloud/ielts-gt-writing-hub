@@ -7,6 +7,12 @@ let remaining = 0;
 let currentLimit = 0;
 const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
+const feedbackUiState = {
+  zhExpanded: false,
+  detailsExpanded: null,
+  toolsOpen: false
+};
+
 const $ = (id) => document.getElementById(id);
 const els = {
   themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), searchInput: $("searchInput"),
@@ -38,6 +44,15 @@ function boolText(value) {
     if (["false", "no", "n", "not covered", "missing", "uncovered", "否"].includes(normalized)) return "否";
   }
   return value ? "是" : "否";
+}
+
+function coverageText(value) {
+  if (value === null || value === undefined || value === "") return "待 AI 核验";
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["unknown", "not returned", "uncertain", "needs check", "coverage unknown"].includes(normalized)) return "待 AI 核验";
+  }
+  return boolText(value);
 }
 
 function targetWordsForPrompt(prompt) {
@@ -385,7 +400,7 @@ function bindZhToggles(scope) {
 
 
 function renderFeedbackTools() {
-  return `<details class="grading-tools grading-tools-menu">
+  return `<details class="grading-tools grading-tools-menu"${feedbackUiState.toolsOpen ? " open" : ""}>
     <summary class="secondary grading-tools-summary">反馈工具</summary>
     <div class="grading-tools-panel" role="toolbar" aria-label="AI feedback tools">
       <button class="secondary" type="button" data-feedback-tool="expand-zh">展开全部中文</button>
@@ -397,6 +412,7 @@ function renderFeedbackTools() {
 }
 
 function setAllZhPanels(scope, expanded) {
+  feedbackUiState.zhExpanded = Boolean(expanded);
   scope.querySelectorAll(".zh-toggle").forEach((button) => {
     const note = button.nextElementSibling;
     if (!note) return;
@@ -407,12 +423,25 @@ function setAllZhPanels(scope, expanded) {
 }
 
 function setAllDetails(scope, expanded) {
-  scope.querySelectorAll("details").forEach((detail) => {
+  feedbackUiState.detailsExpanded = Boolean(expanded);
+  scope.querySelectorAll("details.feedback-collapse").forEach((detail) => {
     detail.open = expanded;
   });
 }
 
+function applyFeedbackUiState(scope) {
+  const tools = scope.querySelector(".grading-tools-menu");
+  if (tools) tools.open = Boolean(feedbackUiState.toolsOpen);
+  if (feedbackUiState.zhExpanded) setAllZhPanels(scope, true);
+  if (feedbackUiState.detailsExpanded !== null) setAllDetails(scope, feedbackUiState.detailsExpanded);
+}
+
 function bindFeedbackTools(scope) {
+  scope.querySelectorAll(".grading-tools-menu").forEach((menu) => {
+    menu.addEventListener("toggle", () => {
+      feedbackUiState.toolsOpen = menu.open;
+    });
+  });
   scope.querySelectorAll("[data-feedback-tool]").forEach((button) => {
     button.addEventListener("click", () => {
       const action = button.dataset.feedbackTool;
@@ -519,7 +548,7 @@ function mergeAiStageResult(base, incoming) {
     incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
   );
   if (canReplaceCriteria) output.criteria = data.criteria;
-  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || usefulScoreAudit || !incomingStage;
+  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
@@ -533,7 +562,6 @@ function mergeAiStageResult(base, incoming) {
 function hasUsefulItemArray(value) {
   return Array.isArray(value) && value.some((item) => hasAnyText(item));
 }
-
 
 function hasMatchingTranslationArray(items, translations) {
   const en = Array.isArray(items) ? items.filter((item) => hasAnyText(item)) : [];
@@ -561,13 +589,16 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return scoreAuditHasUsableCorrections(data);
   }
   if (aiStage === "correction-task") {
-    return Boolean(
+    const hasTaskContent = Boolean(
       hasUsefulItemArray(data.taskAchievementAdvice) ||
       hasUsefulItemArray(data.coherenceAdvice) ||
       hasAnyText(data.task1LetterCorrections) ||
       hasAnyText(data.task2EssayCorrections) ||
       hasAnyText(data.errorAnalysis?.summary)
     );
+    return hasTaskContent &&
+      hasMatchingTranslationArray(data.taskAchievementAdvice, data.taskAchievementAdviceZh) &&
+      hasMatchingTranslationArray(data.coherenceAdvice, data.coherenceAdviceZh);
   }
   if (aiStage === "correction-language") {
     return hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
@@ -582,7 +613,10 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasUsefulItemArray(data.taskAchievementAdvice) ||
       hasUsefulItemArray(data.coherenceAdvice) ||
       hasUsefulItemArray(data.lexicalAdvice) ||
-      hasUsefulItemArray(data.grammarAdvice)
+      hasUsefulItemArray(data.grammarAdvice) ||
+      hasUsefulItemArray(data.band5FixPlan) ||
+      hasUsefulItemArray(data.band6UpgradePlan) ||
+      hasUsefulItemArray(data.band7UpgradePlan)
     );
     return hasAdvice && adviceTranslationsComplete(data);
   }
@@ -590,13 +624,16 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return hasUsefulItemArray(data.spellingCorrections) || hasAnyText(data.errorAnalysis?.summary);
   }
   if (aiStage === "correction-grammar") {
-    return hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.detailedSentenceCorrections);
+    return hasUsefulItemArray(data.grammarErrors) ||
+      hasUsefulItemArray(data.detailedSentenceCorrections) ||
+      hasUsefulItemArray(data.grammarAdvice) ||
+      hasAnyText(data.errorAnalysis?.summary);
   }
   if (aiStage === "correction-sentence") {
     return hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections);
   }
   if (aiStage === "correction-advice") {
-    const hasAdvice = Boolean(
+    return Boolean(
       hasUsefulItemArray(data.taskAchievementAdvice) ||
       hasUsefulItemArray(data.coherenceAdvice) ||
       hasUsefulItemArray(data.lexicalAdvice) ||
@@ -609,7 +646,6 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasAnyText(data.task1LetterCorrections) ||
       hasAnyText(data.task2EssayCorrections)
     );
-    return hasAdvice && adviceTranslationsComplete(data);
   }
   if (aiStage === "correction") {
     return hasDetailedFeedbackContent(data) || hasDetailedAdviceContent(data);
@@ -895,7 +931,7 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
           const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh, [requirement, evidence, problem, suggestion].join(" "));
           return `<div class="correction-item bullet-analysis-item">
             <p><strong>要点：</strong>${escapeHtml(requirement || `Bullet point ${index + 1}`)}</p>
-            <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
+            <p><strong>是否覆盖：</strong>${coverageText(item.covered)}</p>
             ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
             ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
             ${suggestion ? `<p><strong>建议：</strong>${escapeHtml(suggestion)} ${renderCopyButton(suggestion)}</p>` : ""}
@@ -1394,6 +1430,7 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   const mainProblems = filteredMainProblems(result.mainProblems, result.mainProblemsZh);
+  const hasDetailedSentenceCorrections = hasUsefulItemArray(result.detailedSentenceCorrections);
   const feedbackContentHtml = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
@@ -1419,7 +1456,7 @@ function renderGradingResult(result = {}) {
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     ${collapsibleSection("拼写错误 Spelling Corrections", renderSpellingCorrections(result.spellingCorrections))}
     ${collapsibleSection("语法错误 Grammar Errors", renderGrammarErrors(result.grammarErrors))}
-    ${collapsibleSection("Sentence Corrections", renderSentenceCorrections(result.sentenceCorrections))}
+    ${hasDetailedSentenceCorrections ? "" : collapsibleSection("Sentence Corrections", renderSentenceCorrections(result.sentenceCorrections))}
     ${collapsibleSection("四项专项建议", `<div class="advice-grid">
       <div><h4>${taskAdviceTitle}</h4>${renderListWithTranslations(result.taskAchievementAdvice, result.taskAchievementAdviceZh, "No task advice is available.")}</div>
       <div><h4>Coherence Advice</h4>${renderListWithTranslations(result.coherenceAdvice, result.coherenceAdviceZh, "No coherence advice is available.")}</div>
@@ -1460,6 +1497,7 @@ function renderGradingResult(result = {}) {
   });
   bindZhToggles(els.gradingResults);
   bindFeedbackTools(els.gradingResults);
+  applyFeedbackUiState(els.gradingResults);
 }
 
 async function copyText(text) {

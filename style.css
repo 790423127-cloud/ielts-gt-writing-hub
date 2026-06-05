@@ -207,8 +207,7 @@
   }
 }
 
-
-/* Core-quality UI fix: compact sticky feedback tools, no left-side content squeeze */
+/* Final polish: compact stable feedback tools instead of a left-side column */
 .grading-result-layout {
   display: block !important;
 }
