@@ -26,6 +26,12 @@ const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score and revision, not an official IELTS score.";
 
+const AI_REQUEST_TIMEOUT_MS = Math.max(3500, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 8500, 15000));
+const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
+const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
+globalThis.__IELTS_AI_RESPONSE_CACHE__ = AI_RESPONSE_CACHE;
+
+
 
 function normalizeLocale(value) {
   const raw = String(value || "en").toLowerCase();
@@ -91,11 +97,12 @@ function isVeryShortEssay(body) {
 }
 
 function maxTokensForMode(mode, veryShort) {
-  if (veryShort) return 1200;
-  if (mode === "quick") return 1800;
-  if (mode === "full") return 3200;
-  return 4800;
+  if (veryShort) return 800;
+  if (mode === "quick") return 1200;
+  if (mode === "full") return 2400;
+  return 3800;
 }
+
 
 function countWordsServer(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
@@ -637,12 +644,10 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
   const shape = {
     actualWordCount: words,
     taskTypeDetected: taskType,
-    wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
     wordCountStatus: body.isUnderMinimum ? "under_minimum_ai_scored" : "meets_minimum_ai_scored",
-    taskRequirementAnalysis: body.task === "Task 1"
-      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
-      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
-    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    taskRequirementAnalysis: taskType === "task1"
+      ? { taskType: "task1", taskPurpose: "", requiredTone: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, taskMatchSummary: "" },
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     lowBandDiagnostics: { recommendedLowBandRange: "", reason: "" },
@@ -655,24 +660,12 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
       "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
     },
     strengths: [],
-    strengthsZh: [],
     mainProblems: [],
-    mainProblemsZh: [],
-    grammarErrors: [],
-    sentenceCorrections: [],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     detailedSentenceCorrections: [],
-    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: body.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    task1LetterCorrections: taskType === "task1" ? { toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: taskType === "task2" ? { positionComment: "", bodyParagraphComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    taskAchievementAdvice: [],
-    coherenceAdvice: [],
-    lexicalAdvice: [],
-    grammarAdvice: [],
-    band5FixPlan: [],
-    band6UpgradePlan: [],
-    band7UpgradePlan: [],
-    modelAnswerOutline: "",
     revisedEssayBand5: isRevision ? "" : "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -683,57 +676,65 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
 
   return [
     "Return exactly one valid JSON object matching this compact shape. Keep the same keys.",
-    previousIssue ? `Previous JSON issue to avoid: ${previousIssue}` : "",
-    JSON.stringify(shape, null, 2),
-    "Scoring rules:",
-    "1. DeepSeek must score this response; do not refuse because of low word count.",
-    "2. Use Band 1 as the minimum visible score. Do not output 0.",
-    "3. Apply strict IELTS penalties for missing task requirements, very short length, weak development, unclear organisation, limited vocabulary, and grammar errors.",
-    "4. No maximum word-count cap. Do not penalise length alone.",
-    "5. Give concrete suggestions based on the user's actual writing.",
-    "Request data:",
+    previousIssue ? `Previous JSON issue to avoid: ${String(previousIssue).slice(0, 180)}` : "",
+    JSON.stringify(shape),
+    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep every string under 18 words. Arrays max 2 items. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Request:",
     JSON.stringify({
       task: body.task,
       taskType,
       mode: normalizeMode(body.mode),
-      outputLanguage: normalizeLocale(locale),
       questionTitle: body.questionTitle,
       questionPrompt: body.questionPrompt,
       actualWordCount: words,
       targetWordCount: body.targetWordCount,
       isUnderMinimum: Boolean(body.isUnderMinimum),
       essay: body.essay
-    }, null, 2)
+    })
   ].filter(Boolean).join("\n");
 }
 
+
 function buildCompactAiOnlyRepairPrompt(rawText, body, locale = "en") {
   return [
-    "Repair the malformed JSON into one valid JSON object. Do not add markdown.",
+    "Repair this malformed JSON into one valid JSON object only. No markdown. No trailing commas.",
     "If a string was cut off, close it with a short complete sentence.",
-    "Keep only valid JSON syntax. No trailing commas. No comments.",
     "Use Band 1-9 only. Do not return 0.",
-    "Required compact schema and request context:",
-    buildCompactAiOnlyPrompt(body, locale, "Repairing malformed JSON from the previous model response."),
-    "Malformed JSON/text to repair:",
-    String(rawText || "").slice(0, 8000)
+    "Keep keys from the malformed JSON where possible.",
+    "Malformed JSON/text:",
+    String(rawText || "").slice(0, 6000)
   ].join("\n");
 }
 
-async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTokens }) {
+
+async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTokens, allowRepair = true }) {
   try {
     return parseJsonFromProvider(rawText);
   } catch (parseError) {
+    const salvaged = buildAiPartialResultFromText(rawText, body, parseError.message || "Malformed JSON");
+    if (salvaged) return salvaged;
+
+    if (!allowRepair) {
+      parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
+      throw parseError;
+    }
+
     const repairedText = await callDeepSeek({
       apiKey,
       model,
       systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
       userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
-      maxTokens: Math.min(Math.max(maxTokens, 2200), 3200),
+      maxTokens: Math.min(Math.max(maxTokens, 900), 1400),
       temperature: 0.0,
-      jsonMode: true
+      jsonMode: false
     });
-    return parseJsonFromProvider(repairedText);
+    try {
+      return parseJsonFromProvider(repairedText);
+    } catch (repairParseError) {
+      const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
+      if (repairedSalvage) return repairedSalvage;
+      throw repairParseError;
+    }
   }
 }
 
@@ -743,34 +744,28 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
   const firstUserPrompt = compactFirst
     ? buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale)
     : buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
-  const firstMaxTokens = compactFirst ? Math.max(maxTokens, 2400) : maxTokens;
+  const firstMaxTokens = compactFirst ? Math.min(Math.max(maxTokens, 1100), 1500) : maxTokens;
 
-  try {
-    const rawText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: firstSystemPrompt,
-      userPrompt: firstUserPrompt,
-      maxTokens: firstMaxTokens,
-      temperature: 0.1,
-      jsonMode: compactFirst
-    });
-    return await parseOrRepairAiJson({ apiKey, model, rawText, body: { ...body, mode: effectiveMode }, locale, maxTokens: firstMaxTokens });
-  } catch (firstError) {
-    // AI-only fallback path: still use DeepSeek, but with compact re-grading. No local score is generated.
-    const compactText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: buildCompactAiOnlySystemPrompt(locale),
-      userPrompt: buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale, firstError.message || firstError.name || "First AI grading attempt failed."),
-      maxTokens: 2800,
-      temperature: 0.1,
-      jsonMode: true
-    });
-    return await parseOrRepairAiJson({ apiKey, model, rawText: compactText, body: { ...body, mode: effectiveMode }, locale, maxTokens: 2800 });
-  }
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: firstSystemPrompt,
+    userPrompt: firstUserPrompt,
+    maxTokens: firstMaxTokens,
+    temperature: 0.1,
+    jsonMode: false
+  });
+
+  return await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: effectiveMode },
+    locale,
+    maxTokens: firstMaxTokens,
+    allowRepair: !compactFirst
+  });
 }
-
 
 function defaultRevisedEssayMeta(limited = false, reason = "") {
   if (limited) {
@@ -1103,7 +1098,7 @@ function extractDeepSeekText(data) {
 
 async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
   const requestBody = {
     model,
@@ -1188,6 +1183,150 @@ function sendProviderError(req, res, error) {
     detail: String(error.raw || "").slice(0, 1500)
   });
   return true;
+}
+
+
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function simpleHash(text) {
+  let hash = 2166136261;
+  const input = String(text || "");
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function buildAiCacheKey(body, mode, model, locale) {
+  return simpleHash(stableStringify({
+    model,
+    locale,
+    mode,
+    task: body.task,
+    questionPrompt: body.questionPrompt,
+    essay: body.essay,
+    wordCount: body.wordCount,
+    targetWordCount: body.targetWordCount
+  }));
+}
+
+function getCachedAiResult(cacheKey) {
+  if (!AI_CACHE_TTL_MS || !cacheKey) return null;
+  const cached = AI_RESPONSE_CACHE.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > AI_CACHE_TTL_MS) {
+    AI_RESPONSE_CACHE.delete(cacheKey);
+    return null;
+  }
+  return JSON.parse(JSON.stringify(cached.value));
+}
+
+function setCachedAiResult(cacheKey, value) {
+  if (!AI_CACHE_TTL_MS || !cacheKey || !value) return;
+  AI_RESPONSE_CACHE.set(cacheKey, {
+    createdAt: Date.now(),
+    value: JSON.parse(JSON.stringify(value))
+  });
+  if (AI_RESPONSE_CACHE.size > 100) {
+    const oldestKey = AI_RESPONSE_CACHE.keys().next().value;
+    if (oldestKey) AI_RESPONSE_CACHE.delete(oldestKey);
+  }
+}
+
+function extractAiNumber(rawText, key) {
+  const match = String(rawText || "").match(new RegExp(`"${key}"\\s*:\\s*([0-9]+(?:\\.[05])?)`, "i"));
+  return match ? Number(match[1]) : null;
+}
+
+function extractAiString(rawText, key) {
+  const source = String(rawText || "");
+  const match = source.match(new RegExp(`"${key}"\\s*:\\s*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)`, "i"));
+  if (!match) return "";
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
+    return match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+}
+
+function buildAiPartialResultFromText(rawText, body, issue = "") {
+  const overall = extractAiNumber(rawText, "overallBand");
+  if (!Number.isFinite(overall)) return null;
+
+  const firstCriterion = firstCriterionName(body?.task);
+  const firstBand = extractAiNumber(rawText, "Task Achievement") || extractAiNumber(rawText, "Task Response") || overall;
+  const ccBand = extractAiNumber(rawText, "Coherence and Cohesion") || overall;
+  const lrBand = extractAiNumber(rawText, "Lexical Resource") || overall;
+  const graBand = extractAiNumber(rawText, "Grammatical Range and Accuracy") || overall;
+  const whyNotHigher = extractAiString(rawText, "whyNotHigher") || "The AI response was partially parsed, but it provided enough scoring information to show an estimated band.";
+  const whyNotLower = extractAiString(rawText, "whyNotLower") || "The visible score comes from the AI output, not from a local fallback score.";
+  const lowReason = extractAiString(rawText, "reason") || (body?.isUnderMinimum ? "The response is under the recommended word count and was scored by AI." : "");
+
+  return {
+    actualWordCount: Number(body?.wordCount) || countWordsServer(body?.essay),
+    taskTypeDetected: body?.task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: body?.task === "Task 1" ? 150 : 250,
+    wordCountStatus: body?.isUnderMinimum ? "under_minimum_ai_partial" : "meets_minimum_ai_partial",
+    taskRequirementAnalysis: body?.task === "Task 1"
+      ? { taskType: "task1", taskPurpose: "The AI response was partial; retry for fuller task analysis.", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: true, missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected in the recovered AI output.", warning: issue ? `Partial AI JSON recovered: ${String(issue).slice(0, 120)}` : "" },
+    overallBand: clampAiBand(overall, 1),
+    estimatedLevel: `Band ${formatBand(clampAiBand(overall, 1))}`,
+    lowBandDiagnostics: { recommendedLowBandRange: "", reason: lowReason },
+    highBandDiagnostics: { recommendedHighBandRange: "", reason: "High-band evidence could not be fully confirmed from partial AI JSON." },
+    scoreCalibration: {
+      strictness: "strict",
+      capApplied: Boolean(body?.isUnderMinimum),
+      capReason: body?.isUnderMinimum ? "The AI considered the response below the recommended IELTS word count." : "",
+      whyNotHigher,
+      whyNotLower,
+      evidence: [
+        `AI partial JSON provided overallBand ${overall}.`,
+        issue ? `Recovered after JSON issue: ${String(issue).slice(0, 120)}.` : "",
+        body?.isUnderMinimum ? `Word count: ${body.wordCount}/${body.targetWordCount}.` : ""
+      ].filter(Boolean).slice(0, 3)
+    },
+    criteria: {
+      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: extractAiString(rawText, "feedback") || "AI partial output indicates this criterion is limited.", feedbackZh: "", howToImprove: extractAiString(rawText, "howToImprove") || "Write a clearer and fuller response.", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use clearer paragraphing and linking.", howToImproveZh: "" },
+      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use more precise topic vocabulary.", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use complete and accurate sentences.", howToImproveZh: "" }
+    },
+    strengths: [],
+    strengthsZh: [],
+    mainProblems: ensureArray(extractAiString(rawText, "mainProblems")).filter(Boolean).slice(0, 2),
+    mainProblemsZh: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    errorAnalysis: { summary: extractAiString(rawText, "summary") || "The AI result was partially recovered. Retry for detailed error analysis.", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    detailedSentenceCorrections: [],
+    task1LetterCorrections: body?.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: body?.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: [],
+    band5FixPlan: [],
+    band6UpgradePlan: [],
+    band7UpgradePlan: [],
+    modelAnswerOutline: "",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "Partial AI JSON was recovered; retry for full revision." },
+    revisionNotes: ["Partial AI JSON was recovered. Retry once for full feedback if needed."],
+    revisionNotesZh: [],
+    disclaimer: DISCLAIMER,
+    diagnosticMode: "ai_partial_json_recovered",
+    aiOnly: true
+  };
 }
 
 function ensureArray(value) {
@@ -1557,6 +1696,13 @@ module.exports = async function handler(req, res) {
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
 
+  const cacheKey = buildAiCacheKey(body, effectiveMode, model, locale);
+  const cachedResult = getCachedAiResult(cacheKey);
+  if (cachedResult) {
+    sendJson(req, res, 200, { ...cachedResult, cacheHit: true });
+    return;
+  }
+
   try {
     const result = await callAiOnlyGrader({
       apiKey,
@@ -1568,7 +1714,9 @@ module.exports = async function handler(req, res) {
       locale
     });
 
-    sendJson(req, res, 200, normalizeResultForMode(result, effectiveMode, veryShort, body, locale));
+    const normalizedResult = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
+    setCachedAiResult(cacheKey, normalizedResult);
+    sendJson(req, res, 200, normalizedResult);
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
 
