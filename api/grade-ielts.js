@@ -121,8 +121,8 @@ function maxTokensForMode(mode, veryShort) {
   // Two user-facing modes are now supported:
   // full = detailed grading without model answer; revision = detailed grading + model/revision.
   // Do not shrink under-minimum essays into a "basic" diagnostic; they still need detailed AI correction.
-  if (mode === "revision") return veryShort ? 5200 : 7600;
-  return veryShort ? 4200 : 6200;
+  if (mode === "revision") return veryShort ? 3200 : 7000;
+  return veryShort ? 2400 : 5000;
 }
 
 
@@ -1023,12 +1023,12 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
   return await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
 }
 
-async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline }) {
+async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline, veryShort = false }) {
   const rawText = await callDeepSeek({
     apiKey,
     model,
-    systemPrompt: buildSystemPrompt(false, locale),
-    userPrompt: buildUserPrompt({ ...body, mode: gradingMode }, false, locale),
+    systemPrompt: buildSystemPrompt(veryShort, locale),
+    userPrompt: buildUserPrompt({ ...body, mode: gradingMode }, veryShort, locale),
     maxTokens,
     temperature: 0.1,
     jsonMode: false,
@@ -1087,7 +1087,8 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
     gradingMode,
     maxTokens: gradingMaxTokens,
     locale,
-    deadline
+    deadline,
+    veryShort
   });
 
   const correctionPromise = callAiCorrectionPass({
@@ -1133,7 +1134,8 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         gradingMode: "revision",
         maxTokens,
         locale,
-        deadline
+        deadline,
+        veryShort
       });
       result = mergeRevisionPassIntoResult(result, revision);
     } catch {
