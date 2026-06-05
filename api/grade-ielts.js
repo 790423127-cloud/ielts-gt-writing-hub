@@ -97,7 +97,9 @@ function isVeryShortEssay(body) {
 }
 
 function maxTokensForMode(mode, veryShort) {
-  if (veryShort) return 800;
+  if (veryShort && mode === "quick") return 1100;
+  if (veryShort && mode === "full") return 1900;
+  if (veryShort && mode === "revision") return 2600;
   if (mode === "quick") return 1200;
   if (mode === "full") return 2400;
   return 3800;
@@ -558,7 +560,7 @@ function buildExpectedJsonShape(task, locale = "en") {
 
 function buildUserPrompt(body, veryShort, locale = "en") {
   const mode = normalizeMode(body.mode);
-  const effectiveMode = veryShort ? "quick" : mode;
+  const effectiveMode = mode;
   const isRevisionMode = effectiveMode === "revision";
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
@@ -577,7 +579,7 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     "- quick: shortest feedback, no revised essays, compact arrays only.",
     "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
     "- revision: include all three revised essays, but keep all non-essay feedback compact.",
-    veryShort ? (isChineseLocale(locale) ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note in revisionNotesZh: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Keep revisionNotesZh empty.") : "",
+    veryShort ? (isChineseLocale(locale) ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The response is underlength, but AI has still graded it and provided diagnostic feedback. Add content before requesting higher-band revisions. Add this Chinese note in revisionNotesZh: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The response is underlength, but AI has still graded it and provided diagnostic feedback. Add content before requesting higher-band revisions. Keep revisionNotesZh empty.") : "",
     veryShort ? (isChineseLocale(locale) ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, English feedback max 25 words, and all *Zh fields empty.") : "",
     revisionInstruction,
     underMinimumInstruction,
@@ -629,6 +631,7 @@ function buildCompactAiOnlySystemPrompt(locale = "en") {
     "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
     "Score only from Band 1 to Band 9. Do not return 0.",
     "Low-word-count responses must still receive AI scoring and AI feedback. Penalise underlength strictly, but do not reject the answer.",
+    "Even when the response is far below the word target, return useful diagnostic feedback: strengths, mainProblems, errorAnalysis.summary, correctionPriority, and task-specific advice must not be empty if there is any rateable writing.",
     "There is no maximum word-count limit. Penalise long answers only for repetition, irrelevance, weak coherence, or loss of task focus.",
     "Keep every string short. Avoid quotation marks inside feedback strings where possible.",
     "Use arrays with at most 3 items unless the key is criteria.",
@@ -660,12 +663,20 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
       "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
     },
     strengths: [],
+    strengthsZh: [],
     mainProblems: [],
+    mainProblemsZh: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     detailedSentenceCorrections: [],
-    task1LetterCorrections: taskType === "task1" ? { toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: taskType === "task2" ? { positionComment: "", bodyParagraphComment: "", developmentAdvice: [] } : null,
+    task1LetterCorrections: taskType === "task1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: taskType === "task2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
     correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: [],
     revisedEssayBand5: isRevision ? "" : "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -678,7 +689,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     "Return exactly one valid JSON object matching this compact shape. Keep the same keys.",
     previousIssue ? `Previous JSON issue to avoid: ${String(previousIssue).slice(0, 180)}` : "",
     JSON.stringify(shape),
-    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep every string under 18 words. Arrays max 2 items. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep every string under 22 words. Arrays max 3 items. If the essay has any English content, strengths, mainProblems, errorAnalysis.summary, correctionPriority.fixFirst, and task-specific advice must not be empty. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
     "Request:",
     JSON.stringify({
       task: body.task,
@@ -711,30 +722,38 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
   try {
     return parseJsonFromProvider(rawText);
   } catch (parseError) {
+    if (allowRepair) {
+      try {
+        const repairedText = await callDeepSeek({
+          apiKey,
+          model,
+          systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
+          userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
+          maxTokens: Math.min(Math.max(maxTokens, 1000), 1600),
+          temperature: 0.0,
+          jsonMode: false
+        });
+        try {
+          return parseJsonFromProvider(repairedText);
+        } catch (repairParseError) {
+          const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
+          if (repairedSalvage) return repairedSalvage;
+          const originalSalvage = buildAiPartialResultFromText(rawText, body, parseError.message || "Malformed JSON");
+          if (originalSalvage) return originalSalvage;
+          throw repairParseError;
+        }
+      } catch (repairError) {
+        const salvaged = buildAiPartialResultFromText(rawText, body, parseError.message || repairError.message || "Malformed JSON");
+        if (salvaged) return salvaged;
+        throw repairError;
+      }
+    }
+
     const salvaged = buildAiPartialResultFromText(rawText, body, parseError.message || "Malformed JSON");
     if (salvaged) return salvaged;
 
-    if (!allowRepair) {
-      parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
-      throw parseError;
-    }
-
-    const repairedText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
-      userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
-      maxTokens: Math.min(Math.max(maxTokens, 900), 1400),
-      temperature: 0.0,
-      jsonMode: false
-    });
-    try {
-      return parseJsonFromProvider(repairedText);
-    } catch (repairParseError) {
-      const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
-      if (repairedSalvage) return repairedSalvage;
-      throw repairParseError;
-    }
+    parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
+    throw parseError;
   }
 }
 
@@ -744,17 +763,35 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
   const firstUserPrompt = compactFirst
     ? buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale)
     : buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
-  const firstMaxTokens = compactFirst ? Math.min(Math.max(maxTokens, 1100), 1500) : maxTokens;
+  const firstMaxTokens = compactFirst
+    ? (effectiveMode === "quick" ? Math.min(Math.max(maxTokens, 1100), 1300) : Math.min(Math.max(maxTokens, 1600), 2600))
+    : maxTokens;
 
-  const rawText = await callDeepSeek({
-    apiKey,
-    model,
-    systemPrompt: firstSystemPrompt,
-    userPrompt: firstUserPrompt,
-    maxTokens: firstMaxTokens,
-    temperature: 0.1,
-    jsonMode: false
-  });
+  let rawText;
+  try {
+    rawText = await callDeepSeek({
+      apiKey,
+      model,
+      systemPrompt: firstSystemPrompt,
+      userPrompt: firstUserPrompt,
+      maxTokens: firstMaxTokens,
+      temperature: 0.1,
+      jsonMode: false
+    });
+  } catch (firstError) {
+    const message = firstError.message || firstError.name || "";
+    if (!/empty response|AbortError|aborted|timeout|terminated/i.test(message)) throw firstError;
+
+    rawText = await callDeepSeek({
+      apiKey,
+      model,
+      systemPrompt: buildCompactAiOnlySystemPrompt(locale),
+      userPrompt: buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale, message),
+      maxTokens: Math.min(Math.max(firstMaxTokens, 1200), 1800),
+      temperature: 0.0,
+      jsonMode: false
+    });
+  }
 
   return await parseOrRepairAiJson({
     apiKey,
@@ -763,7 +800,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
     body: { ...body, mode: effectiveMode },
     locale,
     maxTokens: firstMaxTokens,
-    allowRepair: !compactFirst
+    allowRepair: true
   });
 }
 
@@ -1238,6 +1275,69 @@ function setCachedAiResult(cacheKey, value) {
   }
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractAiStringArray(rawText, key) {
+  const source = String(rawText || "");
+  const match = source.match(new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*\\[([\\s\\S]*?)(?:\\]|$)`, "i"));
+  if (!match) return [];
+  const items = [];
+  const pattern = /"([^"\\]*(?:\\.[^"\\]*)*)"/g;
+  let item;
+  while ((item = pattern.exec(match[1])) && items.length < 5) {
+    try {
+      items.push(JSON.parse(`"${item[1]}"`));
+    } catch {
+      items.push(item[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
+    }
+  }
+  return items.filter(Boolean);
+}
+
+function extractObjectAfterKey(rawText, key) {
+  const source = String(rawText || "");
+  const keyMatch = source.match(new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*\\{`, "i"));
+  if (!keyMatch) return "";
+  const start = keyMatch.index + keyMatch[0].lastIndexOf("{");
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  return source.slice(start);
+}
+
+function extractAiCriterionString(rawText, criterionName, fieldName) {
+  const block = extractObjectAfterKey(rawText, criterionName);
+  return extractAiString(block, fieldName);
+}
+
+function extractAiCriterionNumber(rawText, criterionName, fieldName = "band") {
+  const block = extractObjectAfterKey(rawText, criterionName);
+  return extractAiNumber(block, fieldName);
+}
+
 function extractAiNumber(rawText, key) {
   const match = String(rawText || "").match(new RegExp(`"${key}"\\s*:\\s*([0-9]+(?:\\.[05])?)`, "i"));
   return match ? Number(match[1]) : null;
@@ -1258,28 +1358,73 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
   const overall = extractAiNumber(rawText, "overallBand");
   if (!Number.isFinite(overall)) return null;
 
-  const firstCriterion = firstCriterionName(body?.task);
-  const firstBand = extractAiNumber(rawText, "Task Achievement") || extractAiNumber(rawText, "Task Response") || overall;
-  const ccBand = extractAiNumber(rawText, "Coherence and Cohesion") || overall;
-  const lrBand = extractAiNumber(rawText, "Lexical Resource") || overall;
-  const graBand = extractAiNumber(rawText, "Grammatical Range and Accuracy") || overall;
-  const whyNotHigher = extractAiString(rawText, "whyNotHigher") || "The AI response was partially parsed, but it provided enough scoring information to show an estimated band.";
-  const whyNotLower = extractAiString(rawText, "whyNotLower") || "The visible score comes from the AI output, not from a local fallback score.";
-  const lowReason = extractAiString(rawText, "reason") || (body?.isUnderMinimum ? "The response is under the recommended word count and was scored by AI." : "");
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
+  const firstCriterion = firstCriterionName(task);
+  const firstBand = extractAiCriterionNumber(rawText, firstCriterion) || extractAiNumber(rawText, firstCriterion) || overall;
+  const ccBand = extractAiCriterionNumber(rawText, "Coherence and Cohesion") || overall;
+  const lrBand = extractAiCriterionNumber(rawText, "Lexical Resource") || overall;
+  const graBand = extractAiCriterionNumber(rawText, "Grammatical Range and Accuracy") || overall;
+
+  const firstFeedback = extractAiCriterionString(rawText, firstCriterion, "feedback") || extractAiString(rawText, "feedback") || (body?.isUnderMinimum ? "The response is underlength, so task coverage and development are limited." : "The AI score indicates limitations in task fulfilment.");
+  const firstImprove = extractAiCriterionString(rawText, firstCriterion, "howToImprove") || extractAiString(rawText, "howToImprove") || (task === "Task 1" ? "Cover every bullet point with clear details." : "Develop your position with supported main ideas.");
+  const ccFeedback = extractAiCriterionString(rawText, "Coherence and Cohesion", "feedback") || (words < (task === "Task 1" ? 150 : 250) ? "The response needs clearer paragraph development." : "Organisation needs clearer progression.");
+  const ccImprove = extractAiCriterionString(rawText, "Coherence and Cohesion", "howToImprove") || "Use clear paragraphs and linking.";
+  const lrFeedback = extractAiCriterionString(rawText, "Lexical Resource", "feedback") || "Vocabulary needs more precise topic words.";
+  const lrImprove = extractAiCriterionString(rawText, "Lexical Resource", "howToImprove") || "Use accurate topic vocabulary and avoid repetition.";
+  const graFeedback = extractAiCriterionString(rawText, "Grammatical Range and Accuracy", "feedback") || "Grammar control needs clearer complete sentences.";
+  const graImprove = extractAiCriterionString(rawText, "Grammatical Range and Accuracy", "howToImprove") || "Check verb forms, sentence structure, and punctuation.";
+
+  const whyNotHigher = extractAiString(rawText, "whyNotHigher") || (body?.isUnderMinimum ? "The response is below the recommended word count and does not provide enough development for a higher band." : "The AI output indicates task, organisation, vocabulary, or grammar limitations.");
+  const whyNotLower = extractAiString(rawText, "whyNotLower") || "The visible band comes from the AI output and shows some rateable writing.";
+  const lowReason = extractAiString(rawText, "reason") || (body?.isUnderMinimum ? `${task} has ${words} words, below the recommended minimum, so development is limited.` : "");
+  const strengths = extractAiStringArray(rawText, "strengths").slice(0, 3);
+  if (!strengths.length && words > 0) strengths.push("There is a relevant attempt to answer the task.");
+  const mainProblems = extractAiStringArray(rawText, "mainProblems").slice(0, 3);
+  if (!mainProblems.length) {
+    if (body?.isUnderMinimum) mainProblems.push("The response is below the recommended word count.", "Ideas are not developed enough for a higher band.");
+    else mainProblems.push("The AI output was incomplete, but the recovered score shows clear weaknesses.");
+  }
+  const priorityFixes = extractAiStringArray(rawText, "priorityFixes").slice(0, 3);
+  if (!priorityFixes.length) {
+    priorityFixes.push(task === "Task 1" ? "Cover all bullet points." : "State and develop a clear position.", "Add specific supporting details.", "Improve sentence accuracy.");
+  }
+
+  const taskRequirementAnalysis = task === "Task 1"
+    ? {
+      taskType: "task1",
+      taskPurpose: "Write a General Training Task 1 letter that answers the selected prompt.",
+      recipient: "",
+      relationship: "",
+      requiredTone: "",
+      letterType: "",
+      bulletPoints: extractPromptBulletPoints(body?.questionPrompt).map((requirement) => ({ requirement, covered: false, evidence: "Partial AI output could not fully confirm coverage." })),
+      missingRequirements: [],
+      taskMatchSummary: "The AI output was partial, but the recovered score and feedback were kept."
+    }
+    : {
+      taskType: "task2",
+      questionType: "",
+      topic: String(body?.questionPrompt || "").slice(0, 140),
+      requiredPosition: "Give a clear position if the question asks for your opinion.",
+      requiredParts: ["Answer all parts of the question."],
+      positionPresent: false,
+      mainIdeasRelevant: true,
+      missingRequirements: [],
+      taskMatchSummary: "The AI output was partial, but the recovered score and feedback were kept."
+    };
 
   return {
-    actualWordCount: Number(body?.wordCount) || countWordsServer(body?.essay),
-    taskTypeDetected: body?.task === "Task 1" ? "task1" : "task2",
-    wordCountThresholdUsed: body?.task === "Task 1" ? 150 : 250,
+    actualWordCount: words,
+    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: task === "Task 1" ? 150 : 250,
     wordCountStatus: body?.isUnderMinimum ? "under_minimum_ai_partial" : "meets_minimum_ai_partial",
-    taskRequirementAnalysis: body?.task === "Task 1"
-      ? { taskType: "task1", taskPurpose: "The AI response was partial; retry for fuller task analysis.", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." }
-      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: true, missingRequirements: [], taskMatchSummary: "Partial AI output was recovered." },
+    taskRequirementAnalysis,
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected in the recovered AI output.", warning: issue ? `Partial AI JSON recovered: ${String(issue).slice(0, 120)}` : "" },
     overallBand: clampAiBand(overall, 1),
     estimatedLevel: `Band ${formatBand(clampAiBand(overall, 1))}`,
-    lowBandDiagnostics: { recommendedLowBandRange: "", reason: lowReason },
-    highBandDiagnostics: { recommendedHighBandRange: "", reason: "High-band evidence could not be fully confirmed from partial AI JSON." },
+    lowBandDiagnostics: { recommendedLowBandRange: body?.isUnderMinimum ? "Underlength warning" : "", reason: lowReason },
+    highBandDiagnostics: { recommendedHighBandRange: "", reason: "High-band evidence was not fully confirmed from partial AI JSON." },
     scoreCalibration: {
       strictness: "strict",
       capApplied: Boolean(body?.isUnderMinimum),
@@ -1289,39 +1434,58 @@ function buildAiPartialResultFromText(rawText, body, issue = "") {
       evidence: [
         `AI partial JSON provided overallBand ${overall}.`,
         issue ? `Recovered after JSON issue: ${String(issue).slice(0, 120)}.` : "",
-        body?.isUnderMinimum ? `Word count: ${body.wordCount}/${body.targetWordCount}.` : ""
+        body?.isUnderMinimum ? `Word count: ${words}/${body.targetWordCount}.` : ""
       ].filter(Boolean).slice(0, 3)
     },
     criteria: {
-      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: extractAiString(rawText, "feedback") || "AI partial output indicates this criterion is limited.", feedbackZh: "", howToImprove: extractAiString(rawText, "howToImprove") || "Write a clearer and fuller response.", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use clearer paragraphing and linking.", howToImproveZh: "" },
-      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use more precise topic vocabulary.", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: "AI partial output recovered this score.", feedbackZh: "", howToImprove: "Use complete and accurate sentences.", howToImproveZh: "" }
+      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: firstFeedback, feedbackZh: "", howToImprove: firstImprove, howToImproveZh: "" },
+      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: ccFeedback, feedbackZh: "", howToImprove: ccImprove, howToImproveZh: "" },
+      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: lrFeedback, feedbackZh: "", howToImprove: lrImprove, howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: graFeedback, feedbackZh: "", howToImprove: graImprove, howToImproveZh: "" }
     },
-    strengths: [],
+    strengths,
     strengthsZh: [],
-    mainProblems: ensureArray(extractAiString(rawText, "mainProblems")).filter(Boolean).slice(0, 2),
+    mainProblems,
     mainProblemsZh: [],
     grammarErrors: [],
     sentenceCorrections: [],
-    errorAnalysis: { summary: extractAiString(rawText, "summary") || "The AI result was partially recovered. Retry for detailed error analysis.", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    errorAnalysis: {
+      summary: extractAiString(rawText, "summary") || (body?.isUnderMinimum ? "The response is too short for full development, but the AI score and key weaknesses were recovered." : "The AI result was partially recovered and still provides a usable diagnostic score."),
+      summaryZh: "",
+      errorPatterns: [],
+      priorityFixes,
+      priorityFixesZh: []
+    },
     detailedSentenceCorrections: [],
-    task1LetterCorrections: body?.task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
-    task2EssayCorrections: body?.task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
-    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-    taskAchievementAdvice: [],
-    coherenceAdvice: [],
-    lexicalAdvice: [],
-    grammarAdvice: [],
-    band5FixPlan: [],
-    band6UpgradePlan: [],
-    band7UpgradePlan: [],
-    modelAnswerOutline: "",
+    task1LetterCorrections: task === "Task 1" ? {
+      openingComment: "",
+      closingComment: "",
+      toneComment: "Use a tone suitable for the recipient.",
+      purposeComment: "State the purpose clearly and develop it.",
+      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: false, comment: "Partial AI output could not fully verify this bullet point.", suggestedSentence: "Add one clear sentence addressing this point." }))
+    } : null,
+    task2EssayCorrections: task === "Task 2" ? {
+      positionComment: "Make your position clear if the question requires an opinion.",
+      introductionComment: "Introduce the topic and answer the question directly.",
+      bodyParagraphComment: "Develop each body paragraph with one clear main idea.",
+      exampleComment: "Add specific examples or explanations.",
+      conclusionComment: "End with a clear summary or final position.",
+      developmentAdvice: ["Add more support for each main idea.", "Use specific examples instead of general statements."]
+    } : null,
+    correctionPriority: { fixFirst: priorityFixes, fixNext: ["Improve paragraph development.", "Use more precise vocabulary."], polishLater: ["Make expressions more natural."], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    taskAchievementAdvice: [firstImprove],
+    coherenceAdvice: [ccImprove],
+    lexicalAdvice: [lrImprove],
+    grammarAdvice: [graImprove],
+    band5FixPlan: ["Write enough content to answer the task.", "Use clear simple paragraphs."],
+    band6UpgradePlan: ["Develop ideas with reasons and examples."],
+    band7UpgradePlan: ["Use more precise language and stronger cohesion."],
+    modelAnswerOutline: task === "Task 1" ? "Opening, purpose, bullet point details, polite closing." : "Introduction, clear position, two developed body paragraphs, conclusion.",
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
-    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "Partial AI JSON was recovered; retry for full revision." },
-    revisionNotes: ["Partial AI JSON was recovered. Retry once for full feedback if needed."],
+    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "Partial AI JSON was recovered; use diagnostic feedback first, then retry for revision if needed." },
+    revisionNotes: ["Partial AI JSON was recovered. The score is from AI, and the diagnostic sections were completed for display."],
     revisionNotesZh: [],
     disclaimer: DISCLAIMER,
     diagnosticMode: "ai_partial_json_recovered",
@@ -1588,7 +1752,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
       normalized.revisionNotes = Array.isArray(normalized.revisionNotes) ? normalized.revisionNotes : [];
       normalized.revisionNotesZh = Array.isArray(normalized.revisionNotesZh) ? normalized.revisionNotesZh : [];
       if (!normalized.revisionNotes.some((note) => /too short/i.test(note))) {
-        normalized.revisionNotes.unshift("The essay is too short for a meaningful full revision. Please write a fuller response first.");
+        normalized.revisionNotes.unshift("The response is underlength, but AI has still graded it and provided diagnostic feedback. Add content before requesting higher-band revisions.");
       }
       if (!normalized.revisionNotesZh.some((note) => note.includes("作文太短"))) {
         normalized.revisionNotesZh.unshift("作文太短，暂不适合生成完整修改版，请先补充内容。");
@@ -1613,7 +1777,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
     normalized.revisedEssayBand7 = "";
     normalized.revisedEssayMeta = defaultRevisedEssayMeta(true, "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions.");
     if (!normalized.revisionNotes.some((note) => /too short|too limited|Band 6/i.test(note))) {
-      normalized.revisionNotes.unshift("The original response is too short or too limited for meaningful Band 6 or Band 7 revision. Add more content first.");
+      normalized.revisionNotes.unshift("The response is underlength, but diagnostic feedback is still available. Add more content before requesting Band 6 or Band 7 revisions.");
     }
     if (!normalized.revisionNotesZh.some((note) => note.includes("原文太短") || note.includes("内容太少"))) {
       normalized.revisionNotesZh.unshift("原文太短或内容太少，不适合直接生成 Band 6 / Band 7 修改版。");
@@ -1692,7 +1856,7 @@ module.exports = async function handler(req, res) {
 
   const mode = normalizeMode(body.mode);
   const veryShort = isVeryShortEssay(body);
-  const effectiveMode = veryShort ? "quick" : mode;
+  const effectiveMode = mode;
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
   const maxTokens = maxTokensForMode(effectiveMode, veryShort);
 
