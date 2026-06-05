@@ -28,7 +28,7 @@ const DISCLAIMER = "This is an AI-generated estimated score and revision, not an
 
 const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
   12000,
-  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 25000, 30000)
+  Math.min(Number(process.env.AI_SINGLE_REQUEST_TIMEOUT_MS || process.env.AI_REQUEST_TIMEOUT_MS) || 28000, 30000)
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
   30000,
@@ -1023,16 +1023,210 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
   return await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
 }
 
-async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline, veryShort = false }) {
+
+function buildFastAiGradingSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Write short Chinese helper notes only in fields ending with Zh. Do not translate essays."
+    : "Main feedback must be English. Write short Chinese helper notes only in fields ending with Zh. Do not translate essays.";
+  return [
+    "You are a strict IELTS Writing examiner.",
+    "Return exactly one valid JSON object only. No markdown. No code fences. No trailing commas.",
+    "This pass is for scoring and task analysis only. A separate AI pass handles detailed sentence corrections.",
+    "Use IELTS Writing public band descriptor logic. Score from Band 1 to Band 9 only and allow half bands.",
+    "DeepSeek is the only scorer. Do not use or mention local fallback scoring.",
+    "Penalise short responses strictly but still grade them. There is no maximum word-count cap.",
+    "For Task 1 use Task Achievement. For Task 2 use Task Response.",
+    "Band 8 or 9 is allowed for truly high-quality responses; strict scoring must not artificially cap strong answers.",
+    "Keep all strings concise so the response completes quickly.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const taskType = task === "Task 1" ? "task1" : "task2";
+  const firstCriterion = firstCriterionName(task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const diagnostics = buildLowBandDiagnostics(body);
+  const cap = capFromDiagnostics(body, diagnostics);
+  const shape = {
+    actualWordCount: words,
+    taskTypeDetected: taskType,
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: words >= threshold ? "meets_minimum" : "under_minimum_ai_scored",
+    taskRequirementAnalysis: taskType === "task1"
+      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    taskRequirementAnalysisZh: { taskMatchSummaryZh: "", taskPurposeZh: "", requiredToneZh: "", requiredPartsZh: [], bulletPointsZh: [] },
+    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    highBandDiagnostics: {
+      fullyAddressesTask: false,
+      clearProgression: false,
+      wellDevelopedIdeas: false,
+      wideAccurateVocabulary: false,
+      flexibleGrammar: false,
+      fewErrors: false,
+      appropriateToneTask1: task === "Task 1" ? false : null,
+      recommendedHighBandRange: "",
+      reason: ""
+    },
+    highBandDiagnosticsZh: { reasonZh: "" },
+    lowBandDiagnostics: { ...diagnostics, reason: "" },
+    lowBandDiagnosticsZh: { reasonZh: "" },
+    scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+    scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+    overallBand: 1,
+    estimatedLevel: "Band 1.0",
+    criteria: {
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+    },
+    strengths: [],
+    strengthsZh: [],
+    mainProblems: [],
+    mainProblemsZh: [],
+    spellingCorrections: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    detailedSentenceCorrections: [],
+    errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: [],
+    band5FixPlan: [],
+    band6UpgradePlan: [],
+    band7UpgradePlan: [],
+    modelAnswerOutline: "",
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    revisedEssayMeta: { revisionLimited: gradingMode !== "revision", revisionLimitReason: "" },
+    revisionNotes: [],
+    revisionNotesZh: [],
+    disclaimer: DISCLAIMER
+  };
+
+  return [
+    "Return one JSON object matching this shape. Keep the same keys, but fill the scoring/task-analysis fields with real IELTS assessment.",
+    JSON.stringify(shape),
+    "Scoring requirements:",
+    "- Assign four IELTS criterion bands and overallBand.",
+    "- Explain why the score is not higher and not lower.",
+    "- Analyse the selected prompt before scoring.",
+    "- If under the recommended word count, reflect that in Task Achievement/Task Response, but still score normally from Band 1 upward.",
+    "- Do not generate full sentence corrections in this pass; leave correction arrays empty if the separate correction pass will fill them.",
+    "- Keep strings short. Arrays max 5 items.",
+    "Server low-band context:",
+    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
+    "Request:",
+    JSON.stringify({
+      task,
+      taskType,
+      gradingMode,
+      questionTitle: body.questionTitle,
+      questionPrompt: body.questionPrompt,
+      actualWordCount: words,
+      targetWordCount: body.targetWordCount,
+      isUnderMinimum: Boolean(body.isUnderMinimum),
+      essay: body.essay
+    })
+  ].join("\n");
+}
+
+function buildFastRevisionSystemPrompt(locale = "en") {
+  return [
+    "You are an IELTS General Training writing coach.",
+    "Return exactly one valid JSON object only. No markdown. No code fences. No trailing commas.",
+    "This pass generates revised/model answer content only. Do not rescore the essay.",
+    "Do not translate the essay into Chinese. Use English for revised essays."
+  ].join(" ");
+}
+
+function buildFastRevisionPrompt(body, locale = "en") {
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const tooShort = body.task === "Task 1" ? words < 80 : words < 150;
+  const shape = {
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    modelAnswerOutline: "",
+    revisedEssayMeta: {
+      band5Target: "Basic but complete response; simple grammar; suitable for Band 5.",
+      band6Target: "Clear and complete response with better organisation and vocabulary; suitable for Band 6.",
+      band7Target: "Well-developed and natural response; suitable for Band 7, not Band 9.",
+      revisionLimited: tooShort,
+      revisionLimitReason: tooShort ? "The original response is very short, so only a limited revision is suitable." : ""
+    },
+    revisionNotes: [],
+    revisionNotesZh: []
+  };
+  return [
+    "Return one JSON object matching this shape:",
+    JSON.stringify(shape),
+    tooShort
+      ? "The original essay is very short. You may provide a Band 5 basic completion only; leave Band 6 and Band 7 empty if there is not enough content to upgrade."
+      : "Generate three clearly different revised versions: Band 5, Band 6, and Band 7. Do not write a Band 9 essay.",
+    "Keep each revised essay concise and appropriate for IELTS General Training.",
+    "Question:",
+    String(body.questionPrompt || ""),
+    "Original essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+async function callAiCompactScoringRetry({ apiKey, model, body, gradingMode, locale, deadline }) {
   const rawText = await callDeepSeek({
     apiKey,
     model,
-    systemPrompt: buildSystemPrompt(veryShort, locale),
-    userPrompt: buildUserPrompt({ ...body, mode: gradingMode }, veryShort, locale),
-    maxTokens,
+    systemPrompt: buildCompactAiOnlySystemPrompt(locale),
+    userPrompt: buildCompactAiOnlyPrompt({ ...body, mode: gradingMode }, locale, "Previous full scoring pass timed out; return a smaller complete scoring JSON."),
+    maxTokens: 1800,
     temperature: 0.1,
     jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+  });
+  return await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: gradingMode },
+    locale,
+    maxTokens: 1800,
+    allowRepair: true,
     deadline
+  });
+}
+
+
+async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline, veryShort = false, timeoutMs }) {
+  const isRevisionPass = normalizeMode(gradingMode) === "revision";
+  const systemPrompt = isRevisionPass ? buildFastRevisionSystemPrompt(locale) : buildFastAiGradingSystemPrompt(locale);
+  const userPrompt = isRevisionPass
+    ? buildFastRevisionPrompt({ ...body, mode: gradingMode }, locale)
+    : buildFastAiGradingPrompt({ ...body, mode: gradingMode }, gradingMode, locale);
+
+  const cappedMaxTokens = isRevisionPass
+    ? Math.min(maxTokens || 3600, 4200)
+    : Math.min(maxTokens || 2600, veryShort ? 1800 : 2600);
+
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt,
+    userPrompt,
+    maxTokens: cappedMaxTokens,
+    temperature: 0.1,
+    jsonMode: false,
+    deadline,
+    timeoutMs
   });
 
   return await parseOrRepairAiJson({
@@ -1041,7 +1235,7 @@ async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, 
     rawText,
     body: { ...body, mode: gradingMode },
     locale,
-    maxTokens,
+    maxTokens: cappedMaxTokens,
     allowRepair: true,
     deadline
   });
@@ -1105,9 +1299,25 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
   });
 
   const [gradingSettled, correctionSettled] = await Promise.allSettled([gradingPromise, correctionPromise]);
-  if (gradingSettled.status !== "fulfilled") throw gradingSettled.reason;
 
-  let result = gradingSettled.value && typeof gradingSettled.value === "object" ? gradingSettled.value : {};
+  let result;
+  if (gradingSettled.status === "fulfilled") {
+    result = gradingSettled.value && typeof gradingSettled.value === "object" ? gradingSettled.value : {};
+  } else {
+    try {
+      result = await callAiCompactScoringRetry({
+        apiKey,
+        model,
+        body,
+        gradingMode,
+        locale,
+        deadline
+      });
+      result.gradingWarning = "Primary AI scoring pass timed out, so a smaller AI scoring pass was used.";
+    } catch (retryError) {
+      throw gradingSettled.reason || retryError;
+    }
+  }
   if (correctionSettled.status === "fulfilled") {
     result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
   } else {
