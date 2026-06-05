@@ -280,8 +280,8 @@ function capFromDiagnostics(body, diagnostics) {
 
 function buildSystemPrompt(veryShort = false, locale = "en") {
   const outputLanguageInstruction = isChineseLocale(locale)
-    ? "Output language request: English feedback may include brief Chinese helper notes only in fields ending with Zh. Do not translate whole essays."
-    : "Output language request: main feedback must be English. Also include brief hidden Chinese helper notes only in fields ending with Zh so the front end can reveal them on demand. Do not put Chinese inside normal English feedback fields.";
+    ? "Output language request: English feedback may include accurate Chinese explanations only in fields ending with Zh. These *Zh fields must closely match the English feedback, not generic templates. Do not translate whole essays."
+    : "Output language request: main feedback must be English. Also include accurate Chinese explanations only in fields ending with Zh so the front end can reveal them on demand. The *Zh text must closely explain the adjacent English field, not a vague template. Do not put Chinese inside normal English feedback fields.";
   const rules = [
     outputLanguageInstruction,
     "You are a strict IELTS Writing examiner and writing coach.",
@@ -374,10 +374,10 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Use detailed but structured feedback. Do not be vague.",
     "Do not cap advice arrays at 5 items when the user essay contains more clear issues; return as many clear score-affecting items as the schema and limits allow.",
     "Each correction item must include a concrete fix, reason, and realistic next-step improvement.",
-    "Provide brief Chinese helper notes in *Zh fields only. Chinese helper notes should explain feedback only; do not translate the full essay, original sentences, corrected sentences, model answers, or revised essays.",
+    "Provide accurate Chinese explanations in *Zh fields only. Each *Zh field must directly match the adjacent English feedback, correction reason, band impact, or advice. Do not use generic phrases such as “更完整地回应题目” unless that is exactly the issue. Do not translate the full essay, original sentences, corrected sentences, model answers, or revised essays.",
     "For taskRequirementAnalysisZh, scoreCalibrationZh, lowBandDiagnosticsZh, highBandDiagnosticsZh, strengthsZh, and mainProblemsZh, write short Chinese explanations of the feedback only.",
     "For advice arrays and task-specific correction fields, provide matching short *Zh helper fields when possible, but never translate complete essay text or revised essay text.",
-    "Keep Chinese helper notes short. Do not let Chinese helper notes replace the English feedback.",
+    "Keep Chinese explanations concise but specific. They must be accurate enough for a Chinese learner to understand the exact IELTS problem and action. Do not let Chinese explanations replace the English feedback.",
     "Do not translate the user's full essay or any revised essay into Chinese.",
     "Do not use trailing commas.",
     "Do not use comments inside JSON."
@@ -629,7 +629,7 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     underMinimumInstruction,
     body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 1 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
-    "Use English for the main feedback. Use brief Chinese helper notes only in *Zh fields for local understanding. Do not translate the whole essay or revised essays.",
+    "Use English for the main feedback. Use accurate Chinese explanations only in *Zh fields. These Chinese explanations must follow the exact English meaning and must not be vague template translations. Do not translate the whole essay or revised essays.",
     "Local low-band diagnostics from the server are provided below. Use them as strong evidence, but still assess the actual writing.",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }, null, 2),
     "If capSuggestion.cap is not null, apply that as an upper cap unless the essay is clearly worse, and explain it in scoreCalibration.",
@@ -667,8 +667,8 @@ function buildUserPrompt(body, veryShort, locale = "en") {
 
 function buildCompactAiOnlySystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Brief Chinese helper notes may appear only in *Zh fields. Do not translate essays."
-    : "Main feedback must be English. You may include brief hidden Chinese helper notes only in *Zh fields. Do not translate essays.";
+    ? "Accurate Chinese explanations may appear only in *Zh fields. They must match the English feedback and not be generic. Do not translate essays."
+    : "Main feedback must be English. Include accurate Chinese explanations only in *Zh fields. They must match the English feedback and not be generic. Do not translate essays.";
   return [
     "You are a strict IELTS Writing examiner.",
     "DeepSeek is the only scorer. Do not copy or rely on any local fallback score.",
@@ -743,7 +743,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     "Return exactly one valid JSON object matching this compact shape. Keep the same keys.",
     previousIssue ? `Previous JSON issue to avoid: ${String(previousIssue).slice(0, 180)}` : "",
     JSON.stringify(shape),
-    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep strings concise but useful. Arrays may contain up to 8 items for correction fields. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep strings concise but specific. Arrays may contain up to 12 items for correction fields when visible issues exist. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
     "Request:",
     JSON.stringify({
       task: body.task,
@@ -907,8 +907,8 @@ function correctionLimitForEssay(body, mode) {
 
 function buildAiCorrectionSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Write brief Chinese helper explanations only in fields ending with Zh. Do not translate the full essay."
-    : "Main feedback must be English. Add brief Chinese helper explanations only in fields ending with Zh. Do not translate the full essay.";
+    ? "Write accurate Chinese explanations only in fields ending with Zh. Each Chinese explanation must match the adjacent English feedback or correction, not a generic template. Do not translate the full essay."
+    : "Main feedback must be English. Add accurate Chinese explanations only in fields ending with Zh. Each Chinese explanation must match the adjacent English feedback or correction, not a generic template. Do not translate the full essay.";
   return [
     "You are an IELTS Writing error-correction examiner.",
     "Your task is not to rescore the essay. Your task is to scan the whole user essay and return detailed correction data.",
@@ -921,6 +921,8 @@ function buildAiCorrectionSystemPrompt(locale = "en") {
     "If the essay is short, scan every sentence.",
     "If the essay is long, return all clear high-impact errors and repeated patterns within the requested limits.",
     "Do not return blank correction objects.",
+    "Every correction item must include: what is wrong, why it affects the band, the exact corrected wording, and a realistic stronger version when useful.",
+    "Do not give only one-sentence comments for major IELTS criteria; use enough detail for the learner to know what to change next.",
     chineseRule
   ].join(" ");
 }
@@ -994,9 +996,12 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     JSON.stringify(shape),
     "",
     `Mode: ${mode === "revision" ? "detailed grading plus model/revision" : "detailed grading without model answer"}.`,
-    `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors. The user wants maximum detail; use the full limit when clear issues exist.`,
+    `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors. The user wants maximum detail; use the full limit when clear score-affecting issues exist.`,
+    "Quality requirement: each visible feedback item should be detailed enough to be useful without another explanation. Avoid one-line template advice.",
+    "For every advice item, include: the current weakness, the exact action, and a concrete example phrase/sentence when possible.",
     "If there are no errors of a specific type, return an empty array for that type, but do not return all correction arrays empty when the essay has visible errors.",
     "If the essay has more than 30 words, quote and correct at least 8 clear original errors unless there are genuinely fewer visible errors. For essays above 150 words, aim for 12+ concrete corrections across spellingCorrections, grammarErrors, sentenceCorrections, and detailedSentenceCorrections when errors exist.",
+    "For high-band writing with few errors, do not invent errors; instead give precise polishing advice with evidence, but do not display harmless salutation/closing items as errors.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
     "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
@@ -1007,11 +1012,11 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, target, action, exampleUpgrade, actionZh. The action field must be a concrete step, not blank.",
     "Write every correction and betterExpression at the target level, not far above it.",
     "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: do not give all plans equal priority. Put the most relevant plan for the target range first and make it the most detailed. If the target range is above Band 7, put the Band 7.5-9 coaching mainly in targetImprovementPlan, criterionUpgrades, practiceTasks, and band7UpgradePlan.",
-    "For every advice array, also return a matching short Chinese helper array: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. These are not full translations; they are concise explanations for Chinese learners.",
+    "For every advice array, also return a matching Chinese explanation array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must accurately explain the corresponding English item, not a general template.",
     "Do not return blank objects in errorAnalysis.errorPatterns, targetImprovementPlan.criterionUpgrades, or developmentAdvice. Omit empty objects and return useful text instead.",
     "Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or salutation/closing-only items with no score impact.",
     "For each correction item, explain exactly how the change helps the user reach the target range.",
-    "Chinese helper notes must be short and appear only in *Zh fields.",
+    "Chinese explanations must be concise, accurate, and appear only in *Zh fields. They must not be vague template text.",
     "",
     "Question:",
     String(body.questionPrompt || ""),
@@ -1329,8 +1334,8 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
 
 function buildFocusedAiCorrectionSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Use brief Chinese helper notes only in *Zh fields. Do not translate the essay."
-    : "Use English for main fields. Add brief Chinese helper notes only in *Zh fields. Do not translate the essay.";
+    ? "Use accurate Chinese explanations only in *Zh fields. They must match the adjacent English correction or advice, not a generic template. Do not translate the essay."
+    : "Use English for main fields. Add accurate Chinese explanations only in *Zh fields. They must match the adjacent English correction or advice, not a generic template. Do not translate the essay.";
   return [
     "You are an IELTS Writing correction examiner.",
     "Return exactly one valid JSON object. No markdown. No code fences.",
@@ -1479,8 +1484,8 @@ async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingM
 
 function buildFastAiGradingSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Write short Chinese helper notes only in fields ending with Zh. Do not translate essays."
-    : "Main feedback must be English. Write short Chinese helper notes only in fields ending with Zh. Do not translate essays.";
+    ? "Write accurate Chinese explanations only in fields ending with Zh. They must match the adjacent English feedback and avoid vague templates. Do not translate essays."
+    : "Main feedback must be English. Write accurate Chinese explanations only in fields ending with Zh. They must match the adjacent English feedback and avoid vague templates. Do not translate essays.";
   return [
     "You are a strict IELTS Writing examiner.",
     "Return exactly one valid JSON object only. No markdown. No code fences. No trailing commas.",
@@ -1741,8 +1746,8 @@ function isDeepSeekEmptyResponseError(error) {
 
 function buildMinimalAiScoringSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Use short Chinese helper notes only in *Zh fields."
-    : "Main fields must be English. Use short Chinese helper notes only in *Zh fields.";
+    ? "Use accurate Chinese explanations only in *Zh fields; match the adjacent English content and avoid generic templates."
+    : "Main fields must be English. Use accurate Chinese explanations only in *Zh fields; match the adjacent English content and avoid generic templates.";
   return [
     "You are a strict IELTS Writing examiner.",
     "Return exactly one valid JSON object only.",
@@ -1911,8 +1916,8 @@ function assertMeaningfulAiScoringResult(result, body, sourceLabel) {
 
 function buildNoTemplateAiScoringSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Use short Chinese helper notes only in fields ending with Zh."
-    : "Main fields must be English. Use short Chinese helper notes only in fields ending with Zh.";
+    ? "Use accurate Chinese explanations only in fields ending with Zh; match the adjacent English content and avoid generic templates."
+    : "Main fields must be English. Use accurate Chinese explanations only in fields ending with Zh; match the adjacent English content and avoid generic templates.";
   return [
     "You are a strict IELTS Writing examiner.",
     "Return exactly one valid JSON object only. No markdown. No code fences.",
@@ -1979,8 +1984,8 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
 
 function buildLeanScoreSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
-    ? "Use short Chinese helper notes only in fields ending with Zh. Do not translate essays."
-    : "Main feedback must be English. Use short Chinese helper notes only in fields ending with Zh. Do not translate essays.";
+    ? "Use accurate Chinese explanations only in fields ending with Zh; match the adjacent English content and avoid generic templates. Do not translate essays."
+    : "Main feedback must be English. Use accurate Chinese explanations only in fields ending with Zh; match the adjacent English content and avoid generic templates. Do not translate essays.";
   return [
     "You are a strict IELTS Writing examiner.",
     "This pass is ONLY for scoring and task analysis. Do not do detailed sentence correction here.",
@@ -2075,7 +2080,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
-    "- Keep strengths/mainProblems/advice arrays short but specific, usually 2-5 items.",
+    "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
+    "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
     buildTargetImprovementInstruction(body),
     "Server low-band context:",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
@@ -2136,7 +2142,7 @@ function normalizeFocusedCorrectionStage(value) {
 function buildFocusedSectionSystemPrompt(section, locale = "en") {
   const chineseRule = isChineseLocale(locale)
     ? "Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
-    : "Main fields must be English. Use brief Chinese helper notes only in fields ending with Zh. Do not translate the full essay.";
+    : "Main fields must be English. Use accurate Chinese explanations only in fields ending with Zh. Match the adjacent English content and avoid generic templates. Do not translate the full essay.";
   const sectionName = {
     task: "task response, structure, tone, and prompt coverage",
     language: "grammar, sentence structure, and meaning-control correction",
@@ -2153,6 +2159,8 @@ function buildFocusedSectionSystemPrompt(section, locale = "en") {
     "Use only words and sentences that appear in the user's essay for original text fields.",
     "Do not invent user sentences.",
     "The user wants maximum useful detail. Do not stop at two examples when more clear issues exist.",
+    "For every returned issue, give a specific explanation, a concrete fix, and a realistic next-step upgrade tied to the current band target.",
+    "Do not use vague coaching such as improve vocabulary, make it clearer, or use better grammar unless you also show exactly what to change and why it affects IELTS scoring.",
     chineseRule
   ].join(" ");
 }
@@ -2176,7 +2184,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     return [
       "Return JSON with this exact shape:",
       JSON.stringify({
-        task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+        task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [{ bulletPoint: "", covered: false, evidenceFromEssay: "", problem: "", comment: "", suggestedSentence: "", explanationZh: "" }] } : null,
         task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
         taskAchievementAdvice: [],
         taskAchievementAdviceZh: [],
@@ -2185,6 +2193,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       "Check only task response/achievement, prompt coverage, purpose, tone, opening/closing, paragraphing, relevance, position, development, examples, and conclusion.",
+      "For Task 1 bulletPointAdvice, create one non-empty object for each bullet point in the question. State whether it is covered, quote evidenceFromEssay if covered, explain the exact problem if not fully covered, and give a suggestedSentence that directly fixes it.",
+      "For Task 2 developmentAdvice, create detailed items that mention the exact idea/paragraph, what is missing, and one concrete sentence-level action.",
       "Return only issues that can affect Task Achievement/Task Response or Coherence and Cohesion.",
       ...common
     ].join("\n");
@@ -2205,6 +2215,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       `Find spelling, word choice, collocation, repetition, register, and lexical precision issues that affect Lexical Resource. Return up to ${limit} correction items.`,
+      "For each lexical issue, quote the original wording, give a precise replacement, explain the collocation/register/precision problem, and state how it affects Lexical Resource.",
       "Do not include correct words or harmless style preferences. Every detailed item must be scoreImpacting=true.",
       ...common
     ].join("\n");
@@ -2241,7 +2252,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       `Find all clear grammar, word-form, article, tense, plural, agreement, preposition, punctuation, and sentence-structure errors. Return up to ${limit} items.`,
-      "Each item must include original text from the essay, corrected text, and a specific rule/explanation.",
+      "Each item must include original text from the essay, corrected text, a specific rule/explanation, and why it affects Grammatical Range and Accuracy.",
+      "For high-band essays, return only real accuracy or naturalness issues that could affect the score; do not mark correct sentences.",
       "Do not return errorType None, No significant improvement needed, No impact on band score, or unchanged corrections.",
       ...common
     ].join("\n");
@@ -2289,11 +2301,11 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       band7UpgradePlanZh: [],
       errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
     }),
-    "Give detailed IELTS coaching based on the current band and the next realistic target range.",
+    "Give detailed IELTS coaching based on the current band and the next realistic target range. Each advice item must be concrete and connected to the submitted essay, not generic IELTS advice.",
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects using keys criterion, currentWeakness, target, action, exampleUpgrade, actionZh: one for Task Response/Task Achievement, one for Coherence and Cohesion, one for Lexical Resource, and one for Grammatical Range and Accuracy.",
     "Focus on improving 0.5-1 band at a time, with Band 5 as the first floor for very weak writing.",
-    "Give concrete actions, not generic advice. Include task-specific advice.",
-    "For every English advice array, return a matching short Chinese helper array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, and band7UpgradePlanZh.",
+    "Give concrete actions, not generic advice. Include task-specific advice, sample upgraded wording, and the criterion it improves.",
+    "For every English advice array, return a matching accurate Chinese explanation array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, and band7UpgradePlanZh. Each Chinese item must explain the corresponding English item specifically.",
     "Do not return blank errorPatterns or blank criterionUpgrades. If an object has no useful text, omit it instead of returning empty labels.",
     "For Task 1: opening, closing, tone, purpose, bullet coverage.",
     "For Task 2: position, introduction, body paragraph development, examples, conclusion, relevance.",
@@ -2379,17 +2391,17 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
 
 async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
   const maxTokensBySection = {
-    task: 7200,
-    language: 9000,
-    vocabulary: 7200,
-    spelling: 3600,
-    grammar: 7000,
-    sentence: 10000,
-    advice: 8500
+    task: 9000,
+    language: 11000,
+    vocabulary: 9000,
+    spelling: 4200,
+    grammar: 9000,
+    sentence: 12000,
+    advice: 11000
   };
   const sectionTimeout = Math.min(
     AI_SINGLE_REQUEST_TIMEOUT_MS,
-    Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 150000)
+    Math.max(120000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 210000)
   );
   const maxAttempts = section === "spelling" ? 1 : 2;
   let lastError = null;
@@ -2444,10 +2456,93 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     return bestOutput;
   }
 
-  const error = lastError || new Error(`AI ${section} stage returned no usable detailed content.`);
-  error.code = error.code || "AI_SECTION_EMPTY";
-  error.section = section;
-  throw error;
+  const warning = lastError?.message || `AI ${section} stage returned no usable detailed content.`;
+  bestOutput.sectionStage = section;
+  bestOutput.sectionWarning = warning;
+  bestOutput.stageWarnings = ensureArray(bestOutput.stageWarnings).concat([
+    `${section} stage did not return enough usable detail. Existing grading results were kept.`
+  ]);
+  if (section === "vocabulary") {
+    bestOutput.spellingCorrections = ensureArray(bestOutput.spellingCorrections);
+    bestOutput.detailedSentenceCorrections = ensureArray(bestOutput.detailedSentenceCorrections);
+    bestOutput.lexicalAdvice = ensureArray(bestOutput.lexicalAdvice);
+    bestOutput.errorAnalysis = bestOutput.errorAnalysis && typeof bestOutput.errorAnalysis === "object" ? bestOutput.errorAnalysis : {};
+    bestOutput.errorAnalysis.summary = bestOutput.errorAnalysis.summary || "The vocabulary stage did not return enough usable detail; retry this stage for a fuller lexical check.";
+    bestOutput.errorAnalysis.summaryZh = bestOutput.errorAnalysis.summaryZh || "词汇检查阶段返回内容不足；可重试获得更完整的词汇反馈。";
+  }
+  return bestOutput;
+}
+
+
+function scoreAuditLooksNecessary(currentResult) {
+  if (!currentResult || typeof currentResult !== "object") return false;
+  const criteria = currentResult.criteria && typeof currentResult.criteria === "object" ? currentResult.criteria : {};
+  const weakPhrases = /needs clearer control|needs improvement|limited|weak|poor|basic|underdeveloped/i;
+  const strengthPhrases = /fully addresses|appropriate tone|well[-\s]?developed|clear purpose|coherent|accurate language|few errors/i;
+  const bands = Object.values(criteria).map((item) => Number(item?.band)).filter(Number.isFinite);
+  const overall = Number(currentResult.overallBand);
+  if (bands.length && Number.isFinite(overall)) {
+    const avg = bands.reduce((sum, value) => sum + value, 0) / bands.length;
+    if (Math.abs(avg - overall) > 1) return true;
+  }
+  for (const item of Object.values(criteria)) {
+    const band = Number(item?.band);
+    const text = `${item?.feedback || ""} ${item?.howToImprove || ""}`;
+    if (band >= 7.5 && weakPhrases.test(text)) return true;
+  }
+  return ensureArray(currentResult.mainProblems).some((item) => strengthPhrases.test(String(item || "")));
+}
+
+function buildScoreAuditPrompt(body, locale = "en") {
+  const current = body.currentResult || {};
+  return [
+    "Audit this IELTS scoring result for contradictions only. Return one compact valid JSON object.",
+    "Do not rescore from scratch. Do not produce corrections. Do not analyse the whole essay again.",
+    "If there is no contradiction, return {\"scoreAuditSkipped\":true,\"stageWarnings\":[]}.",
+    "If there is a contradiction, return only corrected criteria wording, strengths, mainProblems, scoreCalibration, and stageWarnings.",
+    "Band 7.5+ feedback must sound high-band and use minor refinement language, not low-band templates.",
+    "mainProblems must not contain strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, or accurate language.",
+    "Chinese *Zh fields, if returned, must accurately match the English wording and must not be generic.",
+    "Shape:",
+    JSON.stringify({ scoreAuditSkipped: false, criteria: {}, strengths: [], mainProblems: [], scoreCalibration: {}, stageWarnings: [] }),
+    "Current result:",
+    JSON.stringify(current).slice(0, 5000)
+  ].join("\n");
+}
+
+async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
+  if (!scoreAuditLooksNecessary(body.currentResult)) {
+    return {
+      aiStage: "score-audit",
+      scoreAuditSkipped: true,
+      stageWarnings: ["Score audit skipped because no obvious score-feedback contradiction was detected."]
+    };
+  }
+  try {
+    const rawText = await callDeepSeek({
+      apiKey,
+      model,
+      systemPrompt: "You are a concise IELTS scoring consistency auditor. Return one valid compact JSON object only.",
+      userPrompt: buildScoreAuditPrompt(body, locale),
+      maxTokens: 1200,
+      temperature: 0.0,
+      jsonMode: false,
+      deadline,
+      timeoutMs: Math.min(45000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    });
+    const parsed = parseJsonFromProvider(rawText);
+    return {
+      ...(parsed && typeof parsed === "object" ? parsed : {}),
+      aiStage: "score-audit",
+      stageWarnings: ensureArray(parsed?.stageWarnings)
+    };
+  } catch (error) {
+    return {
+      aiStage: "score-audit",
+      scoreAuditSkipped: true,
+      stageWarnings: ["Score audit timed out or returned invalid JSON. The original AI score was kept."]
+    };
+  }
 }
 
 function normalizeAiStage(value) {
@@ -3639,7 +3734,7 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
     normalized.task1LetterCorrections.purposeComment = hasUsefulText(normalized.task1LetterCorrections.purposeComment) ? normalized.task1LetterCorrections.purposeComment : "Make the purpose clear in the first paragraph.";
     normalized.task1LetterCorrections.bulletPointAdvice = cleanObjectArray(normalized.task1LetterCorrections.bulletPointAdvice, ["bulletPoint", "comment", "suggestedSentence"]);
     if (!normalized.task1LetterCorrections.bulletPointAdvice.length && points.length) {
-      normalized.task1LetterCorrections.bulletPointAdvice = points.map((point) => ({ bulletPoint: point, covered: false, comment: "Address this bullet point directly with one clear detail.", suggestedSentence: "Add one sentence that answers this requirement." })).slice(0, 5);
+      normalized.task1LetterCorrections.bulletPointAdvice = points.map((point) => ({ bulletPoint: point, covered: false, evidenceFromEssay: "", problem: "No clear evidence for this bullet point was returned by AI.", comment: "Check whether this bullet point is directly answered with a concrete detail, not just implied.", suggestedSentence: "Add one specific sentence that directly answers this requirement and includes a concrete detail.", explanationZh: "请检查这一要点是否被直接回答，并补充具体细节。" })).slice(0, 5);
     }
   }
 
@@ -3721,8 +3816,6 @@ function backfillChineseHelperNotes(normalized, body) {
   if (!hasUsefulText(normalized.highBandDiagnosticsZh.reasonZh) && hasUsefulText(normalized.highBandDiagnostics?.reason)) normalized.highBandDiagnosticsZh.reasonZh = "高分证据尚不充分。";
 
   normalized.taskRequirementAnalysisZh = normalized.taskRequirementAnalysisZh && typeof normalized.taskRequirementAnalysisZh === "object" ? normalized.taskRequirementAnalysisZh : {};
-  if (!hasUsefulText(normalized.taskRequirementAnalysisZh.taskMatchSummaryZh) && hasUsefulText(normalized.taskRequirementAnalysis?.taskMatchSummary)) normalized.taskRequirementAnalysisZh.taskMatchSummaryZh = "这里解释作文是否回应了题目。";
-  if (!hasUsefulText(normalized.taskRequirementAnalysisZh.taskPurposeZh) && hasUsefulText(normalized.taskRequirementAnalysis?.taskPurpose)) normalized.taskRequirementAnalysisZh.taskPurposeZh = "这里说明题目的写作目的。";
 
   normalized.correctionPriority = normalized.correctionPriority && typeof normalized.correctionPriority === "object" ? normalized.correctionPriority : {};
   if (!Array.isArray(normalized.correctionPriority.fixFirstZh) || !normalized.correctionPriority.fixFirstZh.length) {
@@ -3735,58 +3828,30 @@ function backfillChineseHelperNotes(normalized, body) {
     normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLater).map(() => "最后再优化表达自然度。").slice(0, 5);
   }
 
-  const makeAdviceZh = (items, type) => ensureArray(items).map((item) => {
-    const text = String(item || "").toLowerCase();
-    if (type === "task") {
-      if (text.includes("position") || text.includes("opinion")) return "明确表达立场。";
-      if (text.includes("example")) return "用具体例子展开。";
-      if (text.includes("word")) return "补充内容达到建议字数。";
-      return "更完整地回应题目。";
-    }
-    if (type === "coherence") {
-      if (text.includes("paragraph")) return "分段更清楚。";
-      if (text.includes("link")) return "衔接更自然。";
-      return "让文章逻辑更连贯。";
-    }
-    if (type === "lexical") {
-      if (text.includes("vocabulary") || text.includes("word")) return "替换模糊词，使用题目相关词汇。";
-      return "提升词汇准确性。";
-    }
-    if (type === "grammar") {
-      if (text.includes("tense")) return "检查动词时态。";
-      if (text.includes("article")) return "注意冠词使用。";
-      return "先保证句子语法准确。";
-    }
-    if (type === "band5") return "先把作文写完整、清楚、少错。";
-    if (type === "band6") return "再提升展开、衔接和句型变化。";
-    if (type === "band7") return "最后提升自然度、精准度和论证深度。";
-    return "按这个建议逐步提升。";
-  });
+  const alignZhArray = (englishItems, zhItems) => {
+    const en = ensureArray(englishItems);
+    const zh = ensureArray(zhItems).filter(hasUsefulText);
+    // Do not invent generic Chinese translations here. If DeepSeek did not return
+    // an accurate matching Chinese explanation, leave it blank so the UI does not
+    // show misleading template text.
+    return zh.slice(0, en.length);
+  };
 
-  if (!Array.isArray(normalized.taskAchievementAdviceZh) || !normalized.taskAchievementAdviceZh.length) normalized.taskAchievementAdviceZh = makeAdviceZh(normalized.taskAchievementAdvice, "task").slice(0, 8);
-  if (!Array.isArray(normalized.coherenceAdviceZh) || !normalized.coherenceAdviceZh.length) normalized.coherenceAdviceZh = makeAdviceZh(normalized.coherenceAdvice, "coherence").slice(0, 8);
-  if (!Array.isArray(normalized.lexicalAdviceZh) || !normalized.lexicalAdviceZh.length) normalized.lexicalAdviceZh = makeAdviceZh(normalized.lexicalAdvice, "lexical").slice(0, 8);
-  if (!Array.isArray(normalized.grammarAdviceZh) || !normalized.grammarAdviceZh.length) normalized.grammarAdviceZh = makeAdviceZh(normalized.grammarAdvice, "grammar").slice(0, 8);
-  if (!Array.isArray(normalized.band5FixPlanZh) || !normalized.band5FixPlanZh.length) normalized.band5FixPlanZh = makeAdviceZh(normalized.band5FixPlan, "band5").slice(0, 8);
-  if (!Array.isArray(normalized.band6UpgradePlanZh) || !normalized.band6UpgradePlanZh.length) normalized.band6UpgradePlanZh = makeAdviceZh(normalized.band6UpgradePlan, "band6").slice(0, 8);
-  if (!Array.isArray(normalized.band7UpgradePlanZh) || !normalized.band7UpgradePlanZh.length) normalized.band7UpgradePlanZh = makeAdviceZh(normalized.band7UpgradePlan, "band7").slice(0, 8);
+  normalized.taskAchievementAdviceZh = alignZhArray(normalized.taskAchievementAdvice, normalized.taskAchievementAdviceZh);
+  normalized.coherenceAdviceZh = alignZhArray(normalized.coherenceAdvice, normalized.coherenceAdviceZh);
+  normalized.lexicalAdviceZh = alignZhArray(normalized.lexicalAdvice, normalized.lexicalAdviceZh);
+  normalized.grammarAdviceZh = alignZhArray(normalized.grammarAdvice, normalized.grammarAdviceZh);
+  normalized.band5FixPlanZh = alignZhArray(normalized.band5FixPlan, normalized.band5FixPlanZh);
+  normalized.band6UpgradePlanZh = alignZhArray(normalized.band6UpgradePlan, normalized.band6UpgradePlanZh);
+  normalized.band7UpgradePlanZh = alignZhArray(normalized.band7UpgradePlan, normalized.band7UpgradePlanZh);
 
   if (normalized.task2EssayCorrections && typeof normalized.task2EssayCorrections === "object") {
-    if (!hasUsefulText(normalized.task2EssayCorrections.positionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.positionComment)) normalized.task2EssayCorrections.positionCommentZh = "这里说明立场是否清楚。";
-    if (!hasUsefulText(normalized.task2EssayCorrections.introductionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.introductionComment)) normalized.task2EssayCorrections.introductionCommentZh = "这里说明开头是否直接回应题目。";
-    if (!hasUsefulText(normalized.task2EssayCorrections.bodyParagraphCommentZh) && hasUsefulText(normalized.task2EssayCorrections.bodyParagraphComment)) normalized.task2EssayCorrections.bodyParagraphCommentZh = "这里说明主体段展开是否充分。";
-    if (!hasUsefulText(normalized.task2EssayCorrections.exampleCommentZh) && hasUsefulText(normalized.task2EssayCorrections.exampleComment)) normalized.task2EssayCorrections.exampleCommentZh = "这里说明例子是否具体有效。";
-    if (!hasUsefulText(normalized.task2EssayCorrections.conclusionCommentZh) && hasUsefulText(normalized.task2EssayCorrections.conclusionComment)) normalized.task2EssayCorrections.conclusionCommentZh = "这里说明结尾是否总结立场。";
     if (!Array.isArray(normalized.task2EssayCorrections.developmentAdviceZh) || !normalized.task2EssayCorrections.developmentAdviceZh.length) {
       normalized.task2EssayCorrections.developmentAdviceZh = ensureArray(normalized.task2EssayCorrections.developmentAdvice).map(() => "这个建议可以帮助观点展开更充分。").slice(0, 8);
     }
   }
 
   if (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object") {
-    if (!hasUsefulText(normalized.task1LetterCorrections.openingCommentZh) && hasUsefulText(normalized.task1LetterCorrections.openingComment)) normalized.task1LetterCorrections.openingCommentZh = "这里说明开头是否合适。";
-    if (!hasUsefulText(normalized.task1LetterCorrections.closingCommentZh) && hasUsefulText(normalized.task1LetterCorrections.closingComment)) normalized.task1LetterCorrections.closingCommentZh = "这里说明结尾是否合适。";
-    if (!hasUsefulText(normalized.task1LetterCorrections.toneCommentZh) && hasUsefulText(normalized.task1LetterCorrections.toneComment)) normalized.task1LetterCorrections.toneCommentZh = "这里说明语气是否合适。";
-    if (!hasUsefulText(normalized.task1LetterCorrections.purposeCommentZh) && hasUsefulText(normalized.task1LetterCorrections.purposeComment)) normalized.task1LetterCorrections.purposeCommentZh = "这里说明写信目的是否清楚。";
   }
 
 }
@@ -4313,18 +4378,14 @@ async function handleRequest(req, res) {
       result.aiStage = "score";
       result = normalizeResultForMode(result, "full", veryShort, body, locale);
     } else if (aiStage === "score-audit") {
-      result = await callAiScoreOnlyGrader({
+      result = await callAiScoreAuditPass({
         apiKey,
         model,
         body: { ...body, currentResult: body.currentResult || null },
-        effectiveMode,
-        veryShort,
-        maxTokens: maxTokensForMode("full", veryShort),
         locale,
         deadline
       });
       result.aiStage = "score-audit";
-      result = normalizeResultForMode(result, "full", veryShort, body, locale);
     } else if (aiStage.startsWith("correction-")) {
       const section = aiStage.slice("correction-".length);
       result = await callAiFocusedSectionStageOnly({

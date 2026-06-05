@@ -32,6 +32,11 @@ function proseHtml(text) {
 }
 
 function boolText(value) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "yes", "y", "covered", "fully covered", "partly covered", "partially covered"].includes(normalized)) return "是";
+    if (["false", "no", "n", "not covered", "missing", "uncovered", "否"].includes(normalized)) return "否";
+  }
   return value ? "是" : "否";
 }
 
@@ -98,6 +103,35 @@ function resetTimer(limit) {
   currentLimit = limit;
   remaining = limit * 60;
   els.timerDisplay.textContent = fmt(remaining);
+}
+
+function ensureEssayTimerDock() {
+  if (!els.essayInput || !els.timerDisplay || !els.timerBtn || !els.resetTimerBtn) return;
+  const essayCard = els.essayInput.closest(".card") || els.essayInput.parentElement;
+  if (!essayCard) return;
+
+  const oldTimerCard = els.timerDisplay.closest(".card");
+  if (oldTimerCard && oldTimerCard !== essayCard) oldTimerCard.classList.add("timer-card-emptied");
+
+  let dock = $("essayTimerDock");
+  if (!dock) {
+    dock = document.createElement("div");
+    dock.id = "essayTimerDock";
+    dock.className = "essay-timer-dock";
+    dock.innerHTML = `<div class="essay-timer-title"><span>写作计时</span><small>Timer beside writing area</small></div><div class="essay-timer-controls"></div>`;
+    const essayHeader = essayCard.querySelector(".card-head");
+    if (essayHeader && essayHeader.parentNode) {
+      essayHeader.parentNode.insertBefore(dock, essayHeader.nextSibling);
+    } else {
+      essayCard.insertBefore(dock, els.essayInput);
+    }
+  }
+
+  const controls = dock.querySelector(".essay-timer-controls");
+  if (!controls) return;
+  [els.timerDisplay, els.timerBtn, els.resetTimerBtn].forEach((node) => {
+    if (node && node.parentElement !== controls) controls.appendChild(node);
+  });
 }
 
 function toggleTimer() {
@@ -170,6 +204,7 @@ function selectPrompt(id) {
   els.bandTips.innerHTML = `<div class="band"><strong>Band 5 保底写法提示</strong>${selected.notes.band5}</div><div class="band"><strong>Band 6+ 提升提示</strong>${selected.notes.band6}</div>`;
   renderPhrases(selected);
   resetTimer(selected.timeLimit);
+  ensureEssayTimerDock();
   updateWords();
   resetGradingPanel();
   renderList();
@@ -267,11 +302,56 @@ function collapsibleSection(title, contentHtml, options = {}) {
   </details>`;
 }
 
+function isGenericChineseHelper(value, englishText = "") {
+  const zh = String(value || "").trim();
+  if (!zh) return false;
+  const compact = zh.replace(/\s+/g, "");
+  const genericNotes = new Set([
+    "更完整地回应题目。", "这里说明开头是否合适。", "这里说明结尾是否合适。",
+    "逐条覆盖题目要点。", "结构和衔接需要更清楚。", "分段并自然使用连接词。",
+    "词汇需要更准确更多样。", "使用更准确的题目词汇。", "语法准确性和句子控制需提升。",
+    "先写完整准确的句子。", "先保证句子语法准确。", "替换模糊词，使用题目相关词汇。",
+    "更完整地回应题目。", "衔接更自然。", "内容和语言仍需加强。"
+  ]);
+  if (genericNotes.has(compact)) return true;
+  const englishLength = String(englishText || "").trim().length;
+  return englishLength > 90 && compact.length <= 8;
+}
+
+function safeChineseHelper(value, englishText = "") {
+  if (Array.isArray(value)) {
+    return value.map((item) => safeChineseHelper(item, englishText)).filter(Boolean);
+  }
+  return isGenericChineseHelper(value, englishText) ? "" : value;
+}
+
+function renderAdviceObject(item, zhFallback = "") {
+  if (!item || typeof item !== "object") {
+    return renderTextWithTranslation(item, zhFallback, { tag: "span" });
+  }
+  const title = firstNonEmpty(item.title, item.item, item.area, item.criterion, item.category, item.focus, item.point, item.issueType);
+  const weakness = firstNonEmpty(item.currentWeakness, item.weakness, item.problem, item.issue, item.gap, item.currentProblem);
+  const target = firstNonEmpty(item.target, item.targetBand, item.goal, item.objective, item.nextBand, item.targetLevel);
+  const action = firstNonEmpty(item.action, item.advice, item.suggestion, item.howToImprove, item.howToFix, item.specificAction, item.recommendation, item.comment);
+  const example = firstNonEmpty(item.example, item.exampleUpgrade, item.suggestedSentence, item.modelSentence, item.betterExpression, item.targetBandExpression);
+  const impact = firstNonEmpty(item.bandImpact, item.impactOnBand, item.whyThisAffectsBand, item.scoreImpact, item.reason);
+  const zh = safeChineseHelper(firstNonEmpty(item.actionZh, item.adviceZh, item.suggestionZh, item.howToImproveZh, item.howToFixZh, item.commentZh, item.problemZh, item.reasonZh, zhFallback), [title, weakness, target, action, example, impact].join(" "));
+  const lines = [
+    title ? `<p><strong>项目：</strong>${escapeHtml(title)}</p>` : "",
+    weakness ? `<p><strong>当前问题：</strong>${escapeHtml(weakness)}</p>` : "",
+    target ? `<p><strong>目标：</strong>${escapeHtml(target)}</p>` : "",
+    action ? `<p><strong>具体动作：</strong>${escapeHtml(action)}</p>` : "",
+    example ? `<p><strong>示例升级：</strong>${escapeHtml(example)} ${renderCopyButton(example)}</p>` : "",
+    impact ? `<p><strong>对分数影响：</strong>${escapeHtml(impact)}</p>` : ""
+  ].filter(Boolean).join("");
+  return lines ? `<div class="advice-card-inline">${lines}${renderZhToggle(zh)}</div>` : renderTextWithTranslation(flattenObjectText(item), zh, { tag: "span" });
+}
+
 function renderListWithTranslations(items, translations, fallbackText) {
-  const list = Array.isArray(items) ? items : [];
+  const list = Array.isArray(items) ? items.filter((item) => hasAnyText(item)) : [];
   const zhList = Array.isArray(translations) ? translations : [];
   if (!list.length) return `<p class="muted">${escapeHtml(fallbackText || "No content is available.")}</p>`;
-  return `<ul>${list.map((item, index) => `<li>${renderTextWithTranslation(item, zhList[index], { tag: "span" })}</li>`).join("")}</ul>`;
+  return `<ul class="detailed-advice-list">${list.map((item, index) => `<li>${renderAdviceObject(item, zhList[index])}</li>`).join("")}</ul>`;
 }
 
 function bindZhToggles(scope) {
@@ -288,7 +368,7 @@ function bindZhToggles(scope) {
 
 
 function renderFeedbackTools() {
-  return `<div class="grading-tools" role="toolbar" aria-label="AI feedback tools" style="position:sticky;top:0;z-index:5;background:var(--card, #fff);padding:8px 0;border-bottom:1px solid var(--border, #d9e2ec);">
+  return `<div class="grading-tools" role="toolbar" aria-label="AI feedback tools">
     <button class="secondary" type="button" data-feedback-tool="expand-zh">展开全部中文</button>
     <button class="secondary" type="button" data-feedback-tool="collapse-zh">收起全部中文</button>
     <button class="secondary" type="button" data-feedback-tool="expand-details">展开全部折叠</button>
@@ -565,7 +645,7 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  const totalSteps = payload.mode === "revision" ? 7 : 6;
+  const totalSteps = payload.mode === "revision" ? 8 : 7;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -624,10 +704,11 @@ async function startGrading() {
 
     const correctionStages = [
       ["score-audit", `第 2 步/${totalSteps}：AI 正在审核评分一致性`, "评分一致性审核"],
-      ["correction-task", `第 3 步/${totalSteps}：AI 正在检查任务回应与结构问题`, "任务回应与结构检查"],
-      ["correction-language", `第 4 步/${totalSteps}：AI 正在检查语法和句子结构错误`, "语法和句子结构检查"],
-      ["correction-vocabulary", `第 5 步/${totalSteps}：AI 正在检查词汇、拼写和搭配问题`, "词汇拼写和搭配检查"],
-      ["improvement-plan", `第 6 步/${totalSteps}：AI 正在生成下一阶段提分计划`, "提分计划生成"]
+      ["correction-task", `第 3 步/${totalSteps}：AI 正在检查任务回应、结构和题目覆盖`, "任务回应与结构检查"],
+      ["correction-grammar", `第 4 步/${totalSteps}：AI 正在逐项检查语法、词形和句法错误`, "语法专项检查"],
+      ["correction-sentence", `第 5 步/${totalSteps}：AI 正在生成逐句修改和更好表达`, "逐句批改检查"],
+      ["correction-vocabulary", `第 6 步/${totalSteps}：AI 正在检查词汇、拼写、搭配和重复问题`, "词汇拼写和搭配检查"],
+      ["correction-advice", `第 7 步/${totalSteps}：AI 正在生成下一阶段提分计划和练习任务`, "提分计划生成"]
     ];
 
     for (const [stage, statusText, warningPrefix] of correctionStages) {
@@ -637,7 +718,7 @@ async function startGrading() {
     if (!hasDetailedFeedbackContent(result) || !hasDetailedAdviceContent(result)) {
       await runMergeStage(
         "correction",
-        "第 2 步/3：AI 正在补充完整详细反馈，包含错误订正和提分建议，请等待。",
+        `补充步骤：AI 正在补充完整详细反馈，包含错误订正和提分建议，请等待。`,
         "完整详细反馈补充"
       );
     }
@@ -658,7 +739,7 @@ async function startGrading() {
     renderGradingResult(result);
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 7 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 ${totalSteps} 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       setGradingStatus("AI 正在整理最终批改结果。", "loading");
       markStage("最终整理", "done", "结果已整理。");
@@ -667,7 +748,7 @@ async function startGrading() {
     }
 
     if (stageWarnings.length) {
-      setGradingStatus(`批改完成，但部分详细阶段需要重试：${stageWarnings.join("；")}`, "error");
+      setGradingStatus(`批改完成，但部分详细阶段需要重试：${stageWarnings.join("；")}`, "warning");
     } else {
       setGradingStatus("批改完成", "done");
     }
@@ -751,7 +832,21 @@ function renderTaskRequirementAnalysis(analysis = {}, match = {}, analysisZh = {
         <div><strong>语气：</strong>${renderTextWithTranslation(analysis.requiredTone || "Not returned.", analysisZh.requiredToneZh, { tag: "span" })}</div>
         <div><strong>信件类型：</strong>${renderTextWithTranslation(analysis.letterType || "Not returned.", analysisZh.letterTypeZh, { tag: "span" })}</div>
         <div><strong>写作目的：</strong>${renderTextWithTranslation(analysis.taskPurpose || "No detailed task analysis is available for this response.", analysisZh.taskPurposeZh, { tag: "span" })}</div>
-        <div><strong>Bullet points：</strong>${bullets.length ? `<ul>${bullets.map((item, index) => `<li>${renderTextWithTranslation(`${item.requirement || ""} ${item.covered ? "✓" : "✗"} ${item.evidence ? `- ${item.evidence}` : ""}`, bulletsZh[index] || item.evidenceZh || item.reasonZh, { tag: "span" })}</li>`).join("")}</ul>` : `<p class="muted">No detailed task analysis is available for this response.</p>`}</div>
+        <div><strong>Bullet points：</strong>${bullets.length ? `<div class="correction-list bullet-analysis-list">${bullets.map((item, index) => {
+          const requirement = firstNonEmpty(item.requirement, item.bulletPoint, item.point, item.taskRequirement, item.text);
+          const evidence = firstNonEmpty(item.evidence, item.evidenceFromEssay, item.originalEvidence, item.quote);
+          const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason, item.comment);
+          const suggestion = firstNonEmpty(item.suggestion, item.suggestedSentence, item.howToFix, item.advice, item.recommendation);
+          const zh = safeChineseHelper(bulletsZh[index] || item.explanationZh || item.commentZh || item.reasonZh || item.suggestionZh, [requirement, evidence, problem, suggestion].join(" "));
+          return `<div class="correction-item bullet-analysis-item">
+            <p><strong>要点：</strong>${escapeHtml(requirement || `Bullet point ${index + 1}`)}</p>
+            <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
+            ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
+            ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
+            ${suggestion ? `<p><strong>建议：</strong>${escapeHtml(suggestion)} ${renderCopyButton(suggestion)}</p>` : ""}
+            ${renderZhToggle(zh)}
+          </div>`;
+        }).join("")}</div>` : `<p class="muted">No detailed task analysis is available for this response.</p>`}</div>
       ` : `
         <div><strong>题目类型：</strong>${renderTextWithTranslation(analysis.questionType || "Not returned.", analysisZh.questionTypeZh, { tag: "span" })}</div>
         <p><strong>话题：</strong>${escapeHtml(analysis.topic || "未返回")}</p>
@@ -1093,14 +1188,23 @@ function renderTask1LetterCorrections(corrections) {
       <div><strong>Tone：</strong>${renderTextWithTranslation(corrections.toneComment || "暂无", corrections.toneCommentZh, { tag: "span" })}</div>
       <div><strong>Purpose：</strong>${renderTextWithTranslation(corrections.purposeComment || "暂无", corrections.purposeCommentZh, { tag: "span" })}</div>
     </div>
-    ${bulletAdvice.length ? `<h4>Bullet point 建议</h4><div class="correction-list">${bulletAdvice.map((item) => `
-      <div class="correction-item">
-        <p><strong>要点：</strong>${escapeHtml(item.bulletPoint || "")}</p>
+    ${bulletAdvice.length ? `<h4>Bullet point 建议</h4><div class="correction-list bullet-analysis-list">${bulletAdvice.map((item, index) => {
+      const bulletPoint = firstNonEmpty(item.bulletPoint, item.requirement, item.point, item.taskRequirement, item.text) || `Bullet point ${index + 1}`;
+      const evidence = firstNonEmpty(item.evidenceFromEssay, item.evidence, item.originalEvidence, item.quote);
+      const problem = firstNonEmpty(item.problem, item.issue, item.missingDetail, item.reason);
+      const comment = firstNonEmpty(item.comment, item.advice, item.suggestion, item.howToFix, item.recommendation);
+      const sentence = firstNonEmpty(item.suggestedSentence, item.modelSentence, item.exampleSentence, item.fixSentence);
+      const zh = safeChineseHelper(firstNonEmpty(item.explanationZh, item.commentZh, item.suggestionZh, item.reasonZh, item.suggestedSentenceZh), [bulletPoint, evidence, problem, comment, sentence].join(" "));
+      return `<div class="correction-item bullet-analysis-item">
+        <p><strong>要点：</strong>${escapeHtml(bulletPoint)}</p>
         <p><strong>是否覆盖：</strong>${boolText(item.covered)}</p>
-        <div><strong>建议：</strong>${renderTextWithTranslation(item.comment || "", item.commentZh, { tag: "span" })}</div>
-        ${item.suggestedSentence ? `<p><strong>可用句：</strong>${escapeHtml(item.suggestedSentence)} ${renderCopyButton(item.suggestedSentence)}</p>` : ""}
-        ${renderZhToggle(item.suggestedSentenceZh)}
-      </div>`).join("")}</div>` : ""}
+        ${evidence ? `<p><strong>原文证据：</strong>${escapeHtml(evidence)}</p>` : ""}
+        ${problem ? `<p><strong>具体问题：</strong>${escapeHtml(problem)}</p>` : ""}
+        ${comment ? `<p><strong>建议：</strong>${escapeHtml(comment)}</p>` : ""}
+        ${sentence ? `<p><strong>可用句：</strong>${escapeHtml(sentence)} ${renderCopyButton(sentence)}</p>` : ""}
+        ${renderZhToggle(zh)}
+      </div>`;
+    }).join("")}</div>` : ""}
   `);
 }
 
