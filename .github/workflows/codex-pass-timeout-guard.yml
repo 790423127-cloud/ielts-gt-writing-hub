@@ -1,0 +1,131 @@
+name: Codex pass timeout guard patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.codex-pass-timeout-guard-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch non-grading timeout handling only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('api/grade-ielts.js')
+          text = path.read_text(encoding='utf-8')
+          old_helper_anchor = '''function addRevisionTimeoutWarning(result) {
+  const updated = result && typeof result === "object" ? { ...result } : {};
+  const note = "Model answer generation timed out. The grading and correction feedback were returned first.";
+  updated.revisionNotes = ensureArray(updated.revisionNotes);
+  if (!updated.revisionNotes.includes(note)) updated.revisionNotes.push(note);
+  updated.revisionNotesZh = ensureArray(updated.revisionNotesZh);
+  if (!updated.revisionNotesZh.length) updated.revisionNotesZh.push("");
+  updated.revisedEssayMeta = updated.revisedEssayMeta && typeof updated.revisedEssayMeta === "object" ? { ...updated.revisedEssayMeta } : defaultRevisedEssayMeta(false);
+  updated.revisedEssayMeta.revisionLimitReason = note;
+  return updated;
+}
+
+async function callAiOnlyGrader'''
+          new_helper_anchor = '''function addRevisionTimeoutWarning(result) {
+  const updated = result && typeof result === "object" ? { ...result } : {};
+  const note = "Model answer generation timed out. The grading and correction feedback were returned first.";
+  updated.revisionNotes = ensureArray(updated.revisionNotes);
+  if (!updated.revisionNotes.includes(note)) updated.revisionNotes.push(note);
+  updated.revisionNotesZh = ensureArray(updated.revisionNotesZh);
+  if (!updated.revisionNotesZh.length) updated.revisionNotesZh.push("");
+  updated.revisedEssayMeta = updated.revisedEssayMeta && typeof updated.revisedEssayMeta === "object" ? { ...updated.revisedEssayMeta } : defaultRevisedEssayMeta(false);
+  updated.revisedEssayMeta.revisionLimitReason = note;
+  return updated;
+}
+
+function isDeepSeekTimeoutError(error) {
+  return error?.code === "DEEPSEEK_TIMEOUT" || error?.message === "DeepSeek request timed out.";
+}
+
+async function callAiOnlyGrader'''
+          old_correction = '''  if (correctionSettled.status === "fulfilled") {
+    result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
+  } else {
+    try {
+      const correctionRetry = await callAiCorrectionPass({
+        apiKey,
+        model,
+        body: { ...body, mode: gradingMode },
+        effectiveMode: gradingMode,
+        locale,
+        deadline,
+        maxTokensOverride: 1800,
+        timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+      });
+      result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
+    } catch {
+      result.correctionWarning = "AI sentence-level correction timed out. Please retry detailed grading.";
+      result.correctionPassWarning = result.correctionWarning;
+    }
+  }'''
+          new_correction = '''  if (correctionSettled.status === "fulfilled") {
+    result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
+  } else {
+    if (isDeepSeekTimeoutError(correctionSettled.reason)) {
+      result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+      result.correctionPassWarning = result.correctionWarning;
+    } else {
+      try {
+        const correctionRetry = await callAiCorrectionPass({
+          apiKey,
+          model,
+          body: { ...body, mode: gradingMode },
+          effectiveMode: gradingMode,
+          locale,
+          deadline,
+          maxTokensOverride: 1800,
+          timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+        });
+        result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
+      } catch {
+        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+        result.correctionPassWarning = result.correctionWarning;
+      }
+    }
+  }'''
+          old_revision = '''      result = mergeRevisionPassIntoResult(result, revision);
+    } catch {
+      result = addRevisionTimeoutWarning(result);
+    }
+  }'''
+          new_revision = '''      result = mergeRevisionPassIntoResult(result, revision);
+    } catch (error) {
+      result = addRevisionTimeoutWarning(result);
+      if (isDeepSeekTimeoutError(error)) {
+        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+        result.correctionPassWarning = result.correctionWarning;
+      }
+    }
+  }'''
+          for old, new in [(old_helper_anchor, new_helper_anchor), (old_correction, new_correction), (old_revision, new_revision)]:
+              if old not in text and new not in text:
+                  raise SystemExit('target block not found')
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Syntax check
+        run: node --check api/grade-ielts.js
+      - name: Clean temporary files
+        run: |
+          rm -f .codex-pass-timeout-guard-trigger
+          rm -f .github/workflows/codex-pass-timeout-guard.yml
+      - name: Commit changes
+        run: |
+          git config user.name "codex-bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+          git add api/grade-ielts.js .github/workflows/codex-pass-timeout-guard.yml .codex-pass-timeout-guard-trigger
+          git commit -m "Guard non-grading DeepSeek timeouts" || exit 0
+          git push
