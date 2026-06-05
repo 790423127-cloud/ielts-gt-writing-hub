@@ -313,29 +313,18 @@
 }
 
 
-/* Mock IELTS Writing Test */
-.mock-exam-card{border-color:var(--teal);background:linear-gradient(180deg,var(--card),var(--soft));}
-.mock-head{align-items:flex-start;gap:18px;}
-.mock-head h2{margin:0 0 6px;font-size:24px;}
-.mock-timer-box{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;min-width:320px;}
-.mock-timer-box .timer{font-size:28px;color:var(--teal);}
-.mock-exam-panel{margin-top:14px;background:var(--card);}
-.mock-select-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
-.mock-select-grid label{display:grid;gap:8px;}
-.mock-task-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-.mock-task-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);padding:14px;display:grid;gap:12px;}
-.mock-task-card h3{margin:0;font-size:18px;}
-.mock-task-card .prompt-text{padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);}
-.mock-task-card textarea{min-height:260px;background:var(--card);}
-#mockStatus[data-state=loading]{color:var(--amber);font-weight:800;}
-#mockStatus[data-state=done]{color:var(--teal);font-weight:800;}
-#mockStatus[data-state=error]{color:var(--rose);font-weight:800;}
-.mock-results{display:grid;gap:12px;margin-top:14px;}
-.mock-final-score,.mock-result-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:14px;}
-.mock-final-score h3{margin:0 0 8px;font-size:24px;color:var(--teal);}
-.mock-result-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.mock-result-card h4{margin:0 0 10px;font-size:18px;}
-.mock-criteria-grid{display:grid;gap:8px;}
-.mock-criterion{display:flex;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:7px;padding:9px 10px;background:var(--soft);}
-.mock-criterion span{font-weight:800;color:var(--teal);}
-@media(max-width:900px){.mock-head{display:grid}.mock-timer-box{justify-content:flex-start;min-width:0}.mock-select-grid,.mock-task-grid,.mock-result-grid{grid-template-columns:1fr}}
+/* Mock IELTS Writing test */
+.mock-exam-card{border-color:var(--teal)}
+.mock-exam-body{display:grid;gap:14px}
+.mock-toolbar{padding:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--soft)}
+#mockExamStatus[data-state=loading]{color:var(--amber);font-weight:800}
+#mockExamStatus[data-state=done]{color:var(--teal);font-weight:800}
+#mockExamStatus[data-state=error]{color:var(--rose);font-weight:800}
+.mock-exam-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.mock-task-card{display:grid;gap:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--soft);padding:14px}
+.mock-task-card h4{margin:0}
+.mock-task-card .question-card{box-shadow:none;background:var(--card)}
+.mock-task-card textarea{min-height:280px;background:var(--card)}
+.mock-score-card{border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,118,110,.09);padding:16px}
+.mock-score-card h3{margin:4px 0 8px}
+@media(max-width:900px){.mock-exam-grid{grid-template-columns:1fr}.mock-task-card textarea{min-height:240px}}
