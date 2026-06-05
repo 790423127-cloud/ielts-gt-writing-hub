@@ -380,7 +380,8 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "modelAnswerOutline must be an outline only: structure, paragraph content, simple expressions, bullet point arrangement for Task 1, or position/examples for Task 2. Do not write a full essay in the outline.",
     "Error correction requirements: Always return errorAnalysis, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, task1LetterCorrections or task2EssayCorrections, and correctionPriority.",
     "For spellingCorrections, list all clear misspelled words from the user's essay, with the corrected spelling, the sentence where it appears, a short explanation, and a brief explanationZh.",
-    "For detailedSentenceCorrections, use originalSentence from the user's essay only, correctedSentence for direct correction, and betterExpression for a natural IELTS-style improvement without making Band 5 learners imitate Band 9 language.",
+    "For detailedSentenceCorrections, use originalSentence from the user's essay only. correctedSentence is for the direct error fix; betterExpression is optional and must be a clearly stronger rewrite.",
+    "betterExpression must show a meaningful upgrade beyond correction: clearer logic, improved formal tone, stronger cohesion, better clause structure, or more natural IELTS-level phrasing. Do not use betterExpression for a one-word synonym swap, a short phrase replacement, or a sentence that keeps almost the same structure. If there is no clear upgrade, leave betterExpression and betterExpressionZh empty.",
     "detailedSentenceCorrections must contain only score-impacting issues. Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or correct salutation/closing items.",
     "If a criterion band is 7.5 or higher, its feedback must describe high-band quality and frame suggestions as minor polishing/refinement. Do not pair Band 8 with Band 5-6 template wording such as 'needs clearer control' or 'grammar needs improvement' unless the band is lowered.",
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
@@ -1040,12 +1041,13 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
     "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
+    "Do not fill betterExpression if it is almost the same as correctedSentence, only swaps one word/phrase, or keeps the same sentence structure. betterExpression must be a clearly upgraded alternative: changed structure, clearer logic, stronger formal tone, better cohesion, or more natural IELTS-level phrasing. Otherwise leave betterExpression and betterExpressionZh empty.",
     "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
     "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
     buildTargetImprovementInstruction(body),
     "Fill targetImprovementPlan with a realistic next-step plan based on that target range.",
     "targetImprovementPlan.criterionUpgrades must contain four non-empty objects: Task Response/Task Achievement, Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy. Each object must use these keys: criterion, currentWeakness, target, action, exampleUpgrade, actionZh. The action field must be a concrete step, not blank.",
-    "Write every correction and betterExpression at the target level, not far above it.",
+    "Write correctedSentence as a direct fix at the target level. Write betterExpression only when you can provide a visibly stronger rewrite at the target level, not far above it.",
     "For band5FixPlan/band6UpgradePlan/band7UpgradePlan: generate these ladder plans only when the current overallBand is 7.0 or below. If the current score is above Band 7.0, return band5FixPlan, band6UpgradePlan, band7UpgradePlan and their Zh arrays as empty arrays, and put high-band coaching only in targetImprovementPlan, criterionUpgrades, practiceTasks, and four-criterion advice.",
     "For every advice array, also return a matching Chinese explanation array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must accurately explain the corresponding English item, not a general template.",
     "Do not return blank objects in errorAnalysis.errorPatterns, targetImprovementPlan.criterionUpgrades, or developmentAdvice. Omit empty objects and return useful text instead.",
@@ -1109,6 +1111,8 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
   if (!item || typeof item !== "object") return null;
   const originalSentence = pickFirstUsefulValue(item, ["originalSentence", "original", "sentence", "sourceSentence", "wrong"]);
   const correctedSentence = pickFirstUsefulValue(item, ["correctedSentence", "corrected", "correction", "fixed", "right"]);
+  const rawBetterExpression = pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]);
+  const keepBetterExpression = shouldShowBetterExpression(correctedSentence || originalSentence, rawBetterExpression);
   const scoreImpactingRaw = item.scoreImpacting ?? item.affectsBand ?? item.bandAffecting ?? item.isScoreImpacting;
   return {
     sentenceNumber: Number(item.sentenceNumber || item.number || item.index || index + 1) || index + 1,
@@ -1120,8 +1124,8 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     problemZh: pickFirstUsefulValue(item, ["problemZh", "explanationZh", "reasonZh", "commentZh"]),
     rule: pickFirstUsefulValue(item, ["rule", "grammarRule", "howToFix"]),
     ruleZh: pickFirstUsefulValue(item, ["ruleZh", "grammarRuleZh", "howToFixZh"]),
-    betterExpression: pickFirstUsefulValue(item, ["betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better"]),
-    betterExpressionZh: pickFirstUsefulValue(item, ["betterExpressionZh", "improvedSentenceZh", "naturalExpressionZh", "upgradeZh"]),
+    betterExpression: keepBetterExpression ? rawBetterExpression : "",
+    betterExpressionZh: keepBetterExpression ? pickFirstUsefulValue(item, ["betterExpressionZh", "improvedSentenceZh", "naturalExpressionZh", "upgradeZh"]) : "",
     bandImpact: pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact"]),
     bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"]),
     scoreImpacting: scoreImpactingRaw === undefined ? true : scoreImpactingRaw !== false && String(scoreImpactingRaw).toLowerCase() !== "false",
@@ -1159,6 +1163,89 @@ function sameCorrectionText(a, b) {
   const right = compactCorrectionText(b).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
   return Boolean(left && right && left === right);
 }
+
+function tokenizeExpressionForComparison(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+}
+
+function expressionSimilarity(a, b) {
+  const aTokens = tokenizeExpressionForComparison(a);
+  const bTokens = tokenizeExpressionForComparison(b);
+  if (!aTokens.length || !bTokens.length) return 0;
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  let overlap = 0;
+  aSet.forEach((token) => { if (bSet.has(token)) overlap += 1; });
+  return overlap / Math.max(aSet.size, bSet.size);
+}
+
+function expressionTokenEditDistance(a, b) {
+  const left = tokenizeExpressionForComparison(a);
+  const right = tokenizeExpressionForComparison(b);
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+  const dp = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[left.length][right.length];
+}
+
+function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").toLowerCase();
+  const better = String(betterExpression || "").toLowerCase();
+  if (!better.trim()) return false;
+
+  const correctedTokens = tokenizeExpressionForComparison(corrected);
+  const betterTokens = tokenizeExpressionForComparison(better);
+  if (!correctedTokens.length || !betterTokens.length) return false;
+
+  const similarity = expressionSimilarity(corrected, better);
+  const editDistance = expressionTokenEditDistance(corrected, better);
+  const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
+
+  // "Better expression" must be a real upgrade, not a synonym swap.
+  // A few word replacements such as "take on" -> "embrace" are still too close.
+  if (similarity >= 0.74) return false;
+  if (editDistance <= 4 && lengthGap <= 4) return false;
+
+  const structureMarkers = [
+    "not because", "but because", "rather than", "instead of", "so that", "in order to",
+    "which", "while", "although", "whereas", "because", "therefore", "as a result",
+    "this would", "i would be grateful", "i am seeking", "i hope to", "my aim is", "with the aim of"
+  ];
+  const hasStructureMarker = structureMarkers.some((marker) => better.includes(marker) && !corrected.includes(marker));
+  const hasClearLengthUpgrade = betterTokens.length >= correctedTokens.length + 5 || correctedTokens.length >= betterTokens.length + 5;
+  const hasClearRewrite = editDistance >= 6 && similarity < 0.72;
+
+  return hasStructureMarker || hasClearLengthUpgrade || hasClearRewrite;
+}
+
+function shouldShowBetterExpression(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").trim();
+  const better = String(betterExpression || "").trim();
+  if (!better) return false;
+  if (!corrected) return true;
+  if (sameCorrectionText(corrected, better)) return false;
+  return hasBetterExpressionUpgradeSignal(corrected, better);
+}
+
 
 function isPlainSalutationOrClosing(text) {
   const value = compactCorrectionText(text).replace(/[.,!?;:'"()]/g, "");
@@ -1439,7 +1526,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     JSON.stringify(shape),
     `Target: provide ${itemTarget} concrete corrections if the essay contains that many visible errors. Use the full target when the essay has many clear issues. Do not stop at two and do not return only generic advice.`,
     "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
-    "For each corrected sentence, include a correctedSentence and a betterExpression.",
+    "For each corrected sentence, include correctedSentence as the direct fix. Include betterExpression only when it is a visibly stronger alternative with improved structure, logic, cohesion, tone, or naturalness; do not include it for small vocabulary swaps.",
     "Include spelling errors if any misspelled words appear.",
     "Include grammar and sentence-control problems if any are visible.",
     task === "Task 1"
@@ -2477,7 +2564,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
     section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
-    section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence and betterExpression." : "",
+    section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence as the direct fix. Provide betterExpression only if it is a visibly stronger rewrite with improved structure, logic, tone, cohesion, or naturalness; do not include it for one-word synonym changes." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
   ].filter(Boolean).join("\n");
