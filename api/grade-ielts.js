@@ -564,6 +564,239 @@ function applyTask2CriterionDifferentiationCaps(result, body, signals) {
   return changed;
 }
 
+
+function detectTask2QuestionType(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  if (/discuss both views|both these views|both views|give your own opinion/.test(text)) return "discuss_both_views";
+  if (/advantages?.*disadvantages?|disadvantages?.*advantages?|more advantages|more disadvantages|outweigh/.test(text)) return "advantages_disadvantages";
+  if (/problem.*solution|problems.*solutions|cause.*solution|causes.*solutions|what problems|what measures|how can.*solved/.test(text)) return "problem_solution";
+  if (/to what extent do you agree|agree or disagree|do you agree|do you disagree|extent do you agree/.test(text)) return "agree_disagree";
+  const questionMarks = (text.match(/\?/g) || []).length;
+  if (questionMarks >= 2 || /what.*\?.*what|why.*\?.*how|do you think.*\?.*what/i.test(text)) return "two_part_question";
+  return "general_opinion";
+}
+
+function task2QuestionTypeCapReason(type) {
+  if (type === "discuss_both_views") return "The essay must discuss both views and give the writer's own opinion; one required side or the personal opinion appears missing or underdeveloped.";
+  if (type === "advantages_disadvantages") return "The essay must compare the advantages and disadvantages required by the prompt; one side appears missing or underdeveloped.";
+  if (type === "problem_solution") return "The essay must address both the problem/cause and the solution/measure part of the prompt.";
+  if (type === "two_part_question") return "The essay must answer both questions in the prompt; one question appears missing or underdeveloped.";
+  if (type === "agree_disagree") return "The essay must present a clear and consistent position in response to the agree/disagree question.";
+  return "The essay must fully respond to the specific Task 2 question type.";
+}
+
+function applyTask2QuestionTypeCaps(result, body = {}, signals = {}) {
+  if (!result || typeof result !== "object") return false;
+  const type = detectTask2QuestionType(body.questionPrompt);
+  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
+  const requiredParts = ensureArray(analysis.requiredParts);
+  const missingRequirements = ensureArray(analysis.missingRequirements);
+  const allPartsAnswered = analysis.allPartsAnswered;
+  const positionPresent = analysis.positionPresent === true || signals.task2PositionSignals;
+  const first = "Task Response";
+  let changed = false;
+
+  result.task2QuestionTypeDetected = result.task2QuestionTypeDetected || type;
+  if (analysis && typeof analysis === "object") {
+    analysis.questionType = analysis.questionType || type;
+  }
+
+  if (type === "agree_disagree" && !positionPresent) {
+    changed = capCriterionBand(result, first, 4, task2QuestionTypeCapReason(type), "task2_question_type_cap") || changed;
+  }
+
+  if (["discuss_both_views", "advantages_disadvantages", "problem_solution", "two_part_question"].includes(type)) {
+    if (missingRequirements.length || allPartsAnswered === false || (requiredParts.length >= 2 && allPartsAnswered !== true)) {
+      changed = capCriterionBand(result, first, 5, task2QuestionTypeCapReason(type), "task2_question_type_cap") || changed;
+    }
+  }
+
+  if (type === "advantages_disadvantages" && /more advantages|more disadvantages|outweigh/i.test(String(body.questionPrompt || ""))) {
+    const hasComparativeJudgement = /\b(more advantages|more disadvantages|outweigh|overall|on balance|i believe.*advantage|i believe.*disadvantage)\b/i.test(String(body.essay || ""));
+    if (!hasComparativeJudgement) {
+      changed = capCriterionBand(result, first, 5.5, "The prompt asks whether advantages or disadvantages are stronger, but the essay does not make a clear comparative judgement.", "task2_question_type_cap") || changed;
+    }
+  }
+
+  if (changed) {
+    result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
+      ? result.scoreCalibration
+      : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
+    result.scoreCalibration.task2QuestionType = type;
+    appendCalibrationEvidence(result, `Task 2 question type checked: ${type}.`);
+  }
+
+  return changed;
+}
+
+function highBandBadAdvicePattern() {
+  return /\b(more sophisticated vocabulary|sophisticated vocabulary|rare vocabulary|less common lexical|inversion|complex conditional|more complex conditional|flawless|perfect grammar|absolute accuracy|synergistic|synergise|synergize|holistic understanding|expedite|wider range of cohesive devices|furthermore|moreover|in addition|consequently)\b/i;
+}
+
+function setCriterionImprove(criterion, english, chinese) {
+  if (!criterion || typeof criterion !== "object") return false;
+  criterion.howToImprove = english;
+  criterion.howToImproveZh = chinese;
+  criterion.highBandAdviceRefined = true;
+  return true;
+}
+
+function refineHighBandTask1Advice(result) {
+  const criteria = result?.criteria || {};
+  let changed = false;
+  const task = criteria["Task Achievement"];
+  const cc = criteria["Coherence and Cohesion"];
+  const lr = criteria["Lexical Resource"];
+  const gra = criteria["Grammatical Range and Accuracy"];
+
+  if (normalizeCriterionBandValue(task?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      task,
+      "To move closer to Band 9, make the company benefit slightly more concrete by naming the exact department outcome your experience would support, rather than adding more general detail.",
+      "想接近 Band 9，要把公司受益写得更具体，例如说明你的经验会支持新部门的哪一个具体结果，而不是泛泛增加内容。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(cc?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      cc,
+      "To move closer to Band 9, refine the transitions between the request, learned skills, company benefit, and reason for staying so the letter flows even more naturally without extra linking words.",
+      "想接近 Band 9，重点是让请求、已学技能、公司受益和留任原因之间过渡更自然，而不是额外堆连接词。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(lr?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      lr,
+      "To move closer to Band 9, keep the vocabulary precise but natural. Avoid business buzzwords and improve only the words that make the workplace benefit clearer.",
+      "想接近 Band 9，词汇要准确自然，不要使用商业套话；只优化那些能让职场受益表达更清楚的词。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(gra?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      gra,
+      "To move closer to Band 9, check minor punctuation consistency and vary sentence openings only where it makes the letter sound more natural and effortless.",
+      "想接近 Band 9，检查细小标点一致性；只有在能让信件更自然流畅时才调整句子开头。"
+    ) || changed;
+  }
+
+  return changed;
+}
+
+function refineHighBandTask2Advice(result) {
+  const criteria = result?.criteria || {};
+  let changed = false;
+  const tr = criteria["Task Response"];
+  const cc = criteria["Coherence and Cohesion"];
+  const lr = criteria["Lexical Resource"];
+  const gra = criteria["Grammatical Range and Accuracy"];
+
+  if (normalizeCriterionBandValue(tr?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      tr,
+      "To move closer to Band 9, make the argument more nuanced by developing the strongest idea with a sharper reason, example, or consequence instead of adding more separate ideas.",
+      "想接近 Band 9，不是增加更多观点，而是把最强的观点用更精准的原因、例子或结果展开得更有层次。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(cc?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      cc,
+      "To move closer to Band 9, refine paragraph progression so each topic sentence clearly advances the argument without relying on mechanical linking words.",
+      "想接近 Band 9，要让每个主题句推动论证向前发展，而不是依赖机械连接词。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(lr?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      lr,
+      "To move closer to Band 9, keep vocabulary precise and topic-specific. Avoid forcing rare words; choose terms that express the argument more exactly.",
+      "想接近 Band 9，词汇要精准并贴合话题，不要强行使用生僻词；选择能更准确表达论点的词。"
+    ) || changed;
+  }
+  if (normalizeCriterionBandValue(gra?.band, 0) >= 7.5) {
+    changed = setCriterionImprove(
+      gra,
+      "To move closer to Band 9, polish sentence rhythm and clause control only where it makes the reasoning clearer and more natural.",
+      "想接近 Band 9，只在能让论证更清楚、更自然的地方优化句子节奏和从句控制。"
+    ) || changed;
+  }
+
+  return changed;
+}
+
+function replaceBadHighBandAdviceArray(items, replacements) {
+  const list = ensureArray(items).filter(Boolean);
+  if (!list.length) return list;
+  const output = [];
+  list.forEach((item) => {
+    const text = String(item || "");
+    if (highBandBadAdvicePattern().test(text)) {
+      replacements.forEach((replacement) => {
+        if (!output.includes(replacement)) output.push(replacement);
+      });
+    } else if (!output.includes(text)) {
+      output.push(text);
+    }
+  });
+  return output.slice(0, Math.max(3, list.length));
+}
+
+function refineHighBandAdviceArrays(result, task) {
+  if (!result || typeof result !== "object") return false;
+  const overall = normalizeCriterionBandValue(result.overallBand || result.overallEstimatedBand, 0);
+  const bands = getCriterionBandsForTask(result, task);
+  const highBand = overall >= 7.5 || bands.some((band) => band >= 7.5);
+  if (!highBand) return false;
+
+  let changed = false;
+  if (task === "Task 1") {
+    const taskAdvice = "Make the practical benefit to the target department more concrete, using one precise workplace outcome rather than extra general detail.";
+    const cohesionAdvice = "Improve natural paragraph flow between the request, experience, company benefit, and loyalty reason without adding formulaic linking words.";
+    const lexicalAdvice = "Keep wording precise and natural; avoid business buzzwords and only adjust vocabulary when it clarifies the workplace situation.";
+    const grammarAdvice = "Polish minor punctuation and sentence rhythm only where it improves the letter's natural formal tone.";
+    result.taskAchievementAdvice = replaceBadHighBandAdviceArray(result.taskAchievementAdvice, [taskAdvice]);
+    result.coherenceAdvice = replaceBadHighBandAdviceArray(result.coherenceAdvice, [cohesionAdvice]);
+    result.lexicalAdvice = replaceBadHighBandAdviceArray(result.lexicalAdvice, [lexicalAdvice]);
+    result.grammarAdvice = replaceBadHighBandAdviceArray(result.grammarAdvice, [grammarAdvice]);
+    changed = true;
+  } else {
+    const taskAdvice = "Deepen the strongest line of argument with a clearer reason, example, or consequence instead of adding extra claims.";
+    const cohesionAdvice = "Make paragraph progression more argumentative so each topic sentence moves the essay forward naturally.";
+    const lexicalAdvice = "Use precise topic vocabulary that serves the argument; do not force rare or inflated words.";
+    const grammarAdvice = "Refine sentence rhythm and clause control only where it makes the reasoning clearer.";
+    result.taskAchievementAdvice = replaceBadHighBandAdviceArray(result.taskAchievementAdvice, [taskAdvice]);
+    result.coherenceAdvice = replaceBadHighBandAdviceArray(result.coherenceAdvice, [cohesionAdvice]);
+    result.lexicalAdvice = replaceBadHighBandAdviceArray(result.lexicalAdvice, [lexicalAdvice]);
+    result.grammarAdvice = replaceBadHighBandAdviceArray(result.grammarAdvice, [grammarAdvice]);
+    changed = true;
+  }
+
+  return changed;
+}
+
+function refineHighBandTaskSpecificAdvice(result, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const overall = normalizeCriterionBandValue(result.overallBand || result.overallEstimatedBand, 0);
+  const bands = getCriterionBandsForTask(result, task);
+  const highBand = overall >= 7.5 || bands.some((band) => band >= 7.5);
+  if (!highBand) return result;
+
+  const changed = task === "Task 1"
+    ? refineHighBandTask1Advice(result)
+    : refineHighBandTask2Advice(result);
+  const arrayChanged = refineHighBandAdviceArrays(result, task);
+
+  if (changed || arrayChanged) {
+    result.highBandAdvicePolicy = {
+      applied: true,
+      task,
+      principle: task === "Task 1"
+        ? "High-band Task 1 advice focuses on naturalness, specificity, concise formal register, and letter-purpose precision."
+        : "High-band Task 2 advice focuses on argument nuance, paragraph progression, precise topic vocabulary, and grammar serving reasoning."
+    };
+  }
+
+  return result;
+}
+
 function applyCriterionDifferentiationCaps(result, body = {}) {
   if (!result || typeof result !== "object") return result;
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
@@ -573,14 +806,19 @@ function applyCriterionDifferentiationCaps(result, body = {}) {
     : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
 
   const signals = extractEssaySignals(body, result);
+  const questionTypeChanged = task === "Task 2" ? applyTask2QuestionTypeCaps(result, body, signals) : false;
   if (!shouldApplyHardDifferentiation(result, body, task, signals)) {
+    if (questionTypeChanged) {
+      result.scoreCalibration.criterionDifferentiationApplied = true;
+      result.scoreCalibration.criteriaDifferentiationReason = "Task 2 question-type requirements were applied before final score calculation.";
+    }
     return result;
   }
 
   const beforeBands = getCriterionBandsForTask(result, task);
-  const changed = task === "Task 1"
+  const changed = (task === "Task 1"
     ? applyTask1CriterionDifferentiationCaps(result, body, signals)
-    : applyTask2CriterionDifferentiationCaps(result, body, signals);
+    : applyTask2CriterionDifferentiationCaps(result, body, signals)) || questionTypeChanged;
 
   const afterBands = getCriterionBandsForTask(result, task);
   const wasSame = beforeBands.length === 4 && new Set(beforeBands.map((band) => formatBand(roundHalf(band)))).size === 1;
@@ -645,6 +883,7 @@ function finalizeTaskScoringEngine(result, body = {}) {
 
   result.overallBand = roundHalf(finalBand);
   result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
+  refineHighBandTaskSpecificAdvice(result, { ...body, task });
   result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
   result.scoringSystem = {
     type: task === "Task 1" ? "task1_practice_engine" : "task2_practice_engine",
@@ -893,6 +1132,11 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "detailedSentenceCorrections must contain only score-impacting issues. Do not return errorType None, No significant improvement needed, No impact on band score, unchanged original/corrected pairs, or correct salutation/closing items.",
     "If a criterion band is 7.5 or higher, its feedback must describe high-band quality and frame suggestions as minor polishing/refinement. Do not pair Band 8 with Band 5-6 template wording such as 'needs clearer control' or 'grammar needs improvement' unless the band is lowered.",
     "For Band 7.5+ writing, improvement advice must focus on naturalness, specificity, concision, register precision, and consistency. Do not advise forced inversion, artificially complex conditionals, rare vocabulary, 'synergistic opportunities', 'holistic understanding', or flawless/perfect grammar unless there is a concrete reason.",
+    "For Band 7.5+ Task 1 letters, improvement advice must be about making the letter more natural, specific, concise, and recipient-appropriate. Do not suggest business buzzwords, rare vocabulary, more formal linking words, inversion, or extra complexity. Suggest concrete benefit, smoother paragraph flow, register precision, and minor punctuation consistency.",
+    "For Band 7.5+ Task 2 essays, improvement advice must be about argument nuance, paragraph progression, example quality, topic-specific precision, and grammar that clarifies reasoning. Do not suggest rare words, inflated vocabulary, mechanical linking words, or complexity for its own sake.",
+    "Task 2 question-type scoring: agree/disagree requires a clear and consistent position; discuss-both-views requires both views plus the writer's own opinion; advantages/disadvantages requires both sides and, when asked, a clear judgement about which side is stronger; problem/solution requires both problem/cause and solution/measure; two-part questions require both questions to be answered.",
+    "Task 2 high-band advice should never focus on simply adding more ideas. It should focus on developing the strongest idea with clearer reasoning, a more precise example, a consequence, or a qualification.",
+
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
     "targetImprovementPlan.criterionUpgrades must include currentWeakness, target, action, and exampleUpgrade for each IELTS criterion. Each action should help improve about 0.5-1 band from the current level.",
     "Classify errors using categories such as Task response/achievement problem, Missing bullet point, Tone problem, Verb tense, Subject-verb agreement, Article error, Singular/plural error, Word form error, Word choice error, Collocation error, Sentence fragment, Run-on sentence, Unclear meaning, Repetition, Informal wording in formal writing, Weak linking, Paragraphing problem, and Spelling error.",
