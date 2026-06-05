@@ -88,7 +88,9 @@ async function readJsonBody(req) {
 }
 
 function normalizeMode(mode) {
-  return ["quick", "full", "revision"].includes(mode) ? mode : "quick";
+  const raw = String(mode || "").toLowerCase();
+  if (["revision", "grading_revision", "detailed_revision", "with_model", "with-model", "model", "model_answer"].includes(raw)) return "revision";
+  return "full";
 }
 
 function isVeryShortEssay(body) {
@@ -97,12 +99,11 @@ function isVeryShortEssay(body) {
 }
 
 function maxTokensForMode(mode, veryShort) {
-  // Keep Quick mode fast, but allow enough output for usable diagnostics.
-  // Too-small limits caused blank advice arrays and empty correction cards.
-  if (veryShort) return 1200;
-  if (mode === "quick") return 1600;
-  if (mode === "full") return 2800;
-  return 4200;
+  // Two user-facing modes are now supported:
+  // full = detailed grading without model answer; revision = detailed grading + model/revision.
+  // Do not shrink under-minimum essays into a "basic" diagnostic; they still need detailed AI correction.
+  if (mode === "revision") return veryShort ? 5200 : 7600;
+  return veryShort ? 4200 : 6200;
 }
 
 
@@ -334,11 +335,13 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "If the original is very short, Band 0-3, severely capped, or too limited, do not generate full Band 6 or Band 7 revised essays. revisedEssayBand6 and revisedEssayBand7 should be empty strings and revisedEssayMeta.revisionLimited true.",
     "If Task 1 misses bullet points, the revision must cover all three bullet points and revisionNotes should say what was added. If Task 2 has no position, the revision must add a clear position.",
     "modelAnswerOutline must be an outline only: structure, paragraph content, simple expressions, bullet point arrangement for Task 1, or position/examples for Task 2. Do not write a full essay in the outline.",
-    "Error correction requirements: Always return errorAnalysis, detailedSentenceCorrections, task1LetterCorrections or task2EssayCorrections, and correctionPriority.",
+    "Error correction requirements: Always return errorAnalysis, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, task1LetterCorrections or task2EssayCorrections, and correctionPriority.",
+    "For spellingCorrections, list all clear misspelled words from the user's essay, with the corrected spelling, the sentence where it appears, a short explanation, and a brief explanationZh.",
     "For detailedSentenceCorrections, use originalSentence from the user's essay only, correctedSentence for direct correction, and betterExpression for a natural IELTS-style improvement without making Band 5 learners imitate Band 9 language.",
-    "Classify errors using categories such as Task response/achievement problem, Missing bullet point, Tone problem, Verb tense, Subject-verb agreement, Article error, Singular/plural error, Word form error, Word choice error, Collocation error, Sentence fragment, Run-on sentence, Unclear meaning, Repetition, Informal wording in formal writing, Weak linking, and Paragraphing problem.",
-    "Quick mode: detailedSentenceCorrections max 2, compact errorAnalysis only, no long special analysis. Full mode: detailedSentenceCorrections max 6 and include correctionPriority. Revision mode: detailedSentenceCorrections max 8 and include full correctionPriority plus task-specific corrections.",
-    "Do not invent errors. Do not correct the whole essay line by line; choose representative high-impact errors.",
+    "Classify errors using categories such as Task response/achievement problem, Missing bullet point, Tone problem, Verb tense, Subject-verb agreement, Article error, Singular/plural error, Word form error, Word choice error, Collocation error, Sentence fragment, Run-on sentence, Unclear meaning, Repetition, Informal wording in formal writing, Weak linking, Paragraphing problem, and Spelling error.",
+    "There is no Quick Check mode. Both modes must include detailed AI error diagnosis. Full mode gives detailed grading without model answer; Revision mode gives detailed grading plus model/revision output.",
+    "Do not limit corrections to two examples. Check the whole essay and return all clear score-affecting spelling, grammar, vocabulary, sentence-structure, cohesion, and task-response errors. For repeated identical errors, group the pattern but still show representative original text and corrections.",
+    "Do not invent errors. Do not rewrite the whole essay line by line unless the essay is short enough; prioritise all clear IELTS-relevant errors and repeated patterns.",
     "Return only one valid JSON object.",
     "Do not return markdown or code fences.",
     "Do not include explanatory preface or closing comments.",
@@ -469,6 +472,15 @@ function buildExpectedJsonShape(task, locale = "en") {
         explanationZh: emptyForLocaleZh("Brief Chinese explanation", locale)
       }
     ],
+    spellingCorrections: [
+      {
+        originalWord: "...",
+        correctedWord: "...",
+        sentence: "...",
+        explanation: "...",
+        explanationZh: emptyForLocaleZh("Brief Chinese explanation", locale)
+      }
+    ],
     sentenceCorrections: [
       {
         original: "...",
@@ -565,8 +577,8 @@ function buildUserPrompt(body, veryShort, locale = "en") {
   const diagnostics = buildLowBandDiagnostics(body);
   const cap = capFromDiagnostics(body, diagnostics);
   const revisionInstruction = isRevisionMode
-    ? "Grade + Revision mode: generate revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
-    : "Quick Check and Full IELTS Grading modes: do not generate revised essays. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
+    ? "Detailed Grading + Model Answer mode: generate revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
+    : "Detailed Grading mode: do not generate revised essays or model answers. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
   const underMinimumInstruction = body.isUnderMinimum
     ? `The essay is below the IELTS target word count (${body.wordCount}/${body.targetWordCount}). Still grade normally. If this is Task 1, mention the word count issue in Task Achievement and mainProblems. If this is Task 2, mention the word count issue in Task Response and mainProblems because idea development and argument depth may be affected.`
     : "The essay meets or exceeds the target word count.";
@@ -576,9 +588,8 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     JSON.stringify(buildExpectedJsonShape(body.task, locale), null, 2),
     "",
     "Mode instructions:",
-    "- quick: shortest feedback, no revised essays, compact arrays only.",
-    "- full: four criteria, grammar errors, sentence corrections, no revised essays.",
-    "- revision: include all three revised essays, but keep all non-essay feedback compact.",
+    "- full: detailed grading without model answer. Include full AI error diagnosis, spelling corrections, grammar corrections, sentence corrections, and task-specific advice. Do not generate revised essays.",
+    "- revision: detailed grading plus model/revision output. Include the same full AI error diagnosis plus the three revised essays.",
     veryShort ? (isChineseLocale(locale) ? "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Add this Chinese note in revisionNotesZh: 作文太短，暂不适合生成完整修改版，请先补充内容。" : "Very short essay mode: ignore any revision request. Return only a compact diagnostic JSON. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings. Add this revision note: The essay is too short for a meaningful full revision. Please write a fuller response first. Keep revisionNotesZh empty.") : "",
     veryShort ? (isChineseLocale(locale) ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, English feedback max 25 words, and all *Zh fields empty.") : "",
     revisionInstruction,
@@ -664,6 +675,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     strengths: [],
     mainProblems: [],
     grammarErrors: [],
+    spellingCorrections: [],
     sentenceCorrections: [],
     errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
     detailedSentenceCorrections: [],
@@ -690,7 +702,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     "Return exactly one valid JSON object matching this compact shape. Keep the same keys.",
     previousIssue ? `Previous JSON issue to avoid: ${String(previousIssue).slice(0, 180)}` : "",
     JSON.stringify(shape),
-    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep every string under 22 words. Arrays max 3 items. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, and task-specific advice must not be empty. If no specific grammar correction can be quoted from the essay, return grammarErrors and sentenceCorrections as empty arrays; never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep strings concise but useful. Arrays may contain up to 8 items for correction fields. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
     "Request:",
     JSON.stringify({
       task: body.task,
@@ -756,34 +768,276 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
   }
 }
 
+
+function correctionLimitForEssay(body, mode) {
+  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
+  if (words <= 20) return 6;
+  if (words <= 80) return 10;
+  if (words <= 180) return 16;
+  return mode === "revision" ? 28 : 24;
+}
+
+function buildAiCorrectionSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Write brief Chinese helper explanations only in fields ending with Zh. Do not translate the full essay."
+    : "Main feedback must be English. Add brief Chinese helper explanations only in fields ending with Zh. Do not translate the full essay.";
+  return [
+    "You are an IELTS Writing error-correction examiner.",
+    "Your task is not to rescore the essay. Your task is to scan the whole user essay and return detailed correction data.",
+    "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
+    "Use only sentences and words that appear in the user's essay for originalSentence, original, sentence, and originalWord.",
+    "Do not invent user sentences.",
+    "Find all clear IELTS-relevant spelling, grammar, vocabulary, collocation, sentence-structure, punctuation, cohesion, paragraphing, tone, and task-response errors.",
+    "Do not limit corrections to two examples.",
+    "If repeated errors are identical, group the pattern but still provide representative original text and corrected text.",
+    "If the essay is short, scan every sentence.",
+    "If the essay is long, return all clear high-impact errors and repeated patterns within the requested limits.",
+    "Do not return blank correction objects.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildAiCorrectionPrompt(body, mode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const limit = correctionLimitForEssay(body, mode);
+  const shape = {
+    spellingCorrections: [
+      { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
+    ],
+    grammarErrors: [
+      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+    ],
+    sentenceCorrections: [
+      { original: "", corrected: "", reason: "", reasonZh: "" }
+    ],
+    detailedSentenceCorrections: [
+      {
+        sentenceNumber: 1,
+        originalSentence: "",
+        correctedSentence: "",
+        errorType: "",
+        errorTypeZh: "",
+        problem: "",
+        problemZh: "",
+        rule: "",
+        ruleZh: "",
+        betterExpression: "",
+        betterExpressionZh: "",
+        bandImpact: "",
+        bandImpactZh: ""
+      }
+    ],
+    errorAnalysis: {
+      summary: "",
+      summaryZh: "",
+      errorPatterns: [
+        { type: "", typeZh: "", frequency: "", impactOnBand: "", impactOnBandZh: "", howToFix: "", howToFixZh: "" }
+      ],
+      priorityFixes: [],
+      priorityFixesZh: []
+    },
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    task1LetterCorrections: task === "Task 1" ? { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] } : null,
+    task2EssayCorrections: task === "Task 2" ? { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] } : null,
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: [],
+    band5FixPlan: [],
+    band6UpgradePlan: [],
+    band7UpgradePlan: [],
+    revisionNotes: [],
+    revisionNotesZh: []
+  };
+
+  return [
+    "Return exactly one valid JSON object matching this shape:",
+    JSON.stringify(shape),
+    "",
+    `Mode: ${mode === "revision" ? "detailed grading plus model/revision" : "detailed grading without model answer"}.`,
+    `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors.`,
+    "If there are no errors of a specific type, return an empty array for that type.",
+    "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
+    "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
+    "For detailedSentenceCorrections, include originalSentence, correctedSentence, betterExpression, problem, rule, and bandImpact.",
+    "For Task 1, also check opening, closing, tone, purpose, and bullet point coverage.",
+    "For Task 2, also check position, introduction, topic sentences, idea development, examples, conclusion, and relevance.",
+    "Chinese helper notes must be short and appear only in *Zh fields.",
+    "",
+    "Question:",
+    String(body.questionPrompt || ""),
+    "",
+    "Essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+function hasAiCorrectionContent(correction) {
+  if (!correction || typeof correction !== "object") return false;
+  return Boolean(
+    ensureArray(correction.spellingCorrections).length ||
+    ensureArray(correction.grammarErrors).length ||
+    ensureArray(correction.sentenceCorrections).length ||
+    ensureArray(correction.detailedSentenceCorrections).length ||
+    hasUsefulText(correction.errorAnalysis?.summary) ||
+    ensureArray(correction.errorAnalysis?.errorPatterns).length
+  );
+}
+
+function mergeAiCorrectionDetails(result, correction, body, mode) {
+  if (!correction || typeof correction !== "object") return result;
+  const merged = result && typeof result === "object" ? result : {};
+  const correctionLimit = correctionLimitForEssay(body, mode);
+
+  const arrayFields = [
+    "spellingCorrections",
+    "grammarErrors",
+    "sentenceCorrections",
+    "detailedSentenceCorrections",
+    "taskAchievementAdvice",
+    "coherenceAdvice",
+    "lexicalAdvice",
+    "grammarAdvice",
+    "band5FixPlan",
+    "band6UpgradePlan",
+    "band7UpgradePlan",
+    "revisionNotes",
+    "revisionNotesZh"
+  ];
+
+  arrayFields.forEach((field) => {
+    const incoming = ensureArray(correction[field]);
+    if (incoming.length) {
+      const limit = ["spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections"].includes(field)
+        ? correctionLimit
+        : 8;
+      merged[field] = incoming.slice(0, limit);
+    }
+  });
+
+  if (correction.errorAnalysis && typeof correction.errorAnalysis === "object") {
+    merged.errorAnalysis = {
+      ...(merged.errorAnalysis && typeof merged.errorAnalysis === "object" ? merged.errorAnalysis : {}),
+      ...correction.errorAnalysis,
+      errorPatterns: ensureArray(correction.errorAnalysis.errorPatterns).length
+        ? ensureArray(correction.errorAnalysis.errorPatterns).slice(0, 12)
+        : ensureArray(merged.errorAnalysis?.errorPatterns),
+      priorityFixes: ensureArray(correction.errorAnalysis.priorityFixes).length
+        ? ensureArray(correction.errorAnalysis.priorityFixes).slice(0, 8)
+        : ensureArray(merged.errorAnalysis?.priorityFixes),
+      priorityFixesZh: ensureArray(correction.errorAnalysis.priorityFixesZh).length
+        ? ensureArray(correction.errorAnalysis.priorityFixesZh).slice(0, 8)
+        : ensureArray(merged.errorAnalysis?.priorityFixesZh)
+    };
+  }
+
+  if (correction.correctionPriority && typeof correction.correctionPriority === "object") {
+    merged.correctionPriority = {
+      ...(merged.correctionPriority && typeof merged.correctionPriority === "object" ? merged.correctionPriority : {}),
+      ...correction.correctionPriority
+    };
+  }
+
+  if (body?.task === "Task 1" && correction.task1LetterCorrections && typeof correction.task1LetterCorrections === "object") {
+    merged.task1LetterCorrections = {
+      ...(merged.task1LetterCorrections && typeof merged.task1LetterCorrections === "object" ? merged.task1LetterCorrections : {}),
+      ...correction.task1LetterCorrections
+    };
+  }
+
+  if (body?.task === "Task 2" && correction.task2EssayCorrections && typeof correction.task2EssayCorrections === "object") {
+    merged.task2EssayCorrections = {
+      ...(merged.task2EssayCorrections && typeof merged.task2EssayCorrections === "object" ? merged.task2EssayCorrections : {}),
+      ...correction.task2EssayCorrections
+    };
+  }
+
+  return merged;
+}
+
+async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens }) {
+  try {
+    return parseJsonFromProvider(rawText);
+  } catch (parseError) {
+    try {
+      const repairedText = await callDeepSeek({
+        apiKey,
+        model,
+        systemPrompt: "You repair malformed correction JSON. Return exactly one valid JSON object and nothing else.",
+        userPrompt: [
+          "Repair this IELTS correction JSON. Keep only correction-related fields.",
+          "Return valid JSON only. No markdown.",
+          "If a string was cut off, close it with a short complete phrase.",
+          "Malformed JSON/text:",
+          String(rawText || "").slice(0, 10000)
+        ].join("\n"),
+        maxTokens: Math.min(Math.max(maxTokens, 1800), 3200),
+        temperature: 0.0,
+        jsonMode: false
+      });
+      return parseJsonFromProvider(repairedText);
+    } catch {
+      return {};
+    }
+  }
+}
+
+async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale }) {
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  if (!String(body.essay || "").trim()) return {};
+  const maxTokens = Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 180, words < 80 ? 2200 : 3600), effectiveMode === "revision" ? 6200 : 5200);
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildAiCorrectionSystemPrompt(locale),
+    userPrompt: buildAiCorrectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, locale),
+    maxTokens,
+    temperature: 0.1,
+    jsonMode: false
+  });
+  return await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens });
+}
+
 async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale }) {
-  const compactFirst = Boolean(body.isUnderMinimum || veryShort || effectiveMode === "quick");
-  const firstSystemPrompt = compactFirst ? buildCompactAiOnlySystemPrompt(locale) : buildSystemPrompt(false, locale);
-  const firstUserPrompt = compactFirst
-    ? buildCompactAiOnlyPrompt({ ...body, mode: effectiveMode }, locale)
-    : buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
-  const firstMaxTokens = compactFirst ? Math.min(Math.max(maxTokens, 1500), 2200) : maxTokens;
+  const mainSystemPrompt = buildSystemPrompt(false, locale);
+  const mainUserPrompt = buildUserPrompt({ ...body, mode: effectiveMode }, false, locale);
 
   const rawText = await callDeepSeek({
     apiKey,
     model,
-    systemPrompt: firstSystemPrompt,
-    userPrompt: firstUserPrompt,
-    maxTokens: firstMaxTokens,
+    systemPrompt: mainSystemPrompt,
+    userPrompt: mainUserPrompt,
+    maxTokens,
     temperature: 0.1,
     jsonMode: false
   });
 
-  return await parseOrRepairAiJson({
+  const graded = await parseOrRepairAiJson({
     apiKey,
     model,
     rawText,
     body: { ...body, mode: effectiveMode },
     locale,
-    maxTokens: firstMaxTokens,
+    maxTokens,
     allowRepair: true
   });
+
+  try {
+    const correction = await callAiCorrectionPass({
+      apiKey,
+      model,
+      body: { ...body, mode: effectiveMode },
+      effectiveMode,
+      locale
+    });
+    return mergeAiCorrectionDetails(graded, correction, body, effectiveMode);
+  } catch (correctionError) {
+    const result = graded && typeof graded === "object" ? graded : {};
+    result.correctionPassWarning = `AI correction pass failed: ${correctionError.message || correctionError.name || "unknown error"}`;
+    return result;
+  }
 }
+
 
 function defaultRevisedEssayMeta(limited = false, reason = "") {
   if (limited) {
@@ -997,6 +1251,7 @@ function buildFallbackFeedback(body, reason, locale = "en") {
       ? ["AI feedback was incomplete, so this is only a temporary fallback estimate.", "Retry to receive detailed task, grammar, and revision feedback."]
       : ["The essay is far below the recommended word count.", "Several task points or ideas are missing."],
     grammarErrors: [],
+    spellingCorrections: [],
     sentenceCorrections: [],
     taskAchievementAdvice: normalLength ? ["Retry for a reliable check of task coverage."] : ["Add enough detail to answer the task properly."],
     coherenceAdvice: normalLength ? ["Retry for detailed organisation feedback."] : ["Use clear paragraphs."],
@@ -1531,21 +1786,22 @@ function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
   const threshold = task === "Task 1" ? 150 : 250;
   const underMinimum = words < threshold;
 
-  normalized.strengths = cleanStringArray(normalized.strengths).slice(0, 5);
-  normalized.mainProblems = cleanStringArray(normalized.mainProblems).slice(0, 5);
-  normalized.taskAchievementAdvice = cleanStringArray(normalized.taskAchievementAdvice).slice(0, 5);
-  normalized.coherenceAdvice = cleanStringArray(normalized.coherenceAdvice).slice(0, 5);
-  normalized.lexicalAdvice = cleanStringArray(normalized.lexicalAdvice).slice(0, 5);
-  normalized.grammarAdvice = cleanStringArray(normalized.grammarAdvice).slice(0, 5);
-  normalized.band5FixPlan = cleanStringArray(normalized.band5FixPlan).slice(0, 5);
-  normalized.band6UpgradePlan = cleanStringArray(normalized.band6UpgradePlan).slice(0, 5);
-  normalized.band7UpgradePlan = cleanStringArray(normalized.band7UpgradePlan).slice(0, 5);
+  normalized.strengths = cleanStringArray(normalized.strengths).slice(0, 8);
+  normalized.mainProblems = cleanStringArray(normalized.mainProblems).slice(0, 10);
+  normalized.taskAchievementAdvice = cleanStringArray(normalized.taskAchievementAdvice).slice(0, 8);
+  normalized.coherenceAdvice = cleanStringArray(normalized.coherenceAdvice).slice(0, 8);
+  normalized.lexicalAdvice = cleanStringArray(normalized.lexicalAdvice).slice(0, 8);
+  normalized.grammarAdvice = cleanStringArray(normalized.grammarAdvice).slice(0, 8);
+  normalized.band5FixPlan = cleanStringArray(normalized.band5FixPlan).slice(0, 8);
+  normalized.band6UpgradePlan = cleanStringArray(normalized.band6UpgradePlan).slice(0, 8);
+  normalized.band7UpgradePlan = cleanStringArray(normalized.band7UpgradePlan).slice(0, 8);
 
   // Remove blank correction cards that the front end would otherwise render as empty boxes.
-  normalized.grammarErrors = cleanObjectArray(normalized.grammarErrors, ["original", "corrected", "explanation"]).slice(0, 5);
-  normalized.sentenceCorrections = cleanObjectArray(normalized.sentenceCorrections, ["original", "corrected", "reason"]).slice(0, 5);
-  const sentenceLimit = mode === "quick" ? 2 : (mode === "revision" ? 8 : 6);
-  normalized.detailedSentenceCorrections = cleanObjectArray(normalized.detailedSentenceCorrections, ["originalSentence", "correctedSentence", "problem", "rule", "bandImpact"]).slice(0, sentenceLimit);
+  const correctionLimit = correctionLimitForEssay(body, mode);
+  normalized.spellingCorrections = cleanObjectArray(normalized.spellingCorrections, ["originalWord", "correctedWord", "sentence", "explanation"]).slice(0, correctionLimit);
+  normalized.grammarErrors = cleanObjectArray(normalized.grammarErrors, ["original", "corrected", "explanation"]).slice(0, correctionLimit);
+  normalized.sentenceCorrections = cleanObjectArray(normalized.sentenceCorrections, ["original", "corrected", "reason"]).slice(0, correctionLimit);
+  normalized.detailedSentenceCorrections = cleanObjectArray(normalized.detailedSentenceCorrections, ["originalSentence", "correctedSentence", "problem", "rule", "bandImpact"]).slice(0, correctionLimit);
 
   const firstImprove = criterionImprove(normalized, task, firstCriterion, task === "Task 1" ? "Answer each bullet point directly with enough detail." : "State a clear position and support it with specific reasons.");
   const ccImprove = criterionImprove(normalized, task, "Coherence and Cohesion", "Use clear paragraphing and logical linking between ideas.");
@@ -1900,14 +2156,15 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.strengthsZh = ensureArray(normalized.strengthsZh).slice(0, 5);
   normalized.mainProblems = ensureArray(normalized.mainProblems).slice(0, 5);
   normalized.mainProblemsZh = ensureArray(normalized.mainProblemsZh).slice(0, 5);
-  normalized.grammarErrors = ensureArray(normalized.grammarErrors).slice(0, 5);
-  normalized.sentenceCorrections = ensureArray(normalized.sentenceCorrections).slice(0, 5);
+  const correctionLimit = correctionLimitForEssay(body || {}, mode);
+  normalized.spellingCorrections = ensureArray(normalized.spellingCorrections).slice(0, correctionLimit);
+  normalized.grammarErrors = ensureArray(normalized.grammarErrors).slice(0, correctionLimit);
+  normalized.sentenceCorrections = ensureArray(normalized.sentenceCorrections).slice(0, correctionLimit);
   normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
-  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, mode === "quick" ? 2 : 5);
-  normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 5);
-  normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 5);
-  const sentenceLimit = mode === "quick" ? 2 : (mode === "revision" ? 8 : 6);
-  normalized.detailedSentenceCorrections = ensureArray(normalized.detailedSentenceCorrections).slice(0, sentenceLimit);
+  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, 12);
+  normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 8);
+  normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 8);
+  normalized.detailedSentenceCorrections = ensureArray(normalized.detailedSentenceCorrections).slice(0, correctionLimit);
   normalized.task1LetterCorrections = body?.task === "Task 1"
     ? (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object" ? normalized.task1LetterCorrections : { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] })
     : null;
@@ -1949,7 +2206,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
 
   normalizeAiBandsOnly(normalized, body || {});
 
-  if (veryShort || mode !== "revision") {
+  if (mode !== "revision") {
     normalized.revisedEssayBand5 = "";
     normalized.revisedEssayBand6 = "";
     normalized.revisedEssayBand7 = "";
@@ -1977,7 +2234,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   );
   const taskMismatch = normalized.taskMatchCheck?.appearsToAnswerSelectedPrompt === false;
   const lowOrLimited = veryShort || explicitLowBandTrigger || taskMismatch;
-  if (lowOrLimited) {
+  if (lowOrLimited && mode !== "revision") {
     normalized.revisedEssayBand6 = "";
     normalized.revisedEssayBand7 = "";
     normalized.revisedEssayMeta = defaultRevisedEssayMeta(true, "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions.");
