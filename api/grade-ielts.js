@@ -877,7 +877,8 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "",
     `Mode: ${mode === "revision" ? "detailed grading plus model/revision" : "detailed grading without model answer"}.`,
     `Correction limit: return up to ${limit} items in each correction array when errors exist. Do not stop at two errors.`,
-    "If there are no errors of a specific type, return an empty array for that type.",
+    "If there are no errors of a specific type, return an empty array for that type, but do not return all correction arrays empty when the essay has visible errors.",
+    "If the essay has more than 30 words, quote and correct at least 3 clear original errors unless there are genuinely fewer visible errors.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
     "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
     "For detailedSentenceCorrections, include originalSentence, correctedSentence, betterExpression, problem, rule, and bandImpact.",
@@ -893,20 +894,44 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
   ].join("\n");
 }
 
+function correctionObjectHasText(item, fields) {
+  if (!item || typeof item !== "object") return false;
+  return fields.some((field) => hasUsefulText(item[field]));
+}
+
+function sanitizeAiCorrectionPayload(correction) {
+  if (!correction || typeof correction !== "object") return {};
+  const cleaned = { ...correction };
+  cleaned.spellingCorrections = ensureArray(cleaned.spellingCorrections).filter((item) =>
+    correctionObjectHasText(item, ["originalWord", "correctedWord", "sentence", "explanation"])
+  );
+  cleaned.grammarErrors = ensureArray(cleaned.grammarErrors).filter((item) =>
+    correctionObjectHasText(item, ["original", "corrected", "explanation"])
+  );
+  cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections).filter((item) =>
+    correctionObjectHasText(item, ["original", "corrected", "reason"])
+  );
+  cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections).filter((item) =>
+    correctionObjectHasText(item, ["originalSentence", "correctedSentence", "problem", "rule", "betterExpression"])
+  );
+  return cleaned;
+}
+
 function hasAiCorrectionContent(correction) {
-  if (!correction || typeof correction !== "object") return false;
+  const cleaned = sanitizeAiCorrectionPayload(correction);
   return Boolean(
-    ensureArray(correction.spellingCorrections).length ||
-    ensureArray(correction.grammarErrors).length ||
-    ensureArray(correction.sentenceCorrections).length ||
-    ensureArray(correction.detailedSentenceCorrections).length ||
-    hasUsefulText(correction.errorAnalysis?.summary) ||
-    ensureArray(correction.errorAnalysis?.errorPatterns).length
+    ensureArray(cleaned.spellingCorrections).length ||
+    ensureArray(cleaned.grammarErrors).length ||
+    ensureArray(cleaned.sentenceCorrections).length ||
+    ensureArray(cleaned.detailedSentenceCorrections).length ||
+    hasUsefulText(cleaned.errorAnalysis?.summary) ||
+    ensureArray(cleaned.errorAnalysis?.errorPatterns).some((item) => correctionObjectHasText(item, ["type", "impactOnBand", "howToFix"]))
   );
 }
 
 function mergeAiCorrectionDetails(result, correction, body, mode) {
   if (!correction || typeof correction !== "object") return result;
+  correction = sanitizeAiCorrectionPayload(correction);
   const merged = result && typeof result === "object" ? result : {};
   const correctionLimit = correctionLimitForEssay(body, mode);
 
@@ -1024,6 +1049,136 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
 }
 
 
+function buildFocusedAiCorrectionSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use brief Chinese helper notes only in *Zh fields. Do not translate the essay."
+    : "Use English for main fields. Add brief Chinese helper notes only in *Zh fields. Do not translate the essay.";
+  return [
+    "You are an IELTS Writing correction examiner.",
+    "Return exactly one valid JSON object. No markdown. No code fences.",
+    "This is a focused retry because the detailed correction section was empty or incomplete.",
+    "Scan the whole essay and quote real user text only.",
+    "Return concrete corrections, not generic advice.",
+    "Do not return blank objects.",
+    "If the essay has visible errors, at least one of spellingCorrections, grammarErrors, sentenceCorrections, or detailedSentenceCorrections must contain items.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const itemTarget = words < 80 ? 3 : (words < 180 ? 6 : 10);
+  const shape = {
+    spellingCorrections: [
+      { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
+    ],
+    grammarErrors: [
+      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+    ],
+    sentenceCorrections: [
+      { original: "", corrected: "", reason: "", reasonZh: "" }
+    ],
+    detailedSentenceCorrections: [
+      {
+        sentenceNumber: 1,
+        originalSentence: "",
+        correctedSentence: "",
+        errorType: "",
+        errorTypeZh: "",
+        problem: "",
+        problemZh: "",
+        rule: "",
+        ruleZh: "",
+        betterExpression: "",
+        betterExpressionZh: "",
+        bandImpact: "",
+        bandImpactZh: ""
+      }
+    ],
+    errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    taskAchievementAdvice: [],
+    coherenceAdvice: [],
+    lexicalAdvice: [],
+    grammarAdvice: []
+  };
+
+  return [
+    "Return one JSON object with this shape:",
+    JSON.stringify(shape),
+    `Target: provide up to ${itemTarget} concrete corrections. Do not stop at two.`,
+    "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
+    "For each corrected sentence, include a correctedSentence and a betterExpression.",
+    "Include spelling errors if any misspelled words appear.",
+    "Include grammar and sentence-control problems if any are visible.",
+    task === "Task 1"
+      ? "Also mention tone, purpose, and bullet-point problems in advice arrays if relevant."
+      : "Also mention position, idea development, examples, paragraphing, and conclusion problems in advice arrays if relevant.",
+    "Question:",
+    String(body.questionPrompt || ""),
+    "Essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  if (!String(body.essay || "").trim()) return {};
+  const maxTokens = Math.min(words < 80 ? 2200 : (words < 180 ? 3200 : 4200), 4600);
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildFocusedAiCorrectionSystemPrompt(locale),
+    userPrompt: buildFocusedAiCorrectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, locale),
+    maxTokens,
+    temperature: 0.0,
+    jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(18000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+  });
+  const parsed = await parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTokens, deadline });
+  return sanitizeAiCorrectionPayload(parsed);
+}
+
+async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingMode, locale, deadline }) {
+  let output = result && typeof result === "object" ? result : {};
+  if (hasAiCorrectionContent(output)) return output;
+  if (!String(body?.essay || "").trim()) return output;
+
+  if (remainingAiTime(deadline) < 9000) {
+    output.correctionWarning = "AI detailed correction did not complete before the server deadline. Please retry detailed grading.";
+    output.correctionPassWarning = output.correctionWarning;
+    return output;
+  }
+
+  try {
+    const focusedCorrection = await callAiFocusedCorrectionPass({
+      apiKey,
+      model,
+      body: { ...body, mode: gradingMode },
+      effectiveMode: gradingMode,
+      locale,
+      deadline
+    });
+    if (hasAiCorrectionContent(focusedCorrection)) {
+      output = mergeAiCorrectionDetails(output, focusedCorrection, body, gradingMode);
+      output.correctionWarning = "";
+      output.correctionPassWarning = "";
+      return output;
+    }
+  } catch (error) {
+    output.correctionWarning = "AI detailed correction retry failed. The score was returned first. Please retry detailed grading.";
+    output.correctionPassWarning = output.correctionWarning;
+    return output;
+  }
+
+  output.correctionWarning = "AI did not return concrete sentence-level corrections. Please retry detailed grading.";
+  output.correctionPassWarning = output.correctionWarning;
+  return output;
+}
+
+
 function buildFastAiGradingSystemPrompt(locale = "en") {
   const chineseRule = isChineseLocale(locale)
     ? "Write short Chinese helper notes only in fields ending with Zh. Do not translate essays."
@@ -1121,7 +1276,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     "- Explain why the score is not higher and not lower.",
     "- Analyse the selected prompt before scoring.",
     "- If under the recommended word count, reflect that in Task Achievement/Task Response, but still score normally from Band 1 upward.",
-    "- Do not generate full sentence corrections in this pass; leave correction arrays empty if the separate correction pass will fill them.",
+    "- Include 1-3 short backup spelling/grammar/sentence corrections if visible errors are obvious; the separate correction pass will add the full list.",
     "- Keep strings short. Arrays max 5 items.",
     "Server low-band context:",
     JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
@@ -1343,6 +1498,16 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
       }
     }
   }
+
+  result = await ensureAiCorrectionDetails({
+    result,
+    apiKey,
+    model,
+    body,
+    gradingMode,
+    locale,
+    deadline
+  });
 
   if (effectiveMode === "revision") {
     try {
@@ -2509,14 +2674,15 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.mainProblems = ensureArray(normalized.mainProblems).slice(0, 5);
   normalized.mainProblemsZh = ensureArray(normalized.mainProblemsZh).slice(0, 5);
   const correctionLimit = correctionLimitForEssay(body || {}, mode);
-  normalized.spellingCorrections = ensureArray(normalized.spellingCorrections).slice(0, correctionLimit);
-  normalized.grammarErrors = ensureArray(normalized.grammarErrors).slice(0, correctionLimit);
-  normalized.sentenceCorrections = ensureArray(normalized.sentenceCorrections).slice(0, correctionLimit);
+  const cleanedNormalizedCorrections = sanitizeAiCorrectionPayload(normalized);
+  normalized.spellingCorrections = ensureArray(cleanedNormalizedCorrections.spellingCorrections).slice(0, correctionLimit);
+  normalized.grammarErrors = ensureArray(cleanedNormalizedCorrections.grammarErrors).slice(0, correctionLimit);
+  normalized.sentenceCorrections = ensureArray(cleanedNormalizedCorrections.sentenceCorrections).slice(0, correctionLimit);
   normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
   normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns).slice(0, 12);
   normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 8);
   normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 8);
-  normalized.detailedSentenceCorrections = ensureArray(normalized.detailedSentenceCorrections).slice(0, correctionLimit);
+  normalized.detailedSentenceCorrections = ensureArray(cleanedNormalizedCorrections.detailedSentenceCorrections).slice(0, correctionLimit);
   normalized.task1LetterCorrections = body?.task === "Task 1"
     ? (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object" ? normalized.task1LetterCorrections : { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] })
     : null;
