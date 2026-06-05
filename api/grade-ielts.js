@@ -1429,36 +1429,117 @@ function isDeepSeekTimeoutError(error) {
   return error?.code === "DEEPSEEK_TIMEOUT" || error?.message === "DeepSeek request timed out.";
 }
 
+function isDeepSeekEmptyResponseError(error) {
+  return error?.code === "DEEPSEEK_EMPTY_RESPONSE" || error?.message === "DeepSeek returned an empty response.";
+}
+
+function buildMinimalAiScoringSystemPrompt(locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use short Chinese helper notes only in *Zh fields."
+    : "Main fields must be English. Use short Chinese helper notes only in *Zh fields.";
+  return [
+    "You are a strict IELTS Writing examiner.",
+    "Return exactly one valid JSON object only.",
+    "This is an emergency short scoring pass because the provider returned empty content.",
+    "Use Band 1-9 only and allow half bands.",
+    "Do not produce long feedback.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildMinimalAiScoringPrompt(body, gradingMode, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const shape = {
+    actualWordCount: words,
+    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: words >= threshold ? "meets_minimum" : "under_minimum_ai_scored",
+    overallBand: 1,
+    estimatedLevel: "Band 1.0",
+    criteria: {
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+    },
+    strengths: [],
+    strengthsZh: [],
+    mainProblems: [],
+    mainProblemsZh: [],
+    scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+    taskRequirementAnalysis: task === "Task 1"
+      ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "" }
+      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
+    lowBandDiagnostics: { recommendedLowBandRange: "", reason: "" },
+    highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
+    spellingCorrections: [],
+    grammarErrors: [],
+    sentenceCorrections: [],
+    detailedSentenceCorrections: [],
+    errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] },
+    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+    disclaimer: DISCLAIMER
+  };
+
+  return [
+    "Return one valid JSON object matching this shape. Fill scoring fields with real IELTS judgement.",
+    JSON.stringify(shape),
+    "Keep feedback very short. Arrays max 3 items. Do not use markdown.",
+    `Task: ${task}`,
+    `Mode: ${gradingMode}`,
+    `Word count: ${words}/${threshold}`,
+    "Question:",
+    String(body.questionPrompt || "").slice(0, 1500),
+    "Essay:",
+    String(body.essay || "").slice(0, 3500)
+  ].join("\n");
+}
+
+async function callAiMinimalScoringPass({ apiKey, model, body, gradingMode, locale, deadline }) {
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildMinimalAiScoringSystemPrompt(locale),
+    userPrompt: buildMinimalAiScoringPrompt({ ...body, mode: gradingMode }, gradingMode, locale),
+    maxTokens: 1200,
+    temperature: 0.0,
+    jsonMode: false,
+    deadline,
+    timeoutMs: Math.min(10000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+  });
+
+  return await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: gradingMode },
+    locale,
+    maxTokens: 1200,
+    allowRepair: true,
+    deadline
+  });
+}
+
 async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
   const gradingMaxTokens = effectiveMode === "revision" ? maxTokensForMode("full", veryShort) : maxTokens;
 
-  const gradingPromise = callAiGradingPass({
-    apiKey,
-    model,
-    body,
-    gradingMode,
-    maxTokens: gradingMaxTokens,
-    locale,
-    deadline,
-    veryShort
-  });
-
-  const correctionPromise = callAiCorrectionPass({
-    apiKey,
-    model,
-    body: { ...body, mode: gradingMode },
-    effectiveMode: gradingMode,
-    locale,
-    deadline
-  });
-
-  const [gradingSettled, correctionSettled] = await Promise.allSettled([gradingPromise, correctionPromise]);
-
   let result;
-  if (gradingSettled.status === "fulfilled") {
-    result = gradingSettled.value && typeof gradingSettled.value === "object" ? gradingSettled.value : {};
-  } else {
+  try {
+    result = await callAiGradingPass({
+      apiKey,
+      model,
+      body,
+      gradingMode,
+      maxTokens: gradingMaxTokens,
+      locale,
+      deadline,
+      veryShort
+    });
+  } catch (primaryError) {
     try {
       result = await callAiCompactScoringRetry({
         apiKey,
@@ -1468,18 +1549,40 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
         locale,
         deadline
       });
-      result.gradingWarning = "Primary AI scoring pass timed out, so a smaller AI scoring pass was used.";
+      result.gradingWarning = isDeepSeekEmptyResponseError(primaryError)
+        ? "Primary AI scoring returned empty content, so a compact AI scoring retry was used."
+        : "Primary AI scoring failed, so a compact AI scoring retry was used.";
     } catch (retryError) {
-      throw gradingSettled.reason || retryError;
+      try {
+        result = await callAiMinimalScoringPass({
+          apiKey,
+          model,
+          body,
+          gradingMode,
+          locale,
+          deadline
+        });
+        result.gradingWarning = isDeepSeekEmptyResponseError(primaryError) || isDeepSeekEmptyResponseError(retryError)
+          ? "Primary AI scoring returned empty content, so a minimal AI scoring retry was used."
+          : "Primary AI scoring failed, so a minimal AI scoring retry was used.";
+      } catch (minimalError) {
+        throw retryError || primaryError || minimalError;
+      }
     }
   }
-  if (correctionSettled.status === "fulfilled") {
-    result = mergeAiCorrectionDetails(result, correctionSettled.value, body, gradingMode);
-  } else {
-    if (isDeepSeekTimeoutError(correctionSettled.reason)) {
-      result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
-      result.correctionPassWarning = result.correctionWarning;
-    } else {
+
+  if (remainingAiTime(deadline) > 9000) {
+    try {
+      const correction = await callAiCorrectionPass({
+        apiKey,
+        model,
+        body: { ...body, mode: gradingMode },
+        effectiveMode: gradingMode,
+        locale,
+        deadline
+      });
+      result = mergeAiCorrectionDetails(result, correction, body, gradingMode);
+    } catch (correctionError) {
       try {
         const correctionRetry = await callAiCorrectionPass({
           apiKey,
@@ -1489,14 +1592,19 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
           locale,
           deadline,
           maxTokensOverride: 1800,
-          timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+          timeoutMs: Math.min(10000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
         result = mergeAiCorrectionDetails(result, correctionRetry, body, gradingMode);
       } catch {
-        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+        result.correctionWarning = isDeepSeekEmptyResponseError(correctionError)
+          ? "AI correction pass returned empty content. The score was returned first. Please retry detailed corrections."
+          : "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
         result.correctionPassWarning = result.correctionWarning;
       }
     }
+  } else {
+    result.correctionWarning = "Not enough server time remained for AI detailed correction. The score was returned first. Please retry detailed corrections.";
+    result.correctionPassWarning = result.correctionWarning;
   }
 
   result = await ensureAiCorrectionDetails({
@@ -1524,8 +1632,8 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
       result = mergeRevisionPassIntoResult(result, revision);
     } catch (error) {
       result = addRevisionTimeoutWarning(result);
-      if (isDeepSeekTimeoutError(error)) {
-        result.correctionWarning = "AI correction pass timed out. The score was returned first. Please retry detailed corrections.";
+      if (isDeepSeekTimeoutError(error) || isDeepSeekEmptyResponseError(error)) {
+        result.correctionWarning = "AI model-answer pass did not complete. The grading and correction feedback were returned first.";
         result.correctionPassWarning = result.correctionWarning;
       }
     }
@@ -1533,7 +1641,6 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 
   return result;
 }
-
 
 function defaultRevisedEssayMeta(limited = false, reason = "") {
   if (limited) {
@@ -1862,75 +1969,118 @@ function buildRepairPrompt(rawText, task, locale = "en") {
 }
 
 function extractDeepSeekText(data) {
-  return data?.choices?.[0]?.message?.content?.trim() || "";
+  const choice = data?.choices?.[0] || {};
+  const message = choice.message || {};
+  const content = typeof message.content === "string" ? message.content : "";
+  const reasoningContent = typeof message.reasoning_content === "string" ? message.reasoning_content : "";
+  const legacyText = typeof choice.text === "string" ? choice.text : "";
+  return (content || reasoningContent || legacyText || "").trim();
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(attempt) {
+  return Math.min(800, 250 * attempt);
+}
+
+function isRetryableProviderStatus(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || (status >= 500 && status <= 599);
 }
 
 async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false, deadline, timeoutMs }) {
-  const controller = new AbortController();
-  const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const maxAttempts = Math.max(1, Math.min(Number(process.env.DEEPSEEK_RETRY_ATTEMPTS) || 2, 3));
+  let lastError;
 
-  const requestBody = {
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ],
-    temperature,
-    stream: false,
-    max_tokens: maxTokens
-  };
-  if (jsonMode) requestBody.response_format = { type: "json_object" };
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
-  let response;
-  let raw = "";
-  try {
-    response = await fetch(DEEPSEEK_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
-    });
-    raw = await response.text();
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      const timeoutError = new Error("DeepSeek request timed out.");
-      timeoutError.code = "DEEPSEEK_TIMEOUT";
-      timeoutError.provider = "deepseek";
-      timeoutError.detail = "The AI provider did not respond before the server timeout.";
-      throw timeoutError;
+    const requestBody = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature,
+      stream: false,
+      max_tokens: maxTokens
+    };
+    if (jsonMode) requestBody.response_format = { type: "json_object" };
+
+    let response;
+    let raw = "";
+    try {
+      response = await fetch(DEEPSEEK_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      raw = await response.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("DeepSeek request timed out.");
+        timeoutError.code = "DEEPSEEK_TIMEOUT";
+        timeoutError.provider = "deepseek";
+        timeoutError.detail = "The AI provider did not respond before the server timeout.";
+        lastError = timeoutError;
+      } else {
+        lastError = error;
+      }
+      if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const error = new Error("DeepSeek API request failed.");
+      error.status = response.status;
+      error.raw = raw;
+      lastError = error;
+      if (attempt < maxAttempts && isRetryableProviderStatus(response.status) && remainingAiTime(deadline) > 5000) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      throw error;
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (error) {
+      error.raw = raw;
+      throw error;
+    }
+
+    const outputText = extractDeepSeekText(data);
+    if (outputText) return outputText;
+
+    const emptyError = new Error("DeepSeek returned an empty response.");
+    emptyError.code = "DEEPSEEK_EMPTY_RESPONSE";
+    emptyError.provider = "deepseek";
+    emptyError.raw = raw;
+    lastError = emptyError;
+
+    if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
+      await wait(retryDelayMs(attempt));
+      continue;
+    }
+
+    throw emptyError;
   }
 
-  if (!response.ok) {
-    const error = new Error("DeepSeek API request failed.");
-    error.status = response.status;
-    error.raw = raw;
-    throw error;
-  }
-
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch (error) {
-    error.raw = raw;
-    throw error;
-  }
-
-  const outputText = extractDeepSeekText(data);
-  if (!outputText) {
-    const error = new Error("DeepSeek returned an empty response.");
-    error.raw = raw;
-    throw error;
-  }
-
-  return outputText;
+  throw lastError || new Error("DeepSeek request failed.");
 }
 
 function sendProviderError(req, res, error) {
