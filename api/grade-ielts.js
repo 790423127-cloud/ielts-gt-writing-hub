@@ -32,7 +32,7 @@ const AI_SINGLE_REQUEST_TIMEOUT_MS = Math.max(
 );
 const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
   60000,
-  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 240000, 290000)
+  Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 240000, 260000)
 );
 const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
 const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
