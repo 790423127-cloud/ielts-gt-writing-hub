@@ -581,7 +581,8 @@ function mergeAiStageResult(base, incoming) {
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "lowBandDiagnostics", "lowBandDiagnosticsZh",
-    "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck"
+    "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
+    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) output[field] = data[field];
@@ -599,9 +600,14 @@ function mergeAiStageResult(base, incoming) {
     incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
   );
   if (canReplaceCriteria) output.criteria = data.criteria;
-  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage;
+  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
+  const calculatedBand = Number(output.scoreCalculation?.finalBand ?? output.mockWritingScore?.mockWritingBand);
+  if (mayReplaceScore && Number.isFinite(calculatedBand) && calculatedBand > 0) {
+    output.overallBand = calculatedBand;
+    output.estimatedLevel = `Band ${formatMockBand(calculatedBand)}`;
+  }
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
   if (typeof data.wordCountThresholdUsed !== "undefined") output.wordCountThresholdUsed = data.wordCountThresholdUsed;
   if (typeof data.wordCountStatus !== "undefined") output.wordCountStatus = data.wordCountStatus;
@@ -947,6 +953,55 @@ function renderCriteria(criteria = {}) {
       ${renderTextWithTranslation(item?.feedback || "", item?.feedbackZh, { fallback: "No feedback is available." })}
       ${item?.howToImprove ? renderTextWithTranslation(`How to improve: ${item.howToImprove}`, item?.howToImproveZh, { className: "improve" }) : ""}
     </div>`).join("")}</div>`;
+}
+
+function criterionBandsFromResult(result = {}) {
+  const calcBands = Array.isArray(result.scoreCalculation?.criteriaBands) ? result.scoreCalculation.criteriaBands : [];
+  if (calcBands.length) return calcBands;
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  return Object.entries(criteria).map(([criterion, item]) => ({ criterion, band: item?.band }));
+}
+
+function averageCriterionBands(bands = []) {
+  const numbers = bands.map((item) => Number(item?.band)).filter(Number.isFinite);
+  if (!numbers.length) return null;
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function renderScoreCalculation(result = {}) {
+  const calc = result.scoreCalculation && typeof result.scoreCalculation === "object" ? result.scoreCalculation : {};
+  const scoringSystem = result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {};
+  const bands = criterionBandsFromResult(result).filter((item) => item && item.criterion && String(item.band ?? "").trim());
+  const rawAverage = Number(calc.rawAverage ?? averageCriterionBands(bands));
+  const finalBand = Number(calc.finalBand ?? result.overallBand);
+  const hasCalculation = bands.length || Number.isFinite(rawAverage) || Number.isFinite(finalBand) || hasAnyText(scoringSystem);
+  if (!hasCalculation) return "";
+
+  const systemLabel = scoringSystem.type === "task1_practice_engine"
+    ? "Task 1 GT Letter Scoring Engine"
+    : scoringSystem.type === "task2_practice_engine"
+      ? "Task 2 Essay Scoring Engine"
+      : scoringSystem.type === "mock_writing_combined_system"
+        ? "Mock Writing Combined Scoring System"
+        : (calc.mode || scoringSystem.type || "Task-specific scoring engine");
+  const formula = calc.formula || "four IELTS criteria average rounded to nearest 0.5";
+  const rows = bands.length ? `<div class="score-calculation-grid">${bands.map((item) => `
+    <div class="score-calculation-row"><span>${escapeHtml(item.criterion)}</span><strong>Band ${escapeHtml(formatMockBand(item.band))}</strong></div>
+  `).join("")}</div>` : "";
+  const sameBands = Boolean(result.scoreCalibration?.criteriaIdentical);
+  const reviewNeeded = Boolean(result.scoreCalibration?.criteriaIdenticalReviewNeeded);
+
+  return `<section class="grading-section score-calculation-card">
+    <h4>评分计算说明</h4>
+    <p><strong>评分系统：</strong>${escapeHtml(systemLabel)}</p>
+    <p><strong>计算方式：</strong>${escapeHtml(formula)}</p>
+    ${rows}
+    ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
+    ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatMockBand(finalBand))}</p>` : ""}
+    ${sameBands ? `<p class="muted">四项分数相同：系统允许这种情况，但要求评分证据能支持四项确实处在同一水平。</p>` : ""}
+    ${reviewNeeded ? `<p class="ai-warning">四项分数完全相同，但反馈证据显示不同弱点；后端已标记需要评分一致性复核。</p>` : ""}
+    ${calc.explanation ? renderTextWithTranslation(calc.explanation, calc.explanationZh, { tag: "p" }) : ""}
+  </section>`;
 }
 
 
@@ -1674,6 +1729,7 @@ function renderGradingResult(result = {}) {
       <h4>Overall estimated band</h4>
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
     </section>
+    ${renderScoreCalculation(result)}
     <section class="grading-section">
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
@@ -1930,20 +1986,24 @@ function renderMockResults(task1Result, task2Result) {
     ...((Array.isArray(task1Result?.mainProblems) ? task1Result.mainProblems : []).slice(0, 3).map((x) => `Task 1: ${x}`)),
     ...((Array.isArray(task2Result?.mainProblems) ? task2Result.mainProblems : []).slice(0, 3).map((x) => `Task 2: ${x}`))
   ];
+  const rawWeightedAverage = (t1Band + t2Band * 2) / 3;
   node.innerHTML = `
     <div class="mock-score-card">
       <p class="kicker">Mock Writing Result</p>
       <h3>Final Writing estimated band: Band ${formatMockBand(finalBand)}</h3>
       <p><strong>Task 1:</strong> Band ${formatMockBand(t1Band)} &nbsp; <strong>Task 2:</strong> Band ${formatMockBand(t2Band)}</p>
-      <p class="muted">综合公式：Task 1 + Task 2 × 2，再除以 3。Task 2 权重更高。本结果为 AI 估算，不是官方 IELTS 成绩。</p>
+      <p><strong>综合计算：</strong>(${formatMockBand(t1Band)} + ${formatMockBand(t2Band)} × 2) ÷ 3 = ${rawWeightedAverage.toFixed(3).replace(/\.?0+$/, "")} → Band ${formatMockBand(finalBand)}</p>
+      <p class="muted">Task 1 和 Task 2 分开评分；Task 2 权重更高。本结果为 AI 估算，不是官方 IELTS 成绩。</p>
     </div>
     ${collapsibleSection("Task 1 模拟考试评分", `
       <p><strong>Estimated band:</strong> Band ${formatMockBand(t1Band)}</p>
+      ${renderScoreCalculation(task1Result || {})}
       ${renderCriteria(task1Result?.criteria || {})}
       ${renderListWithTranslations(task1Result?.mainProblems || [], task1Result?.mainProblemsZh || [], "No main problems returned.")}
     `, { defaultOpen: true })}
     ${collapsibleSection("Task 2 模拟考试评分", `
       <p><strong>Estimated band:</strong> Band ${formatMockBand(t2Band)}</p>
+      ${renderScoreCalculation(task2Result || {})}
       ${renderCriteria(task2Result?.criteria || {})}
       ${renderListWithTranslations(task2Result?.mainProblems || [], task2Result?.mainProblemsZh || [], "No main problems returned.")}
     `, { defaultOpen: true })}

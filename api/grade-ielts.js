@@ -169,13 +169,15 @@ function clampAiBand(value, fallback = 1) {
 }
 
 function normalizeAiBandsOnly(result, body) {
-  // AI-only scoring guard: keep the model's judgement, but enforce the app's 1-9 visible range.
-  // This does not create a local score and does not apply local caps.
+  // AI-only scoring guard: keep the model's criterion judgement, but enforce the app's 1-9 visible range.
+  // The final displayed overallBand is recalculated later from the four task-specific criteria.
   const fallbackBand = 1;
+  result.rawOverallBand = Number.isFinite(Number(result.overallBand)) ? clampAiBand(result.overallBand, fallbackBand) : undefined;
   result.overallBand = clampAiBand(result.overallBand, fallbackBand);
   result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
 
   ensureCriteria(result, body?.task);
+  normalizeTaskSpecificCriteria(result, body?.task === "Task 1" ? "Task 1" : "Task 2");
   Object.values(result.criteria || {}).forEach((criterion) => {
     criterion.band = clampAiBand(criterion.band, result.overallBand);
   });
@@ -188,6 +190,243 @@ function normalizeAiBandsOnly(result, body) {
 
 function firstCriterionName(task) {
   return task === "Task 1" ? "Task Achievement" : "Task Response";
+}
+
+
+// --- IELTS task-specific scoring engines ---
+function getWritingCriterionNames(task) {
+  const first = task === "Task 1" ? "Task Achievement" : "Task Response";
+  return [first, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+}
+
+function getTaskScoringEngineName(task) {
+  return task === "Task 1" ? "task1_gt_letter_practice_engine" : "task2_essay_practice_engine";
+}
+
+function buildTaskSpecificScoringRubric(task) {
+  if (task === "Task 1") {
+    return [
+      "Task-specific scoring engine: IELTS General Training Writing Task 1 letter.",
+      "Use Task Achievement as the first criterion, not Task Response.",
+      "Task Achievement must assess: clear letter purpose, coverage of all prompt bullet points, development of each bullet point, recipient relationship, formal/semi-formal/informal tone, opening/closing, letter format, relevance, and word-count impact.",
+      "Do not assess Task 1 as an essay. Do not require thesis statement, argument, counterargument, essay conclusion, or a clear opinion position unless the prompt itself asks for an opinion in a letter context.",
+      "Coherence and Cohesion for Task 1 must assess letter organisation, paragraphing by purpose/bullet point, logical ordering of request/explanation/thanks/apology/invitation details, natural linking, and referencing.",
+      "Lexical Resource for Task 1 must assess letter-function vocabulary, register, precision, collocation, spelling, word formation, and whether the wording fits the recipient relationship.",
+      "Grammatical Range and Accuracy for Task 1 must assess sentence control for requests, explanations, reasons, conditions, polite forms, tense, articles, plurals, punctuation, and whether errors reduce the reader's understanding."
+    ].join("\n");
+  }
+  return [
+    "Task-specific scoring engine: IELTS Writing Task 2 essay.",
+    "Use Task Response as the first criterion, not Task Achievement.",
+    "Task Response must assess: whether all parts of the question are answered, whether a clear position is present when required, relevance of main ideas, depth of development, reasoning, examples, conclusion, and whether the response matches the question type.",
+    "Do not assess Task 2 as a letter. Do not use recipient relationship, letter opening/closing, formal letter tone, or bullet-point coverage as Task Response evidence.",
+    "Coherence and Cohesion for Task 2 must assess introduction/body/conclusion organisation, clear paragraph central ideas, progression of argument, logical sequencing, cohesive devices, referencing, and paragraph unity.",
+    "Lexical Resource for Task 2 must assess topic vocabulary, abstract/general academic wording, precision, collocation, repetition, spelling, word formation, and whether vocabulary expresses argument clearly.",
+    "Grammatical Range and Accuracy for Task 2 must assess sentence variety used for argument, clauses, concession, comparison, cause/effect, accuracy, punctuation, error density, and whether errors weaken the argument."
+  ].join("\n");
+}
+
+function normalizeCriterionBandValue(value, fallback = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return clampAiBand(fallback, 1);
+  return clampAiBand(numeric, fallback);
+}
+
+function defaultCriterionForName(name, fallbackBand = 1) {
+  return {
+    band: normalizeCriterionBandValue(fallbackBand, 1),
+    feedback: "",
+    feedbackZh: "",
+    howToImprove: "",
+    howToImproveZh: "",
+    evidence: [],
+    positiveEvidence: [],
+    limitingEvidence: [],
+    whyThisBand: "",
+    whyNotHigher: "",
+    whyNotLower: ""
+  };
+}
+
+function normalizeTaskSpecificCriteria(result, task) {
+  if (!result || typeof result !== "object") return result;
+  const normalizedTask = task === "Task 1" ? "Task 1" : "Task 2";
+  const wanted = getWritingCriterionNames(normalizedTask);
+  const wrongFirst = normalizedTask === "Task 1" ? "Task Response" : "Task Achievement";
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const fallbackBand = normalizeCriterionBandValue(result.overallBand, 1);
+  const fixed = {};
+
+  wanted.forEach((name) => {
+    const source = criteria[name] || (name === wanted[0] ? criteria[wrongFirst] : null) || {};
+    fixed[name] = {
+      ...defaultCriterionForName(name, source.band ?? fallbackBand),
+      ...(source && typeof source === "object" ? source : {}),
+      band: normalizeCriterionBandValue(source.band, fallbackBand),
+      evidence: ensureArray(source.evidence).filter(Boolean).slice(0, 6),
+      positiveEvidence: ensureArray(source.positiveEvidence).filter(Boolean).slice(0, 4),
+      limitingEvidence: ensureArray(source.limitingEvidence).filter(Boolean).slice(0, 4),
+      whyThisBand: source.whyThisBand || source.bandJustification || "",
+      whyNotHigher: source.whyNotHigher || "",
+      whyNotLower: source.whyNotLower || ""
+    };
+  });
+
+  result.criteria = fixed;
+  return result;
+}
+
+function getCriterionBandsForTask(result, task) {
+  normalizeTaskSpecificCriteria(result, task);
+  return getWritingCriterionNames(task)
+    .map((name) => Number(result?.criteria?.[name]?.band))
+    .filter(Number.isFinite)
+    .map((band) => clampAiBand(band, 1));
+}
+
+function calculateTaskBandFromCriteria(result, task) {
+  const bands = getCriterionBandsForTask(result, task);
+  if (bands.length !== 4) return clampAiBand(result?.overallBand, 1);
+  const avg = bands.reduce((sum, band) => sum + band, 0) / 4;
+  return roundHalf(avg);
+}
+
+function calculateMockWritingBand(task1Band, task2Band) {
+  const t1 = clampAiBand(task1Band, 1);
+  const t2 = clampAiBand(task2Band, 1);
+  return roundHalf((t1 + (t2 * 2)) / 3);
+}
+
+function buildScoreCalculation(result, task, finalBand) {
+  const names = getWritingCriterionNames(task);
+  const criteriaBands = names.map((name) => ({
+    criterion: name,
+    band: normalizeCriterionBandValue(result?.criteria?.[name]?.band, result?.overallBand || 1)
+  }));
+  const rawAverage = criteriaBands.reduce((sum, item) => sum + Number(item.band || 0), 0) / 4;
+  return {
+    mode: getTaskScoringEngineName(task),
+    method: "task_specific_four_criteria_average",
+    formula: "four IELTS criteria average rounded to nearest 0.5",
+    criteriaBands,
+    rawAverage: Number(rawAverage.toFixed(3)),
+    finalBand,
+    explanation: `${task} is scored with its own IELTS criteria first; the displayed band is calculated from the four criterion bands, not copied from an AI overall impression.`
+  };
+}
+
+function mechanicalSameBandSignals(result, task) {
+  const text = JSON.stringify(result?.criteria || {}).toLowerCase();
+  const taskSignals = task === "Task 1"
+    ? /bullet|purpose|tone|recipient|letter|opening|closing|task achievement|underdeveloped|word count/.test(text)
+    : /position|argument|idea|example|conclusion|task response|both views|advantages|disadvantages|problem|solution/.test(text);
+  const ccSignals = /paragraph|progression|cohesive|linking|organisation|organization|sequence/.test(text);
+  const lrSignals = /vocabulary|word choice|collocation|spelling|lexical|repetition|word form/.test(text);
+  const graSignals = /grammar|verb|article|sentence|tense|punctuation|subject-verb|plural/.test(text);
+  return [taskSignals, ccSignals, lrSignals, graSignals].filter(Boolean).length;
+}
+
+function shouldReauditMechanicalSameBands(result, task) {
+  const bands = getCriterionBandsForTask(result, task);
+  if (bands.length !== 4) return false;
+  const allSame = new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
+  if (!allSame) return false;
+  return mechanicalSameBandSignals(result, task) >= 3;
+}
+
+function finalizeTaskScoringEngine(result, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+
+  const diagnostics = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object"
+    ? result.lowBandDiagnostics
+    : buildLowBandDiagnostics({ ...body, task });
+  const cap = capFromDiagnostics({ ...body, task }, diagnostics);
+  const firstCriterion = firstCriterionName(task);
+
+  if (cap.firstCap !== null && result.criteria?.[firstCriterion]) {
+    result.criteria[firstCriterion].band = Math.min(
+      normalizeCriterionBandValue(result.criteria[firstCriterion].band, result.overallBand || 1),
+      cap.firstCap
+    );
+  }
+
+  Object.values(result.criteria || {}).forEach((criterion) => {
+    if (criterion && typeof criterion === "object") {
+      criterion.band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    }
+  });
+
+  let finalBand = calculateTaskBandFromCriteria(result, task);
+  const beforeCapBand = finalBand;
+  let capApplied = false;
+  let capReason = "";
+  if (cap.cap !== null && Number.isFinite(Number(cap.cap)) && finalBand > cap.cap) {
+    finalBand = roundHalf(cap.cap);
+    capApplied = true;
+    capReason = cap.reason || "A task-specific IELTS cap was applied.";
+  }
+
+  const bands = getCriterionBandsForTask(result, task);
+  const lowCriteria = bands.filter((band) => band <= 5).length;
+  if (lowCriteria >= 2 && finalBand >= 6) {
+    finalBand = 5.5;
+    capApplied = true;
+    capReason = capReason || "Two or more criteria are 5.0 or below, so Band 6.0+ is not justified.";
+  }
+
+  result.overallBand = roundHalf(finalBand);
+  result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
+  result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
+  result.scoringSystem = {
+    type: task === "Task 1" ? "task1_practice_engine" : "task2_practice_engine",
+    task,
+    firstCriterion,
+    criteriaAreTaskSpecific: true,
+    overallBandSource: "calculated_from_four_criteria",
+    previousAiOverallBand: Number.isFinite(Number(result.overallEstimatedBand || result.rawOverallBand)) ? Number(result.overallEstimatedBand || result.rawOverallBand) : undefined
+  };
+
+  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
+    ? result.scoreCalibration
+    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
+  result.scoreCalibration.strictness = result.scoreCalibration.strictness || "strict";
+  result.scoreCalibration.capApplied = Boolean(result.scoreCalibration.capApplied || capApplied);
+  if (capApplied) result.scoreCalibration.capReason = result.scoreCalibration.capReason || capReason;
+  result.scoreCalibration.evidence = ensureArray(result.scoreCalibration.evidence).concat([
+    `Scoring engine: ${task === "Task 1" ? "Task 1 GT letter" : "Task 2 essay"}.`,
+    `Overall recalculated from four criteria: ${formatBand(result.overallBand)}.`,
+    beforeCapBand !== result.overallBand ? `Pre-cap criteria average band: ${formatBand(beforeCapBand)}.` : ""
+  ].filter(Boolean)).slice(0, 5);
+
+  const allSame = bands.length === 4 && new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
+  result.scoreCalibration.criteriaIdentical = allSame;
+  result.scoreCalibration.criteriaIdenticalReviewNeeded = shouldReauditMechanicalSameBands(result, task);
+  if (result.scoreCalibration.criteriaIdenticalReviewNeeded) {
+    result.scoreCalibration.evidence = ensureArray(result.scoreCalibration.evidence).concat([
+      "All four criterion bands are identical while the feedback mentions different criterion-specific evidence; score-audit should recheck whether the same bands are truly justified."
+    ]).slice(0, 5);
+  }
+
+  result.overallEstimatedBand = result.overallBand;
+  return result;
+}
+
+function buildMockWritingScore(task1Result, task2Result) {
+  const task1Band = clampAiBand(task1Result?.overallBand ?? task1Result?.overallEstimatedBand, 1);
+  const task2Band = clampAiBand(task2Result?.overallBand ?? task2Result?.overallEstimatedBand, 1);
+  const finalBand = calculateMockWritingBand(task1Band, task2Band);
+  return {
+    mockWritingBand: finalBand,
+    estimatedLevel: `Band ${formatBand(finalBand)}`,
+    task1Band,
+    task2Band,
+    method: "ielts_mock_writing_weighted_combination",
+    formula: "roundToHalf((Task 1 + Task 2 × 2) / 3)",
+    rawWeightedAverage: Number(((task1Band + task2Band * 2) / 3).toFixed(3)),
+    explanation: "Task 1 and Task 2 are scored separately with task-specific criteria, then combined with Task 2 carrying double weight for the mock Writing estimate."
+  };
 }
 
 function mostlyNonEnglish(text) {
@@ -665,6 +904,9 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     veryShort ? (isChineseLocale(locale) ? "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, each Chinese helper note max 25 Chinese characters, each English feedback max 25 English words." : "Very short essay limits: strengths max 2, mainProblems max 3, grammarErrors max 3, sentenceCorrections max 3, English feedback max 25 words, and all *Zh fields empty.") : "",
     revisionInstruction,
     underMinimumInstruction,
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(body.task),
+    "Scoring order: first assign the four task-specific criterion bands independently from essay evidence; then estimate overallBand. The server will finally recalculate the displayed overallBand from the four criteria.",
     body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 1 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
     "Use English for the main feedback. Use accurate Chinese explanations only in *Zh fields. These Chinese explanations must follow the exact English meaning and must not be vague template translations. Do not translate the whole essay or revised essays.",
@@ -782,7 +1024,9 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     "Return exactly one valid JSON object matching this compact shape. Keep the same keys.",
     previousIssue ? `Previous JSON issue to avoid: ${String(previousIssue).slice(0, 180)}` : "",
     JSON.stringify(shape),
-    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Keep strings concise but specific. Arrays may contain up to 12 items for correction fields when visible issues exist. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Score the four task-specific criteria independently; the server will recalculate the displayed overallBand from those four criteria. Keep strings concise but specific. Arrays may contain up to 12 items for correction fields when visible issues exist. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(body.task),
     "Request:",
     JSON.stringify({
       task: body.task,
@@ -1742,7 +1986,9 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     "Return one JSON object matching this shape. Keep the same keys, but fill the scoring/task-analysis fields with real IELTS assessment.",
     JSON.stringify(shape),
     "Scoring requirements:",
-    "- Assign four IELTS criterion bands and overallBand.",
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(task),
+    "- Assign four task-specific IELTS criterion bands independently; the server will recalculate the displayed overallBand from the four criteria.",
     "- Explain why the score is not higher and not lower.",
     "- Analyse the selected prompt before scoring.",
     "- If under the recommended word count, reflect that in Task Achievement/Task Response, but still score normally from Band 1 upward.",
@@ -2097,6 +2343,9 @@ function buildNoTemplateAiScoringPrompt(body, gradingMode, locale = "en") {
     "Grade the essay and return JSON with these exact top-level keys:",
     "actualWordCount, taskTypeDetected, wordCountThresholdUsed, wordCountStatus, taskRequirementAnalysis, taskMatchCheck, overallBand, estimatedLevel, criteria, strengths, mainProblems, lowBandDiagnostics, highBandDiagnostics, scoreCalibration, errorAnalysis, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, disclaimer.",
     `criteria must contain exactly these four keys: ${firstCriterion}, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy.`,
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(task),
+    "Score each criterion independently from its own evidence. The server will recalculate the displayed overallBand from the four criterion bands.",
     "Each criterion object must contain: band, feedback, feedbackZh, howToImprove, howToImproveZh.",
     "Every English feedback/howToImprove field must be filled with a concrete sentence based on the essay.",
     "strengths and mainProblems must each contain at least 2 concrete items if the essay has English content.",
@@ -2156,6 +2405,8 @@ function buildLeanScoreSystemPrompt(locale = "en") {
     "Penalise underlength strictly, but still grade from Band 1 upward.",
     "There is no maximum word-count cap; penalise long answers only for repetition, irrelevance, weak coherence, or loss of task focus.",
     "For Task 1 use Task Achievement. For Task 2 use Task Response.",
+    "Use separate task-specific scoring engines: Task 1 is a General Training letter; Task 2 is an essay. Do not mix letter and essay criteria.",
+    "Assign the four criterion bands independently first. OverallBand may be estimated, but the server will finally recalculate the displayed overallBand from the four criterion bands.",
     "High-quality relevant answers may receive Band 8 or 9. Do not artificially cap strong writing at Band 7.",
     "High-quality scoring is the core product: prioritise accurate bands, evidence-based criterion feedback, and concrete next-step advice over speed.",
     "Do not use Band 7 as a safe default. If the response fully satisfies the prompt, has natural progression, precise vocabulary, flexible grammar, and only rare minor issues, award Band 8-9 as appropriate.",
@@ -2244,6 +2495,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "Return exactly one valid JSON object matching this shape. Fill scoring and task-analysis fields with real IELTS assessment.",
     JSON.stringify(shape),
     "Important scoring rules:",
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(task),
     "- Do not copy template values. Replace Band 1 placeholders with real criterion bands.",
     "- Give specific evidence from the essay for each criterion.",
     body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
@@ -2251,6 +2504,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
     "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
+    "- When possible, each criterion should also include evidence, whyThisBand, whyNotHigher, and whyNotLower to support examiner-like scoring.",
+    "- Do not keep all four criterion bands identical unless the evidence for all four criteria is genuinely equivalent.",
     "- High-band calibration is mandatory: when the evidence shows full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and rare minor errors, use Band 8-9. Do not force such writing into Band 7.",
     "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
     "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
@@ -2712,16 +2967,21 @@ function scoreAuditLooksNecessary(currentResult) {
     ...Object.values(criteria || {}).map((item) => [item?.band, item?.feedback, item?.howToImprove])
   ], 40);
   const overall = Number(currentResult.overallBand);
-  const bands = Object.values(criteria).map((item) => Number(item?.band)).filter(Number.isFinite);
-  if (bands.length && Number.isFinite(overall)) {
+  const inferredTask = criteria["Task Achievement"] ? "Task 1" : "Task 2";
+  const bands = getWritingCriterionNames(inferredTask)
+    .map((name) => Number(criteria?.[name]?.band))
+    .filter(Number.isFinite);
+  if (bands.length === 4 && Number.isFinite(overall)) {
     const avg = bands.reduce((sum, value) => sum + value, 0) / bands.length;
-    if (Math.abs(avg - overall) > 0.75) return true;
-    const allSame = bands.length >= 4 && new Set(bands.map((value) => formatBand(roundHalf(value)))).size === 1;
+    const expectedOverall = roundHalf(avg);
+    if (expectedOverall !== roundHalf(overall)) return true;
+    const allSame = new Set(bands.map((value) => formatBand(roundHalf(value)))).size === 1;
     if (allSame) {
       const differentiationSignals = [
         "underlength", "all three bullet points", "minimally developed", "limited development",
         "basic structure", "cohesive devices", "progression", "vocabulary is basic", "repetitive",
-        "word choice", "frequent grammatical errors", "grammar errors", "mostly simple", "subject-verb", "articles"
+        "word choice", "frequent grammatical errors", "grammar errors", "mostly simple", "subject-verb", "articles",
+        "purpose", "tone", "recipient", "position", "argument", "example", "conclusion"
       ];
       if (differentiationSignals.some((signal) => combined.includes(signal))) return true;
     }
@@ -2756,6 +3016,9 @@ function buildScoreAuditPrompt(body, locale = "en") {
     "Do not merely polish wording if the score is wrong. Re-read the original essay and recalibrate using IELTS band descriptor logic.",
     "Do not use Band 7 as a safe default. If the essay fully satisfies the prompt, is naturally organised, uses precise vocabulary, has flexible grammar, and only rare minor errors, correct the score to Band 8-9 as appropriate.",
     "Score each IELTS criterion independently. Do not keep four identical criterion bands unless the essay evidence genuinely supports equal performance in all four criteria. If the current score is kept, explain exactly why it is not higher with concrete evidence from the essay.",
+    "Task-specific scoring engine:",
+    buildTaskSpecificScoringRubric(task),
+    "The server will recalculate the final displayed overallBand from the four returned criterion bands, so return the most accurate independent criterion bands.",
     "If Band 7.5+ is awarded, feedback and advice must sound like minor refinement, not basic control problems.",
     "mainProblems must contain only real problems, not strengths.",
     "Chinese *Zh fields must accurately match adjacent English fields and must not be generic templates.",
@@ -2819,7 +3082,9 @@ async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
     });
     if (parsed && typeof parsed === "object" && !parsed.scoreAuditSkipped) {
       normalizeAiBandsOnly(parsed, body);
+      finalizeTaskScoringEngine(parsed, body || {});
       finalQualityGate(parsed, body || {});
+      finalizeTaskScoringEngine(parsed, body || {});
     }
     return {
       ...(parsed && typeof parsed === "object" ? parsed : {}),
@@ -5183,6 +5448,7 @@ function finalQualityGate(result, body = {}) {
   relocateWordCountWarningsFinal(result, body);
   normalizeBandPlanVisibilityAndZhFinal(result);
   cleanGenericChineseFieldsFinal(result);
+  finalizeTaskScoringEngine(result, body || {});
 
   return result;
 }
@@ -5489,6 +5755,7 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   };
 
   normalizeAiBandsOnly(normalized, body || {});
+  finalizeTaskScoringEngine(normalized, body || {});
 
   if (mode !== "revision") {
     normalized.revisedEssayBand5 = "";
@@ -5539,10 +5806,12 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   backfillDiagnosticAdvice(normalized, body || {}, mode, veryShort);
   sanitizeStrengthProblemBuckets(normalized);
   polishHighBandCriteria(normalized, body || {});
+  finalizeTaskScoringEngine(normalized, body || {});
   ensureTargetImprovementPlan(normalized, body || {});
   backfillChineseHelperNotes(normalized, body || {});
   sanitizeStrengthProblemBuckets(normalized);
   finalQualityGate(normalized, body || {});
+  finalizeTaskScoringEngine(normalized, body || {});
 
   normalized.scoringCalibration = normalized.scoreCalibration;
   normalized.lowBandEvidence = normalized.lowBandDiagnostics;
@@ -5552,6 +5821,64 @@ function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
   normalized.feedback = ensureArray(normalized.mainProblems).join(" ") || normalized.scoreCalibration?.whyNotHigher || "Feedback is available in the sections below.";
 
   return localizeResultForOutput(normalized, locale);
+}
+
+
+function isMockCombineRequest(body) {
+  const raw = String(body?.mode || body?.aiStage || body?.stage || "").toLowerCase().replace(/[_\s-]+/g, "");
+  return ["mock", "mockwriting", "mockcombine", "mockexam", "writingmock", "combinewriting"].includes(raw) && (body.task1Result || body.task2Result || body.task1Band || body.task2Band);
+}
+
+function normalizeMockTaskResult(taskResult, task) {
+  if (!taskResult || typeof taskResult !== "object") return null;
+  const copy = { ...taskResult, task };
+  if (copy.criteria && typeof copy.criteria === "object" && Object.keys(copy.criteria).length) {
+    normalizeTaskSpecificCriteria(copy, task);
+    const hasEssayEvidence = String(taskResult.essay || "").trim() || Number(taskResult.actualWordCount || taskResult.wordCount) > 0;
+    if (hasEssayEvidence) {
+      finalizeTaskScoringEngine(copy, { task, essay: taskResult.essay || "", wordCount: Number(taskResult.actualWordCount || taskResult.wordCount) || 0 });
+    } else {
+      const finalBand = calculateTaskBandFromCriteria(copy, task);
+      copy.overallBand = finalBand;
+      copy.estimatedLevel = `Band ${formatBand(finalBand)}`;
+      copy.scoreCalculation = buildScoreCalculation(copy, task, finalBand);
+    }
+  } else {
+    copy.overallBand = clampAiBand(copy.overallBand || copy.overallEstimatedBand, 1);
+    copy.estimatedLevel = `Band ${formatBand(copy.overallBand)}`;
+  }
+  return copy;
+}
+
+function handleMockCombineRequest(req, res, body) {
+  const task1Result = normalizeMockTaskResult(body.task1Result || { overallBand: body.task1Band, criteria: body.task1Criteria || {} }, "Task 1");
+  const task2Result = normalizeMockTaskResult(body.task2Result || { overallBand: body.task2Band, criteria: body.task2Criteria || {} }, "Task 2");
+  const task1Band = clampAiBand(task1Result?.overallBand ?? body.task1Band, 1);
+  const task2Band = clampAiBand(task2Result?.overallBand ?? body.task2Band, 1);
+  const mockScore = buildMockWritingScore({ overallBand: task1Band }, { overallBand: task2Band });
+  sendJson(req, res, 200, {
+    aiStage: "mock-combine",
+    scoringSystem: {
+      type: "mock_writing_combined_system",
+      task1Engine: "task1_gt_letter_practice_engine",
+      task2Engine: "task2_essay_practice_engine",
+      finalBandSource: "weighted_task1_task2_combination"
+    },
+    mockWritingScore: mockScore,
+    overallBand: mockScore.mockWritingBand,
+    estimatedLevel: mockScore.estimatedLevel,
+    task1Result,
+    task2Result,
+    scoreCalculation: {
+      method: "mock_writing_weighted_combination",
+      formula: "roundToHalf((Task 1 Band + Task 2 Band × 2) / 3)",
+      task1Band,
+      task2Band,
+      rawWeightedAverage: mockScore.rawWeightedAverage,
+      finalBand: mockScore.mockWritingBand
+    },
+    disclaimer: DISCLAIMER
+  });
 }
 
 async function handleRequest(req, res) {
@@ -5582,6 +5909,11 @@ async function handleRequest(req, res) {
   }
 
   const locale = normalizeLocale(body.outputLanguage || body.locale || body.language);
+
+  if (isMockCombineRequest(body)) {
+    handleMockCombineRequest(req, res, body);
+    return;
+  }
 
   if (!body.questionPrompt || !String(body.questionPrompt).trim()) {
     sendJson(req, res, 400, { error: "questionPrompt is required." });
