@@ -3947,6 +3947,306 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 }
 
 
+
+
+// --- AI-only 10-step grading stages (maximum-detail, no local scoring) ---
+const TEN_STEP_AI_STAGES = new Set([
+  "prompt-analysis",
+  "score-boundary",
+  "evidence-map",
+  "task-diagnosis",
+  "coherence-diagnosis",
+  "lexical-diagnosis",
+  "grammar-diagnosis",
+  "sentence-corrections",
+  "better-expression-plan"
+]);
+
+function normalizeAiStage(value) {
+  const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
+  if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
+  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "stage2", "step2"].includes(raw)) return "score";
+  if (["scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage3", "step3"].includes(raw)) return "score-boundary";
+  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage4", "step4"].includes(raw)) return "evidence-map";
+  if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage5", "step5"].includes(raw)) return "task-diagnosis";
+  if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage6", "step6"].includes(raw)) return "coherence-diagnosis";
+  if (["lexicaldiagnosis", "lexical", "lexicalresource", "vocabulary", "wordchoice", "collocation", "spelling", "stage7", "step7"].includes(raw)) return "lexical-diagnosis";
+  if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage8", "step8"].includes(raw)) return "grammar-diagnosis";
+  if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage9", "step9"].includes(raw)) return "sentence-corrections";
+  if (["betterexpressionplan", "betterexpression", "betterexpressions", "finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "stage10", "step10"].includes(raw)) return "better-expression-plan";
+  if (["revision", "model", "modelanswer", "revisedessay", "stage11", "step11"].includes(raw)) return "revision";
+  if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
+  if (["evidenceplan", "evidenceandplan", "planandevidence"].includes(raw)) return "evidence-plan";
+  const focused = normalizeFocusedCorrectionStage(raw);
+  if (focused) return `correction-${focused}`;
+  if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
+  return "all";
+}
+
+function tenStepCriterionShape(task) {
+  const first = firstCriterionName(task);
+  return {
+    [first]: { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+    "Coherence and Cohesion": { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+    "Lexical Resource": { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
+    "Grammatical Range and Accuracy": { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+  };
+}
+
+function buildTenStepSystemPrompt(stage, locale = "en") {
+  const chineseRule = isChineseLocale(locale)
+    ? "Use English for normal feedback fields and concise Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
+    : "Main fields must be English. Put concise, accurate Chinese helper notes only in fields ending with Zh. Match the adjacent English field. Do not translate the full essay.";
+  const stageNames = {
+    "prompt-analysis": "question requirement analysis only",
+    "score-boundary": "IELTS half-band boundary explanation only",
+    "evidence-map": "criterion evidence mapping only",
+    "task-diagnosis": "Task Response/Task Achievement diagnosis only",
+    "coherence-diagnosis": "Coherence and Cohesion diagnosis only",
+    "lexical-diagnosis": "Lexical Resource diagnosis only",
+    "grammar-diagnosis": "Grammatical Range and Accuracy diagnosis only",
+    "sentence-corrections": "sentence-level direct corrections only",
+    "better-expression-plan": "single-sentence better expressions and final study plan only"
+  };
+  return [
+    `You are a strict IELTS Writing examiner. This AI pass is ONLY for ${stageNames[stage] || stage}.`,
+    "Do not perform any local or rule-based scoring. All essay judgements must be AI examiner judgements.",
+    "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
+    "Keep this stage focused. Do not include other stages' work.",
+    "Use only content from the user's essay for original text, evidence, and quotes. Do not invent user sentences.",
+    "Give concrete, evidence-based feedback; avoid vague templates.",
+    chineseRule
+  ].join(" ");
+}
+
+function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+  const currentResultText = body.currentResult ? JSON.stringify(body.currentResult).slice(0, 5500) : "{}";
+  const common = [
+    `Task: ${task}`,
+    `Mode: ${mode}`,
+    `Actual word count: ${words}`,
+    `Current AI score/result from earlier stages: ${currentResultText}`,
+    buildTaskSpecificScoringRubric(task),
+    buildTargetImprovementInstruction(body),
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ];
+
+  if (stage === "prompt-analysis") {
+    return [
+      "Stage 1/10. Analyse the prompt requirements only. Do not score and do not correct sentences.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        taskRequirementAnalysis: task === "Task 1"
+          ? { taskType: "task1", taskPurpose: "", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [{ requirement: "", required: true, coverageMustBeCheckedByAi: true }], missingRequirements: [], taskMatchSummary: "" }
+          : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: null, mainIdeasRelevant: null, missingRequirements: [], taskMatchSummary: "" },
+        taskRequirementAnalysisZh: { taskPurposeZh: "", requiredToneZh: "", letterTypeZh: "", taskMatchSummaryZh: "", bulletPointsZh: [], requiredPartsZh: [] },
+        taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+        wordCountWarning: { message: "", messageZh: "" }
+      }),
+      "For Task 1, list each bullet point or required function. For Task 2, list each question part and whether an opinion/position is required.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "score-boundary") {
+    return [
+      "Stage 3/10. Explain the half-band boundaries for the AI score already returned. Do not change criterion bands.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: tenStepCriterionShape(task),
+        scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+        scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+        halfBandBoundary: { summary: "", summaryZh: "", criterionBoundaries: [{ criterion: "", currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] }
+      }),
+      "For every criterion, explain why the current band is correct, why not 0.5 higher, and why not 0.5 lower. Use concrete essay evidence. Do not write 'typical of Band 5' if the current band is 5.5 or 4.0; match the exact band.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "evidence-map") {
+    return [
+      "Stage 4/10. Map essay evidence to the four IELTS criteria. Do not give new scores and do not correct sentences.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({ criteria: tenStepCriterionShape(task), strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
+      "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Each Chinese field must specifically explain the English item.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "task-diagnosis") {
+    return [
+      "Stage 5/10. Diagnose Task Response/Task Achievement and task-specific structure only. Do not do grammar, vocabulary, or sentence correction.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        taskAchievementAdvice: [], taskAchievementAdviceZh: [],
+        task1LetterCorrections: task === "Task 1" ? { openingComment: "", openingCommentZh: "", closingComment: "", closingCommentZh: "", toneComment: "", toneCommentZh: "", purposeComment: "", purposeCommentZh: "", bulletPointAdvice: [{ bulletPoint: "", covered: null, coverageUnknown: false, evidenceFromEssay: "", problem: "", comment: "", suggestedSentence: "", explanationZh: "" }] } : null,
+        task2EssayCorrections: task === "Task 2" ? { positionComment: "", positionCommentZh: "", introductionComment: "", introductionCommentZh: "", bodyParagraphComment: "", bodyParagraphCommentZh: "", exampleComment: "", exampleCommentZh: "", conclusionComment: "", conclusionCommentZh: "", developmentAdvice: [], developmentAdviceZh: [] } : null,
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Task 2: focus on answering all question parts, position, idea development, examples, conclusion, and relevance. Task 1: focus on bullet coverage, purpose, tone, recipient relationship, opening/closing, and detail sufficiency.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "coherence-diagnosis") {
+    return [
+      "Stage 6/10. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: { "Coherence and Cohesion": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        coherenceAdvice: [], coherenceAdviceZh: [],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Analyse paragraphing, topic sentences, progression, linking, referencing, repetition, paragraph unity, and logical order. Use concrete paragraph/phrase evidence.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "lexical-diagnosis") {
+    return [
+      "Stage 7/10. Diagnose Lexical Resource only. Include spelling, word choice, collocation, word formation, register, and repetition. Do not correct grammar unless it is word formation.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        spellingCorrections: [{ originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }],
+        lexicalAdvice: [], lexicalAdviceZh: [],
+        detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / spelling / repetition", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Return all clear score-affecting lexical issues up to the practical limit. If there are no spelling errors, return spellingCorrections as []. Do not invent misspellings.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "grammar-diagnosis") {
+    return [
+      "Stage 8/10. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: { "Grammatical Range and Accuracy": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        grammarErrors: [{ type: "", original: "", corrected: "", explanation: "", explanationZh: "" }],
+        grammarAdvice: [], grammarAdviceZh: [],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Focus on error patterns: tense, articles, plurals, subject-verb agreement, word order, clauses, sentence fragments, run-ons, punctuation, and complexity range. Keep items short to avoid JSON truncation.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "sentence-corrections") {
+    return [
+      "Stage 9/10. Produce direct sentence-level corrections only. Do not write the final study plan here.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        sentenceCorrections: [{ original: "", corrected: "", reason: "", reasonZh: "" }],
+        detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }]
+      }),
+      "Return 8-15 of the most score-affecting sentences. correctedSentence is the direct error fix. Keep betterExpression empty here unless it is very short; the next stage handles upgraded expressions. Do not return paragraphs.",
+      ...common
+    ].join("\n");
+  }
+
+  return [
+    "Stage 10/10. Produce upgraded single-sentence better expressions and the final study plan. Do not rescore.",
+    "Return JSON with this exact shape:",
+    JSON.stringify({
+      detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Better expression", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }],
+      correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", target: "", action: "", exampleUpgrade: "", actionZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+      taskAchievementAdvice: [], taskAchievementAdviceZh: [], coherenceAdvice: [], coherenceAdviceZh: [], lexicalAdvice: [], lexicalAdviceZh: [], grammarAdvice: [], grammarAdviceZh: [], band5FixPlan: [], band5FixPlanZh: [], band6UpgradePlan: [], band6UpgradePlanZh: [], band7UpgradePlan: [], band7UpgradePlanZh: []
+    }),
+    "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. betterExpression must be ONE sentence only, not a paragraph. It must preserve the original meaning and show a realistic 0.5-1 band upgrade, not a Band 9 rewrite for weak writing.",
+    "The final study plan must be concrete, based on this essay, and aimed at the next 0.5-1 band improvement.",
+    ...common
+  ].join("\n");
+}
+
+function tenStepStageMaxTokens(stage) {
+  return ({
+    "prompt-analysis": 3200,
+    "score-boundary": 4300,
+    "evidence-map": 5000,
+    "task-diagnosis": 5200,
+    "coherence-diagnosis": 4500,
+    "lexical-diagnosis": 5600,
+    "grammar-diagnosis": 5200,
+    "sentence-corrections": 6500,
+    "better-expression-plan": 7000
+  })[stage] || 4800;
+}
+
+function tenStepStageHasUsableContent(stage, output) {
+  if (!output || typeof output !== "object") return false;
+  if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
+  if (stage === "score-boundary") return hasUsefulText(output.scoreCalibration) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher));
+  if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
+  if (stage === "task-diagnosis") return ensureArray(output.taskAchievementAdvice).length || hasUsefulText(output.task1LetterCorrections) || hasUsefulText(output.task2EssayCorrections) || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "coherence-diagnosis") return ensureArray(output.coherenceAdvice).length || hasUsefulText(output.criteria?.["Coherence and Cohesion"]) || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "lexical-diagnosis") return ensureArray(output.lexicalAdvice).length || ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.criteria?.["Lexical Resource"]) || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length;
+  if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
+  return hasUsefulText(output);
+}
+
+async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  if (!String(body.essay || "").trim() && stage !== "prompt-analysis") {
+    const error = new Error(`AI ${stage} stage cannot run because the essay is empty.`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const maxTokens = tenStepStageMaxTokens(stage);
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildTenStepSystemPrompt(stage, locale),
+    userPrompt: buildTenStepStagePrompt({ ...body, mode: effectiveMode }, effectiveMode, stage, locale),
+    maxTokens,
+    temperature: stage === "score-boundary" || stage === "evidence-map" ? 0.05 : 0.08,
+    jsonMode: true,
+    deadline,
+    timeoutMs: safePassTimeout(deadline, Math.max(70000, Number(process.env.AI_TEN_STEP_STAGE_TIMEOUT_MS) || 105000), 70000)
+  });
+
+  let parsed = await parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { ...body, mode: effectiveMode, aiStage: stage },
+    locale,
+    maxTokens,
+    allowRepair: true,
+    deadline
+  });
+
+  if (parsed && typeof parsed === "object") {
+    parsed.aiStage = stage;
+    parsed.disclaimer = parsed.disclaimer || DISCLAIMER;
+    if (body.currentOverallBand || body.overallBand || body.currentResult?.overallBand) {
+      parsed.overallBand = parsed.overallBand || body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
+    }
+    if (!parsed.criteria && body.currentResult?.criteria && (stage !== "prompt-analysis")) {
+      parsed.criteria = body.currentResult.criteria;
+    }
+  }
+
+  if (!tenStepStageHasUsableContent(stage, parsed)) {
+    const error = new Error(`AI ${stage} stage returned no usable structured content.`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  return parsed;
+}
+
 async function handleRequest(req, res) {
   if (req.method === "OPTIONS") {
     Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
@@ -4028,6 +4328,18 @@ async function handleRequest(req, res) {
       });
       result.aiStage = "score";
       result = normalizeResultForMode(result, "full", veryShort, body, locale);
+    } else if (TEN_STEP_AI_STAGES.has(aiStage)) {
+      result = await callAiTenStepStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        stage: aiStage,
+        locale,
+        deadline
+      });
+      result.aiStage = aiStage;
+      result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage === "language-correction") {
       result = await callAiCorrectionStageOnly({
         apiKey,

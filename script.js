@@ -693,15 +693,17 @@ function mergeAiStageResult(base, incoming) {
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
-    "scoreCalibration", "scoreCalibrationZh", "lowBandDiagnostics", "lowBandDiagnosticsZh",
+    "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
-      const existing = Array.isArray(output[field]) ? output[field] : [];
-      const incomingLonger = data[field].length >= existing.length;
-      output[field] = incomingLonger ? data[field] : existing;
+      const limit = /detailedSentenceCorrections/i.test(field) ? 30
+        : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 24
+        : /(Advice|Plan|Problems|strengths)/i.test(field) ? 18
+        : 16;
+      output[field] = mergeUniqueArray(output[field], data[field], limit);
     }
   });
   objectFields.forEach((field) => {
@@ -770,6 +772,32 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
   if (aiStage === "score") {
     return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
+  }
+  if (aiStage === "prompt-analysis") {
+    return Boolean(hasAnyText(data.taskRequirementAnalysis) || hasAnyText(data.taskMatchCheck));
+  }
+  if (aiStage === "score-boundary") {
+    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
+    return Boolean(hasAnyText(data.scoreCalibration) || Object.values(criteria).some((item) => hasAnyText(item?.whyThisBand) || hasAnyText(item?.whyNotHigher) || hasAnyText(item?.whyNotLower)));
+  }
+  if (aiStage === "task-diagnosis") {
+    return Boolean(hasUsefulItemArray(data.taskAchievementAdvice) || hasAnyText(data.task1LetterCorrections) || hasAnyText(data.task2EssayCorrections) || hasAnyText(data.errorAnalysis?.summary));
+  }
+  if (aiStage === "coherence-diagnosis") {
+    return Boolean(hasUsefulItemArray(data.coherenceAdvice) || hasAnyText(data.criteria?.["Coherence and Cohesion"]) || hasAnyText(data.errorAnalysis?.summary));
+  }
+  if (aiStage === "lexical-diagnosis") {
+    return Boolean(hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.criteria?.["Lexical Resource"]) || hasAnyText(data.errorAnalysis?.summary));
+  }
+  if (aiStage === "grammar-diagnosis") {
+    return Boolean(hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.grammarAdvice) || hasAnyText(data.criteria?.["Grammatical Range and Accuracy"]) || hasAnyText(data.errorAnalysis?.summary));
+  }
+  if (aiStage === "sentence-corrections") {
+    return Boolean(hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections));
+  }
+  if (aiStage === "better-expression-plan") {
+    const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
+    return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) || hasAnyText(data.correctionPriority));
   }
   if (aiStage === "language-correction" || aiStage === "correction-language" || aiStage === "correction") {
     return hasDetailedFeedbackContent(data);
@@ -912,8 +940,8 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Full grading now runs 6 AI stages. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 7 : 6;
+  // Full grading now runs 10 small AI stages. Revision mode adds one optional AI stage for model/revised essays.
+  const totalSteps = payload.mode === "revision" ? 11 : 10;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -961,15 +989,19 @@ async function startGrading() {
   }
 
   try {
-    await runMergeStage("score", `第 1 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
-    await runMergeStage("evidence-map", `第 2 步/${totalSteps}：AI 正在生成评分证据、评分边界和问题地图`, "评分证据与问题地图");
-    await runMergeStage("correction-grammar", `第 3 步/${totalSteps}：AI 正在生成语法诊断、句法问题和语法建议`, "语法诊断");
-    await runMergeStage("correction-sentence", `第 4 步/${totalSteps}：AI 正在生成逐句批改和单句更好表达`, "逐句批改与更好表达");
-    await runMergeStage("correction-vocabulary", `第 5 步/${totalSteps}：AI 正在检查词汇、拼写、搭配和重复问题`, "词汇拼写和搭配检查");
-    await runMergeStage("correction-advice", `第 6 步/${totalSteps}：AI 正在生成最终提分计划和练习任务`, "最终提分计划");
+    await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
+    await runMergeStage("score", `第 2 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
+    await runMergeStage("score-boundary", `第 3 步/${totalSteps}：AI 正在解释半分边界`, "半分边界解释");
+    await runMergeStage("evidence-map", `第 4 步/${totalSteps}：AI 正在提取评分证据`, "评分证据");
+    await runMergeStage("task-diagnosis", `第 5 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
+    await runMergeStage("lexical-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断词汇、拼写和搭配`, "词汇诊断");
+    await runMergeStage("grammar-diagnosis", `第 8 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("sentence-corrections", `第 9 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
+    await runMergeStage("better-expression-plan", `第 10 步/${totalSteps}：AI 正在生成单句更好表达和最终提分计划`, "更好表达与提分计划");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 7 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 11 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
