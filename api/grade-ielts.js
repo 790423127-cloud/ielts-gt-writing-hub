@@ -334,1704 +334,6 @@ function buildScoreCalculation(result, task, finalBand) {
   };
 }
 
-function mechanicalSameBandSignals(result, task) {
-  const text = JSON.stringify(result?.criteria || {}).toLowerCase();
-  const taskSignals = task === "Task 1"
-    ? /bullet|purpose|tone|recipient|letter|opening|closing|task achievement|underdeveloped|word count/.test(text)
-    : /position|argument|idea|example|conclusion|task response|both views|advantages|disadvantages|problem|solution/.test(text);
-  const ccSignals = /paragraph|progression|cohesive|linking|organisation|organization|sequence/.test(text);
-  const lrSignals = /vocabulary|word choice|collocation|spelling|lexical|repetition|word form/.test(text);
-  const graSignals = /grammar|verb|article|sentence|tense|punctuation|subject-verb|plural/.test(text);
-  return [taskSignals, ccSignals, lrSignals, graSignals].filter(Boolean).length;
-}
-
-function shouldReauditMechanicalSameBands(result, task) {
-  const bands = getCriterionBandsForTask(result, task);
-  if (bands.length !== 4) return false;
-  const allSame = new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
-  if (!allSame) return false;
-  return mechanicalSameBandSignals(result, task) >= 3;
-}
-
-
-function countRegexMatches(text, regex) {
-  const source = String(text || "");
-  if (!source) return 0;
-  const matches = source.match(regex);
-  return matches ? matches.length : 0;
-}
-
-function sentenceCountServer(text) {
-  const sentences = String(text || "")
-    .split(/[.!?]+|\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return sentences.length;
-}
-
-function paragraphCountServer(text) {
-  return String(text || "")
-    .split(/\n\s*\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean).length;
-}
-
-function averageCriterionBand(result, task) {
-  const bands = getCriterionBandsForTask(result, task);
-  if (!bands.length) return clampAiBand(result?.overallBand, 1);
-  return bands.reduce((sum, band) => sum + band, 0) / bands.length;
-}
-
-function appendCalibrationEvidence(result, message) {
-  if (!message) return;
-  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
-    ? result.scoreCalibration
-    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
-  const evidence = ensureArray(result.scoreCalibration.evidence).filter(Boolean);
-  if (!evidence.includes(message)) evidence.push(message);
-  result.scoreCalibration.evidence = evidence.slice(0, 7);
-}
-
-function appendCriterionLimitEvidence(criterion, message) {
-  if (!criterion || typeof criterion !== "object" || !message) return;
-  const limiting = ensureArray(criterion.limitingEvidence).filter(Boolean);
-  if (!limiting.includes(message)) limiting.push(message);
-  criterion.limitingEvidence = limiting.slice(0, 5);
-  if (!criterion.whyNotHigher) criterion.whyNotHigher = message;
-}
-
-function capCriterionBand(result, criterionName, capBand, reason, source = "local_criterion_differentiation") {
-  const criterion = result?.criteria?.[criterionName];
-  if (!criterion || !Number.isFinite(Number(capBand))) return false;
-  const current = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-  const cap = clampAiBand(capBand, current);
-  if (current <= cap) return false;
-  criterion.band = cap;
-  criterion.localDifferentiationCap = { source, cap, reason };
-  appendCriterionLimitEvidence(criterion, reason);
-  appendCalibrationEvidence(result, `${criterionName} capped at Band ${formatBand(cap)}: ${reason}`);
-  return true;
-}
-
-function task1BulletCoverageFromResult(result) {
-  const bullets = result?.taskRequirementAnalysis?.bulletPoints;
-  if (!Array.isArray(bullets) || !bullets.length) return { known: false, covered: 0, total: 0 };
-  let known = 0;
-  let covered = 0;
-  bullets.forEach((item) => {
-    if (!item || typeof item !== "object") return;
-    const value = item.covered;
-    if (value === null || value === undefined || String(value).toLowerCase() === "unknown") return;
-    known += 1;
-    if (value === true || /^(yes|true|covered|partly covered|partially covered)$/i.test(String(value))) covered += 1;
-  });
-  return { known: known > 0, covered, total: known || bullets.length };
-}
-
-function extractEssaySignals(body = {}, result = {}) {
-  const essay = String(body.essay || result.essay || "");
-  const lower = essay.toLowerCase();
-  const words = Number(body.wordCount || body.actualWordCount || result.actualWordCount) || countWordsServer(essay);
-  const sentences = sentenceCountServer(essay);
-  const paragraphs = paragraphCountServer(essay);
-  const commonBasicWords = countRegexMatches(lower, /\b(good|nice|job|thing|things|people|work|help|do|make|go|get|know|learn|want)\b/g);
-  const repeatedBasicWords = commonBasicWords >= Math.max(8, Math.ceil(words * 0.08));
-  const weakCollocationHits = countRegexMatches(lower, /\b(want go|want leave|want try|learn talk|learn many thing|many thing\b|some customer\b|do some job|career need|need grow|people is|company is nice|company is good|other department\b|make better use|move department)\b/g);
-  const seriousGrammarHits = countRegexMatches(lower, /\b(want\s+(?:go|leave|try|change|move)|learn\s+(?:talk|do|work)|need\s+(?:grow|go|improve)|people\s+is|company\s+are|many\s+thing\b|some\s+customer\b|two\s+year\b|I\s+write\s+this\s+letter)\b/g);
-  const grammarErrorObjects = ensureArray(result.grammarErrors).length + ensureArray(result.detailedSentenceCorrections).filter((item) => {
-    const text = JSON.stringify(item || {}).toLowerCase();
-    return /grammar|verb|article|plural|subject|tense|sentence|word form|agreement/.test(text);
-  }).length;
-  const grammarPressure = seriousGrammarHits + grammarErrorObjects;
-  const weakLinkingHits = countRegexMatches(lower, /\b(firstly|secondly|finally|therefore|however|moreover|furthermore|in addition|as a result|because|so|also)\b/g);
-  const hasOnlyBasicLinking = weakLinkingHits <= 4 && words >= 70;
-  const hasFormalSalutation = /^\s*dear\s+(mr\.?|ms\.?|mrs\.?|dr\.?|manager|sir|madam|[a-z]+\s*[a-z]*)/i.test(essay);
-  const hasBareDear = /^\s*dear\s*\n/i.test(essay) || /^\s*dear\s*$/im.test(essay);
-  const hasLetterClosing = /\b(yours sincerely|yours faithfully|kind regards|best regards|regards|thank you|thank you for your consideration)\b/i.test(essay);
-  const task2PositionSignals = /\b(i believe|i agree|i disagree|in my opinion|my view|this essay will|i think|overall,? i|to conclude|in conclusion)\b/i.test(essay);
-  const hasExamples = /\b(for example|for instance|such as|for example,|e\.g\.|for example\b)\b/i.test(essay);
-  return {
-    essay,
-    lower,
-    words,
-    sentences,
-    paragraphs,
-    repeatedBasicWords,
-    commonBasicWords,
-    weakCollocationHits,
-    seriousGrammarHits,
-    grammarErrorObjects,
-    grammarPressure,
-    hasOnlyBasicLinking,
-    weakLinkingHits,
-    hasFormalSalutation,
-    hasBareDear,
-    hasLetterClosing,
-    task2PositionSignals,
-    hasExamples
-  };
-}
-
-function shouldApplyHardDifferentiation(result, body, task, signals) {
-  const bands = getCriterionBandsForTask(result, task);
-  const allSame = bands.length === 4 && new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
-  const avg = averageCriterionBand(result, task);
-  const underMinimum = task === "Task 1" ? signals.words < 150 : signals.words < 250;
-  const weakLanguage = signals.grammarPressure >= 3 || signals.weakCollocationHits >= 2 || signals.repeatedBasicWords;
-  return Boolean(
-    shouldReauditMechanicalSameBands(result, task) ||
-    (allSame && (underMinimum || weakLanguage || avg <= 5)) ||
-    (avg <= 5.5 && underMinimum && weakLanguage)
-  );
-}
-
-function applyTask1CriterionDifferentiationCaps(result, body, signals) {
-  const first = "Task Achievement";
-  const bulletCoverage = task1BulletCoverageFromResult(result);
-  let changed = false;
-
-  if (signals.words < 50) {
-    changed = capCriterionBand(result, first, 3, "Task 1 is far below 50 words, so task fulfilment and development are severely limited.") || changed;
-  } else if (signals.words < 80) {
-    changed = capCriterionBand(result, first, 4, "Task 1 is 50-79 words; the response cannot develop the letter functions enough for a higher Task Achievement score.") || changed;
-  } else if (signals.words < 120) {
-    changed = capCriterionBand(result, first, 4.5, "Task 1 is under 120 words and the bullet-point development is very limited.") || changed;
-  } else if (signals.words < 150) {
-    changed = capCriterionBand(result, first, 5, "Task 1 is below the recommended 150 words, so development may be limited.") || changed;
-  }
-
-  if (bulletCoverage.known && bulletCoverage.total >= 2) {
-    if (bulletCoverage.covered <= 1) {
-      changed = capCriterionBand(result, first, 4, "Only one Task 1 bullet point is clearly addressed.") || changed;
-    } else if (bulletCoverage.covered === 2 && bulletCoverage.total >= 3) {
-      changed = capCriterionBand(result, first, 5, "One major Task 1 bullet point appears missing or insufficiently covered.") || changed;
-    }
-  }
-
-  if ((signals.hasBareDear || !signals.hasFormalSalutation || !signals.hasLetterClosing) && signals.words < 130) {
-    changed = capCriterionBand(result, first, 4.5, "Letter format and register are incomplete: the salutation/closing or manager-facing tone is not fully controlled.") || changed;
-  }
-
-  if (signals.paragraphs >= 2 && signals.hasOnlyBasicLinking) {
-    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "Paragraphing is present, but progression is simple and cohesive devices are very limited.") || changed;
-  } else if (signals.paragraphs <= 1 && signals.words >= 80) {
-    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "The letter lacks clear paragraphing for separate letter functions.") || changed;
-  }
-
-  if (signals.repeatedBasicWords || signals.weakCollocationHits >= 2) {
-    changed = capCriterionBand(result, "Lexical Resource", 4, "Vocabulary is very basic and several collocations or word choices are inaccurate.") || changed;
-  } else if (signals.commonBasicWords >= 8 && signals.words < 130) {
-    changed = capCriterionBand(result, "Lexical Resource", 4.5, "Vocabulary range is narrow and relies heavily on basic words.") || changed;
-  }
-
-  if (signals.grammarPressure >= 5) {
-    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 3.5, "Frequent basic grammar errors in verb patterns, plurals, and agreement reduce sentence control.") || changed;
-  } else if (signals.grammarPressure >= 3) {
-    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4, "Several basic grammar errors are repeated across short sentences.") || changed;
-  }
-
-  return changed;
-}
-
-function applyTask2CriterionDifferentiationCaps(result, body, signals) {
-  const first = "Task Response";
-  let changed = false;
-  const analysis = result?.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
-  const positionPresent = analysis.positionPresent === true || signals.task2PositionSignals;
-  const requiredParts = ensureArray(analysis.requiredParts);
-  const missingRequirements = ensureArray(analysis.missingRequirements);
-
-  if (signals.words < 80) {
-    changed = capCriterionBand(result, first, 3, "Task 2 is under 80 words, so there is too little argument development for a higher Task Response score.") || changed;
-  } else if (signals.words < 150) {
-    changed = capCriterionBand(result, first, 4, "Task 2 is 80-149 words; the response is too short for adequate argument development.") || changed;
-  } else if (signals.words < 200) {
-    changed = capCriterionBand(result, first, 5, "Task 2 is 150-199 words, so idea development is normally too limited for Band 6 Task Response.") || changed;
-  }
-
-  if (!positionPresent && /agree|disagree|opinion|extent|advantages|disadvantages|discuss|views|problem|solution/i.test(String(body.questionPrompt || ""))) {
-    changed = capCriterionBand(result, first, 4, "A clear Task 2 position is not evident for a question type that requires one.") || changed;
-  }
-
-  const reliableMissingTask2Part = task2HasReliableMissingRequiredPart(result, body, signals, detectTask2QuestionType(body.questionPrompt));
-  if (reliableMissingTask2Part) {
-    changed = capCriterionBand(result, first, 5, "One or more required parts of the Task 2 question are genuinely missing or only partly answered.") || changed;
-  }
-
-  if (!signals.hasExamples && signals.words < 230) {
-    changed = capCriterionBand(result, first, 5, "Ideas are not supported with a clear example or developed explanation.") || changed;
-  }
-
-  if (signals.paragraphs <= 1 && signals.words >= 120) {
-    changed = capCriterionBand(result, "Coherence and Cohesion", 4, "The essay has little clear paragraphing, so argument organisation is weak.") || changed;
-  } else if (signals.paragraphs < 4 && signals.words >= 180) {
-    changed = capCriterionBand(result, "Coherence and Cohesion", 5, "Essay organisation is basic and does not show a fully controlled introduction, body paragraphs, and conclusion.") || changed;
-  }
-
-  if (signals.repeatedBasicWords || signals.weakCollocationHits >= 2) {
-    changed = capCriterionBand(result, "Lexical Resource", 4.5, "Vocabulary is narrow or repetitive and does not provide enough topic-specific precision for a higher essay score.") || changed;
-  }
-
-  if (signals.grammarPressure >= 5) {
-    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4, "Frequent grammar errors reduce control of argument sentences.") || changed;
-  } else if (signals.grammarPressure >= 3) {
-    changed = capCriterionBand(result, "Grammatical Range and Accuracy", 4.5, "Repeated grammar errors prevent a higher grammar band.") || changed;
-  }
-
-  return changed;
-}
-
-
-
-
-// --- Fine-grained IELTS half-band and evidence calibration ---
-function setCriterionBandWithEvidence(result, criterionName, targetBand, reason, source = "local_half_band_calibration") {
-  const criterion = result?.criteria?.[criterionName];
-  if (!criterion || !Number.isFinite(Number(targetBand))) return false;
-  const current = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-  const target = clampAiBand(targetBand, current);
-  if (current === target) return false;
-  criterion.band = target;
-  criterion.localBandCalibration = { source, from: current, to: target, reason };
-  if (target < current) appendCriterionLimitEvidence(criterion, reason);
-  if (target > current) {
-    const positive = ensureArray(criterion.positiveEvidence).filter(Boolean);
-    if (!positive.includes(reason)) positive.push(reason);
-    criterion.positiveEvidence = positive.slice(0, 5);
-    if (!criterion.whyNotLower) criterion.whyNotLower = reason;
-  }
-  appendCalibrationEvidence(result, `${criterionName} adjusted from Band ${formatBand(current)} to Band ${formatBand(target)}: ${reason}`);
-  return true;
-}
-
-function bandIsWholeNumber(band) {
-  const value = Number(band);
-  return Number.isFinite(value) && Math.abs(value - Math.round(value)) < 0.001;
-}
-
-function criterionEvidenceText(criterion = {}) {
-  return JSON.stringify({
-    feedback: criterion.feedback,
-    howToImprove: criterion.howToImprove,
-    evidence: criterion.evidence,
-    evidenceZh: criterion.evidenceZh,
-    positiveEvidence: criterion.positiveEvidence,
-    positiveEvidenceZh: criterion.positiveEvidenceZh,
-    limitingEvidence: criterion.limitingEvidence,
-    limitingEvidenceZh: criterion.limitingEvidenceZh,
-    whyThisBand: criterion.whyThisBand,
-    whyThisBandZh: criterion.whyThisBandZh,
-    whyNotHigher: criterion.whyNotHigher,
-    whyNotHigherZh: criterion.whyNotHigherZh,
-    whyNotLower: criterion.whyNotLower,
-    whyNotLowerZh: criterion.whyNotLowerZh
-  }).toLowerCase();
-}
-
-function splitEssaySentencesForEvidence(text) {
-  return String(text || "")
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 20)
-    .slice(0, 80);
-}
-
-function pickEvidenceQuotes(text, patterns, limit = 2) {
-  const sentences = splitEssaySentencesForEvidence(text);
-  const regexes = ensureArray(patterns).map((pattern) => pattern instanceof RegExp ? pattern : new RegExp(String(pattern), "i"));
-  const picked = [];
-  sentences.forEach((sentence) => {
-    if (picked.length >= limit) return;
-    if (regexes.some((regex) => regex.test(sentence))) picked.push(sentence.length > 220 ? `${sentence.slice(0, 217)}...` : sentence);
-  });
-  return picked;
-}
-
-function extractTask2LexicalCalibrationSignals(body = {}, result = {}) {
-  const essay = String(body.essay || result.essay || "");
-  const prompt = String(body.questionPrompt || "");
-  const lower = essay.toLowerCase();
-  const promptTokens = new Set((prompt.toLowerCase().match(/[a-z]{5,}/g) || []).filter((word) => !/^(today|countries|people|think|essay|question)$/.test(word)));
-  const essayTokens = (lower.match(/[a-z]{5,}/g) || []);
-  const promptTopicHits = [...promptTokens].filter((word) => lower.includes(word)).length;
-  const topicListHits = [
-    "crime", "novel", "drama", "detective", "police", "criminal", "violence", "mystery", "society", "suspense", "entertainment", "viewer", "audience", "justice", "morality",
-    "treatment", "cosmetic", "product", "appearance", "younger", "confidence", "health", "risk", "benefit", "disadvantage", "self-esteem", "beauty", "procedure",
-    "education", "technology", "environment", "government", "children", "culture", "employment", "transport", "global", "community"
-  ].filter((word) => lower.includes(word)).length;
-  const longerTopicWords = new Set(essayTokens.filter((word) => word.length >= 7 && !/^(because|firstly|secondly|however|conclusion|important|different|possible|nowadays)$/.test(word)));
-  const basicWordHits = countRegexMatches(lower, /\b(good|bad|nice|thing|things|people|do|make|get|very|many|some|big|small|interesting)\b/g);
-  const repeatedBasic = basicWordHits >= Math.max(9, Math.ceil((Number(body.wordCount) || countWordsServer(essay)) * 0.055));
-  const spellingHits = countRegexMatches(lower, /\b(nowday|nowday's|imporve|unkonw|confortable|exeryday|improtant|it'spossible|suchconduct|everyday\b|it\s*'spossible)\b/g);
-  const weakCollocationHits = countRegexMatches(lower, /\b(good thing|bad thing|make people think|do bad things|using some of beauty products|pay for treatments was|need to facing|improve the salary to them|with if|look younger at working days|important than looking younger)\b/g);
-  return {
-    topicVocabularyHits: promptTopicHits + topicListHits + Math.min(longerTopicWords.size, 6),
-    promptTopicHits,
-    topicListHits,
-    longerTopicWordCount: longerTopicWords.size,
-    basicWordHits,
-    repeatedBasic,
-    spellingHits,
-    weakCollocationHits
-  };
-}
-
-function applyTask2LexicalResourceCalibration(result, body = {}, signals = extractEssaySignals(body, result)) {
-  if (!result || body?.task === "Task 1" || !result.criteria?.["Lexical Resource"]) return false;
-  const lr = result.criteria["Lexical Resource"];
-  const current = normalizeCriterionBandValue(lr.band, result.overallBand || 1);
-  const lexical = extractTask2LexicalCalibrationSignals(body, result);
-  lr.lexicalCalibrationSignals = lexical;
-  const words = signals.words || countWordsServer(body.essay);
-  const hasEnoughTopicVocabulary = lexical.topicVocabularyHits >= 7 || (lexical.promptTopicHits >= 2 && lexical.topicListHits >= 3);
-  const hasSomeTopicVocabulary = lexical.topicVocabularyHits >= 4 || lexical.promptTopicHits >= 2 || lexical.topicListHits >= 3;
-  const severeWordProblems = lexical.spellingHits >= 5 || lexical.weakCollocationHits >= 4;
-  const moderateWordProblems = lexical.repeatedBasic || lexical.spellingHits >= 2 || lexical.weakCollocationHits >= 2;
-  let changed = false;
-
-  if (words >= 200 && hasSomeTopicVocabulary && !severeWordProblems && current < 5.5) {
-    changed = setCriterionBandWithEvidence(
-      result,
-      "Lexical Resource",
-      5.5,
-      "Vocabulary is simple and sometimes repetitive, but the essay uses enough topic-related vocabulary to communicate the argument clearly.",
-      "task2_lexical_mid_band_protection"
-    ) || changed;
-  }
-
-  if (words >= 200 && hasEnoughTopicVocabulary && moderateWordProblems && !severeWordProblems && current > 5.5 && current <= 6.5) {
-    changed = setCriterionBandWithEvidence(
-      result,
-      "Lexical Resource",
-      5.5,
-      "Topic vocabulary is present, but repetition and some inaccurate word choices keep Lexical Resource in the mid-band range.",
-      "task2_lexical_mid_band_cap"
-    ) || changed;
-  }
-
-  if (severeWordProblems && hasSomeTopicVocabulary && current > 5) {
-    changed = setCriterionBandWithEvidence(
-      result,
-      "Lexical Resource",
-      5,
-      "The essay has relevant topic vocabulary, but spelling, word-choice, or collocation errors are frequent enough to limit lexical precision.",
-      "task2_lexical_error_cap"
-    ) || changed;
-  }
-
-  if (severeWordProblems && !hasSomeTopicVocabulary && current > 4.5) {
-    changed = setCriterionBandWithEvidence(
-      result,
-      "Lexical Resource",
-      4.5,
-      "Vocabulary is very limited and frequent word-choice or spelling problems reduce precision.",
-      "task2_lexical_error_cap"
-    ) || changed;
-  }
-
-  if (changed) {
-    lr.lexicalCalibrationSignals = lexical;
-    lr.whyThisBand = lr.whyThisBand || "The lexical band reflects both topic vocabulary coverage and limitations in range, repetition, collocation, and spelling.";
-    lr.whyNotHigher = lr.whyNotHigher || "A higher lexical band needs more precise and less repetitive wording with fewer spelling or collocation problems.";
-    lr.whyNotLower = lr.whyNotLower || "The essay still contains enough topic-related vocabulary to communicate the main ideas.";
-  }
-  return changed;
-}
-
-function task1LetterLexicalHits(body = {}) {
-  const essay = String(body.essay || "").toLowerCase();
-  return [
-    "dear", "manager", "request", "enquire", "grateful", "consideration", "sincerely", "faithfully", "regards", "department", "transfer", "colleague", "customer", "company", "arrange", "apologise", "apologize", "complaint", "refund", "invite", "appointment", "schedule", "available"
-  ].filter((word) => essay.includes(word)).length;
-}
-
-function applyTask1HalfBandCalibration(result, body = {}, signals = extractEssaySignals(body, result)) {
-  if (!result || body?.task !== "Task 1" || !result.criteria) return false;
-  let changed = false;
-  const coverage = task1BulletCoverageFromResult(result);
-  const allBulletsCovered = coverage.known && coverage.total >= 3 && coverage.covered >= coverage.total;
-  const mostBulletsCovered = coverage.known && coverage.total >= 3 && coverage.covered >= 2;
-  const letterLexicalHits = task1LetterLexicalHits(body);
-
-  const ta = result.criteria["Task Achievement"];
-  if (ta) {
-    const band = normalizeCriterionBandValue(ta.band, result.overallBand || 1);
-    if (band === 5 && signals.words >= 130 && (allBulletsCovered || mostBulletsCovered) && !signals.hasBareDear) {
-      changed = setCriterionBandWithEvidence(result, "Task Achievement", 5.5, "The letter covers the main task requirements, but development or register is still limited.", "task1_half_band_calibration") || changed;
-    } else if (band === 6 && signals.words >= 150 && allBulletsCovered && signals.hasLetterClosing) {
-      changed = setCriterionBandWithEvidence(result, "Task Achievement", 6.5, "The letter fulfils the task clearly with all bullet points covered, though some details could still be more specific.", "task1_half_band_calibration") || changed;
-    } else if (band === 7 && allBulletsCovered && signals.hasFormalSalutation && signals.hasLetterClosing) {
-      changed = setCriterionBandWithEvidence(result, "Task Achievement", 7.5, "The letter is complete and appropriate, with only minor room for more precise or realistic detail.", "task1_half_band_calibration") || changed;
-    }
-  }
-
-  const cc = result.criteria["Coherence and Cohesion"];
-  if (cc) {
-    const band = normalizeCriterionBandValue(cc.band, result.overallBand || 1);
-    if (band === 5 && signals.paragraphs >= 3 && signals.weakLinkingHits >= 2) {
-      changed = setCriterionBandWithEvidence(result, "Coherence and Cohesion", 5.5, "The letter has a visible paragraph structure, but transitions and referencing are still basic.", "task1_half_band_calibration") || changed;
-    } else if (band === 6 && signals.paragraphs >= 3 && !signals.hasOnlyBasicLinking) {
-      changed = setCriterionBandWithEvidence(result, "Coherence and Cohesion", 6.5, "Paragraphing and progression are clear, though the flow could still be more natural.", "task1_half_band_calibration") || changed;
-    }
-  }
-
-  const lr = result.criteria["Lexical Resource"];
-  if (lr) {
-    const band = normalizeCriterionBandValue(lr.band, result.overallBand || 1);
-    if (band === 5 && letterLexicalHits >= 4 && signals.weakCollocationHits < 3) {
-      changed = setCriterionBandWithEvidence(result, "Lexical Resource", 5.5, "The letter uses some relevant letter-function and topic vocabulary, although range and precision remain limited.", "task1_half_band_calibration") || changed;
-    } else if (band === 6 && letterLexicalHits >= 6 && signals.weakCollocationHits <= 1) {
-      changed = setCriterionBandWithEvidence(result, "Lexical Resource", 6.5, "Vocabulary is generally appropriate for the letter context, with only limited issues in precision or naturalness.", "task1_half_band_calibration") || changed;
-    }
-  }
-
-  const gra = result.criteria["Grammatical Range and Accuracy"];
-  if (gra) {
-    const band = normalizeCriterionBandValue(gra.band, result.overallBand || 1);
-    if (band === 5 && signals.grammarPressure <= 3 && signals.sentences >= 5) {
-      changed = setCriterionBandWithEvidence(result, "Grammatical Range and Accuracy", 5.5, "Grammar communicates the message with some sentence control, but repeated errors still prevent Band 6.", "task1_half_band_calibration") || changed;
-    } else if (band === 6 && signals.grammarPressure <= 1 && signals.sentences >= 5) {
-      changed = setCriterionBandWithEvidence(result, "Grammatical Range and Accuracy", 6.5, "Sentence control is mostly accurate with some variety, though not yet consistently Band 7.", "task1_half_band_calibration") || changed;
-    }
-  }
-
-  return changed;
-}
-
-function halfBandEvidenceProfile(criterion = {}) {
-  const text = criterionEvidenceText(criterion);
-  const positive = /\b(clear|addresses|answered|relevant|adequate|some development|generally clear|basic structure|understandable|some topic vocabulary|some complex sentences|mostly accurate|well[- ]organised|well organized|appropriate|maintained|covered)\b/i.test(text);
-  const limiting = /\b(limited|repetitive|underdeveloped|generic|basic|some errors|noticeable errors|not fully|partly|lacks specificity|not varied|could be more|minor|occasional)\b/i.test(text);
-  const severe = /\b(frequent errors|very limited|unclear|hard to follow|missing|major problems|meaning is reduced|poorly organised|poorly organized|severely|mostly incorrect)\b/i.test(text);
-  const high = /\b(strong|wide range|flexible|natural|well[- ]developed|effective|precise|accurate|sophisticated|smooth progression)\b/i.test(text);
-  return { positive, limiting, severe, high, text };
-}
-
-function applyGlobalHalfBandCalibration(result, body = {}) {
-  if (!result || !result.criteria || typeof result.criteria !== "object") return false;
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  let changed = false;
-  for (const name of getWritingCriterionNames(task)) {
-    const criterion = result.criteria[name];
-    if (!criterion || typeof criterion !== "object") continue;
-    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-    if (!bandIsWholeNumber(band) || band < 4 || band >= 8.5) continue;
-    if (task === "Task 2" && name === "Lexical Resource") {
-      const lexical = criterion.lexicalCalibrationSignals || extractTask2LexicalCalibrationSignals(body, result);
-      if ((lexical.spellingHits >= 5 || lexical.weakCollocationHits >= 4) && band <= 5) continue;
-    }
-    const profile = halfBandEvidenceProfile(criterion);
-    if (profile.severe) continue;
-    if (band === 5 && profile.positive && profile.limiting) {
-      changed = setCriterionBandWithEvidence(result, name, 5.5, "The evidence sits between Band 5 and Band 6: the criterion is functional but still clearly limited.", "global_half_band_boundary") || changed;
-    } else if (band === 6 && profile.high && profile.limiting) {
-      changed = setCriterionBandWithEvidence(result, name, 6.5, "The evidence sits between Band 6 and Band 7: performance is generally clear, but not yet consistently strong enough for the next full band.", "global_half_band_boundary") || changed;
-    } else if (band === 7 && profile.high && profile.limiting) {
-      changed = setCriterionBandWithEvidence(result, name, 7.5, "The evidence sits between Band 7 and Band 8: performance is strong, with only minor limits in precision, naturalness, or control.", "global_half_band_boundary") || changed;
-    }
-  }
-  return changed;
-}
-
-function addLocalGrammarError(errors, essay, matcher, corrected, type, explanation, explanationZh) {
-  if (!essay) return;
-  let original = "";
-  if (typeof matcher === "string") {
-    const index = essay.toLowerCase().indexOf(matcher.toLowerCase());
-    if (index >= 0) original = essay.slice(index, index + matcher.length);
-  } else if (matcher instanceof RegExp) {
-    const match = essay.match(matcher);
-    if (match) original = match[0];
-  }
-  if (!original || errors.some((item) => item.original === original)) return;
-  errors.push({ original, corrected, type, explanation, explanationZh });
-}
-
-function buildLocalGrammarErrorFallbacks(body = {}, result = {}) {
-  const essay = String(body.essay || result.essay || "");
-  const errors = [];
-  addLocalGrammarError(errors, essay, "On this essay I will discuss about", "In this essay, I will discuss", "preposition / sentence opening", "Use 'In this essay' and do not use 'discuss about'.", "应使用 In this essay，并且 discuss 后面不加 about。");
-  addLocalGrammarError(errors, essay, "it'spossible", "it is possible", "spacing / contraction", "Separate the words and use a clear form in formal writing.", "需要分开单词，正式写作中建议写 it is possible。");
-  addLocalGrammarError(errors, essay, "nowday's", "nowadays", "word form", "Use the adverb 'nowadays', not the possessive form.", "这里应使用副词 nowadays，不是所有格。");
-  addLocalGrammarError(errors, essay, /people using some of beauty products/i, "people who use beauty products", "relative clause / noun phrase", "Use a relative clause and remove the unnecessary 'of'.", "应改成定语从句，并去掉多余的 of。");
-  addLocalGrammarError(errors, essay, /need to facing customer[s]?/i, "need to face customers", "verb form", "'Need to' must be followed by the base verb.", "need to 后面要接动词原形。");
-  addLocalGrammarError(errors, essay, /treatments was very expensive/i, "treatments are very expensive", "subject-verb agreement", "Plural subject 'treatments' needs plural verb 'are'.", "复数主语 treatments 要搭配 are。");
-  addLocalGrammarError(errors, essay, /with if they do not have/i, "if they do not have", "conjunction", "Do not use 'with' before an if-clause here.", "这里 if 从句前不需要 with。");
-  addLocalGrammarError(errors, essay, /the health is important than looking younger/i, "health is more important than looking younger", "comparative structure", "Use 'more important than' for comparison and avoid unnecessary 'the'.", "比较结构应使用 more important than，并去掉多余的 the。");
-  addLocalGrammarError(errors, essay, /a bad things/i, "a bad thing / bad things", "article / plural", "Do not combine singular article 'a' with plural noun 'things'.", "a 后面不能接复数名词 things。");
-  addLocalGrammarError(errors, essay, /suchconduct/i, "such conduct", "spacing", "Separate the determiner and noun.", "such 和 conduct 需要分开。");
-  addLocalGrammarError(errors, essay, /\bmany thing\b/i, "many things", "plural noun", "Use a plural noun after 'many'.", "many 后面应使用复数名词。");
-  addLocalGrammarError(errors, essay, /\bpeople is\b/i, "people are", "subject-verb agreement", "'People' is plural and takes 'are'.", "people 是复数，谓语用 are。");
-  addLocalGrammarError(errors, essay, /\bwant go\b/i, "want to go", "verb pattern", "Use 'want to + verb'.", "want 后面需要 to 加动词原形。");
-  return errors.slice(0, 8);
-}
-
-function splitEssaySentencesForLocalCorrections(text) {
-  return String(text || "")
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 8)
-    .slice(0, 120);
-}
-
-function findSentenceForLocalCorrection(essay, matcher) {
-  const sentences = splitEssaySentencesForLocalCorrections(essay);
-  const lowerEssay = String(essay || "").toLowerCase();
-  let hit = "";
-  if (typeof matcher === "string") {
-    const needle = matcher.toLowerCase();
-    hit = sentences.find((sentence) => sentence.toLowerCase().includes(needle)) || "";
-    if (!hit && lowerEssay.includes(needle)) hit = matcher;
-  } else if (matcher instanceof RegExp) {
-    hit = sentences.find((sentence) => matcher.test(sentence)) || "";
-    matcher.lastIndex = 0;
-    if (!hit) {
-      const match = String(essay || "").match(matcher);
-      if (match) hit = match[0];
-    }
-  }
-  return String(hit || "").trim();
-}
-
-function addLocalDetailedSentenceCorrection(items, body, result, matcher, fix, meta = {}) {
-  const essay = String(body?.essay || result?.essay || "");
-  const originalSentence = findSentenceForLocalCorrection(essay, matcher);
-  if (!originalSentence) return;
-  let correctedSentence = typeof fix === "function" ? fix(originalSentence) : String(fix || "");
-  correctedSentence = String(correctedSentence || "").trim();
-  if (!correctedSentence || sameCorrectionText(originalSentence, correctedSentence)) return;
-  const key = compactCorrectionText(originalSentence);
-  if (items.some((item) => compactCorrectionText(item.originalSentence) === key)) return;
-  const currentBand = Number(result?.overallBand || body?.currentOverallBand || body?.overallBand || body?.currentResult?.overallBand || 5);
-  const targetInfo = targetImprovementRangeFromBand(currentBand || 5);
-  const betterExpression = buildFallbackBetterExpression(correctedSentence, currentBand || 5, body) || "";
-  items.push({
-    sentenceNumber: items.length + 1,
-    originalSentence,
-    correctedSentence,
-    errorType: meta.errorType || "Sentence-level correction",
-    errorTypeZh: meta.errorTypeZh || "句子级错误",
-    problem: meta.problem || "This sentence contains a visible grammar, word-choice, spelling, or cohesion problem that weakens clarity.",
-    problemZh: meta.problemZh || "这个句子存在明显的语法、用词、拼写或衔接问题，会影响表达清晰度。",
-    rule: meta.rule || "Rewrite the sentence with correct grammar, natural collocation, and clearer IELTS-style expression.",
-    ruleZh: meta.ruleZh || "需要用正确语法、自然搭配和更清楚的雅思写作表达来重写。",
-    betterExpression,
-    betterExpressionZh: betterExpression ? `这个更好表达按 ${targetInfo.label} 设计：保留原意，但让句子更自然、更清楚。` : "",
-    bandImpact: meta.bandImpact || "Band 5.0-5.5: repeated sentence-level errors limit Grammar, Lexical Resource, and clarity.",
-    bandImpactZh: meta.bandImpactZh || "这类重复的句子级错误会限制语法、词汇和表达清晰度，通常影响5到5.5附近的分数。",
-    betterExpressionTargetBand: targetInfo.label,
-    targetBandExpression: betterExpression,
-    scoreImpacting: true,
-    localFallback: true
-  });
-}
-
-function correctedSentenceByReplacements(sentence, replacements) {
-  let out = String(sentence || "");
-  ensureArray(replacements).forEach(([pattern, replacement]) => {
-    out = out.replace(pattern, replacement);
-  });
-  return out.replace(/\s+([,.!?;:])/g, "$1").replace(/([,.!?;:])(?=\S)/g, "$1 ").replace(/\s+/g, " ").trim();
-}
-
-function buildLocalSentenceCorrectionFallbacks(body = {}, result = {}) {
-  const essay = String(body.essay || result.essay || "");
-  const items = [];
-  if (!essay.trim()) return items;
-  const add = (matcher, replacements, meta) => addLocalDetailedSentenceCorrection(
-    items,
-    body,
-    result,
-    matcher,
-    (sentence) => correctedSentenceByReplacements(sentence, replacements),
-    meta
-  );
-
-  add(/On this essay I will discuss about[^.!?]*/i, [
-    [/\bOn this essay\b/i, "In this essay"],
-    [/\bdiscuss about\b/i, "discuss"],
-    [/\bnowday's\b/ig, "nowadays"],
-    [/\bit'spossible\b/ig, "it is possible"],
-    [/\s+/g, " "]
-  ], {
-    errorType: "Opening sentence / word choice / spelling",
-    errorTypeZh: "开头句 / 用词 / 拼写",
-    problem: "The opening uses the wrong preposition, redundant 'discuss about', and spelling or spacing errors.",
-    problemZh: "开头句介词错误，discuss 后多用了 about，并有拼写或空格问题。",
-    rule: "Use 'In this essay' and use 'discuss' without 'about'. Keep formal wording and correct spacing.",
-    ruleZh: "应使用 In this essay；discuss 后面不加 about；正式写作中要注意拼写和空格。"
-  });
-
-  add(/people using some of beauty products[^.!?]*/i, [
-    [/people using some of beauty products/ig, "people who use beauty products"],
-    [/pay for treatments,?that/ig, "pay for treatments that"],
-    [/about appearance/ig, "about their appearance"],
-    [/feel like a sense of satisfaction/ig, "feel a sense of satisfaction"]
-  ], {
-    errorType: "Relative clause / noun phrase / collocation",
-    errorTypeZh: "定语从句 / 名词短语 / 搭配",
-    problem: "The sentence has an unnatural noun phrase and weak collocation.",
-    problemZh: "这个句子的名词短语不自然，搭配也比较弱。",
-    rule: "Use a relative clause such as 'people who use...' and choose natural collocations.",
-    ruleZh: "可以用 people who use... 这样的定语从句，并使用更自然的搭配。"
-  });
-
-  add(/need to facing customer[s]?[^.!?]*/i, [
-    [/need to facing customers?/ig, "need to face customers"],
-    [/exeryday/ig, "every day"],
-    [/look younger at working days/ig, "look younger at work"],
-    [/much confortable/ig, "more comfortable"],
-    [/that means look younger can imporve the salary to them/ig, "this may improve their confidence at work"]
-  ], {
-    errorType: "Verb form / spelling / meaning control",
-    errorTypeZh: "动词形式 / 拼写 / 意思控制",
-    problem: "Several basic errors make the work-related example unclear.",
-    problemZh: "多个基础错误导致工作相关例子表达不清楚。",
-    rule: "After 'need to', use the base verb; check spelling and avoid unnatural claims such as 'improve the salary to them'.",
-    ruleZh: "need to 后接动词原形；同时检查拼写，避免 improve the salary to them 这类不自然表达。"
-  });
-
-  add(/using beauty products or pay for treatments was very expensive[^.!?]*/i, [
-    [/using beauty products or pay for treatments was/ig, "using beauty products or paying for treatments is"],
-    [/\.some/ig, ". Some"]
-  ], {
-    errorType: "Parallel structure / subject-verb agreement",
-    errorTypeZh: "并列结构 / 主谓一致",
-    problem: "The sentence mixes verb forms and uses the wrong verb agreement.",
-    problemZh: "句子并列动词形式不一致，主谓一致也错误。",
-    rule: "Keep parallel gerund forms and use singular agreement for the whole activity.",
-    ruleZh: "并列结构要保持动名词形式一致，整体活动作主语时谓语要一致。"
-  });
-
-  add(/with if they do not have[^.!?]*/i, [
-    [/with if they do not have/ig, "if they do not have"],
-    [/This is not a good thing with if/ig, "This is not a good thing if"]
-  ], {
-    errorType: "Conjunction misuse",
-    errorTypeZh: "连词误用",
-    problem: "'With if' is not a correct conjunction pattern.",
-    problemZh: "with if 不是正确的连词结构。",
-    rule: "Use 'if' directly to introduce a condition.",
-    ruleZh: "表达条件时直接使用 if。"
-  });
-
-  add(/the most improtant thing was\s+treatments may be dangerous[^.!?]*/i, [
-    [/the most improtant thing was\s+treatments may be dangerous/ig, "the most important thing is that some treatments may be dangerous"],
-    [/unkonw/ig, "unknown"]
-  ], {
-    errorType: "Spelling / sentence structure / tense",
-    errorTypeZh: "拼写 / 句子结构 / 时态",
-    problem: "The sentence needs a clear clause after 'the most important thing is that'.",
-    problemZh: "the most important thing is that 后面需要接清楚的从句。",
-    rule: "Use 'is that...' for the main point and keep tense consistent.",
-    ruleZh: "表达重点时可用 is that...，并保持时态一致。"
-  });
-
-  add(/the health is important than looking younger[^.!?]*/i, [
-    [/the health is important than looking younger/ig, "health is more important than looking younger"]
-  ], {
-    errorType: "Comparative structure",
-    errorTypeZh: "比较结构",
-    problem: "The comparative form is incomplete.",
-    problemZh: "比较级结构不完整。",
-    rule: "Use 'more + adjective + than' for comparison.",
-    ruleZh: "比较时用 more + 形容词 + than。"
-  });
-
-  add(/If they use those products or treatments carefully[^.!?]*/i, [
-    [/use those products or treatments carefully and use those products or treatments in the right way/ig, "use those products or treatments carefully and in the right way"],
-    [/chose those famous products/ig, "choose reputable products"],
-    [/famous products/ig, "reputable products"]
-  ], {
-    errorType: "Repetition / verb form / collocation",
-    errorTypeZh: "重复 / 动词形式 / 搭配",
-    problem: "The sentence repeats the same phrase and uses an incorrect verb form.",
-    problemZh: "句子重复同一短语，并且动词形式错误。",
-    rule: "Avoid repetition, keep parallel structure, and use 'choose' after 'also'.",
-    ruleZh: "避免重复，保持并列结构一致；also 后应使用 choose。"
-  });
-
-  if (!items.length) {
-    const grammarErrors = ensureArray(result.grammarErrors).filter((item) => item && (hasUsefulText(item.original) || hasUsefulText(item.corrected) || hasUsefulText(item.explanation)));
-    grammarErrors.slice(0, 6).forEach((error) => {
-      const original = findSentenceForLocalCorrection(essay, error.original || "") || error.original || "";
-      const corrected = error.corrected || original;
-      if (!original || !corrected || sameCorrectionText(original, corrected)) return;
-      addLocalDetailedSentenceCorrection(items, body, result, original, corrected, {
-        errorType: error.type || "Grammar correction",
-        errorTypeZh: "语法修改",
-        problem: error.explanation || "This grammar error weakens sentence accuracy.",
-        problemZh: error.explanationZh || "这个语法错误会影响句子准确性。",
-        rule: error.explanation || "Rewrite with correct grammar.",
-        ruleZh: error.explanationZh || "需要用正确语法重写。"
-      });
-    });
-  }
-
-  return items.slice(0, 8);
-}
-
-function applyLocalCorrectionFallbacks(result, body = {}, mode = "full") {
-  if (!result || typeof result !== "object") return result;
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  normalizeTaskSpecificCriteria(result, task);
-  const existingDetailed = ensureArray(result.detailedSentenceCorrections).filter((item) => isScoreImpactingDetailedCorrection(normalizeDetailedSentenceCorrectionItem(item)));
-  if (!existingDetailed.length) {
-    const fallbackDetailed = buildLocalSentenceCorrectionFallbacks(body, result)
-      .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
-      .filter(isScoreImpactingDetailedCorrection);
-    if (fallbackDetailed.length) {
-      result.detailedSentenceCorrections = fallbackDetailed;
-      result.sentenceCorrections = ensureArray(result.sentenceCorrections).concat(fallbackDetailed.map((item) => ({
-        original: item.originalSentence,
-        corrected: item.correctedSentence,
-        reason: item.problem,
-        reasonZh: item.problemZh
-      }))).slice(0, correctionLimitForEssay(body, mode));
-      result.localSentenceCorrectionFallbackApplied = true;
-      appendCalibrationEvidence(result, "Sentence Corrections panel was filled from local evidence because the AI detailed correction stage returned no usable sentence-level items.");
-    }
-  }
-  if (!ensureArray(result.grammarErrors).length) ensureGrammarErrorsForVisibleProblems(result, body);
-  ensureTargetImprovementPlan(result, body);
-  return result;
-}
-
-function ensureGrammarErrorsForVisibleProblems(result, body = {}) {
-  if (!result || typeof result !== "object") return false;
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  normalizeTaskSpecificCriteria(result, task);
-  const grammarBand = normalizeCriterionBandValue(result.criteria?.["Grammatical Range and Accuracy"]?.band, result.overallBand || 1);
-  const existing = ensureArray(result.grammarErrors).filter((item) => item && (hasUsefulText(item.original) || hasUsefulText(item.corrected) || hasUsefulText(item.explanation)));
-  if (existing.length || grammarBand >= 7.5) {
-    result.grammarErrors = existing;
-    return false;
-  }
-  const signals = extractEssaySignals(body, result);
-  if (grammarBand > 6 && signals.grammarPressure < 2) {
-    result.grammarErrors = existing;
-    return false;
-  }
-  const fallback = buildLocalGrammarErrorFallbacks(body, result);
-  if (!fallback.length && grammarBand <= 6) {
-    fallback.push({
-      original: "See the sentences highlighted in Grammar Advice.",
-      corrected: "Rewrite those sentences with correct verb forms, articles, agreement, and punctuation.",
-      type: "grammar control",
-      explanation: "The grammar band indicates visible errors, but the AI did not return a structured grammarErrors array; this fallback prevents the grammar panel from appearing empty.",
-      explanationZh: "语法分数显示存在问题，但 AI 没有返回结构化 grammarErrors；系统补充此项，避免语法面板空白。"
-    });
-  }
-  result.grammarErrors = fallback;
-  if (fallback.length) {
-    appendCalibrationEvidence(result, "Grammar Errors panel was filled from local grammar evidence because the AI did not return a usable grammarErrors array.");
-    result.grammarErrorFallbackApplied = true;
-    return true;
-  }
-  return false;
-}
-
-function isGenericEvidenceText(value) {
-  const text = String(value || "").toLowerCase();
-  if (!text.trim()) return true;
-  return /has enough positive evidence|shows some relevant evidence|band is limited by|balance between the positive evidence|generally good overall impression|avoid a lower band|criterion is functional|evidence sits between band|typical of band|higher band needs stronger evidence|not just a generally good overall impression/i.test(text);
-}
-
-function extractBandMentionsFromText(value) {
-  const text = String(value || "");
-  const matches = [...text.matchAll(/\bBand\s+([1-9](?:\.0|\.5)?)/gi)];
-  return matches
-    .map((match) => clampAiBand(match[1], NaN))
-    .filter((band) => Number.isFinite(Number(band)));
-}
-
-function extractChineseBandMentionsFromText(value) {
-  const text = String(value || "");
-  const patterns = [
-    /([1-9](?:\.0|\.5)?)\s*分/g,
-    /Band\s*([1-9](?:\.0|\.5)?)/gi,
-    /符合\s*([1-9](?:\.0|\.5)?)\s*分/g,
-    /达到\s*([1-9](?:\.0|\.5)?)\s*分/g
-  ];
-  const values = [];
-  patterns.forEach((pattern) => {
-    [...text.matchAll(pattern)].forEach((match) => {
-      const band = clampAiBand(match[1], NaN);
-      if (Number.isFinite(Number(band))) values.push(band);
-    });
-  });
-  return values;
-}
-
-function chineseBandMentionMismatch(value, actualBand) {
-  const text = String(value || "");
-  if (!text.trim()) return false;
-  const actual = normalizeCriterionBandValue(actualBand, 1);
-  const mentions = extractChineseBandMentionsFromText(text);
-  if (!mentions.length) return false;
-  return !mentions.some((band) => Math.abs(band - actual) < 0.01);
-}
-
-function explanationBandMentionsMismatch(value, actualBand) {
-  const text = String(value || "");
-  if (!text.trim()) return false;
-  const actual = normalizeCriterionBandValue(actualBand, 1);
-  const mentions = extractBandMentionsFromText(text);
-  if (!mentions.length) return false;
-
-  // Phrases such as "between Band 5 and Band 6" are acceptable only when the actual
-  // band is the corresponding half band. Otherwise, regenerate the explanation.
-  const betweenMatch = text.match(/between\s+Band\s+([1-9](?:\.0|\.5)?)\s+and\s+Band\s+([1-9](?:\.0|\.5)?)/i);
-  if (betweenMatch) {
-    const low = clampAiBand(betweenMatch[1], NaN);
-    const high = clampAiBand(betweenMatch[2], NaN);
-    if (Number.isFinite(low) && Number.isFinite(high) && Math.abs(actual - ((low + high) / 2)) < 0.01) return false;
-  }
-
-  return !mentions.some((band) => Math.abs(band - actual) < 0.01);
-}
-
-function shouldReplaceCriterionExplanation(value, actualBand) {
-  return !hasUsefulText(value) ||
-    isGenericEvidenceText(value) ||
-    explanationBandMentionsMismatch(value, actualBand) ||
-    chineseBandMentionMismatch(value, actualBand);
-}
-
-function normalizeZhArrayLength(enItems, zhItems, fallbackFactory) {
-  const en = ensureArray(enItems).filter(Boolean);
-  const zh = ensureArray(zhItems).filter(Boolean);
-  return en.map((item, index) => zh[index] || (typeof fallbackFactory === "function" ? fallbackFactory(item, index) : ""));
-}
-
-function task2QuestionTypeZh(type) {
-  return ({
-    agree_disagree: "同意/不同意题",
-    discuss_both_views: "双方观点讨论题",
-    advantages_disadvantages: "优缺点题",
-    problem_solution: "问题解决题",
-    two_part_question: "双问题题型",
-    general_opinion: "观点类题目"
-  })[type] || "Task 2 题目";
-}
-
-function makeCriterionSpecificEvidence(name, band, task, body = {}, signals = {}, quotes = []) {
-  const formattedBand = formatBand(band);
-  const quoteHint = quotes.length ? ` Example evidence: “${quotes[0]}”` : "";
-  const quoteHintZh = quotes.length ? ` 原文证据如：“${quotes[0]}”。` : "";
-  const promptBullets = task === "Task 1" ? extractPromptBulletPoints(body.questionPrompt) : [];
-  const coveredBullets = task === "Task 1" ? task1BulletCoverageFromResult(body.currentResult || {}) : { known: false };
-  const qType = task === "Task 2" ? detectTask2QuestionType(body.questionPrompt) : "";
-  const words = Number(body.wordCount) || countWordsServer(body.essay);
-
-  const data = {
-    positive: "The response contains some relevant performance for this criterion.",
-    positiveZh: "这项评分有一定正面表现。",
-    limit: "The response still has limitations that prevent a higher band.",
-    limitZh: "仍有一些限制，暂时不能进入更高分档。",
-    why: `Band ${formattedBand} is appropriate because this criterion shows both usable performance and clear limitations.`,
-    whyZh: `${formattedBand} 分合理，因为这一项既有可评分表现，也有明显限制。`,
-    higher: "A higher band needs stronger, more consistent evidence in this criterion.",
-    higherZh: "如果要更高分，需要这一项表现更稳定、更充分。",
-    lower: "It is not lower because there is enough relevant evidence to support the assigned band.",
-    lowerZh: "没有更低，是因为原文仍有足够相关表现支撑当前分数。"
-  };
-
-  if (task === "Task 1" && name === "Task Achievement") {
-    const bulletText = promptBullets.length ? `${promptBullets.length} bullet points` : "the letter requirements";
-    data.positive = band >= 6
-      ? `The letter gives a clear purpose and addresses the main ${bulletText}.${quoteHint}`
-      : `The letter attempts to answer the main ${bulletText}, but the response is still limited.${quoteHint}`;
-    data.positiveZh = band >= 6
-      ? `书信目的比较清楚，并回应了主要题目要求。${quoteHintZh}`
-      : `文章尝试回应主要题目要求，但完成度仍有限。${quoteHintZh}`;
-    data.limit = band >= 7.5
-      ? "Further improvement depends on making the details even more precise and naturally suited to the reader."
-      : "The score is limited by incomplete or underdeveloped bullet-point detail, tone control, or letter-format precision.";
-    data.limitZh = band >= 7.5
-      ? "继续提升主要在于让细节更具体，并让语气更自然地贴合收信人。"
-      : "限制分数的主要因素是要点细节不够充分、语气控制或书信格式不够精准。";
-    data.why = `Band ${formattedBand} reflects how clearly the letter purpose and bullet points are fulfilled, not grammar alone.`;
-    data.whyZh = `${formattedBand} 分主要反映写信目的和题目要点完成度，不是单纯看语法。`;
-    data.higher = "A higher Task Achievement band needs fuller coverage of every bullet point with concrete, reader-appropriate details.";
-    data.higherZh = "如果要更高分，每个题目要点都需要更充分、更具体，并符合收信人的情境。";
-    data.lower = "It is not lower because the letter still shows an attempt to respond to the task requirements.";
-    data.lowerZh = "没有更低，是因为文章仍然尝试回应了题目要求。";
-  } else if (task === "Task 2" && name === "Task Response") {
-    data.positive = band >= 6
-      ? `The essay answers the main Task 2 question type (${qType}) and presents a relevant position or response.${quoteHint}`
-      : `The essay responds to the Task 2 question, but the answer is only partly developed.${quoteHint}`;
-    data.positiveZh = band >= 6
-      ? `文章回应了 ${task2QuestionTypeZh(qType)} 的主要要求，并给出了相关立场或回答。${quoteHintZh}`
-      : `文章回应了 Task 2 题目，但观点展开仍然比较有限。${quoteHintZh}`;
-    data.limit = band >= 7.5
-      ? "To move higher, the argument needs more nuanced reasoning or more precise examples rather than more ideas."
-      : "The score is limited by general explanation, limited example development, or an opinion that is not fully justified.";
-    data.limitZh = band >= 7.5
-      ? "如果要继续提高，需要让论证更有层次，或让例子更精确，而不是单纯增加观点数量。"
-      : "限制分数的主要原因是解释较笼统、例子展开不足，或观点论证不够充分。";
-    data.why = `Band ${formattedBand} reflects the level of answer coverage, position clarity, idea development, and support.`;
-    data.whyZh = `${formattedBand} 分反映了题目回应、立场清晰度、观点展开和论据支持的综合水平。`;
-    data.higher = "A higher Task Response band needs more specific reasoning and better-developed support for the main ideas.";
-    data.higherZh = "如果要更高分，主要观点需要更具体的原因、解释和例子支撑。";
-    data.lower = "It is not lower because the essay still addresses the question and gives a relevant opinion or answer.";
-    data.lowerZh = "没有更低，是因为文章仍然回应了题目，并给出了相关观点或回答。";
-  } else if (name === "Coherence and Cohesion") {
-    data.positive = band >= 6
-      ? `The writing has a recognisable structure with paragraphs or clear stages of the response.${quoteHint}`
-      : `There is some basic organisation, but progression is not fully controlled.${quoteHint}`;
-    data.positiveZh = band >= 6
-      ? `文章有可识别的结构，能看出分段或内容推进。${quoteHintZh}`
-      : `文章有一些基本组织，但推进和衔接控制还不稳定。${quoteHintZh}`;
-    data.limit = band >= 7.5
-      ? "Further improvement is mainly about smoother paragraph flow and less mechanical linking."
-      : "The score is limited by basic linking, repetition, unclear referencing, short paragraphs, or uneven progression.";
-    data.limitZh = band >= 7.5
-      ? "继续提升主要在于段落过渡更自然，减少机械连接词。"
-      : "限制分数的主要因素是连接方式基础、重复、指代不清、段落短或推进不均衡。";
-    data.why = `Band ${formattedBand} reflects how clearly the reader can follow the organisation and progression.`;
-    data.whyZh = `${formattedBand} 分反映读者是否能顺利跟随文章结构和逻辑推进。`;
-    data.higher = "A higher Coherence and Cohesion band needs clearer paragraph function and smoother development between ideas.";
-    data.higherZh = "如果要更高分，需要段落功能更清楚，观点之间推进更自然。";
-    data.lower = "It is not lower because the response still has an identifiable overall structure.";
-    data.lowerZh = "没有更低，是因为文章仍然有基本可识别的整体结构。";
-  } else if (name === "Lexical Resource") {
-    data.positive = band >= 6
-      ? `The writing uses some relevant topic or letter-function vocabulary.${quoteHint}`
-      : `The writing includes some relevant vocabulary for the topic, although the range is limited.${quoteHint}`;
-    data.positiveZh = band >= 6
-      ? `文章使用了一些相关的题目词汇或书信功能词汇。${quoteHintZh}`
-      : `文章有一些相关词汇，但词汇范围仍然有限。${quoteHintZh}`;
-    data.limit = band >= 7.5
-      ? "Further improvement is about choosing more exact words naturally, not forcing rare vocabulary."
-      : "The score is limited by repetition, basic word choice, spelling mistakes, word-form errors, or inaccurate collocations.";
-    data.limitZh = band >= 7.5
-      ? "继续提升应侧重自然且更精确的用词，而不是强行使用生僻词。"
-      : "限制分数的主要因素是重复、用词基础、拼写错误、词形错误或搭配不准确。";
-    data.why = `Band ${formattedBand} reflects the balance between relevant vocabulary use and limits in range, precision, spelling, or collocation.`;
-    data.whyZh = `${formattedBand} 分反映了相关词汇使用与词汇范围、准确性、拼写和搭配问题之间的平衡。`;
-    data.higher = "A higher Lexical Resource band needs more precise topic wording with fewer repeated or inaccurate expressions.";
-    data.higherZh = "如果要更高分，需要更准确的题目词汇，并减少重复或不准确表达。";
-    data.lower = "It is not lower because the writing still uses enough relevant vocabulary to communicate the main message.";
-    data.lowerZh = "没有更低，是因为文章仍然使用了足够相关词汇来表达主要意思。";
-  } else if (name === "Grammatical Range and Accuracy") {
-    data.positive = band >= 6
-      ? `The writing contains some controlled simple or complex sentence forms.${quoteHint}`
-      : `The writing communicates through basic sentence patterns, but accuracy is limited.${quoteHint}`;
-    data.positiveZh = band >= 6
-      ? `文章有一些可控制的简单句或复杂句。${quoteHintZh}`
-      : `文章主要依靠基础句型表达，但准确性有限。${quoteHintZh}`;
-    data.limit = band >= 7.5
-      ? "Further improvement is mainly minor sentence rhythm, punctuation consistency, or clause control."
-      : "The score is limited by repeated errors in verb forms, articles, plurals, agreement, punctuation, or sentence boundaries.";
-    data.limitZh = band >= 7.5
-      ? "继续提升主要是微调句子节奏、标点一致性或从句控制。"
-      : "限制分数的主要因素是动词形式、冠词、复数、主谓一致、标点或句子边界方面的重复错误。";
-    data.why = `Band ${formattedBand} reflects how much grammar control supports clear communication.`;
-    data.whyZh = `${formattedBand} 分反映语法控制对清楚表达的支持程度。`;
-    data.higher = "A higher Grammar band needs more accurate sentence control with fewer repeated basic errors.";
-    data.higherZh = "如果要更高分，需要更准确的句子控制，并减少重复基础语法错误。";
-    data.lower = "It is not lower because the meaning can still generally be understood.";
-    data.lowerZh = "没有更低，是因为整体意思通常仍然可以理解。";
-  }
-
-  if (words && words < (task === "Task 1" ? 150 : 250) && (name === "Task Achievement" || name === "Task Response")) {
-    data.limit += ` The response is also under the recommended word count (${words} words).`;
-    data.limitZh += ` 同时文章字数低于建议最低字数（${words} 词）。`;
-  }
-
-  return data;
-}
-
-function buildEvidenceQuoteZh(name, band, quote, task = "Task 2") {
-  const formattedBand = formatBand(normalizeCriterionBandValue(band, 1));
-  const cleanQuote = String(quote || "").replace(/\s+/g, " ").trim();
-  const quotePreview = cleanQuote ? `原文片段：“${cleanQuote.slice(0, 80)}${cleanQuote.length > 80 ? "..." : ""}”。` : "";
-
-  if (name === "Task Achievement") {
-    return `${quotePreview}这句用于判断书信任务完成度：它能显示写信目的、题目要点覆盖或细节展开情况，因此支撑 Band ${formattedBand} 的 Task Achievement 判断。`;
-  }
-  if (name === "Task Response") {
-    return `${quotePreview}这句用于判断 Task Response：它显示作者是否回应题目、是否有立场，以及观点是否得到展开，因此支撑 Band ${formattedBand} 的任务回应判断。`;
-  }
-  if (name === "Coherence and Cohesion") {
-    return `${quotePreview}这句用于判断结构和衔接：它反映段落推进、连接词使用或观点之间的衔接是否清楚，因此支撑 Band ${formattedBand} 的 Coherence and Cohesion 判断。`;
-  }
-  if (name === "Lexical Resource") {
-    return `${quotePreview}这句用于判断词汇：它能体现话题词、搭配、重复、拼写或用词准确度，因此支撑 Band ${formattedBand} 的 Lexical Resource 判断。`;
-  }
-  if (name === "Grammatical Range and Accuracy") {
-    return `${quotePreview}这句用于判断语法：它能体现句型控制、动词形式、从句、标点或错误是否影响理解，因此支撑 Band ${formattedBand} 的 Grammar 判断。`;
-  }
-  return `${quotePreview}这句是当前评分项的原文证据，用来解释为什么该项被评为 Band ${formattedBand}。`;
-}
-
-function populateCriterionEvidenceDetails(result, body = {}) {
-  if (!result || !result.criteria) return result;
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const essay = String(body.essay || result.essay || "");
-  const signals = extractEssaySignals(body, result);
-  const quotePatterns = task === "Task 1" ? {
-    "Task Achievement": [/\bwriting to\b/i, /\brequest|enquire|apolog|thank|invite|transfer|because|reason\b/i],
-    "Coherence and Cohesion": [/\bfirst|second|also|however|therefore|finally|during|on the contrary\b/i],
-    "Lexical Resource": [/\brequest|manager|department|company|customer|colleague|grateful|consideration\b/i],
-    "Grammatical Range and Accuracy": [/\bwould|could|because|although|if|which|that\b/i]
-  } : {
-    "Task Response": [/\bi think|i believe|in my opinion|personally|one reason|another reason|for example|in conclusion\b/i],
-    "Coherence and Cohesion": [/\bfirstly|secondly|however|therefore|in conclusion|another reason|one major reason\b/i],
-    "Lexical Resource": [/\bcrime|drama|novel|detective|violence|mystery|treatment|product|appearance|confidence|health|risk|benefit|society\b/i],
-    "Grammatical Range and Accuracy": [/\bbecause|although|if|when|which|that|while|provided that\b/i]
-  };
-
-  for (const name of getWritingCriterionNames(task)) {
-    const criterion = result.criteria[name];
-    if (!criterion || typeof criterion !== "object") continue;
-    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-    const existingQuotes = ensureArray(criterion.evidenceQuotes).filter(Boolean);
-    const quotes = existingQuotes.length ? existingQuotes.slice(0, 3) : pickEvidenceQuotes(essay, quotePatterns[name] || [], 2);
-    criterion.evidenceQuotes = quotes;
-    const fallback = makeCriterionSpecificEvidence(name, band, task, { ...body, currentResult: result }, signals, quotes);
-
-    const positives = ensureArray(criterion.positiveEvidence).filter(Boolean);
-    const limits = ensureArray(criterion.limitingEvidence).filter(Boolean);
-    const evidence = ensureArray(criterion.evidence).filter(Boolean);
-
-    if (!positives.length || positives.every(isGenericEvidenceText)) criterion.positiveEvidence = [fallback.positive];
-    else criterion.positiveEvidence = positives.slice(0, 4);
-
-    if (!limits.length || limits.every(isGenericEvidenceText)) criterion.limitingEvidence = [fallback.limit];
-    else criterion.limitingEvidence = limits.slice(0, 4);
-
-    if (!evidence.length || evidence.every(isGenericEvidenceText)) {
-      criterion.evidence = [fallback.positive, fallback.limit].filter(Boolean).slice(0, 4);
-    } else {
-      criterion.evidence = evidence.slice(0, 6);
-    }
-
-    if (shouldReplaceCriterionExplanation(criterion.whyThisBand, band)) criterion.whyThisBand = fallback.why;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotHigher, band)) criterion.whyNotHigher = fallback.higher;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotLower, band)) criterion.whyNotLower = fallback.lower;
-
-    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => buildEvidenceQuoteZh(name, band, quote, task));
-    criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
-    criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
-    criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
-    if (shouldReplaceCriterionExplanation(criterion.whyThisBandZh, band)) criterion.whyThisBandZh = fallback.whyZh;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotHigherZh, band)) criterion.whyNotHigherZh = fallback.higherZh;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotLowerZh, band)) criterion.whyNotLowerZh = fallback.lowerZh;
-  }
-  return result;
-}
-
-function syncCriterionEvidenceWithFinalBands(result, body = {}) {
-  if (!result || !result.criteria || typeof result.criteria !== "object") return result;
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const signals = extractEssaySignals(body, result);
-  for (const name of getWritingCriterionNames(task)) {
-    const criterion = result.criteria[name];
-    if (!criterion || typeof criterion !== "object") continue;
-    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-    const quotes = ensureArray(criterion.evidenceQuotes).filter(Boolean).slice(0, 3);
-    const fallback = makeCriterionSpecificEvidence(name, band, task, { ...body, currentResult: result }, signals, quotes);
-
-    if (shouldReplaceCriterionExplanation(criterion.whyThisBand, band)) criterion.whyThisBand = fallback.why;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotHigher, band)) criterion.whyNotHigher = fallback.higher;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotLower, band)) criterion.whyNotLower = fallback.lower;
-
-    if (shouldReplaceCriterionExplanation(criterion.whyThisBandZh, band)) criterion.whyThisBandZh = fallback.whyZh;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotHigherZh, band)) criterion.whyNotHigherZh = fallback.higherZh;
-    if (shouldReplaceCriterionExplanation(criterion.whyNotLowerZh, band)) criterion.whyNotLowerZh = fallback.lowerZh;
-
-    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => buildEvidenceQuoteZh(name, band, quote, task));
-    criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
-    criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
-    criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
-  }
-  return result;
-}
-
-function buildLocalScoreAudit(result, body = {}) {
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const issues = [];
-  const bands = getCriterionBandsForTask(result, task);
-  const calculated = calculateTaskBandFromCriteria(result, task);
-  if (Number.isFinite(Number(result.overallBand)) && Math.abs(Number(result.overallBand) - calculated) > 0.01) {
-    issues.push({ type: "overall_mismatch", severity: "blocking", message: `Overall Band ${formatBand(result.overallBand)} did not match the four-criteria calculation ${formatBand(calculated)}.` });
-  }
-  const graBand = normalizeCriterionBandValue(result.criteria?.["Grammatical Range and Accuracy"]?.band, result.overallBand || 1);
-  if (graBand <= 6 && !ensureArray(result.grammarErrors).length) {
-    issues.push({ type: "empty_grammar_errors", severity: "quality", message: "Grammar band is 6.0 or below, but grammarErrors is empty." });
-  }
-  const first = firstCriterionName(task);
-  const firstBand = normalizeCriterionBandValue(result.criteria?.[first]?.band, result.overallBand || 1);
-  const firstText = criterionEvidenceText(result.criteria?.[first] || {});
-  if (firstBand <= 5 && /fully addresses|addresses both parts|all three bullet|clear position|well[- ]developed|maintained throughout/.test(firstText)) {
-    issues.push({ type: "band_feedback_conflict", severity: "quality", criterion: first, message: `${first} feedback sounds higher than the assigned band.` });
-  }
-  for (const [name, criterion] of Object.entries(result.criteria || {})) {
-    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-    const text = criterionEvidenceText(criterion);
-    if (band <= 5 && /wide range|precise|sophisticated|flexible|accurate|strong/.test(text)) {
-      issues.push({ type: "band_feedback_conflict", severity: "quality", criterion: name, message: `${name} feedback contains high-band language but the band is low.` });
-    }
-    if (band >= 7.5 && highBandBadAdvicePattern().test(String(criterion.howToImprove || ""))) {
-      issues.push({ type: "high_band_advice_template", severity: "quality", criterion: name, message: `${name} high-band advice still contains template-like or complexity-for-its-own-sake wording.` });
-    }
-  }
-  if (bands.length === 4 && new Set(bands.map((band) => formatBand(band))).size === 1 && shouldReauditMechanicalSameBands(result, task)) {
-    issues.push({ type: "mechanical_same_bands", severity: "quality", message: "All four criteria have the same band while feedback suggests different strengths or weaknesses." });
-  }
-  const hasBlocking = issues.some((issue) => issue.severity === "blocking");
-  return {
-    passed: issues.length === 0,
-    repairApplied: Boolean(result.grammarErrorFallbackApplied || result.scoreCalibration?.criterionDifferentiationApplied || result.scoreCalibration?.taskResponseCapRepaired),
-    issues: issues.slice(0, 8),
-    checkedAt: "finalizeTaskScoringEngine",
-    summary: issues.length ? "Score audit found consistency issues or applied repairs." : "Score audit passed: scoring, evidence, and structured feedback are consistent."
-  };
-}
-
-function detectTask2QuestionType(prompt) {
-  const text = String(prompt || "").toLowerCase();
-  if (/discuss both views|both these views|both views|give your own opinion/.test(text)) return "discuss_both_views";
-  if (/advantages?.*disadvantages?|disadvantages?.*advantages?|more advantages|more disadvantages|outweigh/.test(text)) return "advantages_disadvantages";
-  if (/problem.*solution|problems.*solutions|cause.*solution|causes.*solutions|what problems|what measures|how can.*solved/.test(text)) return "problem_solution";
-  if (/to what extent do you agree|agree or disagree|do you agree|do you disagree|extent do you agree/.test(text)) return "agree_disagree";
-  const questionMarks = (text.match(/\?/g) || []).length;
-  if (questionMarks >= 2 || /what.*\?.*what|why.*\?.*how|do you think.*\?.*what/i.test(text)) return "two_part_question";
-  return "general_opinion";
-}
-
-function task2QuestionTypeCapReason(type) {
-  if (type === "discuss_both_views") return "The essay must discuss both views and give the writer's own opinion; one required side or the personal opinion appears missing or underdeveloped.";
-  if (type === "advantages_disadvantages") return "The essay must compare the advantages and disadvantages required by the prompt; one side appears missing or underdeveloped.";
-  if (type === "problem_solution") return "The essay must address both the problem/cause and the solution/measure part of the prompt.";
-  if (type === "two_part_question") return "The essay must answer both questions in the prompt; one question appears missing or underdeveloped.";
-  if (type === "agree_disagree") return "The essay must present a clear and consistent position in response to the agree/disagree question.";
-  return "The essay must fully respond to the specific Task 2 question type.";
-}
-
-
-function task2MissingRequirementIsMinorDevelopment(value) {
-  const text = String(
-    value && typeof value === "object"
-      ? (value.requirement || value.part || value.point || value.text || value.issue || value.reason || JSON.stringify(value))
-      : value || ""
-  ).toLowerCase();
-  if (!text) return false;
-  return /specific example|named example|study|research|survey|statistic|sherlock|broadchurch|true detective|cultural variation|counter-argument|counterargument|concession|more nuanced|deepen analysis|brief preview/.test(text);
-}
-
-function task2RequiredPartHasPositiveEvidence(part) {
-  if (!part || typeof part !== "object") return false;
-  const answered = part.answered === true || part.covered === true || /^(yes|true|covered|fully|addressed)$/i.test(String(part.answered || part.covered || ""));
-  const evidence = part.evidenceQuote || part.evidence || part.quote || part.supportingText || part.userEvidence || "";
-  return Boolean(answered || hasUsefulText(evidence));
-}
-
-function task2TwoPartPromptLooksAnswered(body = {}, signals = {}) {
-  const prompt = String(body.questionPrompt || "");
-  const essay = String(body.essay || "");
-  const lower = essay.toLowerCase();
-  const asksWhy = /\bwhy\b|reasons?|popular|popularity/i.test(prompt);
-  const asksOpinion = /\bopinion\b|what do you think|do you think|your view|your opinion/i.test(prompt);
-  const whyAnswered = !asksWhy || /\b(reason|because|popular|popularity|audience|readers|viewers|attracted|curiosity|suspense|entertainment|safe distance|human nature|one major reason|another reason)\b/i.test(essay);
-  const opinionAnswered = !asksOpinion || signals.task2PositionSignals || /\b(personally|in my view|in my opinion|i believe|i think|my view|generally positive|valuable|negative|beneficial|harmful|should|risk|therefore,? audiences)\b/i.test(essay);
-  return whyAnswered && opinionAnswered;
-}
-
-function task2HighResponseEvidence(result = {}, body = {}, signals = {}) {
-  const tr = result?.criteria?.["Task Response"] || {};
-  const analysis = result?.taskRequirementAnalysis || {};
-  const essay = String(body.essay || "");
-  const evidenceText = JSON.stringify({
-    feedback: tr.feedback,
-    howToImprove: tr.howToImprove,
-    evidence: tr.evidence,
-    positiveEvidence: tr.positiveEvidence,
-    whyThisBand: tr.whyThisBand,
-    analysis,
-    strengths: result.strengths,
-    task2EssayCorrections: result.task2EssayCorrections
-  }).toLowerCase();
-  const highFeedback = /fully addresses|addresses both parts|answers both questions|clear personal opinion|clear position|position is maintained|maintained throughout|well[- ]developed|specific examples|effective conclusion|effectively summarises|effectively summarizes|strong task response/.test(evidenceText);
-  const enoughDevelopment = signals.words >= 240 && signals.paragraphs >= 4 && (signals.hasExamples || /\b(for instance|in this sense|this makes|as a result|therefore|however|for example|because|they allow|they can|this is because)\b/i.test(essay));
-  const type = detectTask2QuestionType(body.questionPrompt);
-  const twoPartCovered = type !== "two_part_question" || task2TwoPartPromptLooksAnswered(body, signals);
-  const positionCovered = signals.task2PositionSignals || /\b(personally|in my view|in my opinion|i believe|i think)\b/i.test(essay);
-  return Boolean((highFeedback && twoPartCovered && positionCovered) || (twoPartCovered && positionCovered && enoughDevelopment));
-}
-
-function task2HasReliableMissingRequiredPart(result = {}, body = {}, signals = {}, type = "general_opinion") {
-  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
-  const requiredParts = ensureArray(analysis.requiredParts);
-  const missingRequirements = ensureArray(analysis.missingRequirements).filter((item) => !task2MissingRequirementIsMinorDevelopment(item));
-  const highResponseEvidence = task2HighResponseEvidence(result, body, signals);
-
-  if (type === "two_part_question" && task2TwoPartPromptLooksAnswered(body, signals)) {
-    return false;
-  }
-
-  const explicitlyMissingPart = requiredParts.some((part) => {
-    if (!part || typeof part !== "object") return false;
-    if (task2MissingRequirementIsMinorDevelopment(part)) return false;
-    const answeredValue = part.answered ?? part.covered ?? part.addressed;
-    const explicitFalse = answeredValue === false || /^(no|false|missing|not covered|not addressed)$/i.test(String(answeredValue || ""));
-    return explicitFalse && !task2RequiredPartHasPositiveEvidence(part);
-  });
-
-  if (explicitlyMissingPart) return !highResponseEvidence;
-  if (missingRequirements.length) return !highResponseEvidence;
-  if (analysis.allPartsAnswered === false) return !highResponseEvidence;
-
-  return false;
-}
-
-function task2HasHardLowTaskResponseCondition(result = {}, body = {}, signals = {}) {
-  const words = signals.words || countWordsServer(body.essay);
-  if (words < 200) return true;
-  const type = detectTask2QuestionType(body.questionPrompt);
-  if (type === "agree_disagree" && !signals.task2PositionSignals) return true;
-  if (task2HasReliableMissingRequiredPart(result, body, signals, type)) return true;
-  const diagnostics = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object" ? result.lowBandDiagnostics : {};
-  return Boolean(diagnostics.whollyUnrelated || diagnostics.barelyRelated || diagnostics.meaningMostlyBlocked || diagnostics.mostlyCopiedFromPrompt || diagnostics.mostlyNonEnglish);
-}
-
-function repairTask2TaskResponseContradiction(result, body = {}, signals = extractEssaySignals(body, result)) {
-  if (!result || body?.task === "Task 1" || !result.criteria?.["Task Response"]) return false;
-  const tr = result.criteria["Task Response"];
-  const trBand = normalizeCriterionBandValue(tr.band, result.overallBand || 1);
-  if (trBand > 5.5) return false;
-  const otherBands = ["Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
-    .map((name) => normalizeCriterionBandValue(result.criteria?.[name]?.band, 0))
-    .filter((band) => band > 0);
-  const otherAverage = otherBands.length ? otherBands.reduce((sum, band) => sum + band, 0) / otherBands.length : 0;
-  if (otherAverage < 7 || !task2HighResponseEvidence(result, body, signals)) return false;
-  if (task2HasHardLowTaskResponseCondition(result, body, signals)) return false;
-
-  const repairedBand = otherAverage >= 7.75 ? 7.5 : 7;
-  tr.band = repairedBand;
-  tr.localDifferentiationCap = undefined;
-  tr.taskResponseCapRepaired = true;
-  tr.whyThisBand = tr.whyThisBand || "The essay answers the required Task 2 parts, presents a clear position, and develops relevant ideas; a low Task Response cap was not supported by the evidence.";
-  tr.whyNotHigher = tr.whyNotHigher || "To move higher, make the strongest line of reasoning more precise and support it with an even sharper example or consequence.";
-  appendCalibrationEvidence(result, `Task Response restored to Band ${formatBand(repairedBand)} because high-band task-response evidence contradicted a low local cap.`);
-  result.scoreCalibration.taskResponseCapRepaired = true;
-  return true;
-}
-
-function applyTask2QuestionTypeCaps(result, body = {}, signals = {}) {
-  if (!result || typeof result !== "object") return false;
-  const type = detectTask2QuestionType(body.questionPrompt);
-  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
-  const positionPresent = analysis.positionPresent === true || signals.task2PositionSignals;
-  const first = "Task Response";
-  let changed = false;
-
-  result.task2QuestionTypeDetected = result.task2QuestionTypeDetected || type;
-  if (analysis && typeof analysis === "object") {
-    analysis.questionType = analysis.questionType || type;
-  }
-
-  if (type === "agree_disagree" && !positionPresent) {
-    changed = capCriterionBand(result, first, 4, task2QuestionTypeCapReason(type), "task2_question_type_cap") || changed;
-  }
-
-  if (["discuss_both_views", "advantages_disadvantages", "problem_solution", "two_part_question"].includes(type)) {
-    if (task2HasReliableMissingRequiredPart(result, body, signals, type)) {
-      changed = capCriterionBand(result, first, 5, task2QuestionTypeCapReason(type), "task2_question_type_cap") || changed;
-    }
-  }
-
-  if (type === "advantages_disadvantages" && /more advantages|more disadvantages|outweigh/i.test(String(body.questionPrompt || ""))) {
-    const hasComparativeJudgement = /\b(more advantages|more disadvantages|outweigh|overall|on balance|i believe.*advantage|i believe.*disadvantage)\b/i.test(String(body.essay || ""));
-    if (!hasComparativeJudgement) {
-      changed = capCriterionBand(result, first, 5.5, "The prompt asks whether advantages or disadvantages are stronger, but the essay does not make a clear comparative judgement.", "task2_question_type_cap") || changed;
-    }
-  }
-
-  if (changed) {
-    result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
-      ? result.scoreCalibration
-      : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
-    result.scoreCalibration.task2QuestionType = type;
-    appendCalibrationEvidence(result, `Task 2 question type checked: ${type}.`);
-  }
-
-  return changed;
-}
-
-function highBandBadAdvicePattern() {
-  return /\b(more sophisticated vocabulary|sophisticated vocabulary|rare vocabulary|less common lexical|inversion|inverted conditional|inverted conditionals|complex conditional|more complex conditional|flawless|perfect grammar|absolute accuracy|for sophistication|synergistic|synergise|synergize|holistic understanding|expedite|wider range of cohesive devices|vary paragraph transitions.*(?:furthermore|moreover|in addition)|furthermore|moreover|in addition|consequently|replace\s+['"].+?['"]\s+with|this essay will explore|brief preview of your main points)\b/i;
-}
-
-function setCriterionImprove(criterion, english, chinese) {
-  if (!criterion || typeof criterion !== "object") return false;
-  criterion.howToImprove = english;
-  criterion.howToImproveZh = chinese;
-  criterion.highBandAdviceRefined = true;
-  return true;
-}
-
-function refineHighBandTask1Advice(result) {
-  const criteria = result?.criteria || {};
-  let changed = false;
-  const task = criteria["Task Achievement"];
-  const cc = criteria["Coherence and Cohesion"];
-  const lr = criteria["Lexical Resource"];
-  const gra = criteria["Grammatical Range and Accuracy"];
-
-  if (normalizeCriterionBandValue(task?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      task,
-      "To move closer to Band 9, make the company benefit slightly more concrete by naming the exact department outcome your experience would support, rather than adding more general detail.",
-      "想接近 Band 9，要把公司受益写得更具体，例如说明你的经验会支持新部门的哪一个具体结果，而不是泛泛增加内容。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(cc?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      cc,
-      "To move closer to Band 9, refine the transitions between the request, learned skills, company benefit, and reason for staying so the letter flows even more naturally without extra linking words.",
-      "想接近 Band 9，重点是让请求、已学技能、公司受益和留任原因之间过渡更自然，而不是额外堆连接词。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(lr?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      lr,
-      "To move closer to Band 9, keep the vocabulary precise but natural. Avoid business buzzwords and improve only the words that make the workplace benefit clearer.",
-      "想接近 Band 9，词汇要准确自然，不要使用商业套话；只优化那些能让职场受益表达更清楚的词。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(gra?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      gra,
-      "To move closer to Band 9, check minor punctuation consistency and vary sentence openings only where it makes the letter sound more natural and effortless.",
-      "想接近 Band 9，检查细小标点一致性；只有在能让信件更自然流畅时才调整句子开头。"
-    ) || changed;
-  }
-
-  return changed;
-}
-
-function refineHighBandTask2Advice(result) {
-  const criteria = result?.criteria || {};
-  let changed = false;
-  const tr = criteria["Task Response"];
-  const cc = criteria["Coherence and Cohesion"];
-  const lr = criteria["Lexical Resource"];
-  const gra = criteria["Grammatical Range and Accuracy"];
-
-  if (normalizeCriterionBandValue(tr?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      tr,
-      "To move closer to Band 9, make the argument more nuanced by developing the strongest idea with a sharper reason, example, or consequence instead of adding more separate ideas.",
-      "想接近 Band 9，不是增加更多观点，而是把最强的观点用更精准的原因、例子或结果展开得更有层次。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(cc?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      cc,
-      "To move closer to Band 9, refine paragraph progression so each topic sentence clearly advances the argument without relying on mechanical linking words.",
-      "想接近 Band 9，要让每个主题句推动论证向前发展，而不是依赖机械连接词。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(lr?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      lr,
-      "To move closer to Band 9, keep vocabulary precise and topic-specific. Avoid forcing rare words; choose terms that express the argument more exactly.",
-      "想接近 Band 9，词汇要精准并贴合话题，不要强行使用生僻词；选择能更准确表达论点的词。"
-    ) || changed;
-  }
-  if (normalizeCriterionBandValue(gra?.band, 0) >= 7.5) {
-    changed = setCriterionImprove(
-      gra,
-      "To move closer to Band 9, polish sentence rhythm and clause control only where it makes the reasoning clearer and more natural.",
-      "想接近 Band 9，只在能让论证更清楚、更自然的地方优化句子节奏和从句控制。"
-    ) || changed;
-  }
-
-  return changed;
-}
-
-function replaceBadHighBandAdviceArray(items, replacements) {
-  const list = ensureArray(items).filter(Boolean);
-  if (!list.length) return list;
-  const output = [];
-  list.forEach((item) => {
-    const text = String(item || "");
-    if (highBandBadAdvicePattern().test(text)) {
-      replacements.forEach((replacement) => {
-        if (!output.includes(replacement)) output.push(replacement);
-      });
-    } else if (!output.includes(text)) {
-      output.push(text);
-    }
-  });
-  return output.slice(0, Math.max(3, list.length));
-}
-
-function refineHighBandAdviceArrays(result, task) {
-  if (!result || typeof result !== "object") return false;
-  const overall = normalizeCriterionBandValue(result.overallBand || result.overallEstimatedBand, 0);
-  const bands = getCriterionBandsForTask(result, task);
-  const highBand = overall >= 7.5 || bands.some((band) => band >= 7.5);
-  if (!highBand) return false;
-
-  let changed = false;
-  if (task === "Task 1") {
-    const taskAdvice = "Make the practical benefit to the target department more concrete, using one precise workplace outcome rather than extra general detail.";
-    const cohesionAdvice = "Improve natural paragraph flow between the request, experience, company benefit, and loyalty reason without adding formulaic linking words.";
-    const lexicalAdvice = "Keep wording precise and natural; avoid business buzzwords and only adjust vocabulary when it clarifies the workplace situation.";
-    const grammarAdvice = "Polish minor punctuation and sentence rhythm only where it improves the letter's natural formal tone.";
-    result.taskAchievementAdvice = replaceBadHighBandAdviceArray(result.taskAchievementAdvice, [taskAdvice]);
-    result.coherenceAdvice = replaceBadHighBandAdviceArray(result.coherenceAdvice, [cohesionAdvice]);
-    result.lexicalAdvice = replaceBadHighBandAdviceArray(result.lexicalAdvice, [lexicalAdvice]);
-    result.grammarAdvice = replaceBadHighBandAdviceArray(result.grammarAdvice, [grammarAdvice]);
-    changed = true;
-  } else {
-    const taskAdvice = "Deepen the strongest line of argument with a clearer reason, example, or consequence instead of adding extra claims.";
-    const cohesionAdvice = "Make paragraph progression more argumentative so each topic sentence moves the essay forward naturally.";
-    const lexicalAdvice = "Use precise topic vocabulary that serves the argument; do not force rare or inflated words.";
-    const grammarAdvice = "Refine sentence rhythm and clause control only where it makes the reasoning clearer.";
-    result.taskAchievementAdvice = replaceBadHighBandAdviceArray(result.taskAchievementAdvice, [taskAdvice]);
-    result.coherenceAdvice = replaceBadHighBandAdviceArray(result.coherenceAdvice, [cohesionAdvice]);
-    result.lexicalAdvice = replaceBadHighBandAdviceArray(result.lexicalAdvice, [lexicalAdvice]);
-    result.grammarAdvice = replaceBadHighBandAdviceArray(result.grammarAdvice, [grammarAdvice]);
-    changed = true;
-  }
-
-  return changed;
-}
-
-
-function sanitizeHighBandTask2NestedAdvice(result) {
-  if (!result || typeof result !== "object") return false;
-  let changed = false;
-  const taskAdvice = "Deepen the strongest line of argument with a clearer reason, example, or consequence instead of adding extra claims.";
-  const cohesionAdvice = "Make paragraph progression more argumentative so each topic sentence moves the essay forward naturally, without adding formulaic linking words.";
-  const lexicalAdvice = "Use precise topic vocabulary that serves the argument; do not force rare or inflated words.";
-  const grammarAdvice = "Refine sentence rhythm and clause control only where it makes the reasoning clearer.";
-
-  const replaceList = (key, replacements) => {
-    const before = JSON.stringify(result[key] || []);
-    result[key] = replaceBadHighBandAdviceArray(result[key], replacements);
-    changed = changed || before !== JSON.stringify(result[key] || []);
-  };
-  replaceList("taskAchievementAdvice", [taskAdvice]);
-  replaceList("coherenceAdvice", [cohesionAdvice]);
-  replaceList("lexicalAdvice", [lexicalAdvice]);
-  replaceList("grammarAdvice", [grammarAdvice]);
-  replaceList("band7UpgradePlan", [taskAdvice, cohesionAdvice, lexicalAdvice, grammarAdvice]);
-  replaceList("band6UpgradePlan", [taskAdvice, cohesionAdvice]);
-
-  if (result.task2EssayCorrections && typeof result.task2EssayCorrections === "object") {
-    const c = result.task2EssayCorrections;
-    if (highBandBadAdvicePattern().test([c.introductionComment, c.bodyParagraphComment, c.exampleComment, c.conclusionComment].join(" "))) {
-      c.introductionComment = "The introduction is effective; to polish it, make the thesis slightly more nuanced rather than adding a formulaic preview sentence.";
-      c.introductionCommentZh = "开头段已经有效；如要润色，应让立场更有层次，而不是添加模板式预告句。";
-      c.bodyParagraphComment = "Body paragraphs are well controlled; improvement should focus on sharpening the strongest reasoning link in each paragraph.";
-      c.bodyParagraphCommentZh = "主体段控制较好；提升重点是让每段最强的论证关系更清楚。";
-      c.exampleComment = "A named novel, drama, study, or statistic is optional; add one only if it directly strengthens the reasoning rather than as decoration.";
-      c.exampleCommentZh = "具体作品、研究或数据不是硬性要求；只有在能直接加强论证时才添加。";
-      c.conclusionComment = "The conclusion should synthesise the argument precisely rather than simply adding a new broad statement.";
-      c.conclusionCommentZh = "结尾应更精准地综合论证，而不是额外增加泛泛的新观点。";
-      changed = true;
-    }
-    const devBefore = JSON.stringify(c.developmentAdvice || []);
-    c.developmentAdvice = replaceBadHighBandAdviceArray(c.developmentAdvice, [
-      "Make the strongest example or explanation more concrete only where it improves the argument.",
-      "Use referencing and substitution to connect ideas naturally, not extra linking-word lists."
-    ]);
-    changed = changed || devBefore !== JSON.stringify(c.developmentAdvice || []);
-  }
-
-  return changed;
-}
-
-function sanitizeHighBandTask1NestedAdvice(result) {
-  if (!result || typeof result !== "object") return false;
-  let changed = false;
-  if (result.task1LetterCorrections && typeof result.task1LetterCorrections === "object") {
-    const c = result.task1LetterCorrections;
-    if (highBandBadAdvicePattern().test([c.openingComment, c.closingComment, c.toneComment, c.purposeComment, ensureArray(c.bulletPointAdvice).join(" ")].join(" "))) {
-      c.toneComment = "The tone is already controlled; polish only small wording choices to make the letter sound more natural for the recipient.";
-      c.toneCommentZh = "语气已经控制较好；只需润色少量措辞，让信件更自然地适合收信人。";
-      c.bulletPointAdvice = ["Make one key bullet point slightly more concrete by naming a practical workplace outcome."];
-      c.bulletPointAdviceZh = ["把一个核心要点写得更具体，例如说明一个实际职场结果。"];
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function refineHighBandTaskSpecificAdvice(result, body = {}) {
-  if (!result || typeof result !== "object") return result;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const overall = normalizeCriterionBandValue(result.overallBand || result.overallEstimatedBand, 0);
-  const bands = getCriterionBandsForTask(result, task);
-  const highBand = overall >= 7.5 || bands.some((band) => band >= 7.5);
-  if (!highBand) return result;
-
-  const changed = task === "Task 1"
-    ? refineHighBandTask1Advice(result)
-    : refineHighBandTask2Advice(result);
-  const arrayChanged = refineHighBandAdviceArrays(result, task);
-  const nestedChanged = task === "Task 2" ? sanitizeHighBandTask2NestedAdvice(result) : sanitizeHighBandTask1NestedAdvice(result);
-
-  if (changed || arrayChanged || nestedChanged) {
-    result.highBandAdvicePolicy = {
-      applied: true,
-      task,
-      principle: task === "Task 1"
-        ? "High-band Task 1 advice focuses on naturalness, specificity, concise formal register, and letter-purpose precision."
-        : "High-band Task 2 advice focuses on argument nuance, paragraph progression, precise topic vocabulary, and grammar serving reasoning."
-    };
-  }
-
-  return result;
-}
-
-function applyCriterionDifferentiationCaps(result, body = {}) {
-  if (!result || typeof result !== "object") return result;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  normalizeTaskSpecificCriteria(result, task);
-  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
-    ? result.scoreCalibration
-    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
-
-  const signals = extractEssaySignals(body, result);
-  const questionTypeChanged = task === "Task 2" ? applyTask2QuestionTypeCaps(result, body, signals) : false;
-  if (task === "Task 2") repairTask2TaskResponseContradiction(result, body, signals);
-  if (!shouldApplyHardDifferentiation(result, body, task, signals)) {
-    if (questionTypeChanged) {
-      result.scoreCalibration.criterionDifferentiationApplied = true;
-      result.scoreCalibration.criteriaDifferentiationReason = "Task 2 question-type requirements were applied before final score calculation.";
-    }
-    return result;
-  }
-
-  const beforeBands = getCriterionBandsForTask(result, task);
-  const changed = (task === "Task 1"
-    ? applyTask1CriterionDifferentiationCaps(result, body, signals)
-    : applyTask2CriterionDifferentiationCaps(result, body, signals)) || questionTypeChanged;
-
-  if (task === "Task 2") repairTask2TaskResponseContradiction(result, body, signals);
-
-  const afterBands = getCriterionBandsForTask(result, task);
-  const wasSame = beforeBands.length === 4 && new Set(beforeBands.map((band) => formatBand(roundHalf(band)))).size === 1;
-  const isNowDifferent = afterBands.length === 4 && new Set(afterBands.map((band) => formatBand(roundHalf(band)))).size > 1;
-
-  if (changed) {
-    result.scoreCalibration.criterionDifferentiationApplied = true;
-    result.scoreCalibration.criteriaDifferentiationReason = task === "Task 1"
-      ? "Task 1 criterion bands were locally differentiated because the evidence showed different levels of task fulfilment, cohesion, vocabulary, and grammar control."
-      : "Task 2 criterion bands were locally differentiated because the evidence showed different levels of response development, organisation, vocabulary, and grammar control.";
-    appendCalibrationEvidence(result, result.scoreCalibration.criteriaDifferentiationReason);
-    if (wasSame && isNowDifferent) {
-      appendCalibrationEvidence(result, "Identical criterion bands were adjusted because the essay evidence did not support all four criteria being at the same level.");
-    }
-  }
-
-  return result;
-}
-
-function finalizeTaskScoringEngine(result, body = {}) {
-  if (!result || typeof result !== "object") return result;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  normalizeTaskSpecificCriteria(result, task);
-  applyCriterionDifferentiationCaps(result, { ...body, task });
-  const signals = extractEssaySignals({ ...body, task }, result);
-  if (task === "Task 1") applyTask1HalfBandCalibration(result, { ...body, task }, signals);
-  if (task === "Task 2") {
-    applyTask2LexicalResourceCalibration(result, { ...body, task }, signals);
-    repairTask2TaskResponseContradiction(result, { ...body, task }, signals);
-  }
-  applyGlobalHalfBandCalibration(result, { ...body, task });
-  populateCriterionEvidenceDetails(result, { ...body, task });
-  ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
-
-  const diagnostics = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object"
-    ? result.lowBandDiagnostics
-    : buildLowBandDiagnostics({ ...body, task });
-  const cap = capFromDiagnostics({ ...body, task }, diagnostics);
-  const firstCriterion = firstCriterionName(task);
-
-  if (cap.firstCap !== null && result.criteria?.[firstCriterion]) {
-    result.criteria[firstCriterion].band = Math.min(
-      normalizeCriterionBandValue(result.criteria[firstCriterion].band, result.overallBand || 1),
-      cap.firstCap
-    );
-  }
-
-  Object.values(result.criteria || {}).forEach((criterion) => {
-    if (criterion && typeof criterion === "object") {
-      criterion.band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
-    }
-  });
-
-  let finalBand = calculateTaskBandFromCriteria(result, task);
-  const beforeCapBand = finalBand;
-  let capApplied = false;
-  let capReason = "";
-  if (cap.cap !== null && Number.isFinite(Number(cap.cap)) && finalBand > cap.cap) {
-    finalBand = roundHalf(cap.cap);
-    capApplied = true;
-    capReason = cap.reason || "A task-specific IELTS cap was applied.";
-  }
-
-  const bands = getCriterionBandsForTask(result, task);
-  const lowCriteria = bands.filter((band) => band <= 5).length;
-  if (lowCriteria >= 2 && finalBand >= 6) {
-    finalBand = 5.5;
-    capApplied = true;
-    capReason = capReason || "Two or more criteria are 5.0 or below, so Band 6.0+ is not justified.";
-  }
-
-  result.overallBand = roundHalf(finalBand);
-  result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
-  refineHighBandTaskSpecificAdvice(result, { ...body, task });
-  populateCriterionEvidenceDetails(result, { ...body, task });
-  syncCriterionEvidenceWithFinalBands(result, { ...body, task });
-  ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
-  suppressNonBlockingGrammarWarningsFinal(result);
-  result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
-  result.scoringSystem = {
-    type: task === "Task 1" ? "task1_practice_engine" : "task2_practice_engine",
-    task,
-    firstCriterion,
-    criteriaAreTaskSpecific: true,
-    overallBandSource: "calculated_from_four_criteria",
-    previousAiOverallBand: Number.isFinite(Number(result.overallEstimatedBand || result.rawOverallBand)) ? Number(result.overallEstimatedBand || result.rawOverallBand) : undefined
-  };
-
-  result.scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object"
-    ? result.scoreCalibration
-    : { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] };
-  result.scoreCalibration.strictness = result.scoreCalibration.strictness || "strict";
-  result.scoreCalibration.capApplied = Boolean(result.scoreCalibration.capApplied || capApplied);
-  if (capApplied) result.scoreCalibration.capReason = result.scoreCalibration.capReason || capReason;
-  result.scoreCalibration.evidence = ensureArray(result.scoreCalibration.evidence).concat([
-    `Scoring engine: ${task === "Task 1" ? "Task 1 GT letter" : "Task 2 essay"}.`,
-    `Overall recalculated from four criteria: ${formatBand(result.overallBand)}.`,
-    beforeCapBand !== result.overallBand ? `Pre-cap criteria average band: ${formatBand(beforeCapBand)}.` : ""
-  ].filter(Boolean)).slice(0, 5);
-
-  result.scoreAudit = buildLocalScoreAudit(result, { ...body, task });
-
-  const allSame = bands.length === 4 && new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
-  result.scoreCalibration.criteriaIdentical = allSame;
-  result.scoreCalibration.criteriaIdenticalReviewNeeded = shouldReauditMechanicalSameBands(result, task);
-  if (result.scoreCalibration.criteriaIdenticalReviewNeeded) {
-    result.scoreCalibration.evidence = ensureArray(result.scoreCalibration.evidence).concat([
-      "All four criterion bands are identical while the feedback mentions different criterion-specific evidence; score-audit should recheck whether the same bands are truly justified."
-    ]).slice(0, 5);
-  }
-
-  result.overallEstimatedBand = result.overallBand;
-  return result;
-}
 
 function buildMockWritingScore(task1Result, task2Result) {
   const task1Band = clampAiBand(task1Result?.overallBand ?? task1Result?.overallEstimatedBand, 1);
@@ -2049,116 +351,6 @@ function buildMockWritingScore(task1Result, task2Result) {
   };
 }
 
-function mostlyNonEnglish(text) {
-  const trimmed = String(text || "").trim();
-  if (!trimmed) return false;
-  const latin = (trimmed.match(/[A-Za-z]/g) || []).length;
-  const cjk = (trimmed.match(/[\u3400-\u9fff]/g) || []).length;
-  const letters = latin + cjk;
-  return letters > 0 && (latin / letters < 0.25 || (cjk >= 8 && latin < 12));
-}
-
-function tokenSet(text) {
-  return new Set(String(text || "").toLowerCase().match(/[a-z0-9]+(?:[-'][a-z0-9]+)?/g) || []);
-}
-
-function mostlyCopiedFromPrompt(essay, prompt) {
-  const essayTokens = [...tokenSet(essay)].filter((token) => token.length > 2);
-  const promptTokens = tokenSet(prompt);
-  if (essayTokens.length < 8 || promptTokens.size < 8) return false;
-  const overlap = essayTokens.filter((token) => promptTokens.has(token)).length;
-  return overlap / essayTokens.length >= 0.72;
-}
-
-function buildLowBandDiagnostics(body) {
-  const essay = String(body.essay || "");
-  const trimmed = essay.trim();
-  const words = Number(body.wordCount) || countWordsServer(essay);
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const isBlank = !trimmed;
-  const nonEnglish = mostlyNonEnglish(essay);
-  const copied = mostlyCopiedFromPrompt(essay, body.questionPrompt);
-  const wordCount20OrFewer = words > 0 && words <= 20;
-  const severeTask1 = task === "Task 1" && words < 50;
-  const severeTask2 = task === "Task 2" && words < 80;
-
-  let recommendedLowBandRange = "";
-  let reason = "No low-band trigger detected.";
-  if (isBlank) {
-    recommendedLowBandRange = "0";
-    reason = "The response is blank or has no rateable attempt.";
-  } else if (nonEnglish) {
-    recommendedLowBandRange = "0";
-    reason = "The response is mostly not written in English.";
-  } else if (copied) {
-    recommendedLowBandRange = "0-1.0";
-    reason = "The response appears mostly copied from the question prompt.";
-  } else if (wordCount20OrFewer) {
-    recommendedLowBandRange = "1.0";
-    reason = "The response has 20 words or fewer and provides very little rateable language.";
-  } else if (severeTask1 || severeTask2) {
-    recommendedLowBandRange = "2.0-3.5";
-    reason = "The response is extremely short and misses most task requirements.";
-  } else if (task === "Task 1" && words < 150) {
-    recommendedLowBandRange = words < 80 ? "3.0-4.0" : (words < 120 ? "4.0-5.0" : "Underlength warning");
-    reason = `Task 1 has ${words} words, below the recommended 150-word minimum. Task Achievement and development are limited.`;
-  } else if (task === "Task 2" && words < 250) {
-    recommendedLowBandRange = words < 150 ? "3.0-4.0" : (words < 200 ? "4.0-5.0" : "Underlength warning");
-    reason = `Task 2 has ${words} words, below the recommended 250-word minimum. Task Response and idea development are limited.`;
-  }
-
-  return {
-    isBlank,
-    wordCount20OrFewer,
-    mostlyNonEnglish: nonEnglish,
-    mostlyCopiedFromPrompt: copied,
-    mostlyMemorised: false,
-    whollyUnrelated: false,
-    barelyRelated: false,
-    littleRelevantMessage: isBlank || nonEnglish || copied || wordCount20OrFewer || severeTask1 || severeTask2,
-    noClearPositionTask2: false,
-    noBulletPointCoverageTask1: false,
-    meaningMostlyBlocked: isBlank || nonEnglish || wordCount20OrFewer,
-    recommendedLowBandRange,
-    reason
-  };
-}
-
-function capFromDiagnostics(body, diagnostics) {
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const words = Number(body.wordCount) || countWordsServer(body.essay);
-  const firstCriterion = firstCriterionName(task);
-
-  if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
-    return { cap: 0, firstCap: 0, reason: diagnostics.reason || "No rateable English response." };
-  }
-  if (diagnostics.mostlyCopiedFromPrompt) {
-    return { cap: 1, firstCap: 1, reason: "The response is mostly copied from the prompt and has little original rateable writing." };
-  }
-  if (words <= 5) {
-    return { cap: 1, firstCap: 1, reason: "The response has 5 words or fewer; assess from Band 0-1 depending on whether any rateable original English is present." };
-  }
-  if (words <= 20) {
-    return { cap: 2, firstCap: 2, reason: "The response has 20 words or fewer; assess from Band 0-2 depending on rateable content, relevance, and clarity." };
-  }
-  if (task === "Task 1") {
-    if (words < 50) return { cap: 3, firstCap: 3, reason: "Task 1 is under 50 words; assess strictly from Band 0-3 depending on rateable content, relevance, and task coverage." };
-    if (words < 80) return { cap: 4, firstCap: 4, reason: "Task 1 is 50-79 words; Task Achievement is normally capped at Band 4." };
-    if (words < 120) return { cap: 5, firstCap: 5, reason: "Task 1 is 80-119 words; task coverage and development are limited." };
-  } else {
-    if (words < 80) return { cap: 3, firstCap: 3, reason: "Task 2 is under 80 words; assess strictly from Band 0-3 depending on rateable content, relevance, and task response." };
-    if (words < 150) return { cap: 4, firstCap: 4, reason: "Task 2 is 80-149 words; Task Response is normally capped at Band 4." };
-    if (words < 200) return { cap: 5, firstCap: 5, reason: "Task 2 is 150-199 words; argument development is too limited for higher Task Response." };
-  }
-
-  if (diagnostics.noClearPositionTask2) {
-    return { cap: 4, firstCap: 4, reason: `${firstCriterion} is capped because no clear Task 2 position is evident.` };
-  }
-  if (diagnostics.noBulletPointCoverageTask1) {
-    return { cap: 4, firstCap: 4, reason: `${firstCriterion} is capped because Task 1 bullet point coverage is not sufficiently evident.` };
-  }
-  return { cap: null, firstCap: null, reason: "" };
-}
 
 function buildSystemPrompt(veryShort = false, locale = "en") {
   const outputLanguageInstruction = isChineseLocale(locale)
@@ -2510,8 +702,6 @@ function buildUserPrompt(body, veryShort, locale = "en") {
   const mode = normalizeMode(body.mode);
   const effectiveMode = mode;
   const isRevisionMode = effectiveMode === "revision";
-  const diagnostics = buildLowBandDiagnostics(body);
-  const cap = capFromDiagnostics(body, diagnostics);
   const revisionInstruction = isRevisionMode
     ? "Detailed Grading + Model Answer mode: generate revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7. Band 5 should be safer and clearer; Band 6 should be more natural and logically complete; Band 7 should be mature and coherent but not template-like."
     : "Detailed Grading mode: do not generate revised essays or model answers. revisedEssayBand5, revisedEssayBand6, and revisedEssayBand7 must be empty strings.";
@@ -2536,10 +726,6 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 1 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
     "Use English for the main feedback. Use accurate Chinese explanations only in *Zh fields. These Chinese explanations must follow the exact English meaning and must not be vague template translations. Do not translate the whole essay or revised essays.",
-    "Local low-band diagnostics from the server are provided below. Use them as strong evidence, but still assess the actual writing.",
-    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }, null, 2),
-    "If capSuggestion.cap is not null, apply that as an upper cap unless the essay is clearly worse, and explain it in scoreCalibration.",
-    "If lowBandDiagnostics.recommendedLowBandRange is not empty, reflect it in scoreCalibration and avoid inflated scores.",
     `Always set disclaimer to: ${DISCLAIMER}`,
     "",
     "Request data:",
@@ -2577,7 +763,7 @@ function buildCompactAiOnlySystemPrompt(locale = "en") {
     : "Main feedback must be English. Include accurate Chinese explanations only in *Zh fields. They must match the English feedback and not be generic. Do not translate essays.";
   return [
     "You are a strict IELTS Writing examiner.",
-    "DeepSeek is the only scorer. Do not copy or rely on any local fallback score.",
+    "DeepSeek is the only scorer. Do not rely on any non-AI score or fallback content.",
     "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
     "Score only from Band 1 to Band 9. Do not return 0.",
     "Low-word-count responses must still receive AI scoring and AI feedback. Penalise underlength strictly, but do not reject the answer.",
@@ -2701,21 +887,14 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
           deadline,
           timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
-        try {
-          return parseJsonFromProvider(repairedText);
-        } catch (repairParseError) {
-          const repairedSalvage = buildAiPartialResultFromText(repairedText, body, repairParseError.message || "Malformed repaired JSON");
-          if (repairedSalvage) return repairedSalvage;
-        }
+        return parseJsonFromProvider(repairedText);
       } catch (repairCallError) {
-        // Fall through to partial recovery below. This still keeps the score AI-derived.
+        parseError.message = `AI returned malformed JSON and AI repair failed: ${repairCallError.message || repairCallError.name || parseError.message}`;
+        throw parseError;
       }
     }
 
-    const salvaged = buildAiPartialResultFromText(rawText, body, parseError.message || "Malformed JSON");
-    if (salvaged) return salvaged;
-
-    parseError.message = `AI returned malformed JSON and no score could be recovered: ${parseError.message}`;
+    parseError.message = `AI returned malformed JSON. No non-AI partial score or feedback was generated: ${parseError.message}`;
     throw parseError;
   }
 }
@@ -3503,9 +1682,8 @@ async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingM
   }
 
   const warning = lastError
-    ? "AI detailed correction retry failed or timed out. Local sentence-level fallback corrections were used when visible errors could be detected."
-    : "AI did not return concrete sentence-level corrections. Local sentence-level fallback corrections were used when visible errors could be detected.";
-  output = applyLocalCorrectionFallbacks(output, body, gradingMode);
+    ? "AI detailed correction retry failed or timed out. No non-AI correction was generated."
+    : "AI did not return concrete sentence-level corrections. No non-AI correction was generated.";
   output.correctionWarning = warning;
   output.correctionPassWarning = warning;
   output.stageWarnings = ensureArray(output.stageWarnings).concat([warning]);
@@ -3521,7 +1699,7 @@ function buildFastAiGradingSystemPrompt(locale = "en") {
     "Return exactly one valid JSON object only. No markdown. No code fences. No trailing commas.",
     "This pass is for scoring and task analysis only. A separate AI pass handles detailed sentence corrections.",
     "Use IELTS Writing public band descriptor logic. Score from Band 1 to Band 9 only and allow half bands.",
-    "DeepSeek is the only scorer. Do not use or mention local fallback scoring.",
+    "DeepSeek is the only scorer. The server will not score, cap, or generate non-AI feedback.",
     "Penalise short responses strictly but still grade them. There is no maximum word-count cap.",
     "For Task 1 use Task Achievement. For Task 2 use Task Response.",
     "Band 8 or 9 is allowed for truly high-quality responses; strict scoring must not artificially cap strong answers.",
@@ -3536,8 +1714,6 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
   const firstCriterion = firstCriterionName(task);
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   const threshold = task === "Task 1" ? 150 : 250;
-  const diagnostics = buildLowBandDiagnostics(body);
-  const cap = capFromDiagnostics(body, diagnostics);
   const shape = {
     actualWordCount: words,
     taskTypeDetected: taskType,
@@ -3623,8 +1799,6 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     "- If under the recommended word count, reflect that in Task Achievement/Task Response, but still score normally from Band 1 upward.",
     "- Include 1-3 short backup spelling/grammar/sentence corrections if visible errors are obvious; the separate correction pass will add the full list.",
     "- Keep strings short. Arrays max 5 items.",
-    "Server low-band context:",
-    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
     "Request:",
     JSON.stringify({
       task,
@@ -4030,7 +2204,7 @@ function buildLeanScoreSystemPrompt(locale = "en") {
     "Return exactly one valid JSON object. No markdown. No code fences. No trailing commas.",
     "Use IELTS Writing public band descriptor logic.",
     "Score from Band 1 to Band 9 only and allow half bands.",
-    "DeepSeek is the only scorer. Do not use or mention local fallback scoring.",
+    "DeepSeek is the only scorer. The server will not score, cap, or generate non-AI feedback.",
     "Penalise underlength strictly, but still grade from Band 1 upward.",
     "There is no maximum word-count cap; penalise long answers only for repetition, irrelevance, weak coherence, or loss of task focus.",
     "For Task 1 use Task Achievement. For Task 2 use Task Response.",
@@ -4052,8 +2226,6 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
   const firstCriterion = firstCriterionName(task);
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   const threshold = task === "Task 1" ? 150 : 250;
-  const diagnostics = buildLowBandDiagnostics(body);
-  const cap = capFromDiagnostics(body, diagnostics);
   const shape = {
     actualWordCount: words,
     taskTypeDetected: taskType,
@@ -4140,8 +2312,6 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
     "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
     buildTargetImprovementInstruction(body),
-    "Server low-band context:",
-    JSON.stringify({ lowBandDiagnostics: diagnostics, capSuggestion: cap }),
     body.currentResult ? "Current result to audit:" : "",
     body.currentResult ? JSON.stringify(body.currentResult).slice(0, 3500) : "",
     "Request:",
@@ -4479,70 +2649,6 @@ function highBandStageNumber(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function resultSuggestsHighBandForEmptySentenceStage(result) {
-  if (!result || typeof result !== "object") return false;
-  const overall = Math.max(
-    highBandStageNumber(result.overallBand),
-    highBandStageNumber(result.overallEstimatedBand),
-    highBandStageNumber(result.rawOverallBand)
-  );
-  const grammarBand = highBandStageNumber(result.criteria?.["Grammatical Range and Accuracy"]?.band);
-  const criteriaBands = Object.values(result.criteria || {})
-    .map((item) => highBandStageNumber(item?.band))
-    .filter((band) => band > 0);
-  const allCriteriaHigh = criteriaBands.length >= 4 && criteriaBands.every((band) => band >= 7.5);
-  const highBandRange = finalGateText(result.highBandDiagnostics?.recommendedHighBandRange || result.estimatedLevel || "");
-  const highBandText = /(^|[^0-9])(?:7\.5|8|8\.0|8\.5|9|9\.0)([^0-9]|$)/.test(highBandRange);
-  return overall >= 7.5 || grammarBand >= 7.5 || allCriteriaHigh || highBandText;
-}
-
-function essaySignalsSuggestHighBandEmptySentenceStage(body = {}) {
-  const signals = extractEssaySignals(body, {});
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  if (task === "Task 1") {
-    return signals.words >= 150 && signals.paragraphs >= 3 && signals.hasFormalSalutation && signals.hasLetterClosing && signals.grammarPressure <= 1 && signals.weakCollocationHits === 0 && !signals.repeatedBasicWords;
-  }
-  return signals.words >= 250 && signals.paragraphs >= 4 && signals.task2PositionSignals && signals.grammarPressure <= 1 && signals.weakCollocationHits === 0 && !signals.repeatedBasicWords;
-}
-
-function shouldTreatEmptySentenceStageAsValid(body = {}, bestOutput = {}) {
-  const reference = stageReferenceResult(body, bestOutput);
-  return resultSuggestsHighBandForEmptySentenceStage(reference) || essaySignalsSuggestHighBandEmptySentenceStage(body);
-}
-
-function removeNoUsableSentenceWarnings(items) {
-  return ensureArray(items).filter((item) => {
-    const text = String(item || "").toLowerCase();
-    return !/sentence stage returned no usable detailed content|sentence stage did not return enough usable detail|ai sentence stage returned no usable detailed content/.test(text);
-  });
-}
-
-function applyEmptySentenceStageHighBandFallback(bestOutput = {}, body = {}) {
-  const output = bestOutput && typeof bestOutput === "object" ? bestOutput : {};
-  output.sectionStage = "sentence";
-  output.sectionWarning = "";
-  output.stageWarnings = removeNoUsableSentenceWarnings(output.stageWarnings);
-  output.sentenceCorrections = ensureArray(output.sentenceCorrections);
-  output.detailedSentenceCorrections = ensureArray(output.detailedSentenceCorrections);
-  output.sentenceCorrectionSummary = output.sentenceCorrectionSummary && typeof output.sentenceCorrectionSummary === "object"
-    ? output.sentenceCorrectionSummary
-    : {};
-  output.sentenceCorrectionSummary.message = output.sentenceCorrectionSummary.message || "No major score-impacting sentence errors were found in this high-band response.";
-  output.sentenceCorrectionSummary.messageZh = output.sentenceCorrectionSummary.messageZh || "这篇高分作文没有发现明显影响分数的逐句错误，重点是自然度和细节润色。";
-  output.errorAnalysis = output.errorAnalysis && typeof output.errorAnalysis === "object" ? output.errorAnalysis : {};
-  output.errorAnalysis.summary = output.errorAnalysis.summary || "No major score-impacting sentence errors were returned; at this band, sentence work should focus on naturalness, concision, and register precision rather than basic correction.";
-  output.errorAnalysis.summaryZh = output.errorAnalysis.summaryZh || "未返回明显影响分数的逐句错误；这个分数段应重点润色自然度、简洁度和语气精准度，而不是基础纠错。";
-  output.correctionPriority = output.correctionPriority && typeof output.correctionPriority === "object" ? output.correctionPriority : { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] };
-  output.correctionPriority.polishLater = ensureArray(output.correctionPriority.polishLater);
-  if (!output.correctionPriority.polishLater.some((item) => /naturalness|concision|register/i.test(String(item || "")))) {
-    output.correctionPriority.polishLater.push("Polish naturalness, concision, and register precision; no major sentence-level error blocks the score.");
-  }
-  output.correctionPriority.polishLaterZh = ensureArray(output.correctionPriority.polishLaterZh);
-  if (!output.correctionPriority.polishLaterZh.some((item) => String(item || "").includes("自然度"))) {
-    output.correctionPriority.polishLaterZh.push("润色表达自然度、简洁度和语气精准度；没有明显逐句错误拉低分数。");
-  }
-  return output;
-}
 
 function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", previousIssue = "") {
   return [
@@ -4630,9 +2736,6 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     return bestOutput;
   }
 
-  if (section === "sentence" && shouldTreatEmptySentenceStageAsValid(body, bestOutput)) {
-    return applyEmptySentenceStageHighBandFallback(bestOutput, body);
-  }
 
   if (section === "grammar") {
     bestOutput.sectionStage = section;
@@ -4667,63 +2770,6 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
 }
 
 
-function scoreAuditLooksNecessary(currentResult) {
-  if (!currentResult || typeof currentResult !== "object") return false;
-  const criteria = currentResult.criteria && typeof currentResult.criteria === "object" ? currentResult.criteria : {};
-  const combined = finalGateText([
-    currentResult.overallBand,
-    currentResult.estimatedLevel,
-    currentResult.highBandDiagnostics?.recommendedHighBandRange,
-    currentResult.highBandDiagnostics?.reason,
-    currentResult.scoreCalibration?.whyNotHigher,
-    currentResult.scoreCalibration?.whyNotLower,
-    currentResult.strengths,
-    currentResult.mainProblems,
-    currentResult.taskAchievementAdvice,
-    currentResult.coherenceAdvice,
-    currentResult.lexicalAdvice,
-    currentResult.grammarAdvice,
-    ...Object.values(criteria || {}).map((item) => [item?.band, item?.feedback, item?.howToImprove])
-  ], 40);
-  const overall = Number(currentResult.overallBand);
-  const inferredTask = criteria["Task Achievement"] ? "Task 1" : "Task 2";
-  const bands = getWritingCriterionNames(inferredTask)
-    .map((name) => Number(criteria?.[name]?.band))
-    .filter(Number.isFinite);
-  if (bands.length === 4 && Number.isFinite(overall)) {
-    const avg = bands.reduce((sum, value) => sum + value, 0) / bands.length;
-    const expectedOverall = roundHalf(avg);
-    if (expectedOverall !== roundHalf(overall)) return true;
-    const allSame = new Set(bands.map((value) => formatBand(roundHalf(value)))).size === 1;
-    if (allSame) {
-      const differentiationSignals = [
-        "underlength", "all three bullet points", "minimally developed", "limited development",
-        "basic structure", "cohesive devices", "progression", "vocabulary is basic", "repetitive",
-        "word choice", "frequent grammatical errors", "grammar errors", "mostly simple", "subject-verb", "articles",
-        "purpose", "tone", "recipient", "position", "argument", "example", "conclusion"
-      ];
-      if (differentiationSignals.some((signal) => combined.includes(signal))) return true;
-    }
-  }
-
-  const highBandSignals = [
-    "fully addresses", "fully satisfies", "satisfies all task requirements", "all three bullet points", "clear purpose",
-    "appropriate tone", "appropriately formal", "well-developed", "well developed", "natural progression", "clear progression",
-    "precise vocabulary", "high grammatical accuracy", "flexible grammar", "few errors", "rare minor errors", "band 8", "band 9"
-  ];
-  const lowBandSignals = [
-    "needs clearer control", "needs improvement", "development is limited", "task development is limited", "limited development",
-    "vocabulary is limited", "grammar accuracy and sentence control need improvement", "organisation is basic", "organization is basic"
-  ];
-  const hasHighBandSignal = highBandSignals.some((signal) => combined.includes(signal));
-  const hasLowBandTemplate = lowBandSignals.some((signal) => combined.includes(signal));
-
-  if (hasLowBandTemplate && Number.isFinite(overall) && overall >= 6.5) return true;
-  if (hasHighBandSignal && Number.isFinite(overall) && overall <= 7) return true;
-  if (combined.includes("recommendedhighbandrange") && /8|9/.test(combined) && Number.isFinite(overall) && overall < 8) return true;
-  if (ensureArray(currentResult.mainProblems).some((item) => isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item))) return true;
-  return false;
-}
 
 function buildScoreAuditPrompt(body, locale = "en") {
   const current = body.currentResult || {};
@@ -4770,13 +2816,6 @@ function buildScoreAuditPrompt(body, locale = "en") {
 }
 
 async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
-  if (!scoreAuditLooksNecessary(body.currentResult)) {
-    return {
-      aiStage: "score-audit",
-      scoreAuditSkipped: true,
-      stageWarnings: ["Score audit skipped because no obvious score-feedback contradiction was detected."]
-    };
-  }
   try {
     const rawText = await callDeepSeek({
       apiKey,
@@ -4801,9 +2840,6 @@ async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
     });
     if (parsed && typeof parsed === "object" && !parsed.scoreAuditSkipped) {
       normalizeAiBandsOnly(parsed, body);
-      finalizeTaskScoringEngine(parsed, body || {});
-      finalQualityGate(parsed, body || {});
-      finalizeTaskScoringEngine(parsed, body || {});
     }
     return {
       ...(parsed && typeof parsed === "object" ? parsed : {}),
@@ -4930,10 +2966,6 @@ async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, l
 
   output.overallBand = output.overallBand || body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
   output.criteria = output.criteria || (body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined);
-  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
-  ensureGrammarErrorsForVisibleProblems(output, body);
-  output = applyLocalCorrectionFallbacks(output, { ...body, overallBand: output.overallBand }, effectiveMode);
-  finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "language-correction";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -5036,10 +3068,6 @@ async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode,
   }
 
   output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
-  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
-  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
-  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
-  finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "evidence-plan";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -5085,9 +3113,6 @@ async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, 
   }
 
   output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
-  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
-  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
-  finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "evidence-map";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -5121,10 +3146,6 @@ async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, lo
   }
 
   output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
-  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
-  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
-  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
-  finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "final-plan";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -5358,725 +3379,6 @@ function extractPromptBulletPoints(prompt) {
   return candidates.filter(Boolean).slice(0, 5);
 }
 
-function buildFallbackTaskRequirementAnalysis(body, fallbackReason, locale = "en") {
-  const prompt = String(body.questionPrompt || "");
-  if (body.task === "Task 1") {
-    const bulletPoints = extractPromptBulletPoints(prompt).map((requirement) => ({
-      requirement,
-      covered: null,
-      coverageUnknown: true,
-      evidence: "Fallback mode was used, so bullet-point coverage could not be checked reliably.",
-      problem: "Coverage is unknown rather than confirmed missing."
-    }));
-    return {
-      taskType: "task1",
-      taskPurpose: "Write a General Training Task 1 letter that answers the selected prompt.",
-      recipient: "Not extracted in local low-word-count/fallback mode.",
-      relationship: "Not extracted in local low-word-count/fallback mode.",
-      requiredTone: "Use the tone required by the selected prompt.",
-      letterType: "General Training Task 1 letter.",
-      bulletPoints,
-      missingRequirements: bulletPoints.map((item) => item.requirement),
-      taskMatchSummary: `Fallback mode: ${fallbackReason || "AI output was incomplete."}`
-    };
-  }
-
-  return {
-    taskType: "task2",
-    questionType: "",
-    topic: prompt.slice(0, 160),
-    requiredPosition: "Check the selected Task 2 question and give a clear position if required.",
-    requiredParts: ["Answer all parts of the selected Task 2 question."],
-    positionPresent: false,
-    mainIdeasRelevant: false,
-    missingRequirements: [],
-    taskMatchSummary: `Fallback mode: ${fallbackReason || "AI output was incomplete."}`
-  };
-}
-
-function buildFallbackErrorAnalysis(body, words, locale = "en") {
-  const taskLabel = body.task === "Task 1" ? "Task 1 letter" : "Task 2 essay";
-  return {
-    summary: `The AI provider did not return complete feedback. This fallback only confirms that the ${taskLabel} has ${words} words and needs a retry for detailed correction.`,
-    summaryZh: emptyForLocaleZh(`AI 未返回完整批改；当前仅提供基础诊断，作文约 ${words} 词。`, locale),
-    errorPatterns: [],
-    priorityFixes: [
-      "Retry the grading request once.",
-      "If it fails again, use Full Grading instead of Revision.",
-      body.task === "Task 1" ? "Check that all bullet points are covered." : "Check that the position and main ideas are clear."
-    ],
-    priorityFixesZh: emptyForLocaleZh([
-      "先重新点击批改一次。",
-      "如果仍失败，先用完整评分模式。",
-      body.task === "Task 1" ? "检查三个书信要点是否完整。" : "检查立场和主要观点是否清楚。"
-    ], locale)
-  };
-}
-
-function buildFallbackFeedback(body, reason, locale = "en") {
-  const diagnostics = buildLowBandDiagnostics(body);
-  const cap = capFromDiagnostics(body, diagnostics);
-  const firstCriterion = firstCriterionName(body.task);
-  const words = Number(body.wordCount) || countWordsServer(body.essay);
-  let band = 3;
-  let bandReason = "The response is very limited and cannot support a higher score.";
-  const normalLength = (body.task === "Task 1" && words >= 150) || (body.task === "Task 2" && words >= 250);
-
-  if (diagnostics.isBlank || diagnostics.mostlyNonEnglish) {
-    band = 0;
-    bandReason = diagnostics.reason || "There is no rateable English attempt.";
-  } else if (diagnostics.mostlyCopiedFromPrompt) {
-    band = 1;
-    bandReason = "The response is mostly copied from the prompt and has little rateable original writing.";
-  } else if (words <= 5) {
-    band = 0.5;
-    bandReason = "The response has 5 words or fewer and almost no rateable content.";
-  } else if (words <= 20) {
-    band = 1.5;
-    bandReason = "The response has 20 words or fewer and provides very little rateable content.";
-  } else if ((body.task === "Task 1" && words < 50) || (body.task === "Task 2" && words < 80)) {
-    band = 2.5;
-    bandReason = "The response is extremely short and should be assessed from Band 0-3 depending on rateable content.";
-  } else if ((body.task === "Task 1" && words < 80) || (body.task === "Task 2" && words < 150)) {
-    band = 3.5;
-    bandReason = "The response is significantly underlength and only partly communicates a relevant message.";
-  } else if (body.task === "Task 1" && words < 120) {
-    band = 4.5;
-    bandReason = "Task 1 is below 120 words, so task coverage and development are limited.";
-  } else if (body.task === "Task 1" && words < 150) {
-    band = 5;
-    bandReason = "Task 1 is below the 150-word recommended minimum, so the response is underdeveloped.";
-  } else if (body.task === "Task 2" && words < 200) {
-    band = 4.5;
-    bandReason = "Task 2 is below 200 words, so argument development is limited.";
-  } else if (body.task === "Task 2" && words < 250) {
-    band = 5;
-    bandReason = "Task 2 is below the 250-word recommended minimum, so the response is underdeveloped.";
-  } else if (cap.cap !== null) {
-    band = Math.min(4, cap.cap);
-    bandReason = cap.reason;
-  } else if (normalLength) {
-    band = 5.5;
-    bandReason = "AI output was incomplete. This fallback band is a temporary estimate only; retry to get full IELTS feedback.";
-  }
-
-  const criterionBand = roundHalf(band);
-  const noRateable = criterionBand === 0;
-  const revisionLimited = criterionBand <= 3.5 || diagnostics.littleRelevantMessage;
-  const firstFeedback = noRateable
-    ? "There is no rateable English response to assess for this task."
-    : "The response is too short or limited and does not fully answer the task.";
-  const firstFeedbackZh = noRateable
-    ? "没有可评分的英文作答。"
-    : "作文太短或内容有限，没有充分完成题目要求。";
-
-  return {
-    actualWordCount: words,
-    taskTypeDetected: body.task === "Task 1" ? "task1" : "task2",
-    wordCountThresholdUsed: body.task === "Task 1" ? 150 : 250,
-    wordCountStatus: body.task === "Task 1" ? (words >= 150 ? "meets_task1_minimum" : (words < 80 ? "very_short_task1" : "under_task1_minimum")) : (words >= 250 ? "meets_task2_minimum" : (words < 150 ? "very_short_task2" : "under_task2_minimum")),
-    taskRequirementAnalysis: buildFallbackTaskRequirementAnalysis(body, reason, locale),
-    taskRequirementAnalysisZh: { taskPurposeZh: emptyForLocaleZh("题目要求已传入，但 fallback 无法完整分析。", locale), requiredToneZh: emptyForLocaleZh(body.task === "Task 1" ? "语气需根据收信人判断。" : "", locale), letterTypeZh: emptyForLocaleZh(body.task === "Task 1" ? "信件类型需结合题目判断。" : "", locale), taskMatchSummaryZh: emptyForLocaleZh("当前是基础诊断，建议重试获取完整题目分析。", locale), bulletPointsZh: emptyForLocaleZh([], locale), requiredPartsZh: emptyForLocaleZh([], locale) },
-    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "No mismatch was detected before fallback was used.", warning: "" },
-    highBandDiagnostics: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: normalLength ? "Fallback mode cannot confirm high-band evidence. Retry for full high-band diagnostics." : "The response is too short or limited for high-band evidence." },
-    overallBand: criterionBand,
-    estimatedLevel: normalLength ? `Band ${formatBand(criterionBand)} fallback estimate` : `Band ${formatBand(criterionBand)}`,
-    lowBandDiagnostics: diagnostics,
-    lowBandDiagnosticsZh: { reasonZh: emptyForLocaleZh(diagnostics.reason || "没有明显低分触发项。", locale) },
-    scoreCalibration: {
-      strictness: "strict",
-      capApplied: !normalLength || Boolean(diagnostics.recommendedLowBandRange),
-      capReason: bandReason,
-      whyNotHigher: noRateable
-        ? "There is no rateable English response, so a higher band is not justified."
-        : (normalLength ? "This is a fallback estimate because the AI provider returned incomplete output; retry for a reliable higher-band decision." : "The answer is too short, misses key task requirements, and provides too little evidence of organisation, vocabulary, and grammar control."),
-      whyNotLower: noRateable
-        ? "Band 0 is already the lowest score."
-        : (normalLength ? "The response meets the task word-count threshold, so a zero or unavailable score is not appropriate in fallback mode." : "There is at least a small attempt to communicate something related to the task."),
-      evidence: [
-        `The response has ${words} words.`,
-        bandReason,
-        diagnostics.reason || "The response provides limited rateable evidence."
-      ].filter(Boolean).slice(0, 5)
-    },
-    criteria: {
-      [firstCriterion]: {
-        band: criterionBand,
-        feedback: firstFeedback,
-        feedbackZh: emptyForLocaleZh(firstFeedbackZh, locale),
-        howToImprove: "Write a fuller response and cover all bullet points or develop your main ideas.",
-        howToImproveZh: emptyForLocaleZh("请补充内容，覆盖所有要点或展开主要观点。", locale)
-      },
-      "Coherence and Cohesion": {
-        band: criterionBand,
-        feedback: "There is not enough text to show clear organisation.",
-        feedbackZh: emptyForLocaleZh("内容太少，无法体现清楚结构。", locale),
-        howToImprove: "Use separate paragraphs and simple linking words.",
-        howToImproveZh: emptyForLocaleZh("请分段，并使用简单连接词。", locale)
-      },
-      "Lexical Resource": {
-        band: criterionBand,
-        feedback: "Vocabulary range is very limited.",
-        feedbackZh: emptyForLocaleZh("词汇范围非常有限。", locale),
-        howToImprove: "Add more topic-related vocabulary.",
-        howToImproveZh: emptyForLocaleZh("增加与题目相关的词汇。", locale)
-      },
-      "Grammatical Range and Accuracy": {
-        band: criterionBand,
-        feedback: "There is not enough language to assess grammar fully.",
-        feedbackZh: emptyForLocaleZh("语言太少，难以完整评估语法。", locale),
-        howToImprove: "Write complete sentences and check verb forms.",
-        howToImproveZh: emptyForLocaleZh("写完整句子，并检查动词形式。", locale)
-      }
-    },
-    strengths: noRateable ? [] : ["You attempted to respond to the task."],
-    strengthsZh: emptyForLocaleZh(noRateable ? [] : ["你尝试回应题目。"], locale),
-    mainProblems: normalLength
-      ? ["AI feedback was incomplete, so this is only a temporary fallback estimate.", "Retry to receive detailed task, grammar, and revision feedback."]
-      : ["The essay is far below the recommended word count.", "Several task points or ideas are missing."],
-    grammarErrors: [],
-    spellingCorrections: [],
-    sentenceCorrections: [],
-    taskAchievementAdvice: normalLength ? ["Retry for a reliable check of task coverage."] : ["Add enough detail to answer the task properly."],
-    coherenceAdvice: normalLength ? ["Retry for detailed organisation feedback."] : ["Use clear paragraphs."],
-    lexicalAdvice: normalLength ? ["Retry for detailed vocabulary feedback."] : ["Use more topic vocabulary."],
-    grammarAdvice: normalLength ? ["Retry for detailed grammar feedback."] : ["Write complete sentences."],
-    band5FixPlan: ["Write at least the recommended word count.", "Cover all bullet points or develop two clear ideas."],
-    band6UpgradePlan: ["Add supporting details and examples."],
-    band7UpgradePlan: ["Use more precise vocabulary and varied sentence structures."],
-    modelAnswerOutline: "Write a fuller answer with an opening, clear body points, and a suitable closing.",
-    modelAnswerOutlineZh: "",
-    revisedEssayBand5: "",
-    revisedEssayBand6: "",
-    revisedEssayBand7: "",
-    revisedEssayMeta: defaultRevisedEssayMeta(revisionLimited, "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions."),
-    revisionNotes: [normalLength ? "AI output was incomplete, so this is a temporary fallback estimate. Retry to get full feedback and revisions." : "The response was too short, so only a basic diagnostic score is provided."],
-    revisionNotesZh: emptyForLocaleZh([normalLength ? "AI 返回内容不完整；当前只是临时估分，请重试获取完整批改。" : "作文太短，因此这里只提供基础诊断评分。"], locale),
-    errorAnalysis: buildFallbackErrorAnalysis(body, words, locale),
-    detailedSentenceCorrections: [],
-    task1LetterCorrections: body.task === "Task 1" ? { openingComment: "The opening could not be fully checked in fallback mode.", closingComment: "The closing could not be fully checked in fallback mode.", toneComment: "Use a tone suitable for the recipient in the selected prompt.", purposeComment: normalLength ? "Retry for a full purpose and bullet-point check." : "The response is underlength, so the purpose and bullet points need fuller development.", bulletPointAdvice: extractPromptBulletPoints(body.questionPrompt).map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, comment: "Coverage could not be fully checked in fallback mode.", suggestedSentence: "" })) } : null,
-    task2EssayCorrections: body.task === "Task 2" ? { positionComment: "State a clear position if the question asks for your opinion.", introductionComment: "The introduction could not be fully checked in fallback mode.", bodyParagraphComment: "Develop each body paragraph with a clear main idea and support.", exampleComment: "Add specific examples where useful.", conclusionComment: "End with a clear summary or final opinion.", developmentAdvice: ["Expand the essay to meet the recommended word count."] } : null,
-    correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: emptyForLocaleZh([], locale), fixNextZh: emptyForLocaleZh([], locale), polishLaterZh: emptyForLocaleZh([], locale) },
-    scoreUnavailable: false,
-    scoringCalibration: {
-      strictness: "strict",
-      capApplied: !normalLength || Boolean(diagnostics.recommendedLowBandRange),
-      capReason: bandReason,
-      whyNotHigher: noRateable ? "There is no rateable English response, so a higher band is not justified." : (normalLength ? "This is a temporary fallback estimate because provider output was incomplete." : "The response is below the recommended word count and lacks enough development."),
-      whyNotLower: noRateable ? "Band 0 is already the lowest score." : "There is some rateable relevant English content.",
-      evidence: [`Word count: ${words}.`, bandReason, diagnostics.reason].filter(Boolean).slice(0, 5)
-    },
-    lowBandEvidence: diagnostics,
-    highBandEvidence: { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: normalLength ? "Fallback mode cannot confirm high-band evidence. Retry for full high-band diagnostics." : "The response is below the recommended word count, so high-band evidence is not available." },
-    overallEstimatedBand: criterionBand,
-    revisedEssay: "",
-    feedback: normalLength ? "Temporary fallback feedback. Retry for a complete AI response." : "Low-word-count provider fallback. DeepSeek was attempted, but complete AI output was not available.",
-    disclaimer: DISCLAIMER,
-    fallback: !noRateable,
-    diagnosticMode: body.isUnderMinimum ? "provider_fallback_low_word_count" : (noRateable ? "no_rateable_response" : "provider_fallback"),
-    fallbackReason: reason || (body.isUnderMinimum ? `DeepSeek was attempted for this low-word-count response, but complete output was not available. ${lowWordCountReason(body)}` : "DeepSeek returned incomplete JSON.")
-  };
-}
-
-function stripCodeFence(text) {
-  return String(text || "")
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
-
-function extractFirstJsonObject(text) {
-  const cleaned = stripCodeFence(text);
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < cleaned.length; i += 1) {
-    const char = cleaned[i];
-
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (char === "{") {
-      if (depth === 0) start = i;
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0 && start !== -1) return cleaned.slice(start, i + 1);
-    }
-  }
-
-  return cleaned;
-}
-
-function parseJsonFromProvider(text) {
-  const candidate = extractFirstJsonObject(text);
-  try {
-    return JSON.parse(candidate);
-  } catch (error) {
-    error.rawCandidate = candidate;
-    throw error;
-  }
-}
-
-function buildRepairPrompt(rawText, task, locale = "en") {
-  return [
-    "Convert the following text into one valid JSON object matching the required IELTS feedback schema.",
-    "Return JSON only. Do not add markdown, explanations, or code fences.",
-    "If a field is missing, add it with an empty array [] or empty string \"\" as appropriate.",
-    "Do not use trailing commas. Do not use comments inside JSON.",
-    "",
-    "Required JSON shape:",
-    JSON.stringify(buildExpectedJsonShape(task, locale), null, 2),
-    "",
-    "Text to repair:",
-    String(rawText || "").slice(0, 12000)
-  ].join("\n");
-}
-
-function extractDeepSeekText(data) {
-  const choice = data?.choices?.[0] || {};
-  const message = choice.message || {};
-  const content = typeof message.content === "string" ? message.content : "";
-  const reasoningContent = typeof message.reasoning_content === "string" ? message.reasoning_content : "";
-  const legacyText = typeof choice.text === "string" ? choice.text : "";
-  return (content || reasoningContent || legacyText || "").trim();
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function retryDelayMs(attempt) {
-  return Math.min(800, 250 * attempt);
-}
-
-function isRetryableProviderStatus(status) {
-  return status === 408 || status === 409 || status === 425 || status === 429 || (status >= 500 && status <= 599);
-}
-
-async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false, deadline, timeoutMs }) {
-  const maxAttempts = Math.max(1, Math.min(Number(process.env.DEEPSEEK_RETRY_ATTEMPTS) || 2, 3));
-  let lastError;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
-    if (!hasEnoughAiTime(deadline, Math.min(requestTimeoutMs, 3000))) {
-      const timeoutError = new Error("DeepSeek request was skipped because the protected server deadline was too close.");
-      timeoutError.code = "DEEPSEEK_TIMEOUT";
-      timeoutError.provider = "deepseek";
-      timeoutError.detail = "The backend stopped before Vercel could generate a 504 timeout.";
-      throw timeoutError;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-
-    const requestBody = {
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature,
-      stream: false,
-      max_tokens: maxTokens
-    };
-    if (jsonMode) requestBody.response_format = { type: "json_object" };
-
-    let response;
-    let raw = "";
-    try {
-      response = await fetch(DEEPSEEK_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
-      });
-      raw = await response.text();
-    } catch (error) {
-      clearTimeout(timeout);
-      if (error?.name === "AbortError") {
-        const timeoutError = new Error("DeepSeek request timed out.");
-        timeoutError.code = "DEEPSEEK_TIMEOUT";
-        timeoutError.provider = "deepseek";
-        timeoutError.detail = "The AI provider did not respond before the server timeout.";
-        lastError = timeoutError;
-        throw lastError;
-      } else {
-        lastError = error;
-      }
-      if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
-        await wait(retryDelayMs(attempt));
-        continue;
-      }
-      throw lastError;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const error = new Error("DeepSeek API request failed.");
-      error.status = response.status;
-      error.raw = raw;
-      lastError = error;
-      if (attempt < maxAttempts && isRetryableProviderStatus(response.status) && remainingAiTime(deadline) > 5000) {
-        await wait(retryDelayMs(attempt));
-        continue;
-      }
-      throw error;
-    }
-
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch (error) {
-      error.raw = raw;
-      throw error;
-    }
-
-    const outputText = extractDeepSeekText(data);
-    if (outputText) return outputText;
-
-    const emptyError = new Error("DeepSeek returned an empty response.");
-    emptyError.code = "DEEPSEEK_EMPTY_RESPONSE";
-    emptyError.provider = "deepseek";
-    emptyError.raw = raw;
-    lastError = emptyError;
-
-    if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
-      await wait(retryDelayMs(attempt));
-      continue;
-    }
-
-    throw emptyError;
-  }
-
-  throw lastError || new Error("DeepSeek request failed.");
-}
-
-function sendProviderError(req, res, error) {
-  if (error.code === "DEEPSEEK_TIMEOUT" || error.message === "DeepSeek request timed out.") {
-    sendJson(req, res, 503, {
-      error: "DeepSeek request timed out before any AI score could be returned.",
-      provider: "deepseek",
-      detail: "The provider did not return the required scoring result within the protected backend time budget. The request was stopped before Vercel generated a 504.",
-      suggestion: "Retry once. If this repeats, check DeepSeek latency or run the score stage first."
-    });
-    return true;
-  }
-
-  if (error.message !== "DeepSeek API request failed.") return false;
-
-  if (error.status === 429) {
-    sendJson(req, res, 429, {
-      error: "AI provider quota exceeded.",
-      provider: "deepseek",
-      status: 429,
-      suggestion: "Please wait, reduce usage, or check DeepSeek balance."
-    });
-    return true;
-  }
-
-  if (error.status >= 500 && error.status <= 599) {
-    sendJson(req, res, 502, {
-      error: "AI provider temporarily unavailable.",
-      provider: "deepseek",
-      status: error.status,
-      suggestion: "Please try again later."
-    });
-    return true;
-  }
-
-  sendJson(req, res, 502, {
-    error: "AI provider request failed.",
-    provider: "deepseek",
-    status: error.status,
-    detail: String(error.raw || "").slice(0, 1500)
-  });
-  return true;
-}
-
-
-function stableStringify(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
-}
-
-function simpleHash(text) {
-  let hash = 2166136261;
-  const input = String(text || "");
-  for (let i = 0; i < input.length; i += 1) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16);
-}
-
-function buildAiCacheKey(body, mode, model, locale) {
-  return simpleHash(stableStringify({
-    model,
-    locale,
-    mode,
-    task: body.task,
-    questionPrompt: body.questionPrompt,
-    essay: body.essay,
-    wordCount: body.wordCount,
-    targetWordCount: body.targetWordCount
-  }));
-}
-
-function getCachedAiResult(cacheKey) {
-  if (!AI_CACHE_TTL_MS || !cacheKey) return null;
-  const cached = AI_RESPONSE_CACHE.get(cacheKey);
-  if (!cached) return null;
-  if (Date.now() - cached.createdAt > AI_CACHE_TTL_MS) {
-    AI_RESPONSE_CACHE.delete(cacheKey);
-    return null;
-  }
-  return JSON.parse(JSON.stringify(cached.value));
-}
-
-function setCachedAiResult(cacheKey, value) {
-  if (!AI_CACHE_TTL_MS || !cacheKey || !value) return;
-  AI_RESPONSE_CACHE.set(cacheKey, {
-    createdAt: Date.now(),
-    value: JSON.parse(JSON.stringify(value))
-  });
-  if (AI_RESPONSE_CACHE.size > 100) {
-    const oldestKey = AI_RESPONSE_CACHE.keys().next().value;
-    if (oldestKey) AI_RESPONSE_CACHE.delete(oldestKey);
-  }
-}
-
-function extractAiNumber(rawText, key) {
-  const match = String(rawText || "").match(new RegExp(`"${key}"\\s*:\\s*([0-9]+(?:\\.[05])?)`, "i"));
-  return match ? Number(match[1]) : null;
-}
-
-function extractAiString(rawText, key) {
-  const source = String(rawText || "");
-  const match = source.match(new RegExp(`"${key}"\\s*:\\s*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)`, "i"));
-  if (!match) return "";
-  try {
-    return JSON.parse(`"${match[1]}"`);
-  } catch {
-    return match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-  }
-}
-
-function rawTextLooksLikeSchemaOnly(rawText = "") {
-  const text = String(rawText || "").toLowerCase();
-  if (!text.trim()) return true;
-  const schemaSignals = [
-    '"overallband": 1', '"estimatedlevel": "band 1.0"', '"feedback": ""', '"howtoimprove": ""',
-    'replace band 1 placeholders', 'do not copy template values', 'return exactly one valid json object matching this shape'
-  ].filter((signal) => text.includes(signal)).length;
-  const essaySpecificSignals = [
-    'because', 'evidence', 'original', 'corrected', 'this response', 'the essay', 'the letter', 'the candidate', 'the writer'
-  ].filter((signal) => text.includes(signal)).length;
-  return schemaSignals >= 3 && essaySpecificSignals < 2;
-}
-
-function buildAiPartialResultFromText(rawText, body, issue = "") {
-  if (rawTextLooksLikeSchemaOnly(rawText)) return null;
-  const overall = extractAiNumber(rawText, "overallBand");
-  if (!Number.isFinite(overall)) return null;
-  if (Number(overall) === 1 && !/band\s*[2-9]|overall\s*band|criterion|scorecalibration|whyNotHigher|why not higher/i.test(String(rawText || ""))) return null;
-
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  const threshold = task === "Task 1" ? 150 : 250;
-  const underMinimum = words < threshold;
-
-  const firstBand = extractAiNumber(rawText, "Task Achievement") || extractAiNumber(rawText, "Task Response") || overall;
-  const ccBand = extractAiNumber(rawText, "Coherence and Cohesion") || overall;
-  const lrBand = extractAiNumber(rawText, "Lexical Resource") || overall;
-  const graBand = extractAiNumber(rawText, "Grammatical Range and Accuracy") || overall;
-
-  const taskFeedback = extractAiString(rawText, "feedback") ||
-    (task === "Task 1" ? "The letter responds to the task but needs fuller bullet-point coverage." : "The essay answers the topic but needs clearer development and support.");
-  const taskImprove = extractAiString(rawText, "howToImprove") ||
-    (task === "Task 1" ? "Cover every bullet point with one clear detail." : "State a clearer position and support each idea.");
-  const whyNotHigher = extractAiString(rawText, "whyNotHigher") ||
-    (underMinimum ? `The AI output indicates the response is below the ${threshold}-word recommendation and underdeveloped.` : "The AI output indicates the response needs stronger development, organisation, vocabulary, or grammar control.");
-  const whyNotLower = extractAiString(rawText, "whyNotLower") ||
-    "The visible band is recovered from AI scoring data, not from local scoring.";
-  const lowReason = extractAiString(rawText, "reason") ||
-    (underMinimum ? `The response has ${words} words, below the recommended ${threshold}-word minimum.` : "The AI did not confirm a hard low-band trigger.");
-
-  const taskAdvice = task === "Task 1"
-    ? ["Cover each bullet point directly.", "Make the purpose clear in the opening.", "Use a tone suitable for the recipient."]
-    : ["State a clear position.", "Develop each main idea with explanation.", "Add specific examples or details."];
-  const coherenceAdvice = ["Use clear paragraphing.", "Add logical linking between ideas.", "Avoid listing ideas without explanation."];
-  const lexicalAdvice = ["Use more precise topic vocabulary.", "Avoid repeated basic words.", "Check spelling and word choice."];
-  const grammarAdvice = ["Write complete sentences.", "Check verb forms and agreement.", "Use simple accurate grammar first."];
-
-  const strengths = cleanStringArray([
-    extractAiString(rawText, "strengths"),
-    task === "Task 2" ? "The response attempts to give an opinion." : "The response attempts the selected letter task.",
-    Number(overall) >= 4 ? "Some relevant ideas are present." : ""
-  ]).slice(0, 2);
-
-  const mainProblems = cleanStringArray([
-    extractAiString(rawText, "mainProblems"),
-    underMinimum ? `The response is below the recommended ${threshold}-word minimum.` : "",
-    firstBand <= 5 ? "Ideas need fuller development." : "",
-    ccBand <= 5 ? "Organisation and linking need improvement." : "",
-    lrBand <= 5 ? "Vocabulary needs more precision." : "",
-    graBand <= 5 ? "Grammar accuracy needs improvement." : ""
-  ]).slice(0, 4);
-
-  return {
-    actualWordCount: words,
-    taskTypeDetected: task === "Task 1" ? "task1" : "task2",
-    wordCountThresholdUsed: threshold,
-    wordCountStatus: underMinimum ? "under_minimum_ai_recovered" : "meets_minimum_ai_recovered",
-    taskRequirementAnalysis: task === "Task 1"
-      ? {
-          taskType: "task1",
-          taskPurpose: "Answer the selected General Training letter prompt.",
-          recipient: "",
-          relationship: "",
-          requiredTone: "Use the tone required by the prompt.",
-          letterType: "General Training Task 1 letter.",
-          bulletPoints: extractPromptBulletPoints(body?.questionPrompt).map((requirement) => ({ requirement, covered: null, coverageUnknown: true, evidence: "AI output was repaired; retry for precise coverage evidence." })),
-          missingRequirements: [],
-          taskMatchSummary: "AI scoring was recovered from incomplete JSON; task analysis is limited but not empty."
-        }
-      : {
-          taskType: "task2",
-          questionType: "",
-          topic: String(body?.questionTitle || body?.questionPrompt || "").slice(0, 120),
-          requiredPosition: "Give a clear position if the question asks for your opinion.",
-          requiredParts: ["Answer all parts of the selected Task 2 question."],
-          positionPresent: false,
-          mainIdeasRelevant: true,
-          missingRequirements: [],
-          taskMatchSummary: "AI scoring was recovered from incomplete JSON; task analysis is limited but not empty."
-        },
-    taskRequirementAnalysisZh: {
-      taskPurposeZh: "需要回应当前题目要求。",
-      requiredToneZh: task === "Task 1" ? "语气要符合收信人关系。" : "",
-      letterTypeZh: task === "Task 1" ? "这是 G 类书信任务。" : "",
-      taskMatchSummaryZh: "AI 输出已修复，但题目分析较简短。",
-      bulletPointsZh: [],
-      requiredPartsZh: task === "Task 2" ? ["回答题目的所有部分。"] : []
-    },
-    taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "The recovered AI output did not show a task mismatch.", warning: "" },
-    overallBand: clampAiBand(overall, 1),
-    estimatedLevel: `Band ${formatBand(clampAiBand(overall, 1))}`,
-    lowBandDiagnostics: { recommendedLowBandRange: underMinimum ? "Underlength warning" : "", reason: lowReason },
-    lowBandDiagnosticsZh: { reasonZh: underMinimum ? "字数不足会影响任务完成和展开。" : "没有确认严重低分触发项。" },
-    highBandDiagnostics: { recommendedHighBandRange: "", reason: underMinimum ? "High-band evidence is limited because the answer is underlength." : "High-band evidence was not fully confirmed in the recovered AI output." },
-    highBandDiagnosticsZh: { reasonZh: underMinimum ? "字数不足，难以确认高分证据。" : "暂未确认高分证据。" },
-    scoreCalibration: {
-      strictness: "strict",
-      capApplied: Boolean(underMinimum),
-      capReason: underMinimum ? `The response is below the ${threshold}-word recommendation.` : "",
-      whyNotHigher,
-      whyNotLower,
-      evidence: cleanStringArray([
-        `AI output provided overallBand ${formatBand(clampAiBand(overall, 1))}.`,
-        underMinimum ? `Word count: ${words}/${threshold}.` : "",
-        mainProblems[0] || ""
-      ]).slice(0, 3)
-    },
-    scoreCalibrationZh: {
-      capReasonZh: underMinimum ? "字数不足会限制展开。" : "",
-      whyNotHigherZh: "内容、结构、词汇或语法仍有明显提升空间。",
-      whyNotLowerZh: "分数来自 AI 输出中恢复的评分信息。",
-      evidenceZh: underMinimum ? [`字数：${words}/${threshold}`] : ["AI 输出中包含可恢复评分。"]
-    },
-    criteria: {
-      [firstCriterion]: { band: clampAiBand(firstBand, overall), feedback: taskFeedback, feedbackZh: task === "Task 1" ? "任务回应还需要更完整。" : "观点和展开还不够充分。", howToImprove: taskImprove, howToImproveZh: task === "Task 1" ? "逐条覆盖题目要点。" : "明确立场并展开理由。" },
-      "Coherence and Cohesion": { band: clampAiBand(ccBand, overall), feedback: "Organisation and linking need clearer control.", feedbackZh: "结构和衔接需要更清楚。", howToImprove: "Use clearer paragraphing and linking.", howToImproveZh: "分段并自然使用连接词。" },
-      "Lexical Resource": { band: clampAiBand(lrBand, overall), feedback: "Vocabulary needs more precision and range.", feedbackZh: "词汇需要更准确更多样。", howToImprove: "Use more precise topic vocabulary.", howToImproveZh: "使用更准确的题目词汇。" },
-      "Grammatical Range and Accuracy": { band: clampAiBand(graBand, overall), feedback: "Grammar accuracy and sentence control need improvement.", feedbackZh: "语法准确性和句子控制需提升。", howToImprove: "Use complete and accurate sentences.", howToImproveZh: "先写完整准确的句子。" }
-    },
-    strengths,
-    strengthsZh: strengths.map((_, index) => index === 0 ? "有尝试回应题目。" : "有一些相关内容。").slice(0, strengths.length),
-    mainProblems,
-    mainProblemsZh: mainProblems.map((item) => item.includes("word") ? "字数不足。" : "内容和语言仍需加强。").slice(0, mainProblems.length),
-    grammarErrors: [],
-    sentenceCorrections: [],
-    errorAnalysis: {
-      summary: cleanStringArray(mainProblems).join(" ") || "The response needs clearer task development, organisation, vocabulary, and grammar control.",
-      summaryZh: "主要问题是内容展开、结构、词汇和语法控制。",
-      errorPatterns: [],
-      priorityFixes: taskAdvice.slice(0, 2),
-      priorityFixesZh: task === "Task 1" ? ["先补全题目要点。", "再改善语气和结构。"] : ["先明确立场。", "再展开理由和例子。"]
-    },
-    detailedSentenceCorrections: [],
-    task1LetterCorrections: task === "Task 1" ? {
-      openingComment: "Make the letter purpose clear at the start.",
-      openingCommentZh: "开头要直接说明写信目的，让收信人马上明白你为什么写这封信。",
-      closingComment: "Use a suitable closing sentence.",
-      closingCommentZh: "结尾要符合书信对象和语气，并礼貌收束请求或说明。",
-      toneComment: "Match the tone to the recipient.",
-      toneCommentZh: "语气要符合你和收信人的关系，正式信不能过于随意。",
-      purposeComment: "State why you are writing.",
-      purposeCommentZh: "第一段应明确交代写信目的，避免让任务回应显得含糊。",
-      bulletPointAdvice: extractPromptBulletPoints(body?.questionPrompt).map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, comment: "Check this requirement directly with evidence before deciding coverage.", suggestedSentence: "Add one sentence that answers this bullet point if it is missing.", explanationZh: "需要先核验原文证据，再判断这一要点是否覆盖。" })).slice(0, 5)
-    } : null,
-    task2EssayCorrections: task === "Task 2" ? {
-      positionComment: "State your opinion or position clearly.",
-      introductionComment: "Answer the question directly in the introduction.",
-      bodyParagraphComment: "Develop each body paragraph with one clear main idea.",
-      exampleComment: "Add specific examples or explanations.",
-      conclusionComment: "End with a clear final position.",
-      developmentAdvice: ["Explain each main idea more fully.", "Add one specific example for each body paragraph."]
-    } : null,
-    correctionPriority: {
-      fixFirst: task === "Task 1" ? ["Task coverage", "Tone", "Sentence accuracy"] : ["Clear position", "Idea development", "Sentence accuracy"],
-      fixNext: ["Vocabulary precision", "Linking", "Examples"],
-      polishLater: ["More natural expressions", "Flexible grammar"],
-      fixFirstZh: task === "Task 1" ? ["先补全任务要点。", "调整语气。", "提高句子准确性。"] : ["先明确立场。", "展开观点。", "提高句子准确性。"],
-      fixNextZh: ["提升词汇准确性。", "改善衔接。", "加入例子。"],
-      polishLaterZh: ["最后优化自然表达。", "最后提升语法灵活性。"]
-    },
-    taskAchievementAdvice: taskAdvice,
-    coherenceAdvice,
-    lexicalAdvice,
-    grammarAdvice,
-    band5FixPlan: ["Reach the recommended word count with relevant content.", "Use clear paragraphs.", "Write accurate simple sentences."],
-    band6UpgradePlan: ["Develop each idea with a reason.", "Use topic vocabulary accurately.", "Use some complex sentences carefully."],
-    band7UpgradePlan: ["Make ideas more precise.", "Use more natural cohesion.", "Reduce grammar errors in complex sentences."],
-    modelAnswerOutline: task === "Task 1"
-      ? "Opening: state the purpose. Body: cover each bullet point. Closing: end politely."
-      : "Introduction: answer the question. Body paragraphs: develop two ideas. Conclusion: restate the position.",
-    modelAnswerOutlineZh: "",
-    revisedEssayBand5: "",
-    revisedEssayBand6: "",
-    revisedEssayBand7: "",
-    revisedEssayMeta: { revisionLimited: true, revisionLimitReason: "AI JSON was recovered; use Revision mode for full revised essays." },
-    revisionNotes: ["AI scoring was recovered from incomplete JSON. The advice sections were completed for study use."],
-    revisionNotesZh: ["AI 输出不完整，但已补全学习建议。"],
-    disclaimer: DISCLAIMER,
-    diagnosticMode: "ai_recovered_with_completed_advice",
-    aiOnly: true
-  };
-}
 
 function ensureArray(value) {
   if (Array.isArray(value)) return value;
@@ -6136,1949 +3438,6 @@ function cleanObjectArray(value, usefulKeys) {
     .map((item) => ({ ...item }));
 }
 
-function criterionItem(result, task, criterionName) {
-  ensureCriteria(result, task);
-  return result.criteria?.[criterionName] || {};
-}
-
-function criterionImprove(result, task, criterionName, fallback) {
-  const item = criterionItem(result, task, criterionName);
-  return hasUsefulText(item.howToImprove) ? item.howToImprove : fallback;
-}
-
-function criterionFeedback(result, task, criterionName, fallback) {
-  const item = criterionItem(result, task, criterionName);
-  return hasUsefulText(item.feedback) ? item.feedback : fallback;
-}
-
-function makeAdviceArray(primary, fallbackItems, limit = 5) {
-  const items = cleanStringArray([primary, ...ensureArray(fallbackItems)]);
-  return items.slice(0, limit);
-}
-
-function backfillDiagnosticAdvice(normalized, body, mode, veryShort) {
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  const threshold = task === "Task 1" ? 150 : 250;
-  const underMinimum = words < threshold;
-
-  normalized.strengths = cleanStringArray(normalized.strengths).slice(0, 16);
-  normalized.mainProblems = cleanStringArray(normalized.mainProblems).slice(0, 10);
-  normalized.taskAchievementAdvice = cleanStringArray(normalized.taskAchievementAdvice).slice(0, 16);
-  normalized.coherenceAdvice = cleanStringArray(normalized.coherenceAdvice).slice(0, 16);
-  normalized.lexicalAdvice = cleanStringArray(normalized.lexicalAdvice).slice(0, 16);
-  normalized.grammarAdvice = cleanStringArray(normalized.grammarAdvice).slice(0, 16);
-  normalized.band5FixPlan = cleanStringArray(normalized.band5FixPlan).slice(0, 16);
-  normalized.band6UpgradePlan = cleanStringArray(normalized.band6UpgradePlan).slice(0, 16);
-  normalized.band7UpgradePlan = cleanStringArray(normalized.band7UpgradePlan).slice(0, 16);
-
-  // Remove blank correction cards that the front end would otherwise render as empty boxes.
-  const correctionLimit = correctionLimitForEssay(body, mode);
-  normalized.spellingCorrections = cleanObjectArray(normalized.spellingCorrections, ["originalWord", "correctedWord", "sentence", "explanation"]).slice(0, correctionLimit);
-  normalized.grammarErrors = cleanObjectArray(normalized.grammarErrors, ["original", "corrected", "explanation"]).slice(0, correctionLimit);
-  normalized.sentenceCorrections = cleanObjectArray(normalized.sentenceCorrections, ["original", "corrected", "reason"]).slice(0, correctionLimit);
-  normalized.detailedSentenceCorrections = cleanObjectArray(normalized.detailedSentenceCorrections, ["originalSentence", "correctedSentence", "problem", "rule", "bandImpact"])
-    .filter((item, index) => isScoreImpactingDetailedCorrection(normalizeDetailedSentenceCorrectionItem(item, index)))
-    .slice(0, correctionLimit);
-
-  const firstImprove = criterionImprove(normalized, task, firstCriterion, task === "Task 1" ? "Answer each bullet point directly with enough detail." : "State a clear position and support it with specific reasons.");
-  const ccImprove = criterionImprove(normalized, task, "Coherence and Cohesion", "Use clear paragraphing and logical linking between ideas.");
-  const lrImprove = criterionImprove(normalized, task, "Lexical Resource", "Use more precise topic vocabulary and avoid repetition.");
-  const graImprove = criterionImprove(normalized, task, "Grammatical Range and Accuracy", "Write complete sentences and check verb forms, articles, and agreement.");
-
-  if (!normalized.taskAchievementAdvice.length) {
-    normalized.taskAchievementAdvice = makeAdviceArray(firstImprove, [
-      underMinimum ? `Expand the response to at least ${threshold} words.` : "Add more specific support for the task.",
-      task === "Task 1" ? "Make sure every bullet point is clearly covered." : "Develop each main idea with explanation or an example."
-    ]);
-  }
-  if (!normalized.coherenceAdvice.length) normalized.coherenceAdvice = makeAdviceArray(ccImprove, ["Use separate paragraphs for separate ideas.", "Add simple linking words naturally."]);
-  if (!normalized.lexicalAdvice.length) normalized.lexicalAdvice = makeAdviceArray(lrImprove, ["Replace repeated basic words with accurate topic words.", "Check spelling and word choice."]);
-  if (!normalized.grammarAdvice.length) normalized.grammarAdvice = makeAdviceArray(graImprove, ["Use simple accurate sentences before adding complex structures.", "Check tense and subject-verb agreement."]);
-
-  const firstFeedback = criterionFeedback(normalized, task, firstCriterion, "Task response needs more development.");
-  const graFeedback = criterionFeedback(normalized, task, "Grammatical Range and Accuracy", "Grammar errors reduce clarity.");
-
-  if (!normalized.mainProblems.length) {
-    normalized.mainProblems = cleanStringArray([
-      underMinimum ? `The response is under the recommended ${threshold}-word minimum.` : "Task development is limited.",
-      firstFeedback,
-      graFeedback
-    ]).slice(0, 5);
-  }
-  if (!normalized.strengths.length && words > 0) {
-    normalized.strengths = cleanStringArray([
-      "The response attempts to answer the selected task.",
-      Number(normalized.overallBand) >= 4 ? "Some relevant ideas are present." : "There is some rateable English content."
-    ]).slice(0, 3);
-  }
-  sanitizeStrengthProblemBuckets(normalized);
-
-  if (!normalized.band5FixPlan.length) {
-    normalized.band5FixPlan = cleanStringArray([
-      underMinimum ? `First reach the ${threshold}-word minimum with relevant content.` : "Cover the task more completely.",
-      "Use clear paragraphs.",
-      "Write mostly accurate simple sentences.",
-      "Use basic topic vocabulary correctly."
-    ]).slice(0, 5);
-  }
-  if (!normalized.band6UpgradePlan.length) {
-    normalized.band6UpgradePlan = cleanStringArray([
-      "Develop each main idea with a reason and example.",
-      "Use linking words naturally, not mechanically.",
-      "Use a wider range of accurate topic vocabulary.",
-      "Mix simple and some complex sentences accurately."
-    ]).slice(0, 5);
-  }
-  if (!normalized.band7UpgradePlan.length) {
-    normalized.band7UpgradePlan = cleanStringArray([
-      "Make ideas more precise and fully developed.",
-      "Use natural cohesion across paragraphs.",
-      "Choose more exact collocations.",
-      "Reduce grammar errors in complex sentences."
-    ]).slice(0, 5);
-  }
-
-  normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : {};
-  if (!hasUsefulText(normalized.errorAnalysis.summary)) {
-    normalized.errorAnalysis.summary = cleanStringArray([normalized.mainProblems[0], normalized.mainProblems[1], normalized.mainProblems[2]]).join(" ") || "The response needs more task development, clearer organisation, more precise vocabulary, and more accurate grammar.";
-  }
-  normalized.errorAnalysis.priorityFixes = cleanStringArray(normalized.errorAnalysis.priorityFixes);
-  if (!normalized.errorAnalysis.priorityFixes.length) normalized.errorAnalysis.priorityFixes = cleanStringArray([normalized.taskAchievementAdvice[0], normalized.grammarAdvice[0], normalized.lexicalAdvice[0]]).slice(0, 5);
-
-  normalized.correctionPriority = normalized.correctionPriority && typeof normalized.correctionPriority === "object" ? normalized.correctionPriority : {};
-  normalized.correctionPriority.fixFirst = cleanStringArray(normalized.correctionPriority.fixFirst);
-  normalized.correctionPriority.fixNext = cleanStringArray(normalized.correctionPriority.fixNext);
-  normalized.correctionPriority.polishLater = cleanStringArray(normalized.correctionPriority.polishLater);
-  if (!normalized.correctionPriority.fixFirst.length) normalized.correctionPriority.fixFirst = cleanStringArray([task === "Task 1" ? "Task coverage" : "Clear position and idea development", "Sentence accuracy", underMinimum ? "Word count" : "Paragraphing"]).slice(0, 5);
-  if (!normalized.correctionPriority.fixNext.length) normalized.correctionPriority.fixNext = cleanStringArray(["Vocabulary precision", "Linking", "Examples and support"]).slice(0, 5);
-  if (!normalized.correctionPriority.polishLater.length) normalized.correctionPriority.polishLater = cleanStringArray(["More natural expressions", "More flexible sentence patterns"]).slice(0, 5);
-
-  if (!hasUsefulText(normalized.modelAnswerOutline)) {
-    normalized.modelAnswerOutline = task === "Task 1"
-      ? "Opening: state the purpose. Body: cover each bullet point in order. Closing: use a suitable final sentence."
-      : "Introduction: answer the question. Body 1 and Body 2: develop clear main ideas with support. Conclusion: restate your position.";
-  }
-
-  if (task === "Task 1" && normalized.task1LetterCorrections) {
-    const points = extractPromptBulletPoints(body?.questionPrompt);
-    normalized.task1LetterCorrections.openingComment = hasUsefulText(normalized.task1LetterCorrections.openingComment) ? normalized.task1LetterCorrections.openingComment : "Use an opening that matches the recipient and clearly introduces the purpose.";
-    normalized.task1LetterCorrections.closingComment = hasUsefulText(normalized.task1LetterCorrections.closingComment) ? normalized.task1LetterCorrections.closingComment : "Use a suitable closing for the relationship and tone.";
-    normalized.task1LetterCorrections.toneComment = hasUsefulText(normalized.task1LetterCorrections.toneComment) ? normalized.task1LetterCorrections.toneComment : "Keep the tone suitable for the recipient.";
-    normalized.task1LetterCorrections.purposeComment = hasUsefulText(normalized.task1LetterCorrections.purposeComment) ? normalized.task1LetterCorrections.purposeComment : "Make the purpose clear in the first paragraph.";
-    normalized.task1LetterCorrections.bulletPointAdvice = cleanObjectArray(normalized.task1LetterCorrections.bulletPointAdvice, ["bulletPoint", "comment", "suggestedSentence"]);
-    if (!normalized.task1LetterCorrections.bulletPointAdvice.length && points.length) {
-      normalized.task1LetterCorrections.bulletPointAdvice = points.map((point) => ({ bulletPoint: point, covered: null, coverageUnknown: true, evidenceFromEssay: "", problem: "AI did not return reliable coverage evidence for this bullet point.", comment: "Do not treat this as missing until the essay evidence is checked.", suggestedSentence: "If this requirement is not clearly answered, add one specific sentence with concrete detail.", explanationZh: "AI 没有返回可靠覆盖证据；不能直接判定为未覆盖。" })).slice(0, 5);
-    }
-  }
-
-  if (task === "Task 2" && normalized.task2EssayCorrections) {
-    normalized.task2EssayCorrections.positionComment = hasUsefulText(normalized.task2EssayCorrections.positionComment) ? normalized.task2EssayCorrections.positionComment : "State a clear position that directly answers the question.";
-    normalized.task2EssayCorrections.introductionComment = hasUsefulText(normalized.task2EssayCorrections.introductionComment) ? normalized.task2EssayCorrections.introductionComment : "Introduce the topic and answer the question directly.";
-    normalized.task2EssayCorrections.bodyParagraphComment = hasUsefulText(normalized.task2EssayCorrections.bodyParagraphComment) ? normalized.task2EssayCorrections.bodyParagraphComment : "Use one clear main idea in each body paragraph and explain it.";
-    normalized.task2EssayCorrections.exampleComment = hasUsefulText(normalized.task2EssayCorrections.exampleComment) ? normalized.task2EssayCorrections.exampleComment : "Add specific examples or explanations to support the main ideas.";
-    normalized.task2EssayCorrections.conclusionComment = hasUsefulText(normalized.task2EssayCorrections.conclusionComment) ? normalized.task2EssayCorrections.conclusionComment : "End with a clear summary of your position.";
-    normalized.task2EssayCorrections.developmentAdvice = cleanStringArray(normalized.task2EssayCorrections.developmentAdvice);
-    if (!normalized.task2EssayCorrections.developmentAdvice.length) normalized.task2EssayCorrections.developmentAdvice = cleanStringArray([normalized.taskAchievementAdvice[0], "Explain why each idea matters.", "Use one example for each main idea."]).slice(0, 5);
-  }
-
-  if (!hasUsefulText(normalized.lowBandDiagnostics.reason) && underMinimum) {
-    normalized.lowBandDiagnostics.reason = `${task} has ${words} words, below the recommended ${threshold}-word minimum, so task development is limited.`;
-  }
-  if (!hasUsefulText(normalized.highBandDiagnostics.reason)) {
-    normalized.highBandDiagnostics.reason = underMinimum
-      ? "High-band evidence is not confirmed because the response is underlength and underdeveloped."
-      : "High-band evidence was not fully confirmed in this response.";
-  }
-  sanitizeStrengthProblemBuckets(normalized);
-}
-
-
-function backfillChineseHelperNotes(normalized, body) {
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  ensureCriteria(normalized, task);
-
-  const criterionZh = {
-    [firstCriterion]: task === "Task 1" ? ["任务回应需要更完整。", "逐条覆盖题目要点。"] : ["观点和展开需要更清楚。", "明确立场并展开理由。"],
-    "Coherence and Cohesion": ["结构和衔接需要更清楚。", "分段并自然使用连接词。"],
-    "Lexical Resource": ["词汇需要更准确更多样。", "使用更准确的题目词汇。"],
-    "Grammatical Range and Accuracy": ["语法准确性和句子控制需提升。", "先写完整准确的句子。"]
-  };
-
-  Object.entries(criterionZh).forEach(([name, zh]) => {
-    const item = normalized.criteria?.[name];
-    if (!item) return;
-    if (!hasUsefulText(item.feedbackZh)) item.feedbackZh = zh[0];
-    if (!hasUsefulText(item.howToImproveZh)) item.howToImproveZh = zh[1];
-  });
-
-  if (!Array.isArray(normalized.strengthsZh) || !normalized.strengthsZh.length) {
-    normalized.strengthsZh = ensureArray(normalized.strengths).map((_, i) => i === 0 ? "有尝试回应题目。" : "有一些相关内容。").slice(0, 5);
-  }
-  if (!Array.isArray(normalized.mainProblemsZh) || !normalized.mainProblemsZh.length) {
-    normalized.mainProblemsZh = ensureArray(normalized.mainProblems).map((item) => {
-      const text = String(item || "").toLowerCase();
-      if (text.includes("word")) return "字数不足会影响展开。";
-      if (text.includes("grammar")) return "语法错误影响清晰度。";
-      if (text.includes("vocabulary")) return "词汇准确性需要提升。";
-      if (text.includes("organisation") || text.includes("link")) return "结构和衔接需要加强。";
-      return "这个问题会影响写作分数。";
-    }).slice(0, 5);
-  }
-
-  normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : {};
-  if (!hasUsefulText(normalized.errorAnalysis.summaryZh) && hasUsefulText(normalized.errorAnalysis.summary)) {
-    normalized.errorAnalysis.summaryZh = "主要问题集中在任务回应、结构、词汇或语法。";
-  }
-  if (!Array.isArray(normalized.errorAnalysis.priorityFixesZh) || !normalized.errorAnalysis.priorityFixesZh.length) {
-    normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixes).map((_, i) => ["先修任务回应。", "再修句子准确性。", "最后提升词汇和衔接。"][i] || "按优先级逐步修改。").slice(0, 5);
-  }
-
-  normalized.scoreCalibrationZh = normalized.scoreCalibrationZh && typeof normalized.scoreCalibrationZh === "object" ? normalized.scoreCalibrationZh : {};
-  if (!hasUsefulText(normalized.scoreCalibrationZh.capReasonZh) && hasUsefulText(normalized.scoreCalibration?.capReason)) normalized.scoreCalibrationZh.capReasonZh = "存在明确限分原因。";
-  if (!hasUsefulText(normalized.scoreCalibrationZh.whyNotHigherZh) && hasUsefulText(normalized.scoreCalibration?.whyNotHigher)) normalized.scoreCalibrationZh.whyNotHigherZh = "还不能更高，主要因为内容、结构或语言控制不足。";
-  if (!hasUsefulText(normalized.scoreCalibrationZh.whyNotLowerZh) && hasUsefulText(normalized.scoreCalibration?.whyNotLower)) normalized.scoreCalibrationZh.whyNotLowerZh = "没有更低，是因为仍有一定可评分内容。";
-  if (!Array.isArray(normalized.scoreCalibrationZh.evidenceZh) || !normalized.scoreCalibrationZh.evidenceZh.length) {
-    normalized.scoreCalibrationZh.evidenceZh = ensureArray(normalized.scoreCalibration?.evidence).map(() => "这是评分依据之一。").slice(0, 5);
-  }
-
-  normalized.lowBandDiagnosticsZh = normalized.lowBandDiagnosticsZh && typeof normalized.lowBandDiagnosticsZh === "object" ? normalized.lowBandDiagnosticsZh : {};
-  if (!hasUsefulText(normalized.lowBandDiagnosticsZh.reasonZh) && hasUsefulText(normalized.lowBandDiagnostics?.reason)) normalized.lowBandDiagnosticsZh.reasonZh = "低分原因与字数、任务回应或语言清晰度有关。";
-
-  normalized.highBandDiagnosticsZh = normalized.highBandDiagnosticsZh && typeof normalized.highBandDiagnosticsZh === "object" ? normalized.highBandDiagnosticsZh : {};
-  if (!hasUsefulText(normalized.highBandDiagnosticsZh.reasonZh) && hasUsefulText(normalized.highBandDiagnostics?.reason)) normalized.highBandDiagnosticsZh.reasonZh = "高分证据尚不充分。";
-
-  normalized.taskRequirementAnalysisZh = normalized.taskRequirementAnalysisZh && typeof normalized.taskRequirementAnalysisZh === "object" ? normalized.taskRequirementAnalysisZh : {};
-
-  normalized.correctionPriority = normalized.correctionPriority && typeof normalized.correctionPriority === "object" ? normalized.correctionPriority : {};
-  if (!Array.isArray(normalized.correctionPriority.fixFirstZh) || !normalized.correctionPriority.fixFirstZh.length) {
-    normalized.correctionPriority.fixFirstZh = ensureArray(normalized.correctionPriority.fixFirst).map((_, i) => ["先改最影响分数的问题。", "先保证句子准确。", "先补充任务内容。"][i] || "先解决这个问题。").slice(0, 5);
-  }
-  if (!Array.isArray(normalized.correctionPriority.fixNextZh) || !normalized.correctionPriority.fixNextZh.length) {
-    normalized.correctionPriority.fixNextZh = ensureArray(normalized.correctionPriority.fixNext).map(() => "下一步再提升这个方面。").slice(0, 5);
-  }
-  if (!Array.isArray(normalized.correctionPriority.polishLaterZh) || !normalized.correctionPriority.polishLaterZh.length) {
-    normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLater).map(() => "最后再优化表达自然度。").slice(0, 5);
-  }
-
-  const alignZhArray = (englishItems, zhItems) => {
-    const en = ensureArray(englishItems);
-    const zh = ensureArray(zhItems).filter(hasUsefulText);
-    // Do not invent generic Chinese translations here. If DeepSeek did not return
-    // an accurate matching Chinese explanation, leave it blank so the UI does not
-    // show misleading template text.
-    return zh.slice(0, en.length);
-  };
-
-  normalized.taskAchievementAdviceZh = alignZhArray(normalized.taskAchievementAdvice, normalized.taskAchievementAdviceZh);
-  normalized.coherenceAdviceZh = alignZhArray(normalized.coherenceAdvice, normalized.coherenceAdviceZh);
-  normalized.lexicalAdviceZh = alignZhArray(normalized.lexicalAdvice, normalized.lexicalAdviceZh);
-  normalized.grammarAdviceZh = alignZhArray(normalized.grammarAdvice, normalized.grammarAdviceZh);
-  normalized.band5FixPlanZh = alignZhArray(normalized.band5FixPlan, normalized.band5FixPlanZh);
-  normalized.band6UpgradePlanZh = alignZhArray(normalized.band6UpgradePlan, normalized.band6UpgradePlanZh);
-  normalized.band7UpgradePlanZh = alignZhArray(normalized.band7UpgradePlan, normalized.band7UpgradePlanZh);
-
-  if (normalized.task2EssayCorrections && typeof normalized.task2EssayCorrections === "object") {
-    if (!Array.isArray(normalized.task2EssayCorrections.developmentAdviceZh) || !normalized.task2EssayCorrections.developmentAdviceZh.length) {
-      normalized.task2EssayCorrections.developmentAdviceZh = ensureArray(normalized.task2EssayCorrections.developmentAdvice).map(() => "这个建议可以帮助观点展开更充分。").slice(0, 8);
-    }
-  }
-
-  if (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object") {
-  }
-
-}
-
-function hasHardLowBandEvidence(diagnostics, words, task) {
-  if (!diagnostics) return false;
-  if (diagnostics.isBlank || diagnostics.wordCount20OrFewer || diagnostics.mostlyNonEnglish || diagnostics.mostlyCopiedFromPrompt) return true;
-  if (diagnostics.whollyUnrelated || diagnostics.meaningMostlyBlocked) return true;
-  if (task === "Task 1" && words < 80) return true;
-  if (task === "Task 2" && words < 150) return true;
-  return false;
-}
-
-function looksLikeStrengthText(value) {
-  const text = compactCorrectionText(value);
-  return Boolean(text && (
-    text.includes("fully addresses") ||
-    text.includes("addresses all") ||
-    text.includes("covers all") ||
-    text.includes("clear purpose") ||
-    text.includes("appropriate tone") ||
-    text.includes("well-developed") ||
-    text.includes("well developed") ||
-    text.includes("clear progression") ||
-    text.includes("coherent") ||
-    text.includes("accurate language") ||
-    text.includes("few errors") ||
-    text.includes("strong control") ||
-    text.includes("natural")
-  ));
-}
-
-function looksLikeProblemText(value) {
-  const text = compactCorrectionText(value);
-  return Boolean(text && (
-    text.includes("missing") ||
-    text.includes("unclear") ||
-    text.includes("limited") ||
-    text.includes("underdeveloped") ||
-    text.includes("inaccurate") ||
-    text.includes("error") ||
-    text.includes("weak") ||
-    text.includes("needs") ||
-    text.includes("lack") ||
-    text.includes("not fully") ||
-    text.includes("does not")
-  ));
-}
-
-function dedupeStrings(items) {
-  const seen = new Set();
-  return cleanStringArray(items).filter((item) => {
-    const key = compactCorrectionText(item);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function sanitizeStrengthProblemBuckets(result) {
-  if (!result || typeof result !== "object") return;
-  const strengths = dedupeStrings(result.strengths);
-  const problems = dedupeStrings(result.mainProblems);
-  const movedStrengths = problems.filter((item) => looksLikeStrengthText(item) && !looksLikeProblemText(item));
-  result.mainProblems = problems.filter((item) => !(looksLikeStrengthText(item) && !looksLikeProblemText(item))).slice(0, 5);
-  result.strengths = dedupeStrings(strengths.concat(movedStrengths)).filter((item) => !looksLikeProblemText(item) || looksLikeStrengthText(item)).slice(0, 5);
-  if (Array.isArray(result.mainProblemsZh) && result.mainProblemsZh.length > result.mainProblems.length) {
-    result.mainProblemsZh = result.mainProblemsZh.slice(0, result.mainProblems.length);
-  }
-}
-
-function criterionHasLowBandTemplate(item) {
-  const text = compactCorrectionText([item?.feedback, item?.howToImprove].filter(Boolean).join(" "));
-  return Boolean(text && (
-    text.includes("needs clearer control") ||
-    text.includes("need clearer control") ||
-    text.includes("needs more precision and range") ||
-    text.includes("needs improvement") ||
-    text.includes("need improvement") ||
-    text.includes("task development is limited") ||
-    text.includes("grammar errors reduce clarity") ||
-    text.includes("vocabulary is limited") ||
-    text.includes("organisation is basic")
-  ));
-}
-
-function polishHighBandCriteria(result, body) {
-  if (!result?.criteria || typeof result.criteria !== "object") return;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  Object.entries(result.criteria).forEach(([name, item]) => {
-    const band = Number(item?.band);
-    if (!item || Number.isNaN(band) || band < 7.5 || !criterionHasLowBandTemplate(item)) return;
-    if (name === firstCriterion) {
-      item.feedback = task === "Task 1"
-        ? "The letter shows strong task fulfilment, clear purpose, and generally appropriate tone. Any remaining issue is minor refinement rather than basic task coverage."
-        : "The essay gives a strong, relevant response with a clear position and well-developed ideas. Any remaining issue is minor refinement rather than basic task response.";
-      item.howToImprove = task === "Task 1"
-        ? "Polish the precision of details and make the tone consistently natural throughout the letter."
-        : "Polish the depth of examples and make the final line of reasoning even more precise.";
-    } else if (name === "Coherence and Cohesion") {
-      item.feedback = "Organisation is clear and progression is effective. Any cohesion issue is a minor polishing point, not a basic control problem.";
-      item.howToImprove = "Refine paragraph transitions and avoid any slightly mechanical linking.";
-    } else if (name === "Lexical Resource") {
-      item.feedback = "Vocabulary is accurate and flexible enough for a high band. Remaining lexical work is about precision and natural collocation.";
-      item.howToImprove = "Replace any slightly general wording with more exact but still natural IELTS General Training phrasing.";
-    } else if (name === "Grammatical Range and Accuracy") {
-      item.feedback = "Grammar control is strong, with only minor accuracy or naturalness issues if any. This is not a major sentence-control weakness.";
-      item.howToImprove = "Polish small slips in complex sentences and keep sentence variety natural.";
-    }
-  });
-}
-
-function finalGateText(value, limit = 12) {
-  if (value === null || value === undefined) return "";
-
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value).toLowerCase().replace(/\s+/g, " ").trim();
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .slice(0, limit)
-      .map((item) => finalGateText(item, 4))
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  if (typeof value === "object") {
-    return Object.values(value)
-      .slice(0, limit)
-      .map((item) => finalGateText(item, 4))
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  return "";
-}
-
-function finalGateList(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => {
-    if (item === null || item === undefined) return false;
-    if (typeof item === "string") return item.trim();
-    return finalGateText(item);
-  });
-}
-
-function finalGateDedupe(items) {
-  const seen = new Set();
-  return finalGateList(items).filter((item) => {
-    const key = finalGateText(item).replace(/[.,!?;:'"()，。！？；：“”‘’]/g, "");
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function isStrengthLikeFeedbackFinal(value) {
-  const text = finalGateText(value);
-  if (!text) return false;
-
-  const positiveSignals = [
-    "fully addresses",
-    "fully address",
-    "fully satisfies",
-    "satisfies all task requirements",
-    "satisfies the task requirements",
-    "fully answers",
-    "fully fulfils",
-    "fully fulfills",
-    "addresses all",
-    "covers all",
-    "all bullet points are covered",
-    "all task requirements",
-    "clear purpose",
-    "purpose is clear",
-    "appropriate tone",
-    "appropriately formal",
-    "appropriately polite",
-    "formal and polite",
-    "clear and polite",
-    "well-developed",
-    "well developed",
-    "specific content",
-    "clear progression",
-    "logical progression",
-    "logically ordered",
-    "coherent",
-    "well organised",
-    "well organized",
-    "accurate language",
-    "high grammatical accuracy",
-    "grammatical accuracy is high",
-    "precise and natural",
-    "vocabulary is precise",
-    "natural vocabulary",
-    "strong control",
-    "effective",
-    "minor polishing",
-    "minor refinement"
-  ];
-
-  const problemSignals = [
-    "but",
-    "however",
-    "although",
-    "needs",
-    "need to",
-    "need improvement",
-    "needs improvement",
-    "missing",
-    "limited",
-    "underdeveloped",
-    "unclear",
-    "inaccurate",
-    "error",
-    "errors",
-    "weak",
-    "lack",
-    "lacks",
-    "not fully",
-    "does not",
-    "fails to",
-    "problem"
-  ];
-
-  return positiveSignals.some((signal) => text.includes(signal)) &&
-    !problemSignals.some((signal) => text.includes(signal));
-}
-
-function isProblemLikeFeedbackFinal(value) {
-  const text = finalGateText(value);
-  if (!text) return false;
-
-  return [
-    "missing",
-    "unclear",
-    "limited",
-    "underdeveloped",
-    "inaccurate",
-    "error",
-    "errors",
-    "weak",
-    "needs",
-    "need improvement",
-    "needs improvement",
-    "lack",
-    "lacks",
-    "not fully",
-    "does not",
-    "fails to",
-    "inappropriate",
-    "wrong tone",
-    "off-topic",
-    "copied",
-    "repetitive",
-    "mechanical",
-    "fragment",
-    "run-on"
-  ].some((signal) => text.includes(signal));
-}
-
-function sanitizeStrengthProblemBucketsFinal(result) {
-  if (!result || typeof result !== "object") return;
-
-  const rawStrengths = finalGateDedupe(result.strengths);
-  const rawStrengthsZh = Array.isArray(result.strengthsZh) ? result.strengthsZh : [];
-  const rawProblems = finalGateDedupe(result.mainProblems);
-  const rawProblemsZh = Array.isArray(result.mainProblemsZh) ? result.mainProblemsZh : [];
-
-  const keptProblems = [];
-  const keptProblemsZh = [];
-  const movedStrengths = [];
-  const movedStrengthsZh = [];
-
-  rawProblems.forEach((item, index) => {
-    if (isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item)) {
-      movedStrengths.push(item);
-      if (rawProblemsZh[index]) movedStrengthsZh.push(rawProblemsZh[index]);
-      return;
-    }
-
-    keptProblems.push(item);
-    if (rawProblemsZh[index]) keptProblemsZh.push(rawProblemsZh[index]);
-  });
-
-  result.mainProblems = finalGateDedupe(keptProblems).slice(0, 6);
-  result.mainProblemsZh = keptProblemsZh.slice(0, result.mainProblems.length);
-
-  result.strengths = finalGateDedupe(rawStrengths.concat(movedStrengths))
-    .filter((item) => isStrengthLikeFeedbackFinal(item) || !isProblemLikeFeedbackFinal(item))
-    .slice(0, 6);
-
-  result.strengthsZh = rawStrengthsZh.concat(movedStrengthsZh).slice(0, result.strengths.length);
-}
-
-function isGenericChineseNoteFinal(value) {
-  const text = String(value || "")
-    .replace(/\s+/g, "")
-    .replace(/[，。！？；：“”‘’、,.!?;:'"]/g, "")
-    .trim()
-    .toLowerCase();
-
-  if (!text) return false;
-
-  const genericNotes = new Set([
-    "更完整地回应题目",
-    "任务回应需要更完整",
-    "观点和展开需要更清楚",
-    "明确立场并展开理由",
-    "这里说明开头是否合适",
-    "这里说明结尾是否合适",
-    "逐条覆盖题目要点",
-    "结构和衔接需要更清楚",
-    "分段并自然使用连接词",
-    "词汇需要更准确更多样",
-    "使用更准确的题目词汇",
-    "语法准确性和句子控制需提升",
-    "先写完整准确的句子",
-    "先保证句子语法准确",
-    "替换模糊词使用题目相关词汇",
-    "衔接更自然",
-    "内容和语言仍需加强",
-    "这个问题会影响写作分数",
-    "这是评分依据之一",
-    "高分证据尚不充分",
-    "有尝试回应题目",
-    "有一些相关内容",
-    "字数不足会影响展开",
-    "语法错误影响清晰度",
-    "词汇准确性需要提升",
-    "结构和衔接需要加强",
-    "主要问题集中在任务回应结构词汇或语法",
-    "先修改最影响分数的问题",
-    "简短优点解释",
-    "简短问题解释",
-    "简短低分原因解释",
-    "简短高分证据解释",
-    "简短限分原因解释",
-    "简短说明为什么不能更高",
-    "简短说明为什么没有更低",
-    "简短证据解释",
-    "briefchineseexplanation",
-    "briefchinesesuggestion",
-    "briefchinesesummary"
-  ]);
-
-  return genericNotes.has(text);
-}
-
-function cleanChineseHelperValueFinal(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => cleanChineseHelperValueFinal(item))
-      .filter((item) => {
-        if (Array.isArray(item)) return item.length > 0;
-        if (item && typeof item === "object") return Object.keys(item).length > 0;
-        return String(item || "").trim();
-      });
-  }
-
-  if (value && typeof value === "object") {
-    const cleaned = { ...value };
-    Object.keys(cleaned).forEach((key) => {
-      cleaned[key] = cleanChineseHelperValueFinal(cleaned[key]);
-    });
-    return cleaned;
-  }
-
-  if (typeof value === "string" && isGenericChineseNoteFinal(value)) return "";
-  return value;
-}
-
-function cleanGenericChineseFieldsFinal(value) {
-  if (!value || typeof value !== "object") return value;
-
-  if (Array.isArray(value)) {
-    return value.map((item) => cleanGenericChineseFieldsFinal(item));
-  }
-
-  Object.keys(value).forEach((key) => {
-    const fieldValue = value[key];
-
-    if (key.endsWith("Zh")) {
-      value[key] = cleanChineseHelperValueFinal(fieldValue);
-      return;
-    }
-
-    if (fieldValue && typeof fieldValue === "object") {
-      value[key] = cleanGenericChineseFieldsFinal(fieldValue);
-    }
-  });
-
-  return value;
-}
-
-function isHighBandResultFinal(result) {
-  const overall = Number(result?.overallBand || 0);
-  if (Number.isFinite(overall) && overall >= 7.5) return true;
-
-  const criteriaBands = Object.values(result?.criteria || {})
-    .map((item) => Number(item?.band))
-    .filter((band) => Number.isFinite(band));
-
-  if (criteriaBands.length >= 4 && criteriaBands.every((band) => band >= 7.5)) return true;
-
-  const highBandRange = finalGateText(result?.highBandDiagnostics?.recommendedHighBandRange);
-  return /(^|[^0-9])(?:8|8\.0|8\.5|9|9\.0)([^0-9]|$)/.test(highBandRange);
-}
-
-function isLowBandTemplateTextFinal(value) {
-  const text = finalGateText(value);
-  if (!text) return false;
-
-  return [
-    "task development is limited",
-    "task response is limited",
-    "task achievement is limited",
-    "development is limited",
-    "grammar accuracy and sentence control need improvement",
-    "grammar accuracy and sentence control needs improvement",
-    "grammar needs improvement",
-    "grammar need improvement",
-    "needs improvement",
-    "need improvement",
-    "needs clearer control",
-    "need clearer control",
-    "needs more precision and range",
-    "vocabulary is limited",
-    "lexical resource is limited",
-    "organisation is basic",
-    "organization is basic",
-    "grammar errors reduce clarity",
-    "limited task response",
-    "limited task achievement",
-    "ideas are underdeveloped",
-    "paragraphing is weak",
-    "meaning is unclear"
-  ].some((signal) => text.includes(signal));
-}
-
-
-function isOverAdvancedHighBandAdviceFinal(value) {
-  const text = finalGateText(value);
-  if (!text) return false;
-  return [
-    "sophisticated lexical items",
-    "more sophisticated lexical",
-    "synergistic opportunities",
-    "holistic understanding",
-    "inversion",
-    "more complex conditional forms",
-    "complex conditional forms",
-    "flawless grammatical accuracy",
-    "punctuation is consistently perfect",
-    "perfect punctuation",
-    "aim for flawless",
-    "less common lexical items",
-    "use a wider range of linking phrases",
-    "more complex grammatical structures",
-    "inverted conditionals",
-    "inverted conditional",
-    "for sophistication",
-    "brief preview of your main points",
-    "this essay will explore",
-    "vary paragraph transitions beyond",
-    "replace '",
-    "with 'intellectually",
-    "with 'socially",
-    "furthermore",
-    "moreover",
-    "in addition"
-  ].some((signal) => text.includes(signal));
-}
-
-function highBandAdviceOnlyReplacementFinal(name, task) {
-  const firstCriterion = firstCriterionName(task);
-  if (name === firstCriterion) {
-    return task === "Task 1"
-      ? {
-          howToImprove: "At this band, improve by making each detail more specific, concise, and naturally useful for the manager-reader.",
-          howToImproveZh: "这个分数段应把细节写得更具体、更简洁，并且更自然地服务于经理读者。"
-        }
-      : {
-          howToImprove: "At this band, improve by sharpening the line of reasoning, making examples more precise, and keeping the argument natural.",
-          howToImproveZh: "这个分数段应让论证线更清楚、例子更精准，并保持表达自然。"
-        };
-  }
-  if (name === "Coherence and Cohesion") {
-    return {
-      howToImprove: "Polish paragraph transitions so the progression feels effortless, rather than adding more obvious linking phrases.",
-      howToImproveZh: "润色段落过渡，让推进更自然，而不是堆更多明显连接词。"
-    };
-  }
-  if (name === "Lexical Resource") {
-    return {
-      howToImprove: task === "Task 1"
-        ? "Choose wording that is more specific to the workplace situation while keeping the letter natural and not over-formal."
-        : "Choose more precise topic wording where it genuinely clarifies the argument, without forcing rare or showy vocabulary.",
-      howToImproveZh: task === "Task 1"
-        ? "选择更贴合职场情境的措辞，同时保持书信自然，不要过度正式。"
-        : "只在能让论证更清楚时使用更精准的话题词，不要强行使用生僻或炫技词汇。"
-    };
-  }
-  if (name === "Grammatical Range and Accuracy") {
-    return {
-      howToImprove: "Polish small accuracy, punctuation, and sentence-balance details; do not add complex structures just to look advanced.",
-      howToImproveZh: "润色轻微准确性、标点和句子平衡问题，不要为了显得高级而硬加复杂结构。"
-    };
-  }
-  return {
-    howToImprove: "Focus on naturalness, precision, concision, and consistency rather than adding showy language.",
-    howToImproveZh: "重点提升自然度、精准度、简洁度和一致性，而不是增加炫技表达。"
-  };
-}
-
-function sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body = {}) {
-  if (!result?.criteria || typeof result.criteria !== "object") return;
-  if (!isHighBandResultFinal(result)) return;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  Object.entries(result.criteria).forEach(([name, item]) => {
-    if (!item || typeof item !== "object") return;
-    const band = Number(item.band);
-    if (!Number.isFinite(band) || band < 7.5) return;
-    if (!isOverAdvancedHighBandAdviceFinal([item.howToImprove, item.howToImproveZh, item.feedback].join(" "))) return;
-    const replacement = highBandAdviceOnlyReplacementFinal(name, task);
-    item.howToImprove = replacement.howToImprove;
-    item.howToImproveZh = replacement.howToImproveZh;
-  });
-}
-
-function sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body = {}) {
-  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const replacements = {
-    taskAchievementAdvice: task === "Task 1"
-      ? ["Make the workplace benefit and career-development details even more specific while keeping the letter natural and concise."]
-      : ["Sharpen the central line of reasoning and make examples more precise rather than adding more complex language."],
-    taskAchievementAdviceZh: task === "Task 1"
-      ? ["把公司受益和职业发展细节写得更具体，同时保持书信自然简洁。"]
-      : ["让核心论证线更清楚，例子更精准，而不是增加复杂语言。"],
-    coherenceAdvice: ["Make transitions feel effortless by linking each paragraph’s purpose naturally to the next."],
-    coherenceAdviceZh: ["让段落目的之间自然衔接，使过渡更顺，而不是机械增加连接词。"],
-    lexicalAdvice: task === "Task 1"
-      ? ["Use more situation-specific workplace wording only where it makes the letter clearer and more natural."]
-      : ["Use more precise topic vocabulary only where it clarifies the argument; avoid rare vocabulary for its own sake."],
-    lexicalAdviceZh: task === "Task 1"
-      ? ["只在能让书信更清楚自然时，使用更贴合职场情境的词。"]
-      : ["只在能让论证更清楚时使用更精准的话题词，避免为了高级而用生僻词。"],
-    grammarAdvice: ["Polish minor accuracy, punctuation, and sentence rhythm; avoid adding complex structures just to appear advanced."],
-    grammarAdviceZh: ["润色轻微准确性、标点和句子节奏，不要为了显得高级而硬加复杂结构。"]
-  };
-
-  [
-    ["taskAchievementAdvice", "taskAchievementAdviceZh"],
-    ["coherenceAdvice", "coherenceAdviceZh"],
-    ["lexicalAdvice", "lexicalAdviceZh"],
-    ["grammarAdvice", "grammarAdviceZh"]
-  ].forEach(([enKey, zhKey]) => {
-    const items = ensureArray(result[enKey]);
-    if (!items.some(isOverAdvancedHighBandAdviceFinal)) return;
-    result[enKey] = replacements[enKey];
-    result[zhKey] = replacements[zhKey];
-  });
-
-  if (result.targetImprovementPlan?.criterionUpgrades && Array.isArray(result.targetImprovementPlan.criterionUpgrades)) {
-    result.targetImprovementPlan.criterionUpgrades = result.targetImprovementPlan.criterionUpgrades.map((item) => {
-      if (!item || typeof item !== "object") return item;
-      const updated = { ...item };
-      if (isOverAdvancedHighBandAdviceFinal([updated.action, updated.exampleUpgrade, updated.target].join(" "))) {
-        updated.action = "Polish naturalness, specificity, concision, and consistency instead of adding showy complexity.";
-        updated.actionZh = "润色自然度、具体性、简洁度和一致性，而不是增加炫技复杂度。";
-        if (isOverAdvancedHighBandAdviceFinal(updated.exampleUpgrade)) {
-          updated.exampleUpgrade = "Make the point more specific and natural while preserving the original meaning.";
-          updated.exampleUpgradeZh = "在保留原意的基础上，把表达写得更具体、更自然。";
-        }
-      }
-      return updated;
-    });
-  }
-}
-
-function highBandCriterionReplacementFinal(name, task) {
-  const firstCriterion = firstCriterionName(task);
-
-  if (name === firstCriterion) {
-    return task === "Task 1"
-      ? {
-          feedback: "The letter shows strong task fulfilment, clear purpose, appropriate tone, and effective coverage of the required bullet points.",
-          feedbackZh: "这封信任务完成度高，目的清楚，语气合适，并且有效覆盖了题目要点。",
-          howToImprove: "At this band, improvement should focus on making details even more natural, concise, and consistently purposeful.",
-          howToImproveZh: "这个分数段的提升重点是让细节更自然、更简洁，并始终服务于写信目的。"
-        }
-      : {
-          feedback: "The essay addresses the task strongly, presents a clear position, and develops relevant ideas with good control.",
-          feedbackZh: "这篇文章回应题目较充分，立场清楚，观点展开相关且控制较好。",
-          howToImprove: "At this band, improvement should focus on sharper idea development, more precise examples, and more natural progression.",
-          howToImproveZh: "这个分数段的提升重点是观点展开更深入、例子更精准、推进更自然。"
-        };
-  }
-
-  if (name === "Coherence and Cohesion") {
-    return {
-      feedback: "Organisation is clear and progression is effective; any cohesion issue is a minor polishing point rather than a basic control problem.",
-      feedbackZh: "文章结构清楚，推进有效；衔接方面即使有问题，也属于润色层面，不是基础结构问题。",
-      howToImprove: "Refine paragraph transitions and avoid any slightly mechanical linking.",
-      howToImproveZh: "可以进一步润色段落过渡，避免连接词显得机械。"
-    };
-  }
-
-  if (name === "Lexical Resource") {
-    return {
-      feedback: "Vocabulary is generally precise, natural, and suitable for the task, with enough range for a high-band response.",
-      feedbackZh: "词汇整体准确自然，适合题目语境，已经具备高分作文所需的词汇范围。",
-      howToImprove: "Improve by choosing even more topic-specific collocations and avoiding any repeated safe wording.",
-      howToImproveZh: "提升重点是使用更贴合话题的搭配，并减少重复的安全表达。"
-    };
-  }
-
-  if (name === "Grammatical Range and Accuracy") {
-    return {
-      feedback: "Grammar control is strong, with varied sentence structures and only minor issues, if any.",
-      feedbackZh: "语法控制较强，句式有变化，即使有问题也多为轻微问题。",
-      howToImprove: "Polish sentence variety and punctuation consistency rather than fixing basic grammar control.",
-      howToImproveZh: "提升重点是句式变化和标点一致性，而不是基础语法控制。"
-    };
-  }
-
-  return {
-    feedback: "This criterion is generally well controlled, with only minor refinement needed.",
-    feedbackZh: "这一项整体控制较好，只需要做细节润色。",
-    howToImprove: "Focus on precision, naturalness, and consistency.",
-    howToImproveZh: "重点提升表达精准度、自然度和一致性。"
-  };
-}
-
-function polishHighBandCriteriaFinal(result, body) {
-  if (!result?.criteria || typeof result.criteria !== "object") return;
-
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-
-  Object.entries(result.criteria).forEach(([name, item]) => {
-    if (!item || typeof item !== "object") return;
-
-    const band = Number(item.band);
-    if (!Number.isFinite(band) || band < 7.5) return;
-
-    const combined = finalGateText([item.feedback, item.howToImprove, item.feedbackZh, item.howToImproveZh]);
-    if (!isLowBandTemplateTextFinal(combined) && !isGenericChineseNoteFinal(item.feedbackZh) && !isGenericChineseNoteFinal(item.howToImproveZh)) return;
-
-    const replacement = highBandCriterionReplacementFinal(name, task);
-    item.feedback = replacement.feedback;
-    item.feedbackZh = replacement.feedbackZh;
-    item.howToImprove = replacement.howToImprove;
-    item.howToImproveZh = replacement.howToImproveZh;
-  });
-}
-
-function removeHighBandContradictionsFinal(result) {
-  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
-
-  const cleanAdviceArray = (items, zhItems, { removeStrengths = false } = {}) => {
-    const source = finalGateList(items);
-    const zhSource = Array.isArray(zhItems) ? zhItems : [];
-    const kept = [];
-    const keptZh = [];
-
-    source.forEach((item, index) => {
-      if (isLowBandTemplateTextFinal(item)) return;
-      if (removeStrengths && isStrengthLikeFeedbackFinal(item) && !isProblemLikeFeedbackFinal(item)) return;
-      kept.push(item);
-      if (zhSource[index] && !isGenericChineseNoteFinal(zhSource[index])) keptZh.push(zhSource[index]);
-    });
-
-    return { items: finalGateDedupe(kept), zh: keptZh.slice(0, kept.length) };
-  };
-
-  const mainProblems = cleanAdviceArray(result.mainProblems, result.mainProblemsZh, { removeStrengths: true });
-  result.mainProblems = mainProblems.items;
-  result.mainProblemsZh = mainProblems.zh;
-
-  const taskAdvice = cleanAdviceArray(result.taskAchievementAdvice, result.taskAchievementAdviceZh);
-  result.taskAchievementAdvice = taskAdvice.items;
-  result.taskAchievementAdviceZh = taskAdvice.zh;
-
-  const coherenceAdvice = cleanAdviceArray(result.coherenceAdvice, result.coherenceAdviceZh);
-  result.coherenceAdvice = coherenceAdvice.items;
-  result.coherenceAdviceZh = coherenceAdvice.zh;
-
-  const lexicalAdvice = cleanAdviceArray(result.lexicalAdvice, result.lexicalAdviceZh);
-  result.lexicalAdvice = lexicalAdvice.items;
-  result.lexicalAdviceZh = lexicalAdvice.zh;
-
-  const grammarAdvice = cleanAdviceArray(result.grammarAdvice, result.grammarAdviceZh);
-  result.grammarAdvice = grammarAdvice.items;
-  result.grammarAdviceZh = grammarAdvice.zh;
-
-  if (!result.mainProblems.length) {
-    result.mainProblems = [
-      "No major score-limiting problem was identified at this band; focus on minor refinement, naturalness, and consistency."
-    ];
-    result.mainProblemsZh = [
-      "这个分数段没有明显拉低分数的大问题，重点应放在细节润色、表达自然度和一致性上。"
-    ];
-  }
-
-  if (result.targetImprovementPlan?.criterionUpgrades && Array.isArray(result.targetImprovementPlan.criterionUpgrades)) {
-    result.targetImprovementPlan.criterionUpgrades = result.targetImprovementPlan.criterionUpgrades.map((item) => {
-      if (!item || typeof item !== "object") return item;
-
-      const updated = { ...item };
-
-      if (isLowBandTemplateTextFinal(updated.currentWeakness)) {
-        updated.currentWeakness = "Only minor refinement is still possible in this criterion.";
-        updated.currentWeaknessZh = "这一项主要是细节润色空间，不是基础能力问题。";
-      }
-
-      if (isLowBandTemplateTextFinal(updated.action)) {
-        updated.action = "Polish precision, naturalness, and consistency rather than fixing basic control problems.";
-        updated.actionZh = "重点润色精准度、自然度和一致性，而不是修基础控制问题。";
-      }
-
-      if (isLowBandTemplateTextFinal(updated.exampleUpgrade)) {
-        updated.exampleUpgrade = "";
-        updated.exampleUpgradeZh = "";
-      }
-
-      return updated;
-    });
-  }
-}
-
-function removeContradictoryLowBandDiagnosticsFinal(result) {
-  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
-
-  const diagnostics = result.lowBandDiagnostics;
-  if (diagnostics && typeof diagnostics === "object") {
-    const hasRealLowBandTrigger =
-      diagnostics.isBlank ||
-      diagnostics.wordCount20OrFewer ||
-      diagnostics.mostlyNonEnglish ||
-      diagnostics.mostlyCopiedFromPrompt ||
-      diagnostics.mostlyMemorised ||
-      diagnostics.whollyUnrelated ||
-      diagnostics.barelyRelated ||
-      diagnostics.littleRelevantMessage ||
-      diagnostics.noClearPositionTask2 ||
-      diagnostics.noBulletPointCoverageTask1 ||
-      diagnostics.meaningMostlyBlocked;
-
-    if (!hasRealLowBandTrigger) {
-      diagnostics.recommendedLowBandRange = "";
-      diagnostics.reason = "No low-band trigger was detected.";
-      if (result.lowBandDiagnosticsZh && typeof result.lowBandDiagnosticsZh === "object") {
-        result.lowBandDiagnosticsZh.reasonZh = "没有发现明显低分段触发原因。";
-      }
-    }
-  }
-
-  const calibration = result.scoreCalibration;
-  if (calibration && typeof calibration === "object") {
-    const capText = finalGateText(calibration.capReason);
-    const falseCap =
-      !capText ||
-      capText.includes("no low-band trigger") ||
-      capText.includes("task coverage, word count, organisation, vocabulary, or grammar evidence");
-
-    if (calibration.capApplied && falseCap) {
-      calibration.capApplied = false;
-      calibration.capReason = "";
-      if (result.scoreCalibrationZh && typeof result.scoreCalibrationZh === "object") {
-        result.scoreCalibrationZh.capReasonZh = "";
-      }
-    }
-  }
-}
-
-function ensureTaskCorrectionZhFieldsFinal(result) {
-  if (!result || typeof result !== "object") return;
-
-  if (result.task1LetterCorrections && typeof result.task1LetterCorrections === "object") {
-    const c = result.task1LetterCorrections;
-    c.openingCommentZh = c.openingCommentZh || "";
-    c.closingCommentZh = c.closingCommentZh || "";
-    c.toneCommentZh = c.toneCommentZh || "";
-    c.purposeCommentZh = c.purposeCommentZh || "";
-    if (!Array.isArray(c.bulletPointAdvice)) c.bulletPointAdvice = [];
-  }
-
-  if (result.task2EssayCorrections && typeof result.task2EssayCorrections === "object") {
-    const c = result.task2EssayCorrections;
-    c.positionCommentZh = c.positionCommentZh || "";
-    c.introductionCommentZh = c.introductionCommentZh || "";
-    c.bodyParagraphCommentZh = c.bodyParagraphCommentZh || "";
-    c.exampleCommentZh = c.exampleCommentZh || "";
-    c.conclusionCommentZh = c.conclusionCommentZh || "";
-    if (!Array.isArray(c.developmentAdvice)) c.developmentAdvice = [];
-    if (!Array.isArray(c.developmentAdviceZh)) c.developmentAdviceZh = [];
-  }
-
-  result.modelAnswerOutlineZh = result.modelAnswerOutlineZh || "";
-}
-
-function bulletRequirementText(item) {
-  if (!item) return "";
-  if (typeof item === "string") return item;
-  if (typeof item === "object") return String(item.requirement || item.bulletPoint || item.point || item.taskRequirement || item.text || "");
-  return String(item || "");
-}
-
-function isPlaceholderBulletRequirement(item) {
-  const text = bulletRequirementText(item).trim();
-  return !text || /^bullet\s*point\s*\d+$/i.test(text) || /^point\s*\d+$/i.test(text);
-}
-
-function promptBulletRequirements(body) {
-  const fromPayload = ensureArray(body?.task1BulletPoints)
-    .map((item) => String(item || "").trim())
-    .filter(Boolean);
-  if (fromPayload.length) return fromPayload.slice(0, 5);
-  return extractPromptBulletPoints(body?.questionPrompt).slice(0, 5);
-}
-
-function repairTaskRequirementAnalysisFinal(result, body = {}) {
-  if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
-  const points = promptBulletRequirements(body);
-
-  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object"
-    ? result.taskRequirementAnalysis
-    : {};
-  const bullets = ensureArray(analysis.bulletPoints);
-
-  if (!points.length && bullets.some((item) => isPlaceholderBulletRequirement(item))) {
-    analysis.taskType = "task1";
-    analysis.bulletPoints = bullets.map(() => ({
-      requirement: "AI did not reliably return this prompt bullet point",
-      covered: null,
-      coverageUnknown: true,
-      evidence: "The AI output used a placeholder label instead of a real prompt requirement.",
-      problem: "Coverage is unknown rather than confirmed missing.",
-      suggestion: "Retry task analysis or check the original prompt manually."
-    }));
-    analysis.missingRequirements = [];
-    analysis.taskMatchSummary = analysis.taskMatchSummary || "Reliable bullet-point coverage evidence was not returned.";
-    result.taskRequirementAnalysis = analysis;
-    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object" ? result.taskRequirementAnalysisZh : {};
-    result.taskRequirementAnalysisZh.bulletPointsZh = analysis.bulletPoints.map(() => "AI 只返回了占位要点，不能判定为未覆盖；需要重新核验题目要点和原文证据。");
-    result.taskRequirementAnalysisZh.taskMatchSummaryZh = result.taskRequirementAnalysisZh.taskMatchSummaryZh || "要点覆盖情况需要更可靠的 AI 证据。";
-    return;
-  }
-  if (!points.length) return;
-  const hasPlaceholder = !bullets.length || bullets.some((item) => isPlaceholderBulletRequirement(item));
-  const hasTooFewRealBullets = bullets.filter((item) => !isPlaceholderBulletRequirement(item)).length < Math.min(points.length, 3);
-
-  if (hasPlaceholder || hasTooFewRealBullets) {
-    analysis.taskType = "task1";
-    analysis.bulletPoints = points.map((requirement) => ({
-      requirement,
-      covered: null,
-      evidence: "AI did not return reliable bullet-point coverage evidence for this item.",
-      problem: "Coverage is unknown rather than confirmed missing.",
-      suggestion: "Retry or check the letter manually to confirm whether this bullet point is directly answered with concrete detail.",
-      coverageUnknown: true
-    }));
-    analysis.missingRequirements = [];
-    analysis.taskMatchSummary = analysis.taskMatchSummary || "The prompt bullet points were extracted, but reliable AI coverage evidence was not returned for every point.";
-    result.taskRequirementAnalysis = analysis;
-
-    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object"
-      ? result.taskRequirementAnalysisZh
-      : {};
-    if (!Array.isArray(result.taskRequirementAnalysisZh.bulletPointsZh) || !result.taskRequirementAnalysisZh.bulletPointsZh.length) {
-      result.taskRequirementAnalysisZh.bulletPointsZh = points.map(() => "系统已提取该题目要点，但本次 AI 没有可靠返回覆盖证据；这里不能直接判定为未覆盖。");
-    }
-    result.taskRequirementAnalysisZh.taskMatchSummaryZh = result.taskRequirementAnalysisZh.taskMatchSummaryZh || "题目要点已提取，但覆盖情况需要更可靠的 AI 证据。";
-  }
-}
-
-
-function isNonBlockingGrammarWarningText(value) {
-  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON|failed to fetch|fetch failed|network error|request timed out|timeout|aborted/i.test(String(value || ""));
-}
-
-function ensureAlignedZhArrayFinal(items, zhItems, dictionary = {}) {
-  const en = ensureArray(items).filter((item) => hasUsefulText(item));
-  const zh = ensureArray(zhItems).filter((item) => hasUsefulText(item));
-  return en.map((item, index) => {
-    const existing = zh[index];
-    if (existing && !isGenericChineseNoteFinal(existing)) return existing;
-    const key = String(item || "").trim().toLowerCase();
-    if (dictionary[key]) return dictionary[key];
-    return `这条建议对应英文内容：“${String(item || "").slice(0, 70)}”。请按这一步具体修改，提升该项评分表现。`;
-  });
-}
-
-function normalizeBandPlanVisibilityAndZhFinal(result) {
-  if (!result || typeof result !== "object") return;
-  const band = Number(result.overallBand || 0);
-  if (Number.isFinite(band) && band > 7) {
-    result.band5FixPlan = [];
-    result.band5FixPlanZh = [];
-    result.band6UpgradePlan = [];
-    result.band6UpgradePlanZh = [];
-    result.band7UpgradePlan = [];
-    result.band7UpgradePlanZh = [];
-    result.lowBandPlanHidden = true;
-    result.lowBandPlanHiddenReason = "The estimated band is above 7.0, so Band 5/6/7 ladder advice is not shown. Use the target improvement plan and high-band polishing advice instead.";
-    return;
-  }
-
-  const band5Dict = {
-    "cover the task more completely.": "更完整地回应题目，确保每个要求都有直接回答。",
-    "use clear paragraphs.": "使用清楚的段落，让读者容易看出每一段的作用。",
-    "write mostly accurate simple sentences.": "先写准确的简单句，减少基础语法错误。",
-    "use basic topic vocabulary correctly.": "先把基础话题词用准确，避免为了高级而误用词。"
-  };
-  const band6Dict = {
-    "develop each main idea with a reason and example.": "每个主要观点都要配一个原因和例子，避免只列观点。",
-    "use linking words naturally, not mechanically.": "连接词要自然服务于逻辑，不要机械堆砌。",
-    "use a wider range of accurate topic vocabulary.": "扩大话题词汇范围，但要优先保证用词准确。",
-    "mix simple and some complex sentences accurately.": "在准确简单句基础上加入部分准确复杂句。"
-  };
-  const band7Dict = {
-    "make ideas more precise and fully developed.": "把观点写得更具体、更充分，减少笼统表达。",
-    "use natural cohesion across paragraphs.": "段落之间要自然衔接，而不是只靠连接词。",
-    "choose more exact collocations.": "选择更准确的搭配，提高词汇自然度。",
-    "reduce grammar errors in complex sentences.": "减少复杂句中的语法错误，保持表达灵活且准确。"
-  };
-
-  if (ensureArray(result.band5FixPlan).length) result.band5FixPlanZh = ensureAlignedZhArrayFinal(result.band5FixPlan, result.band5FixPlanZh, band5Dict);
-  if (ensureArray(result.band6UpgradePlan).length) result.band6UpgradePlanZh = ensureAlignedZhArrayFinal(result.band6UpgradePlan, result.band6UpgradePlanZh, band6Dict);
-  if (ensureArray(result.band7UpgradePlan).length) result.band7UpgradePlanZh = ensureAlignedZhArrayFinal(result.band7UpgradePlan, result.band7UpgradePlanZh, band7Dict);
-}
-
-
-function betterExpressionTargetRangeLabel(bandValue) {
-  return targetImprovementRangeFromBand(bandValue).label;
-}
-
-function normalizeGenericBetterSource(source) {
-  return String(source || "")
-    .replace(/\s+/g, " ")
-    .replace(/\s+([,.!?;:])/g, "$1")
-    .replace(/([,.!?;:])([A-Za-z])/g, "$1 $2")
-    .trim();
-}
-
-function betterExpressionLevelFromBand(bandValue) {
-  const band = clampAiBand(bandValue, 5);
-  const range = targetImprovementRangeFromBand(band);
-  return {
-    band,
-    lower: range.lower,
-    upper: range.upper,
-    label: range.label,
-    isHigh: range.lower >= 7,
-    isMid: range.lower >= 6 && range.lower < 7,
-    isLowMid: range.lower < 6
-  };
-}
-
-function detectSentenceFunction(sentence, task = "Task 2") {
-  const s = String(sentence || "").toLowerCase();
-  if (task === "Task 1") {
-    if (/\b(i am writing|i would like|i want|request|enquire|ask|could you|would you)\b/.test(s)) return "letter_request";
-    if (/\b(apolog|sorry|regret)\b/.test(s)) return "letter_apology";
-    if (/\b(thank|grateful|appreciate)\b/.test(s)) return "letter_thanks";
-    if (/\b(arrange|available|appointment|meeting|schedule)\b/.test(s)) return "letter_arrangement";
-    if (/\b(complain|problem|noise|refund|issue)\b/.test(s)) return "letter_complaint";
-  }
-  if (/^\s*(in conclusion|to conclude|overall)\b|\b(in conclusion|to conclude|overall)\b/.test(s)) return "conclusion";
-  if (/^\s*(if|provided that|as long as)\b|\bif\b/.test(s)) return "condition";
-  if (/\b(however|but|although|whereas|on the other hand|nevertheless)\b/.test(s)) return "contrast";
-  if (/\b(for example|for instance|such as|e\.g\.)\b/.test(s)) return "example";
-  if (/\b(because|reason|this is because|due to|as a result|therefore|so)\b/.test(s)) return "reason_result";
-  if (/\b(benefit|advantage|good thing|positive|help|improve|useful|confidence|opportunity)\b/.test(s)) return "benefit";
-  if (/\b(disadvantage|drawback|bad thing|negative|risk|dangerous|expensive|harm|problem|cost)\b/.test(s)) return "drawback";
-  if (/\b(i think|i believe|in my opinion|my view|i agree|i disagree)\b/.test(s)) return "opinion";
-  return "general";
-}
-
-function upgradeCommonIeltsWording(sentence) {
-  return normalizeGenericBetterSource(sentence)
-    .replace(/\bvery good\b/gi, "highly beneficial")
-    .replace(/\bgood thing\b/gi, "positive development")
-    .replace(/\bbad thing\b/gi, "negative development")
-    .replace(/\bgood\b/gi, "beneficial")
-    .replace(/\bbad\b/gi, "harmful")
-    .replace(/\bnice\b/gi, "positive")
-    .replace(/\bmany things\b/gi, "a number of issues")
-    .replace(/\bmany thing\b/gi, "many things")
-    .replace(/\bspend too much money\b/gi, "spend excessively")
-    .replace(/\btoo much money\b/gi, "an excessive amount of money")
-    .replace(/\bfamous products\b/gi, "reputable products")
-    .replace(/\bwell-known products\b/gi, "reputable products");
-}
-
-function task1GenericBetterExpression(source, functionType, level) {
-  let s = upgradeCommonIeltsWording(source);
-  if (functionType === "letter_request") {
-    s = s
-      .replace(/\bI write this letter because I want to\b/i, "I am writing to ask whether I could")
-      .replace(/\bI am writing this letter because I want to\b/i, "I am writing to ask whether I could")
-      .replace(/\bI want to\b/i, "I would like to")
-      .replace(/\bI need to\b/i, "I would appreciate the opportunity to");
-    if (!/\b(because|as|so that|in order to)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + ", as this would help me address the situation more effectively";
-    }
-  } else if (functionType === "letter_apology") {
-    s = s.replace(/\bI am sorry\b/i, "I would like to apologise").replace(/[.!?]*$/, "") + " and explain how I intend to resolve the matter";
-  } else if (functionType === "letter_thanks") {
-    s = s.replace(/\bthank you\b/i, "I would like to thank you").replace(/[.!?]*$/, "") + " because your support has been very helpful";
-  } else if (functionType === "letter_complaint") {
-    s = s.replace(/\bthere is a problem\b/i, "there is a serious issue").replace(/[.!?]*$/, "") + ", and I would appreciate it if this could be addressed promptly";
-  } else if (functionType === "letter_arrangement") {
-    s = s.replace(/\bI can\b/i, "I would be available to").replace(/[.!?]*$/, "") + ", if this is convenient for you";
-  }
-  if (level.isHigh && /^I\b/.test(s)) s = s.replace(/^I would like to/i, "I would be grateful if I could");
-  return normalizeGenericBetterSource(s);
-}
-
-function task2GenericBetterExpression(source, functionType, level) {
-  const original = normalizeGenericBetterSource(source);
-  let s = upgradeCommonIeltsWording(original);
-
-  if (functionType === "opinion") {
-    s = s
-      .replace(/\bI think\b/i, "I believe")
-      .replace(/\bin my opinion,?\s*/i, "In my view, ");
-    if (!/\b(provided that|although|because|as long as|while)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? " because it has both benefits and risks" : ", provided that the possible risks are managed responsibly");
-    }
-  } else if (functionType === "benefit") {
-    if (/can bring some benefits/i.test(s)) {
-      s = s.replace(/can bring some benefits/i, level.isLowMid ? "can bring clear benefits" : "can offer clear practical benefits");
-    }
-    if (!/\b(such as|especially|because|by)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", such as greater confidence" : ", especially when it improves confidence or daily life");
-    }
-  } else if (functionType === "drawback") {
-    s = s.replace(/\bit is expensive\b/i, "it can be expensive").replace(/\bvery expensive\b/i, "costly");
-    if (!/\b(such as|especially|because|as this|which)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", which can create problems for some people" : ", which may create financial pressure or health risks");
-    }
-  } else if (functionType === "condition") {
-    if (/^if\b/i.test(s)) {
-      const withoutIf = s.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
-      if (level.isLowMid) {
-        s = `If ${withoutIf}, this can be beneficial`;
-      } else {
-        const conditionCore = withoutIf
-          .replace(/\bthey use\b/i, "people use")
-          .replace(/\bit can be\b.*$/i, "")
-          .replace(/\bthis can be\b.*$/i, "")
-          .trim();
-        s = `${conditionCore.charAt(0).toUpperCase()}${conditionCore.slice(1)} can be beneficial, provided that people choose safe options and use them responsibly`;
-      }
-    }
-    s = s
-      .replace(/Using\s+can be/gi, "Using this can be")
-      .replace(/\bthey use those products or treatments carefully and in the right way, and also choose\b/gi, "people use those products or treatments carefully and choose")
-      .replace(/\bpeople use those products or treatments carefully and in the right way, and also choose\b/gi, "people use those products or treatments carefully and choose");
-  } else if (functionType === "reason_result") {
-    if (!/^this is because\b/i.test(s)) s = s.replace(/\bbecause\b/i, level.isLowMid ? "because" : "This is because");
-    if (!/\b(for example|for instance|therefore|as a result|which means)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", so the idea is easier to understand" : ", which makes the argument clearer and more convincing");
-    }
-  } else if (functionType === "example") {
-    if (!/\b(specific|concrete|realistic)\b/i.test(s)) {
-      s = s.replace(/\bfor example\b/i, "For example").replace(/[.!?]*$/, "") + ", which gives the point more concrete support";
-    }
-  } else if (functionType === "contrast") {
-    s = s.replace(/\bbut\b/i, "However,").replace(/\bhowever, however\b/i, "However");
-    if (!/\b(although|whereas|while|nevertheless)\b/i.test(s) && level.isMid) {
-      s = s.replace(/[.!?]*$/, "") + ", although this depends on how people use it";
-    }
-  } else if (functionType === "conclusion") {
-    s = s.replace(/\bin conclusion,?\s*/i, "Overall, ");
-    if (!/\b(therefore|balanced|responsible|main reason|as a whole)\b/i.test(s)) {
-      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", so it should be used carefully" : ", so the trend should be judged in a balanced and responsible way");
-    }
-  } else {
-    if (sameCorrectionText(s, original)) {
-      s = original.replace(/[.!?]*$/, "") + (level.isLowMid ? ", which makes the idea clearer" : ", which makes the point more specific and persuasive");
-    }
-  }
-
-  return normalizeGenericBetterSource(s);
-}
-
-function buildGenericIeltsBetterExpression(correctedSentence, bandValue, body = {}) {
-  const level = betterExpressionLevelFromBand(bandValue);
-  if (level.band >= 9) return "";
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const source = normalizeGenericBetterSource(correctedSentence);
-  if (!source || tokenizeExpressionForComparison(source).length < 4) return "";
-  const functionType = detectSentenceFunction(source, task);
-  let upgraded = task === "Task 1"
-    ? task1GenericBetterExpression(source, functionType, level)
-    : task2GenericBetterExpression(source, functionType, level);
-
-  if (!/[.!?]$/.test(upgraded)) upgraded += ".";
-  if (!shouldShowBetterExpression(source, upgraded)) return "";
-  return upgraded;
-}
-
-function buildFallbackBetterExpression(correctedSentence, bandValue, body = {}) {
-  const source = normalizeGenericBetterSource(correctedSentence);
-  if (!source) return "";
-  const level = betterExpressionLevelFromBand(bandValue);
-  if (level.band >= 9) return "";
-  const generated = buildGenericIeltsBetterExpression(source, bandValue, body);
-  if (generated) return generated;
-
-  let upgraded = upgradeCommonIeltsWording(source)
-    .replace(/\bI think\b/i, "I believe")
-    .replace(/\bgood thing\b/gi, "positive development")
-    .replace(/\bbad thing\b/gi, "negative outcome")
-    .replace(/\bvery expensive\b/gi, "costly")
-    .replace(/\bspend too much money\b/gi, "avoid excessive spending")
-    .replace(/\buse it carefully\b/gi, "use it responsibly")
-    .replace(/\bmake people feel more confident\b/gi, "increase people’s confidence");
-
-  const functionType = detectSentenceFunction(source, body?.task === "Task 1" ? "Task 1" : "Task 2");
-  if (/^if\b/i.test(upgraded)) {
-    const core = upgraded.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
-    upgraded = `${core.charAt(0).toUpperCase()}${core.slice(1)} can be beneficial, provided that people use it responsibly`;
-  } else if (functionType === "opinion" && !/\b(if|provided that|because|although|while)\b/i.test(upgraded)) {
-    upgraded = upgraded.replace(/[.!?]*$/, ", provided that the possible risks are managed responsibly");
-  } else if (functionType === "drawback" && !/\bwhich\b/i.test(upgraded)) {
-    upgraded = upgraded.replace(/[.!?]*$/, ", which may create financial pressure or practical risks");
-  } else if (sameCorrectionText(upgraded, source) || !hasBetterExpressionUpgradeSignal(source, upgraded)) {
-    upgraded = source.replace(/[.!?]*$/, ", which makes the idea clearer and more specific");
-  }
-
-  upgraded = normalizeGenericBetterSource(upgraded);
-  if (!/[.!?]$/.test(upgraded)) upgraded += ".";
-  return upgraded;
-}
-
-function suppressNonBlockingGrammarWarningsFinal(result) {
-  if (!result || typeof result !== "object") return;
-  result.stageWarnings = ensureArray(result.stageWarnings).filter((item) => !isNonBlockingGrammarWarningText(item));
-  ["sectionWarning", "correctionWarning", "correctionPassWarning", "gradingWarning"].forEach((field) => {
-    if (isNonBlockingGrammarWarningText(result[field])) result[field] = "";
-  });
-  if (!result.errorAnalysis || typeof result.errorAnalysis !== "object") result.errorAnalysis = {};
-  if (!ensureArray(result.grammarErrors).length && !hasUsefulText(result.errorAnalysis.summary)) {
-    result.errorAnalysis.summary = "No major grammar-specific issue was returned in the grammar stage; use the sentence-level and language advice for polishing.";
-    result.errorAnalysis.summaryZh = "语法专项没有返回明显语法问题；可以参考逐句修改和语言建议进行润色。";
-  }
-}
-
-
-function isWordCountWarningText(value) {
-  const text = finalGateText(value).toLowerCase();
-  return /\bword count\b|\bunderlength\b|below the recommended|under the recommended|recommended minimum|\b150 words\b|\b250 words\b|significantly under/.test(text);
-}
-
-function wordCountWarningZhFromText(value, body = {}) {
-  const task = body?.task === "Task 2" ? "Task 2" : "Task 1";
-  const threshold = task === "Task 1" ? 150 : 250;
-  const text = finalGateText(value);
-  if (!text) return "";
-  return `${task} 建议至少写 ${threshold} 词。当前字数不足会限制内容展开和任务完成度，但这不是答错题。`;
-}
-
-function relocateWordCountWarningsFinal(result, body = {}) {
-  if (!result || typeof result !== "object") return;
-  const taskMatch = result.taskMatchCheck && typeof result.taskMatchCheck === "object"
-    ? result.taskMatchCheck
-    : { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected.", warning: "" };
-  result.taskMatchCheck = taskMatch;
-
-  const existingWordWarning = result.wordCountWarning && typeof result.wordCountWarning === "object" ? result.wordCountWarning : {};
-  const collected = [];
-  const collect = (value) => {
-    const text = finalGateText(value);
-    if (text && isWordCountWarningText(text) && !collected.includes(text)) collected.push(text);
-  };
-
-  collect(existingWordWarning.message);
-  collect(existingWordWarning.note);
-  collect(existingWordWarning.warning);
-  collect(taskMatch.warning);
-
-  if (isWordCountWarningText(taskMatch.warning)) {
-    taskMatch.warning = "";
-  }
-
-  const low = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object" ? result.lowBandDiagnostics : {};
-  const calibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
-  collect(low.reason);
-  collect(calibration.capReason);
-  collect(calibration.whyNotHigher);
-
-  const mainMessage = collected[0] || "";
-  if (mainMessage) {
-    result.wordCountWarning = {
-      message: mainMessage,
-      messageZh: existingWordWarning.messageZh || existingWordWarning.warningZh || wordCountWarningZhFromText(mainMessage, body),
-      source: existingWordWarning.source || "word_count"
-    };
-  } else if (Object.keys(existingWordWarning).length) {
-    result.wordCountWarning = existingWordWarning;
-  }
-
-  if (!hasUsefulText(taskMatch.reason) || isWordCountWarningText(taskMatch.reason)) {
-    const summary = finalGateText(result.taskRequirementAnalysis?.taskMatchSummary);
-    taskMatch.reason = summary && !isWordCountWarningText(summary)
-      ? summary
-      : "The response appears to answer the selected prompt. Word count issues are shown separately from task matching.";
-  }
-
-  result.taskMatchCheck = taskMatch;
-}
-
-function forcePlaceholderBulletsToUnknownFinal(result, body = {}) {
-  if (!result || typeof result !== "object" || body?.task !== "Task 1") return;
-  const analysis = result.taskRequirementAnalysis && typeof result.taskRequirementAnalysis === "object" ? result.taskRequirementAnalysis : {};
-  const bullets = ensureArray(analysis.bulletPoints);
-  if (!bullets.length) return;
-  let changed = false;
-  analysis.bulletPoints = bullets.map((item, index) => {
-    const requirement = bulletRequirementText(item);
-    if (isPlaceholderBulletRequirement(item)) {
-      changed = true;
-      return {
-        requirement: "AI did not reliably return this prompt bullet point",
-        covered: null,
-        coverageUnknown: true,
-        evidence: "The returned bullet-point label was only a placeholder, not a real prompt requirement.",
-        problem: "Coverage is unknown rather than confirmed missing.",
-        suggestion: "Retry task analysis or check the original prompt manually."
-      };
-    }
-    if (item && typeof item === "object" && item.coverageUnknown) {
-      return { ...item, covered: null };
-    }
-    return item;
-  });
-  if (changed) {
-    result.taskRequirementAnalysis = analysis;
-    result.taskRequirementAnalysisZh = result.taskRequirementAnalysisZh && typeof result.taskRequirementAnalysisZh === "object" ? result.taskRequirementAnalysisZh : {};
-    result.taskRequirementAnalysisZh.bulletPointsZh = analysis.bulletPoints.map(() => "该项原本是占位要点，不能判定为未覆盖；需要重新核验题目要点和原文证据。");
-  }
-}
-
-
-function suppressNonBlockingSentenceWarningsFinal(result, body = {}) {
-  if (!result || typeof result !== "object") return;
-  const reference = { ...result, ...(body?.currentResult && typeof body.currentResult === "object" ? body.currentResult : {}) };
-  if (!resultSuggestsHighBandForEmptySentenceStage(reference) && !essaySignalsSuggestHighBandEmptySentenceStage(body)) return;
-  result.stageWarnings = removeNoUsableSentenceWarnings(result.stageWarnings);
-  if (/sentence stage returned no usable detailed content|sentence stage did not return enough usable detail|ai sentence stage returned no usable detailed content/i.test(String(result.sectionWarning || ""))) {
-    result.sectionWarning = "";
-  }
-  if (/sentence stage returned no usable detailed content|sentence stage did not return enough usable detail|ai sentence stage returned no usable detailed content/i.test(String(result.correctionWarning || ""))) {
-    result.correctionWarning = "";
-  }
-  if (/sentence stage returned no usable detailed content|sentence stage did not return enough usable detail|ai sentence stage returned no usable detailed content/i.test(String(result.correctionPassWarning || ""))) {
-    result.correctionPassWarning = "";
-  }
-  result.sentenceCorrectionSummary = result.sentenceCorrectionSummary && typeof result.sentenceCorrectionSummary === "object" ? result.sentenceCorrectionSummary : {};
-  result.sentenceCorrectionSummary.message = result.sentenceCorrectionSummary.message || "No major score-impacting sentence errors were found; focus on naturalness, precision, and argument flow.";
-  result.sentenceCorrectionSummary.messageZh = result.sentenceCorrectionSummary.messageZh || "未发现明显影响分数的逐句错误；重点润色自然度、精准度和论证流畅度。";
-}
-
-function finalHighBandAdviceDeepClean(result, body = {}) {
-  if (!result || typeof result !== "object" || !isHighBandResultFinal(result)) return;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  if (task === "Task 2") {
-    sanitizeHighBandTask2NestedAdvice(result);
-  } else {
-    sanitizeHighBandTask1NestedAdvice(result);
-  }
-}
-
-function finalQualityGate(result, body = {}) {
-  if (!result || typeof result !== "object") return result;
-
-  sanitizeStrengthProblemBucketsFinal(result);
-  polishHighBandCriteriaFinal(result, body);
-  sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body);
-  sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body);
-  removeHighBandContradictionsFinal(result);
-  removeContradictoryLowBandDiagnosticsFinal(result);
-  ensureTaskCorrectionZhFieldsFinal(result);
-  repairTaskRequirementAnalysisFinal(result, body);
-  forcePlaceholderBulletsToUnknownFinal(result, body);
-  suppressNonBlockingGrammarWarningsFinal(result);
-  relocateWordCountWarningsFinal(result, body);
-  normalizeBandPlanVisibilityAndZhFinal(result);
-  cleanGenericChineseFieldsFinal(result);
-
-  sanitizeStrengthProblemBucketsFinal(result);
-  polishHighBandCriteriaFinal(result, body);
-  sanitizeHighBandOverAdvancedCriterionAdviceFinal(result, body);
-  sanitizeHighBandOverAdvancedAdviceArraysFinal(result, body);
-  removeHighBandContradictionsFinal(result);
-  removeContradictoryLowBandDiagnosticsFinal(result);
-  ensureTaskCorrectionZhFieldsFinal(result);
-  repairTaskRequirementAnalysisFinal(result, body);
-  forcePlaceholderBulletsToUnknownFinal(result, body);
-  suppressNonBlockingGrammarWarningsFinal(result);
-  suppressNonBlockingSentenceWarningsFinal(result, body);
-  relocateWordCountWarningsFinal(result, body);
-  normalizeBandPlanVisibilityAndZhFinal(result);
-  cleanGenericChineseFieldsFinal(result);
-  finalHighBandAdviceDeepClean(result, body);
-  finalizeTaskScoringEngine(result, body || {});
-  suppressNonBlockingSentenceWarningsFinal(result, body);
-  finalHighBandAdviceDeepClean(result, body);
-
-  return result;
-}
-
-
-
-function ensureTargetImprovementPlan(result, body) {
-  if (!result || typeof result !== "object") return;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  const currentBand = formatBand(roundHalf(result.overallBand || 1));
-  const targetRangeInfo = targetImprovementRangeFromBand(result.overallBand || 1);
-  const targetRange = targetRangeInfo.label;
-  const criteriaNames = [firstCriterion, "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
-  const existingPlan = result.targetImprovementPlan && typeof result.targetImprovementPlan === "object" ? result.targetImprovementPlan : {};
-  const existingUpgrades = ensureArray(existingPlan.criterionUpgrades).filter((item) => item && typeof item === "object");
-  const byCriterion = new Map(existingUpgrades.map((item) => [compactCorrectionText(item.criterion || item.criteria || item.name), item]));
-  const criterionUpgrades = criteriaNames.map((criterion) => {
-    const existing = byCriterion.get(compactCorrectionText(criterion)) || {};
-    const criterionItem = result.criteria?.[criterion] || {};
-    const weakness = existing.currentWeakness || existing.weakness || criterionItem.howToImprove || criterionItem.feedback || "No major weakness was specified; focus on controlled refinement.";
-    const action = existing.action || existing.specificAction || existing.howToImprove || criterionItem.howToImprove || (
-      criterion === firstCriterion
-        ? (task === "Task 1" ? "Check that each bullet point is answered with one precise detail." : "Make each main idea answer the question directly and support it with a concrete reason.")
-        : criterion === "Coherence and Cohesion"
-          ? "Make paragraph progression explicit and keep linking natural."
-          : criterion === "Lexical Resource"
-            ? "Use more exact topic vocabulary and avoid repeated general words."
-            : "Keep sentence forms varied while removing recurring grammar slips."
-    );
-    const exampleUpgrade = existing.exampleUpgrade || existing.example || existing.betterExample || existing.targetBandExpression || "";
-    return {
-      criterion,
-      currentWeakness: weakness,
-      currentWeaknessZh: existing.currentWeaknessZh || criterionItem.feedbackZh || "这项目前最需要根据英文反馈中的弱点进行针对性修正。",
-      target: existing.target || existing.targetBand || targetRange,
-      targetZh: existing.targetZh || `这一项的目标是达到 ${targetRange} 的可实现水平。`,
-      action,
-      exampleUpgrade: exampleUpgrade || "Apply the action to one paragraph, then repeat the same check across the essay.",
-      exampleUpgradeZh: existing.exampleUpgradeZh || "示例升级应保留原意，同时让表达更清楚、更自然。",
-      actionZh: existing.actionZh || existing.howToImproveZh || "按英文动作逐步修改，先解决最影响分数的问题。"
-    };
-  });
-  result.targetImprovementPlan = {
-    ...existingPlan,
-    currentBand: existingPlan.currentBand || `Band ${currentBand}`,
-    targetBandRange: targetRange,
-    targetBandRangeZh: `目标范围按当前分数设置为 ${targetRange}，避免跳到过高表达。`,
-    targetReason: existingPlan.targetReason || "The next target should improve the current score by about 0.5-1 band with realistic, criterion-specific changes.",
-    targetReasonZh: existingPlan.targetReasonZh || "这个目标按当前分数上调约0.5到1分，重点放在最容易实际提高的任务回应、结构、词汇或语法问题上。",
-    criterionUpgrades
-  };
-
-  const targetLabel = result.targetImprovementPlan.targetBandRange || targetRange;
-  const overall = clampAiBand(result.overallBand || 1, 1);
-  ensureArray(result.detailedSentenceCorrections).forEach((item) => {
-    if (!item || typeof item !== "object") return;
-    const baseSentence = item.correctedSentence || item.originalSentence || "";
-    if (overall >= 9) {
-      item.betterExpression = "";
-      item.targetBandExpression = "";
-      item.betterExpressionZh = "";
-      return;
-    }
-    const fallbackBetter = buildFallbackBetterExpression(baseSentence, overall, body);
-    const candidates = [item.betterExpression, item.targetBandExpression, fallbackBetter]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean);
-    const chosen = candidates.find((candidate) => shouldShowBetterExpression(baseSentence, candidate)) || fallbackBetter || candidates[0] || "";
-    if (chosen) {
-      item.betterExpression = chosen;
-      if (!item.targetBandExpression || !shouldShowBetterExpression(baseSentence, item.targetBandExpression)) item.targetBandExpression = chosen;
-      if (!item.betterExpressionTargetBand) item.betterExpressionTargetBand = targetLabel;
-      if (!item.betterExpressionZh) item.betterExpressionZh = `这个更好表达按 ${targetLabel} 设计：保留原意，但让句子更自然、更正式或更清楚。`;
-    }
-  });
-}
-
-function sanitizeLowBandDiagnosticsForTask(modelDiagnostics, localDiagnostics, body) {
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  const threshold = task === "Task 1" ? 150 : 250;
-  const model = modelDiagnostics && typeof modelDiagnostics === "object" ? modelDiagnostics : {};
-  const local = localDiagnostics && typeof localDiagnostics === "object" ? localDiagnostics : {};
-  const normalLength = words >= threshold;
-  const hardLocal = hasHardLowBandEvidence(local, words, task);
-  const hardModel = Boolean(model.isBlank || model.wordCount20OrFewer || model.mostlyNonEnglish || model.mostlyCopiedFromPrompt || model.whollyUnrelated || model.meaningMostlyBlocked);
-  const allowModelLow = hardLocal || hardModel || !normalLength;
-
-  const sanitized = {
-    isBlank: Boolean(local.isBlank || model.isBlank),
-    wordCount20OrFewer: Boolean(local.wordCount20OrFewer || model.wordCount20OrFewer),
-    mostlyNonEnglish: Boolean(local.mostlyNonEnglish || model.mostlyNonEnglish),
-    mostlyCopiedFromPrompt: Boolean(local.mostlyCopiedFromPrompt || model.mostlyCopiedFromPrompt),
-    mostlyMemorised: Boolean(allowModelLow && model.mostlyMemorised),
-    whollyUnrelated: Boolean(allowModelLow && model.whollyUnrelated),
-    barelyRelated: Boolean(allowModelLow && model.barelyRelated),
-    littleRelevantMessage: Boolean((allowModelLow && model.littleRelevantMessage) || local.littleRelevantMessage),
-    noClearPositionTask2: task === "Task 2" ? Boolean(model.noClearPositionTask2 || local.noClearPositionTask2) : false,
-    noBulletPointCoverageTask1: task === "Task 1" ? Boolean(model.noBulletPointCoverageTask1 || local.noBulletPointCoverageTask1) : false,
-    meaningMostlyBlocked: Boolean(local.meaningMostlyBlocked || (allowModelLow && model.meaningMostlyBlocked)),
-    recommendedLowBandRange: allowModelLow ? (model.recommendedLowBandRange || local.recommendedLowBandRange || "") : "",
-    reason: allowModelLow ? (model.reason || local.reason || "") : "No low-band trigger detected."
-  };
-
-  if (normalLength && !hasHardLowBandEvidence(sanitized, words, task) && !sanitized.whollyUnrelated && !sanitized.barelyRelated) {
-    sanitized.littleRelevantMessage = false;
-    sanitized.recommendedLowBandRange = "";
-    sanitized.reason = "No low-band trigger detected.";
-  }
-  return sanitized;
-}
-
-function alignHighBandDiagnostics(result, body) {
-  const high = result.highBandDiagnostics || {};
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  const meetsMinimum = task === "Task 1" ? words >= 150 : words >= 250;
-  const noCap = !result.scoreCalibration?.capApplied;
-  const taskMatch = result.taskMatchCheck?.appearsToAnswerSelectedPrompt !== false;
-  const range = String(high.recommendedHighBandRange || "");
-  const recommendsHigh = /8|9/.test(range);
-  const highEvidence = Boolean(
-    recommendsHigh &&
-    high.fullyAddressesTask &&
-    high.clearProgression &&
-    high.wellDevelopedIdeas &&
-    high.wideAccurateVocabulary &&
-    high.flexibleGrammar &&
-    high.fewErrors &&
-    meetsMinimum &&
-    noCap &&
-    taskMatch
-  );
-
-  if (!highEvidence) return;
-  if (Number(result.overallBand) < 8) {
-    result.overallBand = 8;
-    result.estimatedLevel = "Band 8.0";
-    result.scoreCalibration = {
-      ...(result.scoreCalibration || {}),
-      capApplied: false,
-      capReason: "",
-      whyNotHigher: result.scoreCalibration?.whyNotHigher || "Band 9 is not awarded because the response may still have minor limitations in naturalness, precision, or control.",
-      whyNotLower: "High-band diagnostics show the response fully addresses the task with clear progression, accurate flexible language, and only minor errors.",
-      evidence: ensureArray(result.scoreCalibration?.evidence).concat(["High-band diagnostics support Band 8+."]).slice(0, 5)
-    };
-  }
-}
-
-function applyStrictCaps(result, body, diagnostics) {
-  const cap = capFromDiagnostics(body, diagnostics);
-  const firstCriterion = firstCriterionName(body.task);
-  const words = Number(body.wordCount) || countWordsServer(body.essay);
-  const initialOverall = roundHalf(result.overallBand ?? 0);
-  let overall = initialOverall;
-  let capApplied = false;
-  let capReason = "";
-
-  if (cap.cap !== null) {
-    overall = Math.min(overall, cap.cap);
-    capApplied = initialOverall > cap.cap || cap.firstCap !== null;
-    capReason = cap.reason;
-    if (result.criteria?.[firstCriterion]) {
-      const firstBand = roundHalf(result.criteria[firstCriterion].band ?? overall);
-      result.criteria[firstCriterion].band = Math.min(firstBand, cap.firstCap ?? cap.cap);
-    }
-  }
-
-  const criterionBands = Object.values(result.criteria || {}).map((item) => roundHalf(item?.band ?? overall));
-  const lowCriteria = criterionBands.filter((band) => band <= 5).length;
-  if (lowCriteria >= 2 && overall >= 6) {
-    overall = 5.5;
-    capApplied = true;
-    capReason = capReason || "Two or more criteria are 5.0 or below, so 6.0+ is not justified.";
-  }
-  if ((body.task === "Task 1" && words <= 80) || (body.task === "Task 2" && words <= 150)) {
-    if (overall >= 5.5) {
-      overall = body.task === "Task 1" ? 4 : 4;
-      capApplied = true;
-      capReason = capReason || "The response is far below the word count needed for Band 5.5+.";
-    }
-  }
-  if (diagnostics.littleRelevantMessage && overall >= 5.5) {
-    overall = 4;
-    capApplied = true;
-    capReason = capReason || "There is too little relevant message for Band 5.5+.";
-  }
-  if (diagnostics.meaningMostlyBlocked && overall >= 4) {
-    overall = Math.min(overall, 3);
-    capApplied = true;
-    capReason = capReason || "Meaning is mostly blocked, so Band 4+ is not justified.";
-  }
-
-  overall = roundHalf(overall);
-  result.overallBand = overall;
-  result.estimatedLevel = `Band ${formatBand(overall)}`;
-
-  const existingCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
-  result.scoreCalibration = {
-    strictness: "strict",
-    capApplied: Boolean(capApplied || diagnostics.recommendedLowBandRange),
-    capReason: capApplied || diagnostics.recommendedLowBandRange ? (capReason || diagnostics.reason || "") : "",
-    whyNotHigher: existingCalibration.whyNotHigher || "The score is limited by task coverage, word count, organisation, vocabulary, or grammar evidence.",
-    whyNotLower: existingCalibration.whyNotLower || "Some rateable response is present unless Band 0 has been applied.",
-    evidence: ensureArray(existingCalibration.evidence).concat([
-      `Word count: ${words}.`,
-      diagnostics.reason,
-      capReason
-    ].filter(Boolean)).slice(0, 5)
-  };
-
-  if (overall === 0) {
-    Object.values(result.criteria).forEach((item) => { item.band = 0; });
-  }
-}
-
-function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
-  const normalized = result && typeof result === "object" ? result : {};
-  const words = Number(body?.wordCount) || countWordsServer(body?.essay);
-  const taskTypeDetected = body?.task === "Task 1" ? "task1" : "task2";
-  normalized.actualWordCount = words;
-  normalized.taskTypeDetected = taskTypeDetected;
-  normalized.wordCountThresholdUsed = taskTypeDetected === "task1" ? 150 : 250;
-  normalized.wordCountStatus = taskTypeDetected === "task1"
-    ? (words >= 150 ? "meets_task1_minimum" : (words < 80 ? "very_short_task1" : "under_task1_minimum"))
-    : (words >= 250 ? "meets_task2_minimum" : (words < 150 ? "very_short_task2" : "under_task2_minimum"));
-  const diagnostics = buildLowBandDiagnostics(body || {});
-  const modelDiagnostics = normalized.lowBandDiagnostics && typeof normalized.lowBandDiagnostics === "object" ? normalized.lowBandDiagnostics : {};
-  normalized.lowBandDiagnostics = sanitizeLowBandDiagnosticsForTask(modelDiagnostics, diagnostics, body || {});
-  ensureCriteria(normalized, body?.task);
-  normalized.disclaimer = normalized.disclaimer || DISCLAIMER;
-  normalized.scoreCalibrationZh = normalized.scoreCalibrationZh && typeof normalized.scoreCalibrationZh === "object" ? normalized.scoreCalibrationZh : {};
-  normalized.lowBandDiagnosticsZh = normalized.lowBandDiagnosticsZh && typeof normalized.lowBandDiagnosticsZh === "object" ? normalized.lowBandDiagnosticsZh : {};
-  normalized.highBandDiagnosticsZh = normalized.highBandDiagnosticsZh && typeof normalized.highBandDiagnosticsZh === "object" ? normalized.highBandDiagnosticsZh : {};
-  normalized.taskRequirementAnalysisZh = normalized.taskRequirementAnalysisZh && typeof normalized.taskRequirementAnalysisZh === "object" ? normalized.taskRequirementAnalysisZh : {};
-  normalized.strengths = ensureArray(normalized.strengths).slice(0, 5);
-  normalized.strengthsZh = ensureArray(normalized.strengthsZh).slice(0, 5);
-  normalized.mainProblems = ensureArray(normalized.mainProblems).slice(0, 5);
-  normalized.mainProblemsZh = ensureArray(normalized.mainProblemsZh).slice(0, 5);
-  const correctionLimit = correctionLimitForEssay(body || {}, mode);
-  const cleanedNormalizedCorrections = sanitizeAiCorrectionPayload(normalized);
-  normalized.spellingCorrections = ensureArray(cleanedNormalizedCorrections.spellingCorrections).slice(0, correctionLimit);
-  normalized.grammarErrors = ensureArray(cleanedNormalizedCorrections.grammarErrors).slice(0, correctionLimit);
-  normalized.sentenceCorrections = ensureArray(cleanedNormalizedCorrections.sentenceCorrections).slice(0, correctionLimit);
-  normalized.errorAnalysis = normalized.errorAnalysis && typeof normalized.errorAnalysis === "object" ? normalized.errorAnalysis : { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] };
-  normalized.errorAnalysis.errorPatterns = ensureArray(normalized.errorAnalysis.errorPatterns)
-    .filter((item) => item && typeof item === "object" && (hasUsefulText(item.type) || hasUsefulText(item.impactOnBand) || hasUsefulText(item.howToFix)))
-    .slice(0, 24);
-  normalized.errorAnalysis.priorityFixes = ensureArray(normalized.errorAnalysis.priorityFixes).slice(0, 16);
-  normalized.errorAnalysis.priorityFixesZh = ensureArray(normalized.errorAnalysis.priorityFixesZh).slice(0, 16);
-  normalized.detailedSentenceCorrections = ensureArray(cleanedNormalizedCorrections.detailedSentenceCorrections).slice(0, correctionLimit);
-  normalized.task1LetterCorrections = body?.task === "Task 1"
-    ? (normalized.task1LetterCorrections && typeof normalized.task1LetterCorrections === "object" ? normalized.task1LetterCorrections : { openingComment: "", closingComment: "", toneComment: "", purposeComment: "", bulletPointAdvice: [] })
-    : null;
-  normalized.task2EssayCorrections = body?.task === "Task 2"
-    ? (normalized.task2EssayCorrections && typeof normalized.task2EssayCorrections === "object" ? normalized.task2EssayCorrections : { positionComment: "", introductionComment: "", bodyParagraphComment: "", exampleComment: "", conclusionComment: "", developmentAdvice: [] })
-    : null;
-  normalized.correctionPriority = normalized.correctionPriority && typeof normalized.correctionPriority === "object" ? normalized.correctionPriority : { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] };
-  normalized.correctionPriority.fixFirst = ensureArray(normalized.correctionPriority.fixFirst).slice(0, 5);
-  normalized.correctionPriority.fixNext = ensureArray(normalized.correctionPriority.fixNext).slice(0, 5);
-  normalized.correctionPriority.polishLater = ensureArray(normalized.correctionPriority.polishLater).slice(0, 5);
-  normalized.correctionPriority.fixFirstZh = ensureArray(normalized.correctionPriority.fixFirstZh).slice(0, 5);
-  normalized.correctionPriority.fixNextZh = ensureArray(normalized.correctionPriority.fixNextZh).slice(0, 5);
-  normalized.correctionPriority.polishLaterZh = ensureArray(normalized.correctionPriority.polishLaterZh).slice(0, 5);
-  const adviceLimit = 8;
-  normalized.taskAchievementAdvice = ensureArray(normalized.taskAchievementAdvice).slice(0, adviceLimit);
-  normalized.taskAchievementAdviceZh = ensureArray(normalized.taskAchievementAdviceZh).slice(0, adviceLimit);
-  normalized.coherenceAdvice = ensureArray(normalized.coherenceAdvice).slice(0, adviceLimit);
-  normalized.coherenceAdviceZh = ensureArray(normalized.coherenceAdviceZh).slice(0, adviceLimit);
-  normalized.lexicalAdvice = ensureArray(normalized.lexicalAdvice).slice(0, adviceLimit);
-  normalized.lexicalAdviceZh = ensureArray(normalized.lexicalAdviceZh).slice(0, adviceLimit);
-  normalized.grammarAdvice = ensureArray(normalized.grammarAdvice).slice(0, adviceLimit);
-  normalized.grammarAdviceZh = ensureArray(normalized.grammarAdviceZh).slice(0, adviceLimit);
-  normalized.band5FixPlan = ensureArray(normalized.band5FixPlan).slice(0, adviceLimit);
-  normalized.band5FixPlanZh = ensureArray(normalized.band5FixPlanZh).slice(0, adviceLimit);
-  normalized.band6UpgradePlan = ensureArray(normalized.band6UpgradePlan).slice(0, adviceLimit);
-  normalized.band6UpgradePlanZh = ensureArray(normalized.band6UpgradePlanZh).slice(0, adviceLimit);
-  normalized.band7UpgradePlan = ensureArray(normalized.band7UpgradePlan).slice(0, adviceLimit);
-  normalized.band7UpgradePlanZh = ensureArray(normalized.band7UpgradePlanZh).slice(0, adviceLimit);
-  normalized.revisionNotes = ensureArray(normalized.revisionNotes).slice(0, 5);
-  normalized.revisionNotesZh = normalized.revisionNotesZh || [];
-  normalized.revisionNotesZh = ensureArray(normalized.revisionNotesZh).slice(0, 5);
-  normalized.taskRequirementAnalysis = normalized.taskRequirementAnalysis && typeof normalized.taskRequirementAnalysis === "object"
-    ? normalized.taskRequirementAnalysis
-    : (body?.task === "Task 1"
-      ? { taskType: "task1", taskPurpose: "Write a General Training Task 1 letter that answers the selected prompt.", recipient: "", relationship: "", requiredTone: "", letterType: "", bulletPoints: [], missingRequirements: [], taskMatchSummary: "The selected prompt was provided to the grader." }
-      : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "The selected prompt was provided to the grader." });
-  normalized.taskMatchCheck = normalized.taskMatchCheck && typeof normalized.taskMatchCheck === "object"
-    ? normalized.taskMatchCheck
-    : { appearsToAnswerSelectedPrompt: true, reason: "No task mismatch was detected.", warning: "" };
-  normalized.wordCountWarning = normalized.wordCountWarning && typeof normalized.wordCountWarning === "object"
-    ? normalized.wordCountWarning
-    : { message: "", messageZh: "" };
-  normalized.highBandDiagnostics = normalized.highBandDiagnostics && typeof normalized.highBandDiagnostics === "object"
-    ? normalized.highBandDiagnostics
-    : { fullyAddressesTask: false, clearProgression: false, wellDevelopedIdeas: false, wideAccurateVocabulary: false, flexibleGrammar: false, fewErrors: false, appropriateToneTask1: body?.task === "Task 1" ? false : null, recommendedHighBandRange: "", reason: "" };
-  normalized.revisedEssayMeta = {
-    ...defaultRevisedEssayMeta(false),
-    ...(normalized.revisedEssayMeta && typeof normalized.revisedEssayMeta === "object" ? normalized.revisedEssayMeta : {})
-  };
-
-  normalizeAiBandsOnly(normalized, body || {});
-  finalizeTaskScoringEngine(normalized, body || {});
-
-  if (mode !== "revision") {
-    normalized.revisedEssayBand5 = "";
-    normalized.revisedEssayBand6 = "";
-    normalized.revisedEssayBand7 = "";
-    if (veryShort) {
-      normalized.revisionNotes = Array.isArray(normalized.revisionNotes) ? normalized.revisionNotes : [];
-      normalized.revisionNotesZh = Array.isArray(normalized.revisionNotesZh) ? normalized.revisionNotesZh : [];
-      if (!normalized.revisionNotes.some((note) => /too short/i.test(note))) {
-        normalized.revisionNotes.unshift("The essay is too short for a meaningful full revision. Please write a fuller response first.");
-      }
-      if (!normalized.revisionNotesZh.some((note) => note.includes("作文太短"))) {
-        normalized.revisionNotesZh.unshift("作文太短，暂不适合生成完整修改版，请先补充内容。");
-      }
-    }
-  }
-
-  const explicitLowBandTrigger = Boolean(
-    normalized.lowBandDiagnostics.isBlank ||
-    normalized.lowBandDiagnostics.wordCount20OrFewer ||
-    normalized.lowBandDiagnostics.mostlyNonEnglish ||
-    normalized.lowBandDiagnostics.mostlyCopiedFromPrompt ||
-    normalized.lowBandDiagnostics.whollyUnrelated ||
-    normalized.lowBandDiagnostics.barelyRelated ||
-    normalized.lowBandDiagnostics.littleRelevantMessage ||
-    normalized.lowBandDiagnostics.meaningMostlyBlocked
-  );
-  const taskMismatch = normalized.taskMatchCheck?.appearsToAnswerSelectedPrompt === false;
-  const lowOrLimited = veryShort || explicitLowBandTrigger || taskMismatch;
-  if (lowOrLimited && mode !== "revision") {
-    normalized.revisedEssayBand6 = "";
-    normalized.revisedEssayBand7 = "";
-    normalized.revisedEssayMeta = defaultRevisedEssayMeta(true, "The original response is too short or too limited for meaningful Band 6 or Band 7 revisions.");
-    if (!normalized.revisionNotes.some((note) => /too short|too limited|Band 6/i.test(note))) {
-      normalized.revisionNotes.unshift("The original response is too short or too limited for meaningful Band 6 or Band 7 revision. Add more content first.");
-    }
-    if (!normalized.revisionNotesZh.some((note) => note.includes("原文太短") || note.includes("内容太少"))) {
-      normalized.revisionNotesZh.unshift("原文太短或内容太少，不适合直接生成 Band 6 / Band 7 修改版。");
-    }
-  }
-  if (normalized.overallBand === 0) {
-    normalized.revisedEssayBand5 = "";
-    normalized.revisedEssayBand6 = "";
-    normalized.revisedEssayBand7 = "";
-  }
-
-
-  backfillDiagnosticAdvice(normalized, body || {}, mode, veryShort);
-  sanitizeStrengthProblemBuckets(normalized);
-  polishHighBandCriteria(normalized, body || {});
-  finalizeTaskScoringEngine(normalized, body || {});
-  ensureTargetImprovementPlan(normalized, body || {});
-  backfillChineseHelperNotes(normalized, body || {});
-  sanitizeStrengthProblemBuckets(normalized);
-  finalQualityGate(normalized, body || {});
-  finalizeTaskScoringEngine(normalized, body || {});
-
-  normalized.scoringCalibration = normalized.scoreCalibration;
-  normalized.lowBandEvidence = normalized.lowBandDiagnostics;
-  normalized.highBandEvidence = normalized.highBandDiagnostics;
-  normalized.overallEstimatedBand = normalized.overallBand;
-  normalized.revisedEssay = normalized.revisedEssayBand7 || normalized.revisedEssayBand6 || normalized.revisedEssayBand5 || "";
-  normalized.feedback = ensureArray(normalized.mainProblems).join(" ") || normalized.scoreCalibration?.whyNotHigher || "Feedback is available in the sections below.";
-
-  return localizeResultForOutput(normalized, locale);
-}
-
-
 function isMockCombineRequest(body) {
   const raw = String(body?.mode || body?.aiStage || body?.stage || "").toLowerCase().replace(/[_\s-]+/g, "");
   return ["mock", "mockwriting", "mockcombine", "mockexam", "writingmock", "combinewriting"].includes(raw) && (body.task1Result || body.task2Result || body.task1Band || body.task2Band);
@@ -8136,6 +3495,403 @@ function handleMockCombineRequest(req, res, body) {
   });
 }
 
+
+
+/* --------------------------------------------------------------------------
+ * AI-ONLY GRADING CONTRACT
+ * --------------------------------------------------------------------------
+ * The app is an AI grading system. Server-side code may:
+ *   - count words / identify task type,
+ *   - validate JSON shape,
+ *   - merge AI stage payloads,
+ *   - calculate the displayed overall band from AI-returned criterion bands.
+ *
+ * Server-side code must NOT:
+ *   - score, cap, lift, or lower bands from essay-content heuristics,
+ *   - create local feedback, evidence, sentence corrections, grammar errors,
+ *     spelling lists, better expressions, or study plans,
+ *   - replace missing AI content with non-AI fallback content.
+ */
+
+function aiOnlyCloneObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {};
+}
+
+function aiOnlyArray(value, limit = 50) {
+  return ensureArray(value).filter((item) => item !== null && item !== undefined && item !== "").slice(0, limit);
+}
+
+function aiOnlyCriterionFromSource(source = {}) {
+  const item = aiOnlyCloneObject(source);
+  const out = {};
+  if (Number.isFinite(Number(item.band))) out.band = clampAiBand(item.band, 1);
+  [
+    "feedback", "feedbackZh", "howToImprove", "howToImproveZh",
+    "whyThisBand", "whyThisBandZh", "whyNotHigher", "whyNotHigherZh",
+    "whyNotLower", "whyNotLowerZh"
+  ].forEach((key) => {
+    if (typeof item[key] === "string" && item[key].trim()) out[key] = item[key];
+  });
+  [
+    "evidence", "evidenceZh", "positiveEvidence", "positiveEvidenceZh",
+    "limitingEvidence", "limitingEvidenceZh", "evidenceQuotes", "evidenceQuotesZh"
+  ].forEach((key) => {
+    const arr = aiOnlyArray(item[key], /quotes/i.test(key) ? 3 : 8);
+    if (arr.length) out[key] = arr;
+  });
+  Object.entries(item).forEach(([key, value]) => {
+    if (typeof out[key] !== "undefined") return;
+    if (key === "band" || key.endsWith("Zh") || key.includes("Evidence") || key.includes("evidence")) return;
+    if (value !== undefined && value !== null && value !== "") out[key] = value;
+  });
+  return out;
+}
+
+function normalizeTaskSpecificCriteria(result, task) {
+  if (!result || typeof result !== "object") return result;
+  const normalizedTask = task === "Task 1" ? "Task 1" : "Task 2";
+  const wanted = getWritingCriterionNames(normalizedTask);
+  const wrongFirst = normalizedTask === "Task 1" ? "Task Response" : "Task Achievement";
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const fixed = {};
+  wanted.forEach((name) => {
+    const source = criteria[name] || (name === wanted[0] ? criteria[wrongFirst] : null);
+    if (!source || typeof source !== "object") return;
+    const normalized = aiOnlyCriterionFromSource(source);
+    if (Object.keys(normalized).length) fixed[name] = normalized;
+  });
+  result.criteria = fixed;
+  return result;
+}
+
+function getCriterionBandsForTask(result, task) {
+  normalizeTaskSpecificCriteria(result, task);
+  return getWritingCriterionNames(task)
+    .map((name) => Number(result?.criteria?.[name]?.band))
+    .filter(Number.isFinite)
+    .map((band) => clampAiBand(band, 1));
+}
+
+function aiOnlyHasFourCriterionBands(result, task) {
+  const criteria = result?.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  return getWritingCriterionNames(task).every((name) => Number.isFinite(Number(criteria?.[name]?.band)));
+}
+
+function calculateTaskBandFromCriteria(result, task) {
+  const bands = getCriterionBandsForTask(result, task);
+  if (bands.length !== 4) {
+    const aiOverall = Number(result?.overallBand);
+    return Number.isFinite(aiOverall) ? clampAiBand(aiOverall, 1) : undefined;
+  }
+  return roundHalf(bands.reduce((sum, band) => sum + band, 0) / 4);
+}
+
+function buildScoreCalculation(result, task, finalBand) {
+  const names = getWritingCriterionNames(task);
+  const criteriaBands = names
+    .map((name) => {
+      const band = Number(result?.criteria?.[name]?.band);
+      return Number.isFinite(band) ? { criterion: name, band: clampAiBand(band, 1) } : null;
+    })
+    .filter(Boolean);
+  const rawAverage = criteriaBands.length === 4
+    ? criteriaBands.reduce((sum, item) => sum + Number(item.band || 0), 0) / 4
+    : null;
+  return {
+    mode: getTaskScoringEngineName(task),
+    method: "ai_criterion_average_only",
+    formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5",
+    criteriaBands,
+    rawAverage: rawAverage === null ? null : Number(rawAverage.toFixed(3)),
+    finalBand: Number.isFinite(Number(finalBand)) ? finalBand : null,
+    explanation: "The server does not grade the essay. It only averages the criterion bands returned by AI."
+  };
+}
+
+function finalizeTaskScoringEngine(result, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+
+  const finalBand = calculateTaskBandFromCriteria(result, task);
+  if (Number.isFinite(Number(finalBand))) {
+    result.overallBand = roundHalf(finalBand);
+    result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
+    result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
+  }
+
+  result.scoringSystem = {
+    ...(result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {}),
+    type: getTaskScoringEngineName(task),
+    scorer: "ai_only",
+    serverScoringDisabled: true
+  };
+  result.actualWordCount = Number(body?.wordCount) || countWordsServer(body?.essay);
+  result.wordCountThresholdUsed = task === "Task 1" ? 150 : 250;
+  result.disclaimer = result.disclaimer || DISCLAIMER;
+  return result;
+}
+
+function normalizeAiBandsOnly(result, body) {
+  return finalizeTaskScoringEngine(result, body || {});
+}
+
+function normalizeResultForMode(result, mode, veryShort, body, locale = "en") {
+  const normalized = result && typeof result === "object" ? { ...result } : {};
+  normalized.disclaimer = normalized.disclaimer || DISCLAIMER;
+  normalized.actualWordCount = Number(body?.wordCount) || countWordsServer(body?.essay);
+  normalized.wordCountThresholdUsed = body?.task === "Task 1" ? 150 : 250;
+  normalized.wordCountStatus = normalized.wordCountStatus || "";
+  finalizeTaskScoringEngine(normalized, body || {});
+  if (mode !== "revision") {
+    normalized.revisedEssayBand5 = normalized.revisedEssayBand5 || "";
+    normalized.revisedEssayBand6 = normalized.revisedEssayBand6 || "";
+    normalized.revisedEssayBand7 = normalized.revisedEssayBand7 || "";
+  }
+  return normalized;
+}
+
+function finalQualityGate(result, body = {}) {
+  return finalizeTaskScoringEngine(result, body || {});
+}
+
+function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
+  if (!item || typeof item !== "object") return null;
+  const originalSentence = pickFirstUsefulValue(item, ["originalSentence", "original", "sentence", "sourceSentence", "wrong", "inputSentence", "before"]);
+  const correctedSentence = pickFirstUsefulValue(item, ["correctedSentence", "corrected", "correction", "fixed", "right", "revisedSentence", "after"]);
+  const betterExpression = pickFirstUsefulValue(item, [
+    "betterExpression", "improvedSentence", "naturalExpression", "upgrade", "better",
+    "targetBandExpression", "targetExpression", "bandTargetExpression", "modelExpression",
+    "polishedSentence", "highBandExpression", "exampleUpgrade", "betterSentence"
+  ]);
+  const out = {
+    ...item,
+    sentenceNumber: Number(item.sentenceNumber || item.number || item.index || index + 1) || index + 1,
+    originalSentence,
+    correctedSentence,
+    errorType: pickFirstUsefulValue(item, ["errorType", "type", "category", "ruleType"]) || "",
+    errorTypeZh: pickFirstUsefulValue(item, ["errorTypeZh", "typeZh", "categoryZh"]) || "",
+    problem: pickFirstUsefulValue(item, ["problem", "explanation", "reason", "comment"]) || "",
+    problemZh: pickFirstUsefulValue(item, ["problemZh", "explanationZh", "reasonZh", "commentZh"]) || "",
+    rule: pickFirstUsefulValue(item, ["rule", "grammarRule", "howToFix"]) || "",
+    ruleZh: pickFirstUsefulValue(item, ["ruleZh", "grammarRuleZh", "howToFixZh"]) || "",
+    betterExpression,
+    betterExpressionZh: pickFirstUsefulValue(item, ["betterExpressionZh", "improvedSentenceZh", "naturalExpressionZh", "upgradeZh", "targetBandExpressionZh"]) || "",
+    bandImpact: pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact"]) || "",
+    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh"]) || "",
+    scoreImpacting: item.scoreImpacting === undefined ? true : item.scoreImpacting !== false && String(item.scoreImpacting).toLowerCase() !== "false",
+    whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]) || "",
+    betterExpressionTargetBand: pickFirstUsefulValue(item, ["betterExpressionTargetBand", "targetBandRange", "targetRange", "targetBand"]) || ""
+  };
+  if (!hasUsefulText(out.originalSentence) && !hasUsefulText(out.correctedSentence) && !hasUsefulText(out.problem) && !hasUsefulText(out.rule) && !hasUsefulText(out.betterExpression)) return null;
+  return out;
+}
+
+async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingMode, locale, deadline }) {
+  let output = result && typeof result === "object" ? result : {};
+  if (!String(body?.essay || "").trim()) return output;
+  if (hasConcreteAiCorrectionItems(output)) return output;
+
+  const focusedCorrectionTimeout = safePassTimeout(
+    deadline,
+    Math.max(30000, Number(process.env.AI_FOCUSED_CORRECTION_TIMEOUT_MS) || 45000),
+    30000
+  );
+
+  if (!hasEnoughAiTime(deadline, focusedCorrectionTimeout)) {
+    const warning = "AI detailed correction was not returned before the server deadline. No non-AI correction was generated.";
+    output.correctionWarning = warning;
+    output.correctionPassWarning = warning;
+    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+    return output;
+  }
+
+  try {
+    const focusedCorrection = await callAiFocusedCorrectionPass({
+      apiKey,
+      model,
+      body: { ...body, mode: gradingMode, correctionRetryAttempt: 1 },
+      effectiveMode: gradingMode,
+      locale,
+      deadline,
+      timeoutMs: focusedCorrectionTimeout
+    });
+
+    if (hasAiCorrectionContent(focusedCorrection)) {
+      output = mergeAiCorrectionDetails(output, focusedCorrection, body, gradingMode);
+      if (hasConcreteAiCorrectionItems(output)) {
+        output.correctionWarning = "";
+        output.correctionPassWarning = "";
+        return output;
+      }
+    }
+  } catch (error) {
+    const warning = `AI detailed correction retry failed: ${error.message || error.name || "unknown error"}. No non-AI correction was generated.`;
+    output.correctionWarning = warning;
+    output.correctionPassWarning = warning;
+    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+    return output;
+  }
+
+  const warning = "AI did not return concrete sentence-level corrections. No non-AI correction was generated.";
+  output.correctionWarning = warning;
+  output.correctionPassWarning = warning;
+  output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+  return output;
+}
+
+async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
+  const gradingMode = effectiveMode === "revision" ? "full" : effectiveMode;
+  const attempts = [
+    { label: "High-quality AI scoring", fn: callAiLeanScoringPass },
+    { label: "No-template AI scoring retry", fn: callAiNoTemplateScoringPass },
+    { label: "Compact AI scoring retry", fn: callAiCompactScoringRetry },
+    { label: "Minimal AI scoring retry", fn: callAiMinimalScoringPass }
+  ];
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      let result = await attempt.fn({ apiKey, model, body, gradingMode, locale, deadline });
+      result = assertMeaningfulAiScoringResult(result, body, attempt.label);
+      result = normalizeResultForMode(result, "full", veryShort, body, locale);
+      if (!aiOnlyHasFourCriterionBands(result, body.task === "Task 1" ? "Task 1" : "Task 2")) {
+        throw new Error(`${attempt.label} did not return all four AI criterion bands.`);
+      }
+      if (errors.length) {
+        result.stageWarnings = aiOnlyArray(result.stageWarnings).concat([
+          `AI-only scoring used ${attempt.label} after earlier AI attempts failed.`
+        ]);
+      }
+      result.aiStage = "score";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
+      return result;
+    } catch (error) {
+      errors.push(`${attempt.label}: ${error.message || error.name || String(error)}`);
+      if (remainingAiTime(deadline) < 9000) break;
+    }
+  }
+  const finalError = new Error(`AI core scoring failed. No non-AI score was generated. ${errors.join(" | ")}`);
+  finalError.name = "AiOnlyScoringFailed";
+  finalError.provider = "deepseek";
+  throw finalError;
+}
+
+async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
+  if (!String(body.essay || "").trim()) return output;
+
+  try {
+    const correction = await callAiCorrectionPass({
+      apiKey,
+      model,
+      body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
+      effectiveMode,
+      locale,
+      deadline,
+      maxTokensOverride: Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 320, (Number(body.wordCount) || countWordsServer(body.essay)) < 80 ? 5000 : 9000), effectiveMode === "revision" ? 18000 : 15000),
+      timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
+    });
+    output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
+  } catch (error) {
+    const warning = `AI detailed correction pass failed: ${error.message || error.name || "unknown error"}. No non-AI correction was generated.`;
+    output.correctionWarning = warning;
+    output.correctionPassWarning = warning;
+    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+  }
+
+  output = await ensureAiCorrectionDetails({
+    result: output,
+    apiKey,
+    model,
+    body: { ...body, currentOverallBand: body.currentOverallBand || body.overallBand },
+    gradingMode: effectiveMode,
+    locale,
+    deadline
+  });
+
+  output.overallBand = body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
+  output.criteria = body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : output.criteria;
+  output.aiStage = "language-correction";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = {
+    disclaimer: DISCLAIMER,
+    aiStage: "evidence-map",
+    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
+    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
+  };
+  try {
+    const taskPass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "task",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, taskPass);
+    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
+  } catch (error) {
+    const warning = `AI evidence-map stage failed: ${error.message || error.name || "unknown error"}. No non-AI evidence was generated.`;
+    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+    output.sectionWarning = warning;
+  }
+  output.aiStage = "evidence-map";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = await callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline });
+  output.aiStage = "evidence-plan";
+  return output;
+}
+
+async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = {
+    disclaimer: DISCLAIMER,
+    aiStage: "final-plan",
+    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
+    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined,
+    taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis,
+    taskMatchCheck: body.currentResult?.taskMatchCheck
+  };
+  try {
+    const advicePass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "advice",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, advicePass);
+    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
+  } catch (error) {
+    const warning = `AI final study-plan stage failed: ${error.message || error.name || "unknown error"}. No non-AI study plan was generated.`;
+    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+    output.sectionWarning = warning;
+  }
+  output.aiStage = "final-plan";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
+  let result = await callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline });
+  if (effectiveMode === "revision") {
+    const revision = await callAiRevisionStageOnly({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline });
+    result = mergeRevisionPassIntoResult(result, revision);
+  }
+  return normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
+}
+
+
 async function handleRequest(req, res) {
   if (req.method === "OPTIONS") {
     Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
@@ -8181,9 +3937,7 @@ async function handleRequest(req, res) {
   body.targetWordCount = body.task === "Task 1" ? 150 : 250;
   body.isUnderMinimum = body.wordCount < body.targetWordCount;
 
-  const localDiagnostics = buildLowBandDiagnostics(body);
-  // AI-only scoring: even blank, very short, under-minimum, copied, or mostly non-English submissions go to DeepSeek.
-  // The server may pass factual context, but DeepSeek must be the only scorer.
+  // AI-only: local code only counts words and task type. No local essay diagnostics are used for scoring.
 
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -8335,7 +4089,7 @@ async function handleRequest(req, res) {
     if (sendProviderError(req, res, error)) return;
 
     sendJson(req, res, 502, {
-      error: "AI grading failed. No local score was generated.",
+      error: "AI grading failed. No non-AI score was generated.",
       provider: "deepseek",
       detail: error.message || error.name || "DeepSeek did not return valid JSON after AI-only repair attempts."
     });
