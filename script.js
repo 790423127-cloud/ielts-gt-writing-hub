@@ -33,17 +33,42 @@ function listHtml(items) {
   return Array.isArray(items) && items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">暂无内容</p>`;
 }
 
+function compactTranslationCompare(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\s"'“”‘’`.,;:!?，。；：！？、()（）\[\]【】<>《》-]/g, "");
+}
+
+function translationRepeatsEnglish(chineseText, englishText) {
+  const zh = String(chineseText || "").trim();
+  const en = String(englishText || "").trim();
+  if (!zh || !en) return false;
+  const compactZh = compactTranslationCompare(zh);
+  const compactEn = compactTranslationCompare(en);
+  if (!compactZh || !compactEn) return false;
+  if (compactZh === compactEn) return true;
+  if (compactEn.length >= 18 && compactZh.includes(compactEn)) return true;
+  if (/^[\u4e00-\u9fa5\s：:，,]*[A-Za-z]/.test(zh) && compactZh.length >= compactEn.length * 0.75) return true;
+  return false;
+}
+
 function fallbackEvidenceZh(label, englishText) {
   const text = String(englishText || "").trim();
   if (!text) return "";
   const normalized = String(label || "").toLowerCase();
-  if (normalized.includes("quote")) return `原文证据：${text}`;
-  if (normalized.includes("positive")) return `正面评分证据：${text}`;
-  if (normalized.includes("limiting")) return `限制分数的证据：${text}`;
-  if (normalized.includes("why this")) return `为什么是这个分数：${text}`;
-  if (normalized.includes("why not higher")) return `为什么不能更高：${text}`;
-  if (normalized.includes("why not lower")) return `为什么没有更低：${text}`;
-  return `中文解释：${text}`;
+  if (normalized.includes("quote")) return "这是一处原文证据，用来支持当前评分判断；请结合英文原句查看它体现的内容、结构、词汇或语法问题。";
+  if (normalized.includes("positive")) return "这是正面评分证据，说明这一项并非完全缺失，仍有可计分的表现。";
+  if (normalized.includes("limiting")) return "这是限制分数的证据，说明这一项还没有稳定达到更高分档。";
+  if (normalized.includes("why this")) return "这里解释当前分数为什么成立：系统根据正面表现和限制因素共同判断。";
+  if (normalized.includes("why not higher")) return "这里解释为什么暂时不能给更高分：仍有影响该评分项的明显限制。";
+  if (normalized.includes("why not lower")) return "这里解释为什么没有更低：原文仍有足够表现支撑当前分数。";
+  return "这里是该项反馈的中文说明。";
+}
+
+function normalizeEvidenceZh(label, englishText, chineseText) {
+  const zh = Array.isArray(chineseText) ? chineseText.filter(Boolean).join("\n") : String(chineseText || "").trim();
+  if (!zh || translationRepeatsEnglish(zh, englishText)) return fallbackEvidenceZh(label, englishText);
+  return zh;
 }
 
 function translatedListHtml(items, zhItems, label = "") {
@@ -51,8 +76,8 @@ function translatedListHtml(items, zhItems, label = "") {
   const chinese = Array.isArray(zhItems) ? zhItems : [];
   if (!english.length) return `<p class="muted">暂无内容</p>`;
   return `<ul>${english.map((item, index) => {
-    const zh = hasTranslationValue(chinese[index]) ? chinese[index] : fallbackEvidenceZh(label, item);
-    return `<li>${escapeHtml(item)}${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</li>`;
+    const zh = normalizeEvidenceZh(label, item, chinese[index]);
+    return `<li><span class="evidence-item-text">${escapeHtml(item)}</span>${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</li>`;
   }).join("")}</ul>`;
 }
 
@@ -918,7 +943,7 @@ async function startGrading() {
       renderGradingResult(result);
     }
 
-    if (stageWarnings.length) {
+    if (stageWarnings.some(isUserVisibleSystemWarning)) {
       setGradingStatus("批改完成，但部分详细阶段需要重试。可在下方“AI 批改进度与提示”中查看详情。", "warning");
     } else {
       setGradingStatus("批改完成", "done");
@@ -938,7 +963,8 @@ async function startGrading() {
 
 
 function isNonBlockingStageWarning(text) {
-  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON/i.test(String(text || ""));
+  const value = String(text || "");
+  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON|Failed to fetch|NetworkError|Load failed|AbortError|timed out after waiting|network request failed/i.test(value);
 }
 
 function isWordCountWarningText(text) {
@@ -959,8 +985,10 @@ function renderStageProgress(result = {}) {
   if (!progress.length && !allWarnings.length) return "";
   return collapsibleSection("AI 批改进度与提示", `
     ${progress.length ? `<ul>${progress.map((item) => {
-      const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? "需注意" : "未完成";
-      return `<li><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}</li>`;
+      const nonBlocking = isNonBlockingStageWarning(item.message);
+      const stateText = nonBlocking ? "已补全" : item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? "需注意" : "未完成";
+      const message = nonBlocking ? "该阶段返回不完整，系统已用其他批改结果和本地检查补全。" : (item.message || "");
+      return `<li class="${nonBlocking ? "stage-recovered" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(message)}</li>`;
     }).join("")}</ul>` : ""}
     ${allWarnings.length ? `<div class="ai-warning">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
   `);
@@ -969,7 +997,7 @@ function renderStageProgress(result = {}) {
 function renderEvidenceExplanationLine(label, englishText, chineseText) {
   const text = String(englishText || "").trim();
   if (!text) return "";
-  const zh = hasTranslationValue(chineseText) ? String(chineseText || "").trim() : fallbackEvidenceZh(label, text);
+  const zh = normalizeEvidenceZh(label, text, chineseText);
   return `<div class="evidence-explain-line"><p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</p>${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</div>`;
 }
 
@@ -1440,13 +1468,14 @@ function renderDetailedSentenceCorrections(items = []) {
     <div class="correction-list">${filtered.map((item, index) => {
       const original = item.originalSentence || item.original || "";
       const corrected = item.correctedSentence || item.corrected || "";
-      const rawBetter = item.betterExpression || item.targetBandExpression || "";
+      const rawBetter = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedExpression, item.highBandExpression, item.polishedSentence, item.modelExpression, item.exampleUpgrade, item.betterSentence);
       const better = shouldShowBetterExpression(corrected || original, rawBetter) ? rawBetter : "";
+      const betterTarget = firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel);
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         <p><strong>原句：</strong>${escapeHtml(original)}</p>
         <p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>
-        ${better ? `<p><strong>更好表达${item.betterExpressionTargetBand ? `（目标 ${escapeHtml(item.betterExpressionTargetBand)}）` : ""}：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        ${better ? `<p class="better-expression-line"><strong>更好表达${betterTarget ? `（目标 ${escapeHtml(betterTarget)}）` : ""}：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
         <p><strong>错误类型：</strong>${escapeHtml(item.errorType || "")}${item.errorTypeZh ? ` / ${escapeHtml(item.errorTypeZh)}` : ""}</p>
         ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
         ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
