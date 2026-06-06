@@ -348,6 +348,45 @@ function buildTaskSpecificScoringRubric(task) {
   ].join("\n");
 }
 
+
+function feedbackTrackFromBandValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "unknown";
+  if (numeric <= 5.5) return "low_band_correction";
+  if (numeric <= 7.0) return "mid_band_improvement";
+  return "high_band_polish";
+}
+
+function feedbackTrackLabel(track) {
+  if (track === "low_band_correction") return "Band 4.0-5.5 foundation correction";
+  if (track === "mid_band_improvement") return "Band 5.5-7.0 mid-band improvement";
+  if (track === "high_band_polish") return "Band 7.5+ high-band polish";
+  return "AI examiner decides from evidence";
+}
+
+function buildFeedbackTrackInstruction(body = {}) {
+  const band = resolveCurrentBandForTarget({}, body);
+  const track = feedbackTrackFromBandValue(band);
+  return [
+    `Feedback track: ${feedbackTrackLabel(track)}.`,
+    "Use a three-track IELTS coaching logic, but do not let the server or template decide the score. AI must judge the essay evidence first, then choose the appropriate feedback track.",
+    "Low-band track (Band 4.0-5.5): first fix basic sentence accuracy; then spelling and basic word form; then subject-verb agreement, verb forms, articles, and singular/plural; then clear position or letter purpose and paragraph/topic control; then examples/details; then natural expression; leave complex sentences, wider vocabulary, and more linking words for polish later.",
+    "Mid-band track (Band 5.5-7.0): first improve task response/achievement; then develop ideas or Task 1 bullet details; then paragraph topic sentences and paragraph-internal logic; then stabilise repeated grammar errors; then improve vocabulary accuracy and collocation; then improve natural cohesion and referencing; then sentence variety; leave advanced expression for the final polish step.",
+    "High-band track (Band 7.5+): focus on argument nuance or Task 1 situational precision, natural paragraph progression, lexical precision and register control, reduced repetition, concise flexible sentences, and mature but not inflated expression. Do not recommend rare words, thesaurus use, forced inversion, cleft sentences, passive voice, or complexity for its own sake.",
+    "Task 1 track rule: replace essay logic with letter logic. First check purpose, bullet coverage, detail sufficiency, recipient relationship, tone/register, opening/closing, and practical letter function. Never use thesis, argument, counterargument, or discuss-both-sides language for Task 1.",
+    "Task 2 track rule: use essay logic. First check question-type requirements, position, relevance, development, examples/reasoning, paragraphing, and conclusion. Never use Task 1 bullet, recipient, salutation, or letter-closing logic for Task 2."
+  ].join("\n");
+}
+
+function appendFeedbackTrackToResult(result = {}, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const band = Number(result.overallBand || result.finalOverallBand || body.currentOverallBand || body.overallBand);
+  const track = feedbackTrackFromBandValue(band);
+  result.feedbackTrack = track === "unknown" ? result.feedbackTrack || "ai_examiner_decided" : track;
+  result.feedbackTrackLabel = feedbackTrackLabel(result.feedbackTrack);
+  return result;
+}
+
 function normalizeCriterionBandValue(value, fallback = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return clampAiBand(fallback, 1);
@@ -564,7 +603,14 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "For Band 7.5+ Task 2 essays, improvement advice must be about argument nuance, paragraph progression, example quality, topic-specific precision, and grammar that clarifies reasoning. Do not suggest rare words, inflated vocabulary, mechanical linking words, or complexity for its own sake.",
     "Task 2 question-type scoring: agree/disagree requires a clear and consistent position; discuss-both-views requires both views plus the writer's own opinion; advantages/disadvantages requires both sides and, when asked, a clear judgement about which side is stronger; problem/solution requires both problem/cause and solution/measure; two-part questions require both questions to be answered.",
     "Task 2 high-band advice should never focus on simply adding more ideas. It should focus on developing the strongest idea with clearer reasoning, a more precise example, a consequence, or a qualification.",
-    "For Band 7.0+ writing, Stage 12 must still provide high-band polish suggestions even when there are few or no clear errors. Select 3-6 sentences that can realistically improve the response by about 0.5-1.0 band through precision, nuance, cohesion, concision, register, or argument depth.",
+    
+    "Three-track feedback calibration is mandatory: Band 4.0-5.5 uses foundation correction, Band 5.5-7.0 uses mid-band improvement, and Band 7.5+ uses high-band polish.",
+    "Band 4.0-5.5 advice priority: sentence accuracy first, then spelling/word form, then subject-verb agreement/verb forms/articles/plurals, then clear position or Task 1 purpose and paragraph centre, then examples/details, then natural expression, and only last complex sentences/wider vocabulary/more linking words.",
+    "Band 5.5-7.0 advice priority: task response/achievement first, then development of ideas or bullet details, then paragraph topic sentences and logic, then repeated grammar stability, then vocabulary accuracy/collocation, then natural cohesion/referencing, then sentence variety, and only last higher expression.",
+    "Band 7.5+ advice priority: nuance, specificity, natural progression, lexical precision, register control, concision, and reduced repetition. Do not advise thesaurus use, rare words, forced inversion, cleft sentences, passive constructions, or complexity for its own sake.",
+    "For low- and mid-band detailedSentenceCorrections, each score-impacting item should include both a direct correctedSentence and a realistic betterExpression at the next +0.5 to +1.0 band target unless the upgrade would change or delete meaning.",
+    "Cross-sentence contamination rule: for each sentence-level correction, problem/rule/bandImpact must only mention errors actually present in that originalSentence. If the originalSentence does not contain a misspelling or grammar pattern, do not mention it.",
+"For Band 7.0+ writing, Stage 12 must still provide high-band polish suggestions even when there are few or no clear errors. Select 3-6 sentences that can realistically improve the response by about 0.5-1.0 band through precision, nuance, cohesion, concision, register, or argument depth.",
     "For high-band polish, do not invent errors. The suggested sentence must remain one sentence, preserve meaning, avoid new evidence, and improve the writer's own sentence rather than rewriting the whole paragraph.",
 
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
@@ -1289,7 +1335,8 @@ function buildTargetImprovementInstruction(body) {
     return [
       "Targeted improvement rule: first infer the current IELTS band from the grading result, then give advice for a realistic next step.",
       "Use the full target ladder: Band 0.0-4.5 -> Band 5.0-5.5; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0; Band 9.0 -> maintenance advice.",
-      "Do not give advice that jumps too far beyond the current level. A Band 3 essay should not receive Band 6-9 style advice; a Band 5 essay should not receive Band 8-9 style advice."
+      "Do not give advice that jumps too far beyond the current level. A Band 3 essay should not receive Band 6-9 style advice; a Band 5 essay should not receive Band 8-9 style advice.",
+      buildFeedbackTrackInstruction(body)
     ].join("\n");
   }
 
@@ -1311,7 +1358,8 @@ function buildTargetImprovementInstruction(body) {
     "If the current essay is Band 8.0, give Band 8.5-9.0 advice.",
     "If the current essay is Band 8.5, give Band 9.0 advice.",
     "If the current essay is Band 9.0, give maintenance advice: preserve task fulfilment, naturalness, precision, flexibility, and avoid over-writing.",
-    "Do not make the suggested sentence or betterExpression unrealistically advanced for the current level. Upgrade step by step."
+    "Do not make the suggested sentence or betterExpression unrealistically advanced for the current level. Upgrade step by step.",
+    buildFeedbackTrackInstruction(body)
   ].join("\n");
 }
 
@@ -1458,6 +1506,145 @@ function pickFirstUsefulValue(item, fields) {
     if (hasUsefulText(item?.[field])) return item[field];
   }
   return "";
+}
+
+
+// Source-lock validation for sentence-level feedback.
+// This does not grade, score, or invent corrections. It only removes AI explanation fragments
+// that cite words/phrases not present in the current original/corrected sentence, preventing
+// batch cross-contamination such as mentioning "shop", "office", or "custmers" under a different sentence.
+function normalizeSourceLockText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/[-–—_/]+/g, " ")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceLockTokenSet(texts = []) {
+  const tokens = new Set();
+  texts.forEach((text) => {
+    normalizeSourceLockText(text).split(" ").filter(Boolean).forEach((token) => {
+      tokens.add(token);
+      if (token.length > 3 && token.endsWith("ies")) tokens.add(`${token.slice(0, -3)}y`);
+      if (token.length > 3 && token.endsWith("es")) tokens.add(token.slice(0, -2));
+      if (token.length > 2 && token.endsWith("s")) tokens.add(token.slice(0, -1));
+    });
+  });
+  return tokens;
+}
+
+function sourceLockTermVariants(term) {
+  const raw = normalizeSourceLockText(term);
+  if (!raw) return [];
+  const variants = new Set([raw]);
+  raw.split(" ").filter(Boolean).forEach((token) => {
+    variants.add(token);
+    if (token.length > 3 && token.endsWith("ies")) variants.add(`${token.slice(0, -3)}y`);
+    if (token.length > 3 && token.endsWith("es")) variants.add(token.slice(0, -2));
+    if (token.length > 2 && token.endsWith("s")) variants.add(token.slice(0, -1));
+  });
+  return [...variants].filter(Boolean);
+}
+
+const SOURCE_LOCK_IGNORED_QUOTES = new Set([
+  "s", "to", "a", "an", "the", "and", "or", "but", "has", "have", "is", "are", "was", "were",
+  "band", "task", "grammar", "lexical", "coherence", "cohesion", "word", "sentence", "phrase"
+]);
+
+function extractSourceLockQuotedTerms(text) {
+  const terms = [];
+  const source = String(text || "");
+  const pattern = /['"“”‘’]([^'"“”‘’]{1,90})['"“”‘’]/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    const term = String(match[1] || "").trim();
+    const norm = normalizeSourceLockText(term);
+    if (!norm || SOURCE_LOCK_IGNORED_QUOTES.has(norm)) continue;
+    // Ignore very long sentence-like quotations; the lock is for local error terms/phrases.
+    if (norm.split(" ").length > 8) continue;
+    terms.push(term);
+  }
+  return terms;
+}
+
+function sourceLockTermAppears(term, sourceTexts = []) {
+  const normTerm = normalizeSourceLockText(term);
+  if (!normTerm) return true;
+  const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
+  if (normSources.some((source) => source.includes(normTerm))) return true;
+  const tokenSet = sourceLockTokenSet(sourceTexts);
+  const variants = sourceLockTermVariants(term);
+  if (normTerm.includes(" ")) {
+    return variants.some((variant) => normSources.some((source) => source.includes(variant)));
+  }
+  return variants.some((variant) => tokenSet.has(variant));
+}
+
+function isBetterExpressionMetaClause(clause) {
+  return /^(replaces?|replaced|the upgrade|this upgrade|the rewrite|this rewrite|changed|changes|changing|uses? more formal|use more formal|more formal and precise)\b/i.test(String(clause || "").trim());
+}
+
+function splitSourceLockClauses(text) {
+  return String(text || "")
+    .replace(/\b(Also|In addition|Moreover|Furthermore)\b/g, "; $1")
+    .replace(/(另外|此外|同时|并且|而且)/g, "；$1")
+    .split(/\s*[;；]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence, options = {}) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const sourceTexts = [originalSentence, correctedSentence].filter(Boolean);
+  const kept = splitSourceLockClauses(raw).filter((clause) => {
+    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return false;
+    const quotedTerms = extractSourceLockQuotedTerms(clause);
+    if (!quotedTerms.length) return true;
+    return quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts));
+  });
+  return kept.join("; ").replace(/\s+/g, " ").trim();
+}
+
+function sourceLockDetailedCorrectionItem(item) {
+  if (!item || typeof item !== "object") return item;
+  const original = item.originalSentence || item.original || item.sourceSentence || item.sentence || item.inputSentence || item.before || "";
+  const corrected = item.correctedSentence || item.corrected || item.correction || item.fixed || item.fixedSentence || item.after || "";
+  const better = item.betterExpression || item.targetBandExpression || item.upgradedExpression || item.highBandExpression || item.polishedSentence || item.modelExpression || item.betterSentence || item.exampleUpgrade || "";
+  const locked = { ...item };
+  [
+    "problem", "issue", "reason", "explanation", "comment",
+    "rule", "grammarRule", "suggestionRule", "howToFix",
+    "bandImpact", "impact", "scoreImpact", "impactOnBand", "whyThisAffectsBand", "whyAffectsBand", "scoreReason"
+  ].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetter) {
+    locked.whyBetter = cleanIssueTextAgainstSentence(locked.whyBetter, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  ["problemZh", "issueZh", "reasonZh", "explanationZh", "commentZh", "ruleZh", "bandImpactZh", "impactZh", "scoreImpactZh", "whyThisAffectsBandZh"].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetterZh) {
+    locked.whyBetterZh = cleanIssueTextAgainstSentence(locked.whyBetterZh, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  locked.sourceLockApplied = true;
+  return locked;
+}
+
+function sourceLockSimpleSentenceCorrectionItem(item) {
+  if (!item || typeof item !== "object") return item;
+  const original = item.original || item.originalSentence || item.sentence || item.sourceSentence || "";
+  const corrected = item.corrected || item.correctedSentence || item.correction || item.fixed || "";
+  const locked = { ...item };
+  ["reason", "explanation", "problem", "rule", "comment", "reasonZh", "explanationZh", "problemZh", "ruleZh", "commentZh"].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  locked.sourceLockApplied = true;
+  return locked;
 }
 
 function normalizeSpellingCorrectionItem(item) {
@@ -1708,11 +1895,13 @@ function sanitizeAiCorrectionPayload(correction) {
 
   cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
     .map((item) => normalizeSentenceCorrectionItem(item))
+    .map((item) => sourceLockSimpleSentenceCorrectionItem(item))
     .filter((item) => correctionObjectHasText(item, ["original", "corrected", "reason"]))
     .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["reason"]));
 
   cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections)
     .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
+    .map((item) => sourceLockDetailedCorrectionItem(item))
     .filter((item) => isScoreImpactingDetailedCorrection(item));
 
   return cleaned;
@@ -2571,6 +2760,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
       : { taskType: "task2", questionType: "", topic: "", requiredPosition: "", requiredParts: [], positionPresent: false, mainIdeasRelevant: false, missingRequirements: [], taskMatchSummary: "" },
     taskRequirementAnalysisZh: { taskMatchSummaryZh: "", taskPurposeZh: "", requiredToneZh: "", requiredPartsZh: [], bulletPointsZh: [] },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
+    feedbackTrack: "low_band_correction | mid_band_improvement | high_band_polish",
+    estimatedBandZone: "low | middle | high",
     lowBandDiagnostics: { recommendedLowBandRange: "", reason: "" },
     lowBandDiagnosticsZh: { reasonZh: "" },
     highBandDiagnostics: {
@@ -2647,6 +2838,7 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
     "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
     buildTargetImprovementInstruction(body),
+    "Return feedbackTrack as one of: low_band_correction, mid_band_improvement, high_band_polish. Return estimatedBandZone as low, middle, or high. The track must match the final evidence: low = foundations; middle = improve development/stability; high = polish naturalness/precision.",
     body.currentResult ? "Current result to audit:" : "",
     body.currentResult ? JSON.stringify(body.currentResult).slice(0, 3500) : "",
     "Request:",
@@ -3787,6 +3979,7 @@ function finalizeTaskScoringEngine(result, body = {}) {
   result.actualWordCount = Number(body?.wordCount) || countWordsServer(body?.essay);
   result.wordCountThresholdUsed = task === "Task 1" ? 150 : 250;
   result.disclaimer = result.disclaimer || DISCLAIMER;
+  appendFeedbackTrackToResult(result, body);
   return result;
 }
 
@@ -3904,8 +4097,9 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]) || "",
     betterExpressionTargetBand: pickFirstUsefulValue(item, ["betterExpressionTargetBand", "targetBandRange", "targetRange", "targetBand"]) || ""
   };
-  if (!hasUsefulText(out.originalSentence) && !hasUsefulText(out.correctedSentence) && !hasUsefulText(out.problem) && !hasUsefulText(out.rule) && !hasUsefulText(out.betterExpression)) return null;
-  return out;
+  const lockedOut = sourceLockDetailedCorrectionItem(out);
+  if (!hasUsefulText(lockedOut.originalSentence) && !hasUsefulText(lockedOut.correctedSentence) && !hasUsefulText(lockedOut.problem) && !hasUsefulText(lockedOut.rule) && !hasUsefulText(lockedOut.betterExpression)) return null;
+  return lockedOut;
 }
 
 async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingMode, locale, deadline }) {
@@ -4411,6 +4605,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }]
       }),
       "Return every score-impacting sentence-level issue in the supplied text. Do not stop at 8-15 items if more clear issues exist. correctedSentence is the direct error fix. Do not return betterExpression here; Stage 12 handles upgraded expressions separately. Do not return paragraphs. Every item with an English explanation must include the matching Chinese fields.",
+      "SOURCE LOCK: each item must discuss only the exact originalSentence in that item. Do not mention any word, phrase, spelling error, noun, or grammar issue unless it appears in that originalSentence or its correctedSentence. Do not copy notes from another sentence. Keep better-expression explanations out of problem/rule fields.",
       ...common
     ].join("\n");
   }
@@ -4423,6 +4618,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
       }),
       "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. It must be ONE usable IELTS sentence only, based on the corrected sentence, not a paragraph or explanation. Do not include meta-commentary such as 'which makes the idea clearer' or keep errors such as 'discuss about'. Every English explanation must have the matching Chinese field.",
+      "SOURCE LOCK: every betterExpression item must attach to the exact originalSentence/correctedSentence. whyBetter may explain the upgrade, but problem/rule fields in detailed corrections must not contain notes from other sentences.",
       ...common
     ].join("\n");
   }
@@ -4835,6 +5031,9 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
     `Stage 7/13 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
     "This is still AI-only: identify and correct all clear score-impacting issues in this batch. Do not skip visible errors to keep the output short.",
     "If a sentence has several grammar/word-choice/punctuation errors, return one item with the fully corrected sentence and a concise combined problem description.",
+    "Sentence contamination guard: before returning an item, verify every error named in problem/rule/bandImpact appears in that exact Original sentence. Do not import errors from neighbouring sentences or previous batches.",
+    "If the original sentence does not contain the word or structure you mention, remove that note. Example: do not mention 'confindent' unless this exact sentence contains 'confindent'.",
+
     "If a listed sentence has no score-impacting problem, omit it. Do not invent errors.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
@@ -4924,6 +5123,7 @@ function correctionSourcesForBetterExpression(body = {}) {
 
 function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount, highBandPolish = false }) {
   const targetRange = betterExpressionTargetRangeForBody(body);
+  const feedbackTrackInstruction = buildFeedbackTrackInstruction(body);
   const items = batch.map((item) => [
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
@@ -4940,11 +5140,15 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     ]
     : [
       `Stage 8/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
-      "For every score-impacting sentence, include a betterExpression when a safe next-band upgrade is possible."
+      "For every score-impacting sentence, include a betterExpression when a safe next-band upgrade is possible.",
+      "Low-band betterExpression must stay at Band 5.0-5.5 or 5.5-6.0 style: clear, correct, simple, and easy to imitate.",
+      "Mid-band betterExpression must improve clarity, development, cohesion, collocation, or sentence control without turning the sentence into Band 8-9 language.",
+      "Do not skip a listed score-impacting item simply because the direct corrected sentence is understandable; if a modest +0.5-1.0 upgrade is safe, return it."
     ];
   return [
     ...modeLines,
-    "Return only betterExpressionItems. Do not return detailedSentenceCorrections in this stage; direct corrections already came from Stage 11.",
+    feedbackTrackInstruction,
+    "Return only betterExpressionItems. Do not return detailedSentenceCorrections in this stage; direct corrections already came from Stage 7.",
     "betterExpression must be based on the direct corrected sentence, not on the original wrong sentence.",
     "betterExpression must be ONE usable IELTS sentence only, not a paragraph and not an explanation.",
     "It must first fix all obvious errors from the corrected sentence. Never keep errors such as 'discuss about', 'need to facing', wrong spelling, wrong tense, or broken punctuation.",
@@ -5126,6 +5330,13 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "The server will only average the four AI-returned final criterion bands. The server will not create a non-AI score.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
+    buildFeedbackTrackInstruction(body),
+    "Final priority plan must follow the track: low band = fixFirst/fixNext/polishLater; mid band = improveFirst/stabiliseNext/polishLater using the same JSON arrays fixFirst/fixNext/polishLater; high band = high-band polish priorities only.",
+    "For low-band plans, do not put complex sentence structures, wider linking devices, or more advanced vocabulary in fixFirst. Those belong only in polishLater after accuracy and task clarity are stable.",
+    "For mid-band plans, fixFirst must target task response/achievement and development; fixNext must target paragraph logic, repeated grammar stability, collocation, and referencing; polishLater may mention sentence variety and higher expression.",
+    "For high-band plans, do not recommend thesaurus use, rare vocabulary, forced inversion, cleft sentences, passive voice, or extremely complex structures. Focus on natural precision and argument/letter nuance.",
+    "Consistency checks: if feedback says 'no grammatical errors', do not also say 'minor errors' unless you quote exact examples. If Band 8, do not say the essay needs rare vocabulary or extremely complex structures to reach Band 9.",
+
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       finalCriteria: {
@@ -5141,6 +5352,8 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
         "Grammatical Range and Accuracy": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
       },
       finalOverallBand: "",
+      feedbackTrack: "low_band_correction | mid_band_improvement | high_band_polish",
+      estimatedBandZone: "low | middle | high",
       completionStatus: { isIncomplete: false, completionLevel: "", missingParts: [], completionSignals: [], wordCountImpact: "", scoreImpact: "", scoreCapApplied: false, scoreCapReason: "", canSubmitForScoring: true },
       bandRange: "",
       boundaryPosition: "",
@@ -5447,6 +5660,7 @@ function buildHighBandPolishPrompt({ body, effectiveMode, locale, sources }) {
       : "For Task 2, polish for argument nuance, topic-specific precision, sentence economy, cohesion, and clearer reasoning.",
     `Target range for each upgraded sentence: ${targetRange}.`,
     "Each betterExpression must be ONE sentence only, preserve the original meaning, avoid adding new evidence, avoid rewriting the whole paragraph, and avoid artificial complexity.",
+    "Do not suggest or use forced inversion, cleft sentences, passive voice, rare vocabulary, thesaurus-style synonyms, or extra complexity unless it naturally improves this exact sentence.",
     "Never include meta-commentary inside the sentence, such as 'which makes the idea clearer', 'this improves the sentence', or 'clearer and more specific'.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
