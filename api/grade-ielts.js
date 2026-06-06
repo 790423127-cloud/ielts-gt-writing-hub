@@ -4072,8 +4072,8 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     return [
       "Stage 4/10. Map essay evidence to the four IELTS criteria. Do not give new scores and do not correct sentences.",
       "Return JSON with this exact shape:",
-      JSON.stringify({ criteria: tenStepCriterionShape(task), strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
-      "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Each Chinese field must specifically explain the English item.",
+      JSON.stringify({ criteria: tenStepCriterionShape(task), strengthItems: [{ text: "", zh: "" }], mainProblemItems: [{ text: "", zh: "" }], strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
+      "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Also return strengthItems and mainProblemItems as paired objects where every English text has a non-empty zh Chinese helper note. If you also use strengths/strengthsZh or mainProblems/mainProblemsZh, their item counts must match exactly.",
       ...common
     ].join("\n");
   }
@@ -4146,7 +4146,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         sentenceCorrections: [{ original: "", corrected: "", reason: "", reasonZh: "" }],
         detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }]
       }),
-      "Return 8-15 of the most score-affecting sentences. correctedSentence is the direct error fix. Keep betterExpression empty here unless it is very short; the next stage handles upgraded expressions. Do not return paragraphs.",
+      "Return every score-impacting sentence-level issue in the supplied text. Do not stop at 8-15 items if more clear issues exist. correctedSentence is the direct error fix. Keep betterExpression empty here unless it is very short; the next stage handles upgraded expressions. Do not return paragraphs. Every item with an English explanation must include the matching Chinese fields.",
       ...common
     ].join("\n");
   }
@@ -4189,9 +4189,318 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "coherence-diagnosis") return ensureArray(output.coherenceAdvice).length || hasUsefulText(output.criteria?.["Coherence and Cohesion"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "lexical-diagnosis") return ensureArray(output.lexicalAdvice).length || ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.criteria?.["Lexical Resource"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
-  if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length;
-  if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
+  if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
+  if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
   return hasUsefulText(output);
+}
+
+
+function envInt(name, fallback, min = 1, max = 100) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function splitEssayIntoSentenceUnits(essay) {
+  const text = String(essay || "").replace(/\r/g, "").trim();
+  if (!text) return [];
+  const rough = [];
+  text.split(/\n+/).forEach((paragraph) => {
+    const cleaned = paragraph.trim();
+    if (!cleaned) return;
+    const matches = cleaned.match(/[^.!?。！？]+[.!?。！？]+|[^.!?。！？]+$/g);
+    if (matches && matches.length) rough.push(...matches);
+    else rough.push(cleaned);
+  });
+  return rough
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .filter((sentence) => sentence.length >= 2)
+    .map((sentence, index) => ({ sentenceNumber: index + 1, text: sentence }));
+}
+
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+function compactScoreSnapshot(body = {}) {
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const criteria = current.criteria && typeof current.criteria === "object" ? current.criteria : {};
+  const criterionBands = {};
+  Object.entries(criteria).forEach(([name, item]) => {
+    if (item && typeof item === "object" && typeof item.band !== "undefined") criterionBands[name] = item.band;
+  });
+  return JSON.stringify({
+    overallBand: current.overallBand || body.currentOverallBand || body.overallBand || "",
+    estimatedLevel: current.estimatedLevel || "",
+    criterionBands,
+    scoreCalibration: current.scoreCalibration || null,
+    mainProblems: ensureArray(current.mainProblems).slice(0, 5),
+    strengths: ensureArray(current.strengths).slice(0, 5)
+  }).slice(0, 2200);
+}
+
+function normalizeBatchWarning(stage, batchNumber, error) {
+  return `${stage} batch ${batchNumber} failed: ${error?.message || error?.name || String(error)}`;
+}
+
+async function callTenStepBatchJson({ apiKey, model, stage, locale, userPrompt, maxTokens, deadline, timeoutMs }) {
+  const rawText = await callDeepSeek({
+    apiKey,
+    model,
+    systemPrompt: buildTenStepSystemPrompt(stage, locale),
+    userPrompt,
+    maxTokens,
+    temperature: 0.06,
+    jsonMode: true,
+    deadline,
+    timeoutMs: safePassTimeout(deadline, timeoutMs || (Number(process.env.AI_TEN_STEP_BATCH_TIMEOUT_MS) || 120000), 70000)
+  });
+  return parseOrRepairAiJson({
+    apiKey,
+    model,
+    rawText,
+    body: { aiStage: stage, batchMode: true },
+    locale,
+    maxTokens,
+    allowRepair: true,
+    deadline
+  });
+}
+
+async function runBatchedAiJson({ items, batchSize, maxBatches, concurrency, runBatch }) {
+  const batches = chunkItems(items, batchSize).slice(0, maxBatches);
+  const results = new Array(batches.length);
+  const warnings = [];
+  let cursor = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, batches.length)) }, async () => {
+    while (cursor < batches.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        results[index] = await runBatch(batches[index], index);
+      } catch (error) {
+        warnings.push(normalizeBatchWarning("AI", index + 1, error));
+        results[index] = null;
+      }
+    }
+  });
+  await Promise.all(workers);
+  return { results: results.filter(Boolean), warnings, batchCount: batches.length };
+}
+
+function dedupeCorrections(items = []) {
+  const out = [];
+  const seen = new Set();
+  ensureArray(items).forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+    const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.correction, item.revisedSentence);
+    const problem = firstNonEmpty(item.problem, item.reason, item.explanation, item.issue);
+    const key = [original, corrected, problem].join("||").toLowerCase().replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...item, sentenceNumber: item.sentenceNumber || index + 1, originalSentence: original, correctedSentence: corrected, problem });
+  });
+  return out;
+}
+
+function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
+  return [
+    `Stage 9/10 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
+    "This is still AI-only: identify and correct all clear score-impacting issues in this batch. Do not skip visible errors to keep the output short.",
+    "If a sentence has several grammar/word-choice/punctuation errors, return one item with the fully corrected sentence and a concise combined problem description.",
+    "If a listed sentence has no score-impacting problem, omit it. Do not invent errors.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      sentenceCorrectionSummary: "",
+      sentenceCorrectionSummaryZh: "",
+      sentenceCorrections: [{ original: "", corrected: "", reason: "", reasonZh: "" }],
+      detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }]
+    }),
+    "Chinese requirement: every item with reason/problem/rule/bandImpact must include the corresponding reasonZh/problemZh/ruleZh/bandImpactZh. Do not leave Chinese helper fields empty when the English field is non-empty.",
+    "Keep betterExpression empty here unless it is a short direct upgrade; Stage 10 handles upgraded expressions.",
+    `Task: ${task}`,
+    `Mode: ${effectiveMode}`,
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "Sentences to correct:",
+    sentenceList
+  ].join("\n");
+}
+
+async function callAiBatchedSentenceCorrections({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const units = splitEssayIntoSentenceUnits(body.essay);
+  if (!units.length) {
+    const error = new Error("AI sentence-corrections stage cannot run because no essay sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const batchSize = envInt("AI_SENTENCE_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_SENTENCE_MAX_BATCHES", 8, 1, 12);
+  const concurrency = envInt("AI_SENTENCE_BATCH_CONCURRENCY", 2, 1, 4);
+  const batchCount = Math.min(Math.ceil(units.length / batchSize), maxBatches);
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: units,
+    batchSize,
+    maxBatches,
+    concurrency,
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_SENTENCE_BATCH_MAX_TOKENS", 5200, 2500, 9000),
+      deadline,
+      timeoutMs: Number(process.env.AI_SENTENCE_BATCH_TIMEOUT_MS) || 120000
+    })
+  });
+  if (!results.length) {
+    const error = new Error(`AI sentence-corrections batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  const detailed = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
+  const simple = dedupeCorrections(results.flatMap((r) => ensureArray(r.sentenceCorrections)));
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    sentenceCorrectionSummary: `AI reviewed ${units.length} sentence unit(s) in ${attempted} batch(es).`,
+    sentenceCorrectionSummaryZh: `AI已分${attempted}批检查${units.length}个句子单位。`,
+    sentenceCorrections: simple,
+    detailedSentenceCorrections: detailed,
+    sentenceBatchMeta: { totalSentenceUnits: units.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(units.length / batchSize) > maxBatches },
+    stageWarnings: warnings
+  };
+}
+
+function correctionSourcesForBetterExpression(body = {}) {
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const detailed = dedupeCorrections(ensureArray(current.detailedSentenceCorrections));
+  if (detailed.length) return detailed.map((item, index) => ({
+    sentenceNumber: item.sentenceNumber || index + 1,
+    originalSentence: firstNonEmpty(item.originalSentence, item.original),
+    correctedSentence: firstNonEmpty(item.correctedSentence, item.corrected, item.originalSentence, item.original),
+    problem: firstNonEmpty(item.problem, item.reason, item.explanation),
+    errorType: firstNonEmpty(item.errorType, item.type)
+  }));
+  return splitEssayIntoSentenceUnits(body.essay).map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text, problem: "", errorType: "" }));
+}
+
+function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
+  const items = batch.map((item) => [
+    `Sentence ${item.sentenceNumber}:`,
+    `Original: ${item.originalSentence}`,
+    `Corrected: ${item.correctedSentence || item.originalSentence}`,
+    item.problem ? `Problem: ${item.problem}` : "",
+    item.errorType ? `Error type: ${item.errorType}` : ""
+  ].filter(Boolean).join("\n")).join("\n\n");
+  return [
+    `Stage 10/10 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
+    "Do not skip an item merely to keep output short. If an item is already natural, still provide a modest clearer Band +0.5 style sentence unless it would change the meaning.",
+    "betterExpression must be ONE sentence only, not a paragraph. It must preserve the user's meaning and be realistic for the next 0.5-1 band improvement.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Better expression", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }],
+      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
+    }),
+    "Chinese requirement: every betterExpression item must include betterExpressionZh or whyBetterZh. Every problem/rule/bandImpact field must have its matching Chinese field.",
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Items:",
+    items
+  ].join("\n");
+}
+
+function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
+  return [
+    "Stage 10/10 final plan sub-pass. Produce only correctionPriority and targetImprovementPlan based on the essay and earlier AI results. Do not rescore and do not repeat all sentence corrections.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] }
+    }),
+    "Chinese requirement: every English array item must have a same-index Chinese item in the matching *Zh array. Every criterionUpgrades object must include actionZh and exampleUpgradeZh.",
+    `Mode: ${effectiveMode}`,
+    `Current score snapshot and accumulated result: ${JSON.stringify(body.currentResult || {}).slice(0, 7000)}`,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const sources = correctionSourcesForBetterExpression(body);
+  if (!sources.length) {
+    const error = new Error("AI better-expression stage cannot run because no source sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const batchSize = envInt("AI_BETTER_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_BETTER_MAX_BATCHES", 8, 1, 12);
+  const concurrency = envInt("AI_BETTER_BATCH_CONCURRENCY", 2, 1, 4);
+  const batchCount = Math.min(Math.ceil(sources.length / batchSize), maxBatches);
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: sources,
+    batchSize,
+    maxBatches,
+    concurrency,
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 5200, 2500, 9000),
+      deadline,
+      timeoutMs: Number(process.env.AI_BETTER_BATCH_TIMEOUT_MS) || 120000
+    })
+  });
+  let plan = {};
+  try {
+    plan = await callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildFinalPlanPrompt({ body, effectiveMode, locale }),
+      maxTokens: envInt("AI_FINAL_PLAN_MAX_TOKENS", 4800, 2500, 9000),
+      deadline,
+      timeoutMs: Number(process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 120000
+    });
+  } catch (error) {
+    warnings.push(normalizeBatchWarning("better-expression final plan", attempted + 1, error));
+  }
+  if (!results.length && !hasUsefulText(plan)) {
+    const error = new Error(`AI better-expression batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  const detailed = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
+  const betterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems)).filter((item) => hasUsefulText(item));
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    detailedSentenceCorrections: detailed,
+    betterExpressionItems,
+    correctionPriority: plan.correctionPriority || {},
+    targetImprovementPlan: plan.targetImprovementPlan || {},
+    betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
+    stageWarnings: warnings
+  };
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
@@ -4202,6 +4511,13 @@ async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stag
     error.status = 400;
     throw error;
   }
+  if (stage === "sentence-corrections") {
+    return callAiBatchedSentenceCorrections({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+  if (stage === "better-expression-plan") {
+    return callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+
   const maxTokens = tenStepStageMaxTokens(stage);
   const rawText = await callDeepSeek({
     apiKey,

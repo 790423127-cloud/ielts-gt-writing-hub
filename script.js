@@ -426,6 +426,13 @@ function renderAdviceObject(item, zhFallback = "") {
   if (!item || typeof item !== "object") {
     return renderTextWithTranslation(item, zhFallback, { tag: "span" });
   }
+  const simpleText = firstNonEmpty(item.text, item.english, item.en, item.content, item.statement);
+  const simpleZh = firstNonEmpty(item.zh, item.chinese, item.cn, item.textZh, item.explanationZh, zhFallback);
+  const objectKeys = Object.keys(item || {});
+  const isSimplePairedItem = simpleText && objectKeys.every((key) => ["text", "english", "en", "content", "statement", "zh", "chinese", "cn", "textZh", "explanationZh"].includes(key));
+  if (isSimplePairedItem) {
+    return renderTextWithTranslation(simpleText, simpleZh || "AI 未返回这一项的中文解释；请重试对应阶段。", { tag: "span" });
+  }
   const title = firstNonEmpty(item.title, item.item, item.area, item.criterion, item.category, item.focus, item.point, item.issueType);
   const weakness = firstNonEmpty(item.currentWeakness, item.weakness, item.problem, item.issue, item.gap, item.currentProblem);
   const target = firstNonEmpty(item.target, item.targetBand, item.goal, item.objective, item.nextBand, item.targetLevel);
@@ -461,11 +468,38 @@ function renderAdviceObject(item, zhFallback = "") {
   return lines ? `<div class="advice-card-inline">${lines}${renderZhToggle(zh)}</div>` : renderTextWithTranslation(flattenObjectText(item), zh, { tag: "span" });
 }
 
+function itemChineseFallback(item, zhList, index) {
+  if (item && typeof item === "object") {
+    return firstNonEmpty(
+      item.zh,
+      item.chinese,
+      item.cn,
+      item.textZh,
+      item.explanationZh,
+      item.commentZh,
+      item.problemZh,
+      item.reasonZh,
+      item.adviceZh,
+      item.actionZh,
+      Array.isArray(zhList) ? zhList[index] : ""
+    );
+  }
+  return Array.isArray(zhList) ? zhList[index] : "";
+}
+
 function renderListWithTranslations(items, translations, fallbackText) {
   const list = Array.isArray(items) ? items.filter((item) => hasAnyText(item)) : [];
   const zhList = Array.isArray(translations) ? translations : [];
   if (!list.length) return `<p class="muted">${escapeHtml(fallbackText || "No content is available.")}</p>`;
-  return `<ul class="detailed-advice-list">${list.map((item, index) => `<li>${renderAdviceObject(item, zhList[index])}</li>`).join("")}</ul>`;
+  return `<ul class="detailed-advice-list">${list.map((item, index) => {
+    const zh = itemChineseFallback(item, zhList, index);
+    const rendered = renderAdviceObject(item, zh);
+    if (hasTranslationValue(zh) || (item && typeof item === "object" && hasTranslationValue(firstNonEmpty(item.zh, item.chinese, item.cn, item.textZh, item.explanationZh)))) {
+      return `<li>${rendered}</li>`;
+    }
+    const plain = typeof item === "object" ? firstNonEmpty(item.text, item.english, item.en, item.content, item.statement, flattenObjectText(item)) : item;
+    return `<li>${renderTextWithTranslation(plain, "AI 未返回这一项的中文解释；请重试对应阶段。", { tag: "span" })}</li>`;
+  }).join("")}</ul>`;
 }
 
 function bindZhToggles(scope) {
@@ -688,7 +722,7 @@ function mergeAiStageResult(base, incoming) {
     "lexicalAdvice", "lexicalAdviceZh", "grammarAdvice", "grammarAdviceZh",
     "band5FixPlan", "band5FixPlanZh", "band6UpgradePlan", "band6UpgradePlanZh",
     "band7UpgradePlan", "band7UpgradePlanZh", "revisionNotes", "revisionNotesZh",
-    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "stageWarnings", "stageProgress"
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "strengthItems", "mainProblemItems", "betterExpressionItems", "stageWarnings", "stageProgress"
   ];
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
@@ -699,8 +733,9 @@ function mergeAiStageResult(base, incoming) {
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
-      const limit = /detailedSentenceCorrections/i.test(field) ? 30
-        : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 24
+      const limit = /detailedSentenceCorrections/i.test(field) ? 80
+        : /betterExpressionItems/i.test(field) ? 80
+        : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 80
         : /(Advice|Plan|Problems|strengths)/i.test(field) ? 18
         : 16;
       output[field] = mergeUniqueArray(output[field], data[field], limit);
@@ -1587,7 +1622,18 @@ function getSentenceCorrectionItems(result = {}) {
     ...ensureArray(result.corrections),
     ...ensureArray(result.languageCorrections),
     ...ensureArray(result.sentenceLevelCorrections),
-    ...ensureArray(result.sentenceFeedback)
+    ...ensureArray(result.sentenceFeedback),
+    ...ensureArray(result.betterExpressionItems).map((item) => ({
+      sentenceNumber: item.sentenceNumber,
+      originalSentence: item.originalSentence,
+      correctedSentence: item.correctedSentence,
+      betterExpression: item.betterExpression,
+      betterExpressionZh: item.betterExpressionZh || item.whyBetterZh,
+      problem: item.whyBetter || item.problem,
+      problemZh: item.whyBetterZh || item.problemZh,
+      errorType: item.errorType || "Better expression",
+      targetBandExpression: item.targetBand
+    }))
   ];
   const seen = new Set();
   return rawItems
@@ -2000,8 +2046,8 @@ function renderGradingResult(result = {}) {
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
     </section>
-    ${collapsibleSection("Strengths", renderListWithTranslations(result.strengths, result.strengthsZh, "No strengths were returned for this response."))}
-    ${collapsibleSection("Main Problems", renderListWithTranslations(mainProblems.items, mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
+    ${collapsibleSection("Strengths", renderListWithTranslations(result.strengthItems && result.strengthItems.length ? result.strengthItems : result.strengths, result.strengthItems && result.strengthItems.length ? [] : result.strengthsZh, "No strengths were returned for this response."))}
+    ${collapsibleSection("Main Problems", renderListWithTranslations(result.mainProblemItems && result.mainProblemItems.length ? result.mainProblemItems : mainProblems.items, result.mainProblemItems && result.mainProblemItems.length ? [] : mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(sentenceCorrectionItems)}
     ${renderCorrectionPriority(result.correctionPriority)}
