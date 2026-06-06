@@ -1556,41 +1556,41 @@ function filteredMainProblems(items = [], translations = []) {
 }
 
 
-function genericDisplayBetterExpression(source) {
-  const original = String(source || "").trim();
-  if (!original) return "";
-  let s = original
-    .replace(/\bI think\b/i, "I believe")
-    .replace(/\bin my opinion,?\s*/i, "In my view, ")
-    .replace(/\bgood thing\b/gi, "positive development")
-    .replace(/\bbad thing\b/gi, "negative outcome")
-    .replace(/\bvery expensive\b/gi, "costly")
-    .replace(/\bspend too much money\b/gi, "avoid excessive spending")
-    .replace(/\buse it carefully\b/gi, "use it responsibly")
-    .replace(/\buse these products carefully\b/gi, "use these products responsibly")
-    .replace(/\bmake people feel more confident\b/gi, "increase people’s confidence")
-    .replace(/\bmore important than\b/gi, "more important than");
+function isInvalidBetterExpression(value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  const compact = compactFeedbackText(text);
+  if (!compact) return true;
+  // These phrases are explanations about the rewrite, not usable IELTS sentences.
+  if (/\b(which|this)\s+(makes|make)\s+the\s+(idea|point|sentence)\s+(clearer|more\s+specific|better)\b/i.test(text)) return true;
+  if (/\bclearer\s+and\s+more\s+specific\b/i.test(text)) return true;
+  // Do not display a better expression that still keeps obvious low-level errors.
+  if (/\bdiscuss\s+about\b/i.test(text)) return true;
+  if (/\bneed\s+to\s+facing\b/i.test(text)) return true;
+  if (/\bit['’]?spossible\b/i.test(text)) return true;
+  return false;
+}
 
-  if (/^if\b/i.test(s)) {
-    const core = s.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
-    s = `${core.charAt(0).toUpperCase()}${core.slice(1)} can be beneficial, provided that people use it responsibly.`;
-  } else if (/\bhowever\b|\bbut\b/i.test(s) && !/\balthough\b|\bwhile\b/i.test(s)) {
-    s = s.replace(/\bbut\b/i, "However,");
-  } else if (/\bbecause\b/i.test(s) && !/\bwhich\b|\btherefore\b/i.test(s)) {
-    s = s.replace(/[.!?]*$/, ", which makes the point clearer.");
-  } else if (!shouldShowBetterExpression(original, s)) {
-    s = original.replace(/[.!?]*$/, ", which makes the idea clearer and more specific.");
-  }
-  if (!/[.!?]$/.test(s)) s += ".";
-  return s;
+function genericDisplayBetterExpression() {
+  // AI-only display rule: the front end must not invent a better expression.
+  // If AI does not return a safe betterExpression, the field stays hidden.
+  return "";
 }
 
 function resolveBetterExpressionForDisplay(item = {}, corrected, original) {
   const base = corrected || original || "";
-  const rawBetter = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedExpression, item.highBandExpression, item.polishedSentence, item.modelExpression, item.exampleUpgrade, item.betterSentence);
+  const rawBetter = firstNonEmpty(
+    item.betterExpression,
+    item.upgradedExpression,
+    item.highBandExpression,
+    item.polishedSentence,
+    item.modelExpression,
+    item.betterSentence,
+    item.exampleUpgrade
+  );
+  if (isInvalidBetterExpression(rawBetter)) return "";
   if (shouldShowBetterExpression(base, rawBetter)) return rawBetter;
-  const fallback = genericDisplayBetterExpression(base);
-  return fallback || rawBetter || "";
+  return "";
 }
 
 function normalizeSentenceCorrectionItem(item, index = 0) {
@@ -1624,8 +1624,106 @@ function normalizeSentenceCorrectionItem(item, index = 0) {
   };
   const better = resolveBetterExpressionForDisplay(normalized, corrected, original);
   if (better) normalized.betterExpression = better;
+  else delete normalized.betterExpression;
   if (!hasAnyText(normalized.originalSentence) && !hasAnyText(normalized.correctedSentence) && !hasAnyText(normalized.problem) && !hasAnyText(normalized.rule) && !hasAnyText(normalized.betterExpression)) return null;
   return normalized;
+}
+
+function normalizeCorrectionIdentityText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/\s+/g, " ")
+    .replace(/\s*([,.!?;:])\s*/g, "$1")
+    .replace(/["“”]/g, "")
+    .trim();
+}
+
+function correctionIdentityKey(item = {}) {
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
+  const base = normalizeCorrectionIdentityText(original || corrected);
+  if (base) return `text:${base}`;
+  const number = String(item.sentenceNumber || "").trim();
+  return number ? `num:${number}` : "";
+}
+
+function mergeCorrectionText(existing, incoming) {
+  const a = String(existing || "").trim();
+  const b = String(incoming || "").trim();
+  if (!a) return b;
+  if (!b) return a;
+  const compactA = compactFeedbackText(a);
+  const compactB = compactFeedbackText(b);
+  if (compactA === compactB || compactA.includes(compactB) || compactB.includes(compactA)) {
+    return richTextScore(b) > richTextScore(a) ? b : a;
+  }
+  return `${a}; ${b}`;
+}
+
+function mergeCorrectionItem(existing = {}, incoming = {}) {
+  const merged = { ...existing };
+  const keepRicher = (key) => {
+    merged[key] = preferRicherText(merged[key], incoming[key]);
+  };
+  if (!merged.sentenceNumber && incoming.sentenceNumber) merged.sentenceNumber = incoming.sentenceNumber;
+  ["originalSentence", "correctedSentence"].forEach(keepRicher);
+  ["problem", "problemZh", "rule", "ruleZh", "errorType", "errorTypeZh", "bandImpact", "bandImpactZh", "whyThisAffectsBand"].forEach((key) => {
+    merged[key] = mergeCorrectionText(merged[key], incoming[key]);
+  });
+  const better = resolveBetterExpressionForDisplay(incoming, incoming.correctedSentence || merged.correctedSentence, incoming.originalSentence || merged.originalSentence);
+  if (better) {
+    const existingBetter = resolveBetterExpressionForDisplay(merged, merged.correctedSentence, merged.originalSentence);
+    merged.betterExpression = preferRicherText(existingBetter, better);
+    merged.betterExpressionZh = firstNonEmpty(incoming.betterExpressionZh, incoming.whyBetterZh, merged.betterExpressionZh);
+    merged.betterExpressionTargetBand = firstNonEmpty(incoming.betterExpressionTargetBand, incoming.targetExpressionBand, incoming.targetBand, merged.betterExpressionTargetBand);
+  }
+  if (incoming.scoreImpacting === false && typeof merged.scoreImpacting === "undefined") merged.scoreImpacting = false;
+  return merged;
+}
+
+function attachBetterExpressionItems(corrections = [], betterItems = []) {
+  const byOriginal = new Map();
+  const byNumber = new Map();
+  corrections.forEach((item, index) => {
+    const key = correctionIdentityKey(item);
+    if (key) byOriginal.set(key, index);
+    if (item.sentenceNumber) byNumber.set(String(item.sentenceNumber), index);
+  });
+
+  ensureArray(betterItems).forEach((raw, rawIndex) => {
+    if (!raw || typeof raw !== "object") return;
+    const item = normalizeSentenceCorrectionItem({
+      sentenceNumber: raw.sentenceNumber,
+      originalSentence: firstNonEmpty(raw.originalSentence, raw.original, raw.sourceSentence),
+      correctedSentence: firstNonEmpty(raw.correctedSentence, raw.corrected, raw.revisedSentence),
+      betterExpression: firstNonEmpty(raw.betterExpression, raw.upgradedExpression, raw.highBandExpression, raw.polishedSentence, raw.modelExpression, raw.betterSentence),
+      betterExpressionZh: firstNonEmpty(raw.betterExpressionZh, raw.whyBetterZh),
+      betterExpressionTargetBand: firstNonEmpty(raw.targetBand, raw.targetBandRange, raw.targetLevel),
+      problem: firstNonEmpty(raw.problem, raw.whyBetter),
+      problemZh: firstNonEmpty(raw.problemZh, raw.whyBetterZh),
+      errorType: raw.errorType || "Better expression"
+    }, rawIndex);
+    if (!item || !hasAnyText(item.betterExpression)) return;
+    const key = correctionIdentityKey(item);
+    let matchIndex = key && byOriginal.has(key) ? byOriginal.get(key) : -1;
+    if (matchIndex < 0 && item.sentenceNumber && byNumber.has(String(item.sentenceNumber))) {
+      matchIndex = byNumber.get(String(item.sentenceNumber));
+    }
+    if (matchIndex >= 0) {
+      corrections[matchIndex] = mergeCorrectionItem(corrections[matchIndex], item);
+      return;
+    }
+    // Only create a standalone card when AI supplied a real original/corrected sentence.
+    // This prevents betterExpressionItems from duplicating existing cards with weak keys.
+    if (hasAnyText(item.originalSentence) && hasAnyText(item.correctedSentence)) {
+      const nextIndex = corrections.length;
+      corrections.push(item);
+      if (key) byOriginal.set(key, nextIndex);
+      if (item.sentenceNumber) byNumber.set(String(item.sentenceNumber), nextIndex);
+    }
+  });
+  return corrections;
 }
 
 function getSentenceCorrectionItems(result = {}) {
@@ -1635,34 +1733,25 @@ function getSentenceCorrectionItems(result = {}) {
     ...ensureArray(result.corrections),
     ...ensureArray(result.languageCorrections),
     ...ensureArray(result.sentenceLevelCorrections),
-    ...ensureArray(result.sentenceFeedback),
-    ...ensureArray(result.betterExpressionItems).map((item) => ({
-      sentenceNumber: item.sentenceNumber,
-      originalSentence: item.originalSentence,
-      correctedSentence: item.correctedSentence,
-      betterExpression: item.betterExpression,
-      betterExpressionZh: item.betterExpressionZh || item.whyBetterZh,
-      problem: item.whyBetter || item.problem,
-      problemZh: item.whyBetterZh || item.problemZh,
-      errorType: item.errorType || "Better expression",
-      targetBandExpression: item.targetBand
-    }))
+    ...ensureArray(result.sentenceFeedback)
   ];
-  const seen = new Set();
-  return rawItems
+  const map = new Map();
+  const fallback = [];
+  rawItems
     .map((item, index) => normalizeSentenceCorrectionItem(item, index))
-    .filter((item) => {
-      if (!item) return false;
-      const key = [
-        item.originalSentence || "",
-        item.correctedSentence || "",
-        item.problem || "",
-        item.rule || ""
-      ].join("||").toLowerCase().replace(/\s+/g, " ").trim();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    .filter(Boolean)
+    .forEach((item) => {
+      const key = correctionIdentityKey(item);
+      if (!key) {
+        fallback.push(item);
+        return;
+      }
+      map.set(key, map.has(key) ? mergeCorrectionItem(map.get(key), item) : item);
     });
+
+  const merged = [...map.values(), ...fallback];
+  attachBetterExpressionItems(merged, result.betterExpressionItems);
+  return merged.filter(isScoreImpactingDetailedCorrection);
 }
 
 function renderDetailedSentenceCorrections(items = []) {
