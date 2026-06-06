@@ -889,6 +889,144 @@ function buildCompactAiOnlyRepairPrompt(rawText, body, locale = "en") {
 }
 
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function retryDelayMs(attempt) {
+  return Math.min(1500, 350 * Math.max(1, Number(attempt) || 1));
+}
+
+function isRetryableProviderStatus(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function extractDeepSeekText(data) {
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
+  if (typeof message?.content === "string") return message.content.trim();
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((part) => (typeof part === "string" ? part : part?.text || part?.content || ""))
+      .join("")
+      .trim();
+  }
+  if (typeof data?.output_text === "string") return data.output_text.trim();
+  if (typeof data?.text === "string") return data.text.trim();
+  return "";
+}
+
+async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false, deadline, timeoutMs }) {
+  if (!apiKey) {
+    const error = new Error("DeepSeek API key is missing.");
+    error.status = 500;
+    error.provider = DEFAULT_PROVIDER;
+    throw error;
+  }
+
+  const maxAttempts = Math.max(1, Math.min(Number(process.env.DEEPSEEK_RETRY_ATTEMPTS) || 2, 3));
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const requestTimeoutMs = resolveAiTimeout(deadline, timeoutMs);
+    if (!hasEnoughAiTime(deadline, Math.min(requestTimeoutMs, 3000))) {
+      const timeoutError = new Error("DeepSeek request was skipped because the protected server deadline was too close.");
+      timeoutError.code = "DEEPSEEK_TIMEOUT";
+      timeoutError.provider = DEFAULT_PROVIDER;
+      timeoutError.detail = "The backend stopped before Vercel could generate a timeout.";
+      throw timeoutError;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+    const requestBody = {
+      model: model || DEFAULT_DEEPSEEK_MODEL,
+      messages: [
+        { role: "system", content: String(systemPrompt || "") },
+        { role: "user", content: String(userPrompt || "") }
+      ],
+      temperature,
+      stream: false,
+      max_tokens: Math.max(256, Number(maxTokens) || 2000)
+    };
+    if (jsonMode) requestBody.response_format = { type: "json_object" };
+
+    let response;
+    let raw = "";
+    try {
+      response = await fetch(DEEPSEEK_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      raw = await response.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("DeepSeek request timed out.");
+        timeoutError.code = "DEEPSEEK_TIMEOUT";
+        timeoutError.provider = DEFAULT_PROVIDER;
+        timeoutError.detail = "The AI provider did not respond before the server timeout.";
+        lastError = timeoutError;
+        throw lastError;
+      }
+      lastError = error;
+      if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      const error = new Error("DeepSeek API request failed.");
+      error.status = response.status;
+      error.provider = DEFAULT_PROVIDER;
+      error.raw = raw;
+      lastError = error;
+      if (attempt < maxAttempts && isRetryableProviderStatus(response.status) && remainingAiTime(deadline) > 5000) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      throw error;
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (error) {
+      error.message = `DeepSeek returned non-JSON provider response: ${error.message}`;
+      error.raw = raw;
+      error.provider = DEFAULT_PROVIDER;
+      throw error;
+    }
+
+    const outputText = extractDeepSeekText(data);
+    if (outputText) return outputText;
+
+    const emptyError = new Error("DeepSeek returned an empty response.");
+    emptyError.code = "DEEPSEEK_EMPTY_RESPONSE";
+    emptyError.provider = DEFAULT_PROVIDER;
+    emptyError.raw = raw;
+    lastError = emptyError;
+
+    if (attempt < maxAttempts && remainingAiTime(deadline) > 5000) {
+      await wait(retryDelayMs(attempt));
+      continue;
+    }
+    throw emptyError;
+  }
+
+  throw lastError || new Error("DeepSeek request failed.");
+}
+
 async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTokens, allowRepair = true, deadline }) {
   try {
     return parseJsonFromProvider(rawText);
