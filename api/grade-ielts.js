@@ -3581,7 +3581,8 @@ function aiOnlyCriterionFromSource(source = {}) {
   [
     "feedback", "feedbackZh", "howToImprove", "howToImproveZh",
     "whyThisBand", "whyThisBandZh", "whyNotHigher", "whyNotHigherZh",
-    "whyNotLower", "whyNotLowerZh"
+    "whyNotLower", "whyNotLowerZh", "halfBandDecision", "halfBandDecisionZh",
+    "confidence"
   ].forEach((key) => {
     if (typeof item[key] === "string" && item[key].trim()) out[key] = item[key];
   });
@@ -3652,12 +3653,12 @@ function buildScoreCalculation(result, task, finalBand) {
     : null;
   return {
     mode: getTaskScoringEngineName(task),
-    method: "ai_criterion_average_only",
-    formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5",
+    method: "final_ai_reconciled_criterion_average",
+    formula: "final AI-reconciled four IELTS criterion bands averaged and rounded to nearest 0.5",
     criteriaBands,
     rawAverage: rawAverage === null ? null : Number(rawAverage.toFixed(3)),
     finalBand: Number.isFinite(Number(finalBand)) ? finalBand : null,
-    explanation: "The server does not grade the essay. It only averages the criterion bands returned by AI."
+    explanation: "The server does not grade the essay. It only averages the final criterion bands returned by AI after the final reconciliation stage."
   };
 }
 
@@ -4098,7 +4099,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "prompt-analysis") {
     return [
-      "Stage 1/10. Analyse the prompt requirements only. Do not score and do not correct sentences.",
+      "Stage 1/13. Analyse the prompt requirements only. Do not display or finalise any score and do not correct sentences.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         taskRequirementAnalysis: task === "Task 1"
@@ -4115,7 +4116,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "half-band-summary") {
     return [
-      "Stage 3/13. Explain the overall score and half-band boundary summary only. Do not change any score and do not correct sentences.",
+      "Stage 3/13. Prepare half-band boundary signals from the accumulated AI evidence. Do not finalise or display any score and do not correct sentences.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
@@ -4131,7 +4132,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "criterion-boundary") {
     return [
-      "Stage 4/13. Explain detailed half-band boundaries criterion by criterion. This non-batched prompt is a fallback; prefer the internal criterion batches when available. Do not change criterion bands.",
+      "Stage 4/13. Explain detailed half-band boundary signals criterion by criterion. This non-batched prompt is a fallback; prefer internal criterion batches when available. Do not finalise the score.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: tenStepCriterionShape(task),
@@ -4159,7 +4160,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "evidence-map") {
     return [
-      "Stage 4/10. Map essay evidence to the four IELTS criteria. Do not give new scores and do not correct sentences.",
+      "Stage 5/13. Map essay evidence to the four IELTS criteria. Do not give final scores and do not correct sentences.",
       "Return JSON with this exact shape:",
       JSON.stringify({ criteria: tenStepCriterionShape(task), strengthItems: [{ text: "", zh: "" }], mainProblemItems: [{ text: "", zh: "" }], strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
       "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Also return strengthItems and mainProblemItems as paired objects where every English text has a non-empty zh Chinese helper note. If you also use strengths/strengthsZh or mainProblems/mainProblemsZh, their item counts must match exactly.",
@@ -4169,7 +4170,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "task-diagnosis") {
     return [
-      "Stage 5/10. Diagnose Task Response/Task Achievement and task-specific structure only. Do not do grammar, vocabulary, or sentence correction.",
+      "Stage 6/13. Diagnose Task Response/Task Achievement and task-specific structure only. Do not do grammar, vocabulary, or sentence correction.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         taskAchievementAdvice: [], taskAchievementAdviceZh: [],
@@ -4184,7 +4185,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "coherence-diagnosis") {
     return [
-      "Stage 6/10. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
+      "Stage 7/13. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: { "Coherence and Cohesion": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
@@ -4244,7 +4245,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "grammar-diagnosis") {
     return [
-      "Stage 8/10. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
+      "Stage 10/13. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: { "Grammatical Range and Accuracy": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
@@ -4259,7 +4260,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "sentence-corrections") {
     return [
-      "Stage 9/10. Produce direct sentence-level corrections only. Do not write the final study plan here.",
+      "Stage 11/13. Produce direct sentence-level corrections only. Do not write the final study plan here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         sentenceCorrections: [{ original: "", corrected: "", reason: "", reasonZh: "" }],
@@ -4283,17 +4284,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
   }
 
   if (stage === "final-plan") {
-    return [
-      "Stage 13/13. Produce only correction priority and final target improvement plan. Do not rescore and do not repeat all sentence corrections.",
-      "Return JSON with this exact shape:",
-      JSON.stringify({
-        correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-        targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] },
-        band5FixPlan: [], band5FixPlanZh: [], band6UpgradePlan: [], band6UpgradePlanZh: [], band7UpgradePlan: [], band7UpgradePlanZh: []
-      }),
-      "The plan must be concrete and based on this essay. Every English array item must have a same-index Chinese item in the matching *Zh array.",
-      ...common
-    ].join("\n");
+    return buildFinalPlanPrompt({ body, effectiveMode: mode, locale });
   }
 
   return [
@@ -4327,7 +4318,7 @@ function tenStepStageMaxTokens(stage) {
     "sentence-corrections": envInt("AI_STAGE_SENTENCE_CORRECTIONS_TOKENS", 8000, 3500, 14000),
     "better-expressions": envInt("AI_STAGE_BETTER_EXPRESSIONS_TOKENS", 8000, 3500, 14000),
     "better-expression-plan": envInt("AI_STAGE_BETTER_EXPRESSION_PLAN_TOKENS", 8000, 3500, 14000),
-    "final-plan": envInt("AI_STAGE_FINAL_PLAN_TOKENS", 7000, 3500, 12000)
+    "final-plan": envInt("AI_STAGE_FINAL_RECONCILIATION_TOKENS", 9500, 4500, 16000)
   })[stage] || envInt("AI_STAGE_DEFAULT_TOKENS", 6000, 3000, 12000);
 }
 
@@ -4344,7 +4335,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
   if (stage === "better-expressions") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length;
-  if (stage === "final-plan") return hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority) || ensureArray(output.band5FixPlan).length || ensureArray(output.band6UpgradePlan).length || ensureArray(output.band7UpgradePlan).length;
+  if (stage === "final-plan") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
   return hasUsefulText(output);
 }
@@ -4858,20 +4849,146 @@ async function repairUnsafeBetterExpressionCandidates({ apiKey, model, body, eff
   return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
 }
 
+
+function bandFromFinalCriterionItem(item, fallback = undefined) {
+  if (!item || typeof item !== "object") {
+    const fb = Number(fallback);
+    return Number.isFinite(fb) ? normalizeCriterionBandValue(fb, fb) : undefined;
+  }
+  const candidate = firstNonEmpty(item.finalBand, item.band, item.score, item.criterionBand, item.currentBand);
+  const numeric = Number(candidate);
+  if (Number.isFinite(numeric)) return normalizeCriterionBandValue(numeric, numeric);
+  const fb = Number(fallback);
+  return Number.isFinite(fb) ? normalizeCriterionBandValue(fb, fb) : undefined;
+}
+
+function criterionFromFinalReconciliationItem(item = {}, existing = {}, fallbackBand = undefined) {
+  const band = bandFromFinalCriterionItem(item, existing?.band ?? fallbackBand);
+  const evidenceUsed = ensureArray(item.evidenceUsed).filter(Boolean);
+  const evidenceUsedZh = ensureArray(item.evidenceUsedZh).filter(Boolean);
+  const output = {
+    ...(existing && typeof existing === "object" ? existing : {})
+  };
+  if (Number.isFinite(Number(band))) output.band = band;
+  return {
+    ...output,
+    feedback: firstNonEmpty(existing.feedback, item.feedback, item.summary, item.whyThisBand, item.halfBandDecision),
+    feedbackZh: firstNonEmpty(existing.feedbackZh, item.feedbackZh, item.summaryZh, item.whyThisBandZh, item.halfBandDecisionZh),
+    howToImprove: firstNonEmpty(existing.howToImprove, item.howToImprove, item.improvementFocus, item.whyNotHigher),
+    howToImproveZh: firstNonEmpty(existing.howToImproveZh, item.howToImproveZh, item.improvementFocusZh, item.whyNotHigherZh),
+    evidenceQuotes: ensureArray(existing.evidenceQuotes).length ? ensureArray(existing.evidenceQuotes) : evidenceUsed.slice(0, 3),
+    evidenceQuotesZh: ensureArray(existing.evidenceQuotesZh).length ? ensureArray(existing.evidenceQuotesZh) : evidenceUsedZh.slice(0, 3),
+    positiveEvidence: ensureArray(existing.positiveEvidence),
+    positiveEvidenceZh: ensureArray(existing.positiveEvidenceZh),
+    limitingEvidence: ensureArray(existing.limitingEvidence).length ? ensureArray(existing.limitingEvidence) : evidenceUsed.slice(0, 5),
+    limitingEvidenceZh: ensureArray(existing.limitingEvidenceZh).length ? ensureArray(existing.limitingEvidenceZh) : evidenceUsedZh.slice(0, 5),
+    whyThisBand: firstNonEmpty(item.whyThisBand, existing.whyThisBand, item.halfBandDecision),
+    whyThisBandZh: firstNonEmpty(item.whyThisBandZh, existing.whyThisBandZh, item.halfBandDecisionZh),
+    whyNotHigher: firstNonEmpty(item.whyNotHigher, existing.whyNotHigher),
+    whyNotHigherZh: firstNonEmpty(item.whyNotHigherZh, existing.whyNotHigherZh),
+    whyNotLower: firstNonEmpty(item.whyNotLower, existing.whyNotLower),
+    whyNotLowerZh: firstNonEmpty(item.whyNotLowerZh, existing.whyNotLowerZh),
+    halfBandDecision: firstNonEmpty(item.halfBandDecision, existing.halfBandDecision),
+    halfBandDecisionZh: firstNonEmpty(item.halfBandDecisionZh, existing.halfBandDecisionZh),
+    confidence: firstNonEmpty(item.confidence, existing.confidence)
+  };
+}
+
+function applyFinalScoringReconciliation(result = {}, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const names = getWritingCriterionNames(task);
+  const finalCriteria = result.finalCriteria && typeof result.finalCriteria === "object" ? result.finalCriteria : {};
+  const criteria = result.criteria && typeof result.criteria === "object" ? { ...result.criteria } : {};
+  const fallbackBand = undefined;
+
+  names.forEach((name) => {
+    const finalItem = finalCriteria[name] || {};
+    const existing = criteria[name] || {};
+    if (hasUsefulText(finalItem) || hasUsefulText(existing)) {
+      criteria[name] = criterionFromFinalReconciliationItem(finalItem, existing, existing.band ?? fallbackBand);
+    }
+  });
+
+  result.criteria = criteria;
+  normalizeTaskSpecificCriteria(result, task);
+  if (!aiOnlyHasFourCriterionBands(result, task)) {
+    const error = new Error("Final AI score reconciliation did not return all four final criterion bands. No non-AI score was generated.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "final-plan";
+    error.status = 502;
+    throw error;
+  }
+
+  finalizeTaskScoringEngine(result, body);
+  result.finalCriteria = finalCriteria;
+  result.finalOverallBand = result.overallBand;
+  result.scoreFinalized = true;
+  result.scoreSource = "final_ai_reconciliation";
+  result.finalScoreSource = "final_ai_reconciliation";
+  result.scoringSystem = {
+    ...(result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {}),
+    finalScoreOnlyAfterReconciliation: true,
+    initialScoreHidden: true
+  };
+
+  const scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
+  const criterionBands = names.map((name) => Number(result.criteria?.[name]?.band)).filter(Number.isFinite);
+  const uniqueBands = new Set(criterionBands.map((band) => formatBand(band)));
+  scoreCalibration.criteriaIdentical = criterionBands.length === 4 && uniqueBands.size === 1;
+  if (scoreCalibration.criteriaIdentical && !hasUsefulText(scoreCalibration.evidence)) {
+    scoreCalibration.criteriaIdenticalReviewNeeded = true;
+  }
+  result.scoreCalibration = scoreCalibration;
+  return result;
+}
+
 function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
-  const currentBand = resolveCurrentBandForTarget(body.currentResult || {}, body);
-  const targetRange = nextBandTargetRange(currentBand);
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const diagnosticSnapshot = JSON.stringify(current || {}).slice(0, 9000);
   return [
-    "Stage 13/13 final plan pass. Produce only correctionPriority and targetImprovementPlan based on the essay and earlier AI results. Do not rescore and do not repeat all sentence corrections.",
-    targetRange ? `Target range rule: currentBand is ${formatBand(currentBand)}. targetImprovementPlan.currentBand must be ${formatBand(currentBand)} and targetImprovementPlan.targetBandRange must be exactly ${targetRange}. Do not output a higher final-goal range such as ${nextBandTargetRange(roundHalf(Number(currentBand) + 0.5))} in this next-stage plan.` : "Target range rule: targetImprovementPlan.targetBandRange must be the next 0.5-1.0 band only, not a long-term goal.",
+    "Stage 13/13 final AI score reconciliation and target plan pass.",
+    "This is the ONLY stage that may output the final displayed score.",
+    "Do not rubber-stamp earlier bands. Review all accumulated AI evidence, task diagnosis, coherence diagnosis, lexical diagnosis, grammar diagnosis, sentence corrections, and better-expression evidence before finalising the score.",
+    "Return final IELTS criterion bands using half bands from 1.0 to 9.0. If the evidence is between two bands, choose the stricter/lower half band unless the evidence clearly supports the higher one.",
+    task === "Task 1"
+      ? "Task 1 scoring rule: use Task Achievement as the first criterion. Assess bullet-point coverage, letter purpose, recipient relationship, tone/register, opening/closing, relevance, and development. Do NOT assess Task 1 as an essay or require an essay thesis."
+      : "Task 2 scoring rule: use Task Response as the first criterion. Assess all question parts, clear position where required, relevance, development, examples/reasoning, and conclusion. Do NOT assess Task 2 as a letter.",
+    "For Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy, use IELTS Writing public band-descriptor logic appropriate to the selected task.",
+    "The final score must be evidence-based. If all four criterion bands are identical, explain why each criterion independently sits at the same band; do not use a safe default.",
+    "For every criterion, include a visible 0.5 half-band decision: why not 0.5 lower, why not 0.5 higher, and why this exact final band was selected.",
+    "The server will only average the four AI-returned final criterion bands. The server will not create a non-AI score.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
+      finalCriteria: {
+        [firstCriterion]: { initialBand: "", finalBand: "", whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "", confidence: "", evidenceUsed: [], evidenceUsedZh: [] },
+        "Coherence and Cohesion": { initialBand: "", finalBand: "", whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "", confidence: "", evidenceUsed: [], evidenceUsedZh: [] },
+        "Lexical Resource": { initialBand: "", finalBand: "", whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "", confidence: "", evidenceUsed: [], evidenceUsedZh: [] },
+        "Grammatical Range and Accuracy": { initialBand: "", finalBand: "", whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "", confidence: "", evidenceUsed: [], evidenceUsedZh: [] }
+      },
+      criteria: {
+        [firstCriterion]: { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+        "Coherence and Cohesion": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+        "Lexical Resource": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+        "Grammatical Range and Accuracy": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
+      },
+      finalOverallBand: "",
+      scoreChanged: false,
+      scoreChangeReason: "",
+      scoreChangeReasonZh: "",
+      scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [], criteriaIdentical: false, criteriaIdenticalReviewNeeded: false },
+      scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+      halfBandBoundary: { summary: "", summaryZh: "", criterionBoundaries: [{ criterion: "", currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] },
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
-      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] }
+      targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: firstCriterion, currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] }
     }),
-    "Chinese requirement: every English array item must have a same-index Chinese item in the matching *Zh array. Every criterionUpgrades object must include actionZh and exampleUpgradeZh.",
+    "Chinese requirement: every English explanation must have a matching accurate Chinese helper in the paired *Zh field. Do not translate full essay text.",
+    "Do not output Task Response for Task 1. Do not output Task Achievement for Task 2.",
     `Mode: ${effectiveMode}`,
-    `Current score snapshot and accumulated result: ${JSON.stringify(body.currentResult || {}).slice(0, 7000)}`,
+    `Task: ${task}`,
+    `Accumulated earlier AI evidence and diagnostics: ${diagnosticSnapshot}`,
     "Question prompt:",
     String(body.questionPrompt || ""),
     "User essay:",
@@ -4954,7 +5071,7 @@ function buildCriterionBoundaryBatchPrompt({ body, effectiveMode, locale, criter
   const criterionSnapshot = current.criteria && current.criteria[criterion] ? current.criteria[criterion] : {};
   return [
     `Stage 4/13 internal criterion-boundary batch ${index + 1}/${total}. Explain ONLY this criterion: ${criterion}.`,
-    "Do not change the band. Explain why this exact band is right, why not 0.5 higher, and why not 0.5 lower.",
+    "Do not finalise or change the displayed score. Explain the likely half-band boundary signals for this criterion and what evidence would push it 0.5 higher or lower.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       criteria: { [criterion]: { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" } },
@@ -4962,7 +5079,7 @@ function buildCriterionBoundaryBatchPrompt({ body, effectiveMode, locale, criter
     }),
     "Use short evidence quotes from the essay. Every English explanation must include the matching Chinese field.",
     `Task: ${task}`,
-    `Current criterion snapshot: ${JSON.stringify(criterionSnapshot).slice(0, 2500)}`,
+    `Current criterion/evidence snapshot: ${JSON.stringify(criterionSnapshot).slice(0, 2500)}`,
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
     "Question prompt:",
     String(body.questionPrompt || ""),
@@ -5188,11 +5305,12 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
     stage,
     locale,
     userPrompt: buildFinalPlanPrompt({ body, effectiveMode, locale }),
-    maxTokens: envInt("AI_FINAL_PLAN_MAX_TOKENS", 7000, 3500, 12000),
+    maxTokens: envInt("AI_FINAL_RECONCILIATION_MAX_TOKENS", Number(process.env.AI_FINAL_PLAN_MAX_TOKENS) || 9500, 4500, 16000),
     deadline,
-    timeoutMs: Number(process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 135000
+    timeoutMs: Number(process.env.AI_FINAL_RECONCILIATION_TIMEOUT_MS || process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 165000
   });
-  return applyNextBandTargetPlan({ aiStage: stage, disclaimer: DISCLAIMER, ...plan }, body);
+  const reconciled = applyFinalScoringReconciliation({ aiStage: stage, disclaimer: DISCLAIMER, ...plan }, body);
+  return applyNextBandTargetPlan(reconciled, body);
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {

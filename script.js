@@ -714,8 +714,10 @@ function mergeAiStageResult(base, incoming) {
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
   const isCoreScoreStage = incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
-  const lockScores = !isCoreScoreStage && Boolean(output.criteria || output.overallBand);
-  const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"]);
+  const isFinalScoreStage = incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
+  const canUpdateScores = isCoreScoreStage || isFinalScoreStage;
+  const lockScores = !canUpdateScores && Boolean(output.criteria || output.overallBand);
+  const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"]);
   const arrayFields = [
     "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
     "taskAchievementAdvice", "taskAchievementAdviceZh", "coherenceAdvice", "coherenceAdviceZh",
@@ -729,7 +731,7 @@ function mergeAiStageResult(base, incoming) {
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
-    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"
+    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
@@ -753,18 +755,18 @@ function mergeAiStageResult(base, incoming) {
   });
 
   const canReplaceCriteria = data.criteria && typeof data.criteria === "object" && (
-    isCoreScoreStage || !output.criteria
+    canUpdateScores || !output.criteria
   );
   if (canReplaceCriteria) {
     output.criteria = output.criteria
-      ? mergeCriteriaPreservingRichText(output.criteria, data.criteria, { keepBand: !isCoreScoreStage })
+      ? mergeCriteriaPreservingRichText(output.criteria, data.criteria, { keepBand: !canUpdateScores })
       : data.criteria;
   } else if (data.criteria && typeof data.criteria === "object") {
-    // Later stages may enrich feedback/evidence, but they must never change criterion bands.
+    // Later diagnostic stages may enrich feedback/evidence, but they must never change criterion bands.
     output.criteria = mergeCriteriaPreservingRichText(output.criteria || {}, data.criteria, { keepBand: true });
   }
 
-  const mayReplaceScore = !output.overallBand || isCoreScoreStage;
+  const mayReplaceScore = !output.overallBand || canUpdateScores;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   const calculatedBand = Number(output.scoreCalculation?.finalBand ?? output.mockWritingScore?.mockWritingBand);
@@ -772,6 +774,13 @@ function mergeAiStageResult(base, incoming) {
     output.overallBand = calculatedBand;
     output.estimatedLevel = `Band ${formatMockBand(calculatedBand)}`;
   }
+  if (typeof data.scoreFinalized !== "undefined") output.scoreFinalized = Boolean(data.scoreFinalized);
+  if (typeof data.scoreSource !== "undefined") output.scoreSource = data.scoreSource;
+  if (typeof data.finalScoreSource !== "undefined") output.finalScoreSource = data.finalScoreSource;
+  if (typeof data.finalOverallBand !== "undefined") output.finalOverallBand = data.finalOverallBand;
+  if (typeof data.scoreChanged !== "undefined") output.scoreChanged = data.scoreChanged;
+  if (typeof data.scoreChangeReason !== "undefined") output.scoreChangeReason = data.scoreChangeReason;
+  if (typeof data.scoreChangeReasonZh !== "undefined") output.scoreChangeReasonZh = data.scoreChangeReasonZh;
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
   if (typeof data.wordCountThresholdUsed !== "undefined") output.wordCountThresholdUsed = data.wordCountThresholdUsed;
   if (typeof data.wordCountStatus !== "undefined") output.wordCountStatus = data.wordCountStatus;
@@ -843,6 +852,9 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "better-expression-plan") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
     return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) || hasAnyText(data.correctionPriority));
+  }
+  if (aiStage === "final-plan") {
+    return Boolean(data.scoreFinalized || (data.criteria && Object.values(data.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   }
   if (aiStage === "language-correction" || aiStage === "correction-language" || aiStage === "correction") {
     return hasDetailedFeedbackContent(data);
@@ -1035,9 +1047,9 @@ async function startGrading() {
 
   try {
     await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
-    await runMergeStage("score", `第 2 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
-    await runMergeStage("half-band-summary", `第 3 步/${totalSteps}：AI 正在解释总分和半分边界`, "总分半分边界");
-    await runMergeStage("criterion-boundary", `第 4 步/${totalSteps}：AI 正在逐项解释四项评分边界`, "四项评分边界");
+    await runMergeStage("score", `第 2 步/${totalSteps}：AI 正在进行内部评分信号分析（暂不展示分数）`, "评分信号分析", { required: true });
+    await runMergeStage("half-band-summary", `第 3 步/${totalSteps}：AI 正在整理半分边界信号`, "半分边界信号");
+    await runMergeStage("criterion-boundary", `第 4 步/${totalSteps}：AI 正在逐项整理四项评分边界证据`, "四项边界证据");
     await runMergeStage("evidence-map", `第 5 步/${totalSteps}：AI 正在提取评分证据`, "评分证据");
     await runMergeStage("task-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
     await runMergeStage("coherence-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
@@ -1046,7 +1058,7 @@ async function startGrading() {
     await runMergeStage("grammar-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
     await runMergeStage("sentence-corrections", `第 11 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
     await runMergeStage("better-expressions", `第 12 步/${totalSteps}：AI 正在生成单句更好表达`, "更好表达");
-    await runMergeStage("final-plan", `第 13 步/${totalSteps}：AI 正在生成错误优先级和最终提分计划`, "最终提分计划");
+    await runMergeStage("final-plan", `第 13 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
       await runMergeStage("revision", `第 14 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
@@ -1150,6 +1162,7 @@ function renderCriteria(criteria = {}) {
       <strong>Band ${escapeHtml(item?.band ?? "-")}</strong>
       ${renderTextWithTranslation(item?.feedback || "", item?.feedbackZh, { fallback: "No feedback is available." })}
       ${item?.howToImprove ? renderTextWithTranslation(`How to improve: ${item.howToImprove}`, item?.howToImproveZh, { className: "improve" }) : ""}
+      ${item?.halfBandDecision ? renderTextWithTranslation(`Half-band decision: ${item.halfBandDecision}`, item?.halfBandDecisionZh, { className: "improve" }) : ""}
       ${renderCriterionEvidence(item || {})}
     </div>`).join("")}</div>`;
 }
@@ -2175,6 +2188,33 @@ function renderBandLadderPlans(result = {}) {
   </div>`);
 }
 
+
+function hasFinalDisplayedScore(result = {}) {
+  return Boolean(result.scoreFinalized || result.aiStage === "mock-combine" || result.mockWritingScore);
+}
+
+function renderFinalScoreArea(result = {}) {
+  if (!hasFinalDisplayedScore(result)) {
+    return `<section class="grading-section score-pending-card">
+      <h4>最终评分</h4>
+      <p class="muted">最终分数会在第 13 步 AI 完成最终评分复核后显示。前面的步骤只收集评分证据、诊断问题和生成批改内容。</p>
+    </section>`;
+  }
+  const changeNote = result.scoreChanged
+    ? `<p class="ai-warning"><strong>评分复核已调整：</strong>${escapeHtml(result.scoreChangeReason || "Final AI reconciliation adjusted the criterion bands based on the detailed evidence.")}${renderZhToggle(result.scoreChangeReasonZh || "")}</p>`
+    : "";
+  return `<section class="grading-section">
+      <h4>Overall estimated band</h4>
+      <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
+      ${changeNote}
+    </section>
+    ${renderScoreCalculation(result)}
+    <section class="grading-section">
+      <h4>四项评分表</h4>
+      ${renderCriteria(result.criteria)}
+    </section>`;
+}
+
 function renderGradingResult(result = {}) {
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
@@ -2194,18 +2234,10 @@ function renderGradingResult(result = {}) {
     ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
     ${renderWordCountWarningNote(result)}
-    ${renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh)}
+    ${result.scoreFinalized ? renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh) : ""}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
     ${renderHighBandDiagnostics(result.highBandDiagnostics, result.highBandDiagnosticsZh)}
-    <section class="grading-section">
-      <h4>Overall estimated band</h4>
-      <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
-    </section>
-    ${renderScoreCalculation(result)}
-    <section class="grading-section">
-      <h4>四项评分表</h4>
-      ${renderCriteria(result.criteria)}
-    </section>
+    ${renderFinalScoreArea(result)}
     ${collapsibleSection("Strengths", renderListWithTranslations(result.strengthItems && result.strengthItems.length ? result.strengthItems : result.strengths, result.strengthItems && result.strengthItems.length ? [] : result.strengthsZh, "No strengths were returned for this response."))}
     ${collapsibleSection("Main Problems", renderListWithTranslations(result.mainProblemItems && result.mainProblemItems.length ? result.mainProblemItems : mainProblems.items, result.mainProblemItems && result.mainProblemItems.length ? [] : mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
@@ -2364,24 +2396,56 @@ function mockPayloadForPrompt(prompt, essay) {
   };
 }
 
-async function postMockScore(endpoint, prompt, essay, label) {
+const MOCK_FINAL_SCORING_STAGES = [
+  ["prompt-analysis", "题目要求分析"],
+  ["score", "内部评分信号分析"],
+  ["evidence-map", "评分证据提取"],
+  ["task-diagnosis", "任务完成/回应诊断"],
+  ["coherence-diagnosis", "结构与衔接诊断"],
+  ["spelling-wordform", "拼写和词形诊断"],
+  ["lexical-choice-collocation", "词汇选择和搭配诊断"],
+  ["grammar-diagnosis", "语法诊断"],
+  ["final-plan", "最终评分复核"]
+];
+
+async function postMockStage(endpoint, payload, aiStage, label, stageLabel) {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeout = controller ? setTimeout(() => controller.abort(), 285000) : null;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...mockPayloadForPrompt(prompt, essay), aiStage: "score" }),
+      body: JSON.stringify(payload),
       signal: controller ? controller.signal : undefined
     });
     if (!response.ok) {
       const errorInfo = await buildResponseError(response);
-      throw new Error(`${label}: ${errorInfo.message}`);
+      throw new Error(`${label} ${stageLabel}: ${errorInfo.message}`);
     }
     return await response.json();
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+async function postMockScore(endpoint, prompt, essay, label) {
+  const basePayload = mockPayloadForPrompt(prompt, essay);
+  let result = null;
+  for (let i = 0; i < MOCK_FINAL_SCORING_STAGES.length; i += 1) {
+    const [aiStage, stageLabel] = MOCK_FINAL_SCORING_STAGES[i];
+    setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}...`, "loading");
+    const stageResult = await postMockStage(endpoint, {
+      ...basePayload,
+      aiStage,
+      currentOverallBand: result?.overallBand,
+      currentResult: result || null
+    }, aiStage, label, stageLabel);
+    result = mergeAiStageResult(result || {}, stageResult);
+  }
+  if (!result?.scoreFinalized || !Number.isFinite(Number(result?.overallBand))) {
+    throw new Error(`${label}: final AI score reconciliation did not return a final score.`);
+  }
+  return result;
 }
 
 function renderMockPrompt(targetId, prompt) {
@@ -2449,6 +2513,11 @@ function resetMockExam(pickNew = true) {
 }
 
 function renderMockResults(task1Result, task2Result) {
+  if (!task1Result?.scoreFinalized || !task2Result?.scoreFinalized) {
+    const node = $("mockExamResults");
+    if (node) node.innerHTML = `<p class="ai-warning">模拟考试最终评分复核未完成，不能生成综合分数。请重试。</p>`;
+    return;
+  }
   const t1Band = roundToHalfBand(task1Result?.overallBand);
   const t2Band = roundToHalfBand(task2Result?.overallBand);
   const finalBand = calculateMockWritingBand(t1Band, t2Band);
@@ -2498,7 +2567,7 @@ async function submitMockExam() {
     setMockStatus("正在评分 Task 2...", "loading");
     const task2Result = await postMockScore(endpoint, mockTask2Prompt, t2Essay, "Task 2");
     renderMockResults(task1Result, task2Result);
-    setMockStatus("模拟考试评分完成。", "done");
+    setMockStatus("模拟考试最终评分复核完成。", "done");
   } catch (error) {
     setMockStatus(`模拟考试评分失败：${error.message}`, "error");
   } finally {
