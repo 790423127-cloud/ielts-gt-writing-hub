@@ -117,6 +117,31 @@ function sendJson(req, res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+
+function sendProviderError(req, res, error, fallbackStatusCode = 502) {
+  if (res.headersSent) return true;
+
+  const rawStatus = Number(error?.statusCode || error?.status || error?.response?.status || fallbackStatusCode);
+  const statusCode = Number.isFinite(rawStatus) && rawStatus >= 400 && rawStatus <= 599
+    ? rawStatus
+    : fallbackStatusCode;
+
+  const detail = error?.message || error?.name || String(error || "Unknown DeepSeek provider error");
+  const payload = {
+    ok: false,
+    error: "AI grading failed. No non-AI score was generated.",
+    provider: DEFAULT_PROVIDER,
+    suggestion: "Please retry later or check Vercel runtime logs.",
+    detail: String(detail)
+  };
+
+  if (error?.code) payload.code = String(error.code);
+  if (error?.aiStage) payload.aiStage = String(error.aiStage);
+
+  sendJson(req, res, statusCode, payload);
+  return true;
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
