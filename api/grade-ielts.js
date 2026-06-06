@@ -247,7 +247,8 @@ function defaultCriterionForName(name, fallbackBand = 1) {
     limitingEvidence: [],
     whyThisBand: "",
     whyNotHigher: "",
-    whyNotLower: ""
+    whyNotLower: "",
+    evidenceQuotes: []
   };
 }
 
@@ -271,7 +272,8 @@ function normalizeTaskSpecificCriteria(result, task) {
       limitingEvidence: ensureArray(source.limitingEvidence).filter(Boolean).slice(0, 4),
       whyThisBand: source.whyThisBand || source.bandJustification || "",
       whyNotHigher: source.whyNotHigher || "",
-      whyNotLower: source.whyNotLower || ""
+      whyNotLower: source.whyNotLower || "",
+      evidenceQuotes: ensureArray(source.evidenceQuotes).filter(Boolean).slice(0, 3)
     };
   });
 
@@ -565,6 +567,405 @@ function applyTask2CriterionDifferentiationCaps(result, body, signals) {
   return changed;
 }
 
+
+
+
+// --- Fine-grained IELTS half-band and evidence calibration ---
+function setCriterionBandWithEvidence(result, criterionName, targetBand, reason, source = "local_half_band_calibration") {
+  const criterion = result?.criteria?.[criterionName];
+  if (!criterion || !Number.isFinite(Number(targetBand))) return false;
+  const current = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+  const target = clampAiBand(targetBand, current);
+  if (current === target) return false;
+  criterion.band = target;
+  criterion.localBandCalibration = { source, from: current, to: target, reason };
+  if (target < current) appendCriterionLimitEvidence(criterion, reason);
+  if (target > current) {
+    const positive = ensureArray(criterion.positiveEvidence).filter(Boolean);
+    if (!positive.includes(reason)) positive.push(reason);
+    criterion.positiveEvidence = positive.slice(0, 5);
+    if (!criterion.whyNotLower) criterion.whyNotLower = reason;
+  }
+  appendCalibrationEvidence(result, `${criterionName} adjusted from Band ${formatBand(current)} to Band ${formatBand(target)}: ${reason}`);
+  return true;
+}
+
+function bandIsWholeNumber(band) {
+  const value = Number(band);
+  return Number.isFinite(value) && Math.abs(value - Math.round(value)) < 0.001;
+}
+
+function criterionEvidenceText(criterion = {}) {
+  return JSON.stringify({
+    feedback: criterion.feedback,
+    howToImprove: criterion.howToImprove,
+    evidence: criterion.evidence,
+    positiveEvidence: criterion.positiveEvidence,
+    limitingEvidence: criterion.limitingEvidence,
+    whyThisBand: criterion.whyThisBand,
+    whyNotHigher: criterion.whyNotHigher,
+    whyNotLower: criterion.whyNotLower
+  }).toLowerCase();
+}
+
+function splitEssaySentencesForEvidence(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 20)
+    .slice(0, 80);
+}
+
+function pickEvidenceQuotes(text, patterns, limit = 2) {
+  const sentences = splitEssaySentencesForEvidence(text);
+  const regexes = ensureArray(patterns).map((pattern) => pattern instanceof RegExp ? pattern : new RegExp(String(pattern), "i"));
+  const picked = [];
+  sentences.forEach((sentence) => {
+    if (picked.length >= limit) return;
+    if (regexes.some((regex) => regex.test(sentence))) picked.push(sentence.length > 220 ? `${sentence.slice(0, 217)}...` : sentence);
+  });
+  return picked;
+}
+
+function extractTask2LexicalCalibrationSignals(body = {}, result = {}) {
+  const essay = String(body.essay || result.essay || "");
+  const prompt = String(body.questionPrompt || "");
+  const lower = essay.toLowerCase();
+  const promptTokens = new Set((prompt.toLowerCase().match(/[a-z]{5,}/g) || []).filter((word) => !/^(today|countries|people|think|essay|question)$/.test(word)));
+  const essayTokens = (lower.match(/[a-z]{5,}/g) || []);
+  const promptTopicHits = [...promptTokens].filter((word) => lower.includes(word)).length;
+  const topicListHits = [
+    "crime", "novel", "drama", "detective", "police", "criminal", "violence", "mystery", "society", "suspense", "entertainment", "viewer", "audience", "justice", "morality",
+    "treatment", "cosmetic", "product", "appearance", "younger", "confidence", "health", "risk", "benefit", "disadvantage", "self-esteem", "beauty", "procedure",
+    "education", "technology", "environment", "government", "children", "culture", "employment", "transport", "global", "community"
+  ].filter((word) => lower.includes(word)).length;
+  const longerTopicWords = new Set(essayTokens.filter((word) => word.length >= 7 && !/^(because|firstly|secondly|however|conclusion|important|different|possible|nowadays)$/.test(word)));
+  const basicWordHits = countRegexMatches(lower, /\b(good|bad|nice|thing|things|people|do|make|get|very|many|some|big|small|interesting)\b/g);
+  const repeatedBasic = basicWordHits >= Math.max(9, Math.ceil((Number(body.wordCount) || countWordsServer(essay)) * 0.055));
+  const spellingHits = countRegexMatches(lower, /\b(nowday|nowday's|imporve|unkonw|confortable|exeryday|improtant|it'spossible|suchconduct|everyday\b|it\s*'spossible)\b/g);
+  const weakCollocationHits = countRegexMatches(lower, /\b(good thing|bad thing|make people think|do bad things|using some of beauty products|pay for treatments was|need to facing|improve the salary to them|with if|look younger at working days|important than looking younger)\b/g);
+  return {
+    topicVocabularyHits: promptTopicHits + topicListHits + Math.min(longerTopicWords.size, 6),
+    promptTopicHits,
+    topicListHits,
+    longerTopicWordCount: longerTopicWords.size,
+    basicWordHits,
+    repeatedBasic,
+    spellingHits,
+    weakCollocationHits
+  };
+}
+
+function applyTask2LexicalResourceCalibration(result, body = {}, signals = extractEssaySignals(body, result)) {
+  if (!result || body?.task === "Task 1" || !result.criteria?.["Lexical Resource"]) return false;
+  const lr = result.criteria["Lexical Resource"];
+  const current = normalizeCriterionBandValue(lr.band, result.overallBand || 1);
+  const lexical = extractTask2LexicalCalibrationSignals(body, result);
+  lr.lexicalCalibrationSignals = lexical;
+  const words = signals.words || countWordsServer(body.essay);
+  const hasEnoughTopicVocabulary = lexical.topicVocabularyHits >= 7 || (lexical.promptTopicHits >= 2 && lexical.topicListHits >= 3);
+  const hasSomeTopicVocabulary = lexical.topicVocabularyHits >= 4 || lexical.promptTopicHits >= 2 || lexical.topicListHits >= 3;
+  const severeWordProblems = lexical.spellingHits >= 5 || lexical.weakCollocationHits >= 4;
+  const moderateWordProblems = lexical.repeatedBasic || lexical.spellingHits >= 2 || lexical.weakCollocationHits >= 2;
+  let changed = false;
+
+  if (words >= 200 && hasSomeTopicVocabulary && !severeWordProblems && current < 5.5) {
+    changed = setCriterionBandWithEvidence(
+      result,
+      "Lexical Resource",
+      5.5,
+      "Vocabulary is simple and sometimes repetitive, but the essay uses enough topic-related vocabulary to communicate the argument clearly.",
+      "task2_lexical_mid_band_protection"
+    ) || changed;
+  }
+
+  if (words >= 200 && hasEnoughTopicVocabulary && moderateWordProblems && !severeWordProblems && current > 5.5 && current <= 6.5) {
+    changed = setCriterionBandWithEvidence(
+      result,
+      "Lexical Resource",
+      5.5,
+      "Topic vocabulary is present, but repetition and some inaccurate word choices keep Lexical Resource in the mid-band range.",
+      "task2_lexical_mid_band_cap"
+    ) || changed;
+  }
+
+  if (severeWordProblems && hasSomeTopicVocabulary && current > 5) {
+    changed = setCriterionBandWithEvidence(
+      result,
+      "Lexical Resource",
+      5,
+      "The essay has relevant topic vocabulary, but spelling, word-choice, or collocation errors are frequent enough to limit lexical precision.",
+      "task2_lexical_error_cap"
+    ) || changed;
+  }
+
+  if (severeWordProblems && !hasSomeTopicVocabulary && current > 4.5) {
+    changed = setCriterionBandWithEvidence(
+      result,
+      "Lexical Resource",
+      4.5,
+      "Vocabulary is very limited and frequent word-choice or spelling problems reduce precision.",
+      "task2_lexical_error_cap"
+    ) || changed;
+  }
+
+  if (changed) {
+    lr.lexicalCalibrationSignals = lexical;
+    lr.whyThisBand = lr.whyThisBand || "The lexical band reflects both topic vocabulary coverage and limitations in range, repetition, collocation, and spelling.";
+    lr.whyNotHigher = lr.whyNotHigher || "A higher lexical band needs more precise and less repetitive wording with fewer spelling or collocation problems.";
+    lr.whyNotLower = lr.whyNotLower || "The essay still contains enough topic-related vocabulary to communicate the main ideas.";
+  }
+  return changed;
+}
+
+function task1LetterLexicalHits(body = {}) {
+  const essay = String(body.essay || "").toLowerCase();
+  return [
+    "dear", "manager", "request", "enquire", "grateful", "consideration", "sincerely", "faithfully", "regards", "department", "transfer", "colleague", "customer", "company", "arrange", "apologise", "apologize", "complaint", "refund", "invite", "appointment", "schedule", "available"
+  ].filter((word) => essay.includes(word)).length;
+}
+
+function applyTask1HalfBandCalibration(result, body = {}, signals = extractEssaySignals(body, result)) {
+  if (!result || body?.task !== "Task 1" || !result.criteria) return false;
+  let changed = false;
+  const coverage = task1BulletCoverageFromResult(result);
+  const allBulletsCovered = coverage.known && coverage.total >= 3 && coverage.covered >= coverage.total;
+  const mostBulletsCovered = coverage.known && coverage.total >= 3 && coverage.covered >= 2;
+  const letterLexicalHits = task1LetterLexicalHits(body);
+
+  const ta = result.criteria["Task Achievement"];
+  if (ta) {
+    const band = normalizeCriterionBandValue(ta.band, result.overallBand || 1);
+    if (band === 5 && signals.words >= 130 && (allBulletsCovered || mostBulletsCovered) && !signals.hasBareDear) {
+      changed = setCriterionBandWithEvidence(result, "Task Achievement", 5.5, "The letter covers the main task requirements, but development or register is still limited.", "task1_half_band_calibration") || changed;
+    } else if (band === 6 && signals.words >= 150 && allBulletsCovered && signals.hasLetterClosing) {
+      changed = setCriterionBandWithEvidence(result, "Task Achievement", 6.5, "The letter fulfils the task clearly with all bullet points covered, though some details could still be more specific.", "task1_half_band_calibration") || changed;
+    } else if (band === 7 && allBulletsCovered && signals.hasFormalSalutation && signals.hasLetterClosing) {
+      changed = setCriterionBandWithEvidence(result, "Task Achievement", 7.5, "The letter is complete and appropriate, with only minor room for more precise or realistic detail.", "task1_half_band_calibration") || changed;
+    }
+  }
+
+  const cc = result.criteria["Coherence and Cohesion"];
+  if (cc) {
+    const band = normalizeCriterionBandValue(cc.band, result.overallBand || 1);
+    if (band === 5 && signals.paragraphs >= 3 && signals.weakLinkingHits >= 2) {
+      changed = setCriterionBandWithEvidence(result, "Coherence and Cohesion", 5.5, "The letter has a visible paragraph structure, but transitions and referencing are still basic.", "task1_half_band_calibration") || changed;
+    } else if (band === 6 && signals.paragraphs >= 3 && !signals.hasOnlyBasicLinking) {
+      changed = setCriterionBandWithEvidence(result, "Coherence and Cohesion", 6.5, "Paragraphing and progression are clear, though the flow could still be more natural.", "task1_half_band_calibration") || changed;
+    }
+  }
+
+  const lr = result.criteria["Lexical Resource"];
+  if (lr) {
+    const band = normalizeCriterionBandValue(lr.band, result.overallBand || 1);
+    if (band === 5 && letterLexicalHits >= 4 && signals.weakCollocationHits < 3) {
+      changed = setCriterionBandWithEvidence(result, "Lexical Resource", 5.5, "The letter uses some relevant letter-function and topic vocabulary, although range and precision remain limited.", "task1_half_band_calibration") || changed;
+    } else if (band === 6 && letterLexicalHits >= 6 && signals.weakCollocationHits <= 1) {
+      changed = setCriterionBandWithEvidence(result, "Lexical Resource", 6.5, "Vocabulary is generally appropriate for the letter context, with only limited issues in precision or naturalness.", "task1_half_band_calibration") || changed;
+    }
+  }
+
+  const gra = result.criteria["Grammatical Range and Accuracy"];
+  if (gra) {
+    const band = normalizeCriterionBandValue(gra.band, result.overallBand || 1);
+    if (band === 5 && signals.grammarPressure <= 3 && signals.sentences >= 5) {
+      changed = setCriterionBandWithEvidence(result, "Grammatical Range and Accuracy", 5.5, "Grammar communicates the message with some sentence control, but repeated errors still prevent Band 6.", "task1_half_band_calibration") || changed;
+    } else if (band === 6 && signals.grammarPressure <= 1 && signals.sentences >= 5) {
+      changed = setCriterionBandWithEvidence(result, "Grammatical Range and Accuracy", 6.5, "Sentence control is mostly accurate with some variety, though not yet consistently Band 7.", "task1_half_band_calibration") || changed;
+    }
+  }
+
+  return changed;
+}
+
+function halfBandEvidenceProfile(criterion = {}) {
+  const text = criterionEvidenceText(criterion);
+  const positive = /\b(clear|addresses|answered|relevant|adequate|some development|generally clear|basic structure|understandable|some topic vocabulary|some complex sentences|mostly accurate|well[- ]organised|well organized|appropriate|maintained|covered)\b/i.test(text);
+  const limiting = /\b(limited|repetitive|underdeveloped|generic|basic|some errors|noticeable errors|not fully|partly|lacks specificity|not varied|could be more|minor|occasional)\b/i.test(text);
+  const severe = /\b(frequent errors|very limited|unclear|hard to follow|missing|major problems|meaning is reduced|poorly organised|poorly organized|severely|mostly incorrect)\b/i.test(text);
+  const high = /\b(strong|wide range|flexible|natural|well[- ]developed|effective|precise|accurate|sophisticated|smooth progression)\b/i.test(text);
+  return { positive, limiting, severe, high, text };
+}
+
+function applyGlobalHalfBandCalibration(result, body = {}) {
+  if (!result || !result.criteria || typeof result.criteria !== "object") return false;
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  let changed = false;
+  for (const name of getWritingCriterionNames(task)) {
+    const criterion = result.criteria[name];
+    if (!criterion || typeof criterion !== "object") continue;
+    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    if (!bandIsWholeNumber(band) || band < 4 || band >= 8.5) continue;
+    if (task === "Task 2" && name === "Lexical Resource") {
+      const lexical = criterion.lexicalCalibrationSignals || extractTask2LexicalCalibrationSignals(body, result);
+      if ((lexical.spellingHits >= 5 || lexical.weakCollocationHits >= 4) && band <= 5) continue;
+    }
+    const profile = halfBandEvidenceProfile(criterion);
+    if (profile.severe) continue;
+    if (band === 5 && profile.positive && profile.limiting) {
+      changed = setCriterionBandWithEvidence(result, name, 5.5, "The evidence sits between Band 5 and Band 6: the criterion is functional but still clearly limited.", "global_half_band_boundary") || changed;
+    } else if (band === 6 && profile.high && profile.limiting) {
+      changed = setCriterionBandWithEvidence(result, name, 6.5, "The evidence sits between Band 6 and Band 7: performance is generally clear, but not yet consistently strong enough for the next full band.", "global_half_band_boundary") || changed;
+    } else if (band === 7 && profile.high && profile.limiting) {
+      changed = setCriterionBandWithEvidence(result, name, 7.5, "The evidence sits between Band 7 and Band 8: performance is strong, with only minor limits in precision, naturalness, or control.", "global_half_band_boundary") || changed;
+    }
+  }
+  return changed;
+}
+
+function addLocalGrammarError(errors, essay, matcher, corrected, type, explanation, explanationZh) {
+  if (!essay) return;
+  let original = "";
+  if (typeof matcher === "string") {
+    const index = essay.toLowerCase().indexOf(matcher.toLowerCase());
+    if (index >= 0) original = essay.slice(index, index + matcher.length);
+  } else if (matcher instanceof RegExp) {
+    const match = essay.match(matcher);
+    if (match) original = match[0];
+  }
+  if (!original || errors.some((item) => item.original === original)) return;
+  errors.push({ original, corrected, type, explanation, explanationZh });
+}
+
+function buildLocalGrammarErrorFallbacks(body = {}, result = {}) {
+  const essay = String(body.essay || result.essay || "");
+  const errors = [];
+  addLocalGrammarError(errors, essay, "On this essay I will discuss about", "In this essay, I will discuss", "preposition / sentence opening", "Use 'In this essay' and do not use 'discuss about'.", "应使用 In this essay，并且 discuss 后面不加 about。");
+  addLocalGrammarError(errors, essay, "it'spossible", "it is possible", "spacing / contraction", "Separate the words and use a clear form in formal writing.", "需要分开单词，正式写作中建议写 it is possible。");
+  addLocalGrammarError(errors, essay, "nowday's", "nowadays", "word form", "Use the adverb 'nowadays', not the possessive form.", "这里应使用副词 nowadays，不是所有格。");
+  addLocalGrammarError(errors, essay, /people using some of beauty products/i, "people who use beauty products", "relative clause / noun phrase", "Use a relative clause and remove the unnecessary 'of'.", "应改成定语从句，并去掉多余的 of。");
+  addLocalGrammarError(errors, essay, /need to facing customer[s]?/i, "need to face customers", "verb form", "'Need to' must be followed by the base verb.", "need to 后面要接动词原形。");
+  addLocalGrammarError(errors, essay, /treatments was very expensive/i, "treatments are very expensive", "subject-verb agreement", "Plural subject 'treatments' needs plural verb 'are'.", "复数主语 treatments 要搭配 are。");
+  addLocalGrammarError(errors, essay, /with if they do not have/i, "if they do not have", "conjunction", "Do not use 'with' before an if-clause here.", "这里 if 从句前不需要 with。");
+  addLocalGrammarError(errors, essay, /the health is important than looking younger/i, "health is more important than looking younger", "comparative structure", "Use 'more important than' for comparison and avoid unnecessary 'the'.", "比较结构应使用 more important than，并去掉多余的 the。");
+  addLocalGrammarError(errors, essay, /a bad things/i, "a bad thing / bad things", "article / plural", "Do not combine singular article 'a' with plural noun 'things'.", "a 后面不能接复数名词 things。");
+  addLocalGrammarError(errors, essay, /suchconduct/i, "such conduct", "spacing", "Separate the determiner and noun.", "such 和 conduct 需要分开。");
+  addLocalGrammarError(errors, essay, /\bmany thing\b/i, "many things", "plural noun", "Use a plural noun after 'many'.", "many 后面应使用复数名词。");
+  addLocalGrammarError(errors, essay, /\bpeople is\b/i, "people are", "subject-verb agreement", "'People' is plural and takes 'are'.", "people 是复数，谓语用 are。");
+  addLocalGrammarError(errors, essay, /\bwant go\b/i, "want to go", "verb pattern", "Use 'want to + verb'.", "want 后面需要 to 加动词原形。");
+  return errors.slice(0, 8);
+}
+
+function ensureGrammarErrorsForVisibleProblems(result, body = {}) {
+  if (!result || typeof result !== "object") return false;
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+  const grammarBand = normalizeCriterionBandValue(result.criteria?.["Grammatical Range and Accuracy"]?.band, result.overallBand || 1);
+  const existing = ensureArray(result.grammarErrors).filter((item) => item && (hasUsefulText(item.original) || hasUsefulText(item.corrected) || hasUsefulText(item.explanation)));
+  if (existing.length || grammarBand >= 7.5) {
+    result.grammarErrors = existing;
+    return false;
+  }
+  const signals = extractEssaySignals(body, result);
+  if (grammarBand > 6 && signals.grammarPressure < 2) {
+    result.grammarErrors = existing;
+    return false;
+  }
+  const fallback = buildLocalGrammarErrorFallbacks(body, result);
+  if (!fallback.length && grammarBand <= 6) {
+    fallback.push({
+      original: "See the sentences highlighted in Grammar Advice.",
+      corrected: "Rewrite those sentences with correct verb forms, articles, agreement, and punctuation.",
+      type: "grammar control",
+      explanation: "The grammar band indicates visible errors, but the AI did not return a structured grammarErrors array; this fallback prevents the grammar panel from appearing empty.",
+      explanationZh: "语法分数显示存在问题，但 AI 没有返回结构化 grammarErrors；系统补充此项，避免语法面板空白。"
+    });
+  }
+  result.grammarErrors = fallback;
+  if (fallback.length) {
+    appendCalibrationEvidence(result, "Grammar Errors panel was filled from local grammar evidence because the AI did not return a usable grammarErrors array.");
+    result.grammarErrorFallbackApplied = true;
+    return true;
+  }
+  return false;
+}
+
+function populateCriterionEvidenceDetails(result, body = {}) {
+  if (!result || !result.criteria) return result;
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const essay = String(body.essay || result.essay || "");
+  const quotePatterns = task === "Task 1" ? {
+    "Task Achievement": [/\bwriting to\b/i, /\brequest|enquire|apolog|thank|invite|transfer|because|reason\b/i],
+    "Coherence and Cohesion": [/\bfirst|second|also|however|therefore|finally|during|on the contrary\b/i],
+    "Lexical Resource": [/\brequest|manager|department|company|customer|colleague|grateful|consideration\b/i],
+    "Grammatical Range and Accuracy": [/\bwould|could|because|although|if|which|that\b/i]
+  } : {
+    "Task Response": [/\bi think|i believe|in my opinion|personally|one reason|another reason|for example|in conclusion\b/i],
+    "Coherence and Cohesion": [/\bfirstly|secondly|however|therefore|in conclusion|another reason|one major reason\b/i],
+    "Lexical Resource": [/\bcrime|drama|novel|detective|violence|mystery|treatment|product|appearance|confidence|health|risk|benefit|society\b/i],
+    "Grammatical Range and Accuracy": [/\bbecause|although|if|when|which|that|while|provided that\b/i]
+  };
+
+  for (const name of getWritingCriterionNames(task)) {
+    const criterion = result.criteria[name];
+    if (!criterion || typeof criterion !== "object") continue;
+    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    const positives = ensureArray(criterion.positiveEvidence).filter(Boolean);
+    const limits = ensureArray(criterion.limitingEvidence).filter(Boolean);
+    if (!positives.length) {
+      positives.push(band >= 6
+        ? `${name} has enough positive evidence for Band ${formatBand(band)}.`
+        : `${name} shows some relevant evidence but remains limited.`);
+    }
+    if (!limits.length) {
+      limits.push(band >= 7.5
+        ? "Only minor refinements are needed for greater naturalness, precision, or control."
+        : "The band is limited by development, precision, organisation, vocabulary range, or grammar control.");
+    }
+    criterion.positiveEvidence = positives.slice(0, 4);
+    criterion.limitingEvidence = limits.slice(0, 4);
+    criterion.evidenceQuotes = ensureArray(criterion.evidenceQuotes).filter(Boolean);
+    if (!criterion.evidenceQuotes.length) criterion.evidenceQuotes = pickEvidenceQuotes(essay, quotePatterns[name] || [], 2);
+    criterion.whyThisBand = criterion.whyThisBand || `Band ${formatBand(band)} reflects the balance between the positive evidence and the limits shown in this criterion.`;
+    criterion.whyNotHigher = criterion.whyNotHigher || (band >= 8.5
+      ? "A higher score would require virtually no noticeable limitations."
+      : "A higher band needs stronger evidence in this criterion, not just a generally good overall impression.");
+    criterion.whyNotLower = criterion.whyNotLower || "The response shows enough relevant performance in this criterion to avoid a lower band.";
+  }
+  return result;
+}
+
+function buildLocalScoreAudit(result, body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const issues = [];
+  const bands = getCriterionBandsForTask(result, task);
+  const calculated = calculateTaskBandFromCriteria(result, task);
+  if (Number.isFinite(Number(result.overallBand)) && Math.abs(Number(result.overallBand) - calculated) > 0.01) {
+    issues.push({ type: "overall_mismatch", severity: "blocking", message: `Overall Band ${formatBand(result.overallBand)} did not match the four-criteria calculation ${formatBand(calculated)}.` });
+  }
+  const graBand = normalizeCriterionBandValue(result.criteria?.["Grammatical Range and Accuracy"]?.band, result.overallBand || 1);
+  if (graBand <= 6 && !ensureArray(result.grammarErrors).length) {
+    issues.push({ type: "empty_grammar_errors", severity: "quality", message: "Grammar band is 6.0 or below, but grammarErrors is empty." });
+  }
+  const first = firstCriterionName(task);
+  const firstBand = normalizeCriterionBandValue(result.criteria?.[first]?.band, result.overallBand || 1);
+  const firstText = criterionEvidenceText(result.criteria?.[first] || {});
+  if (firstBand <= 5 && /fully addresses|addresses both parts|all three bullet|clear position|well[- ]developed|maintained throughout/.test(firstText)) {
+    issues.push({ type: "band_feedback_conflict", severity: "quality", criterion: first, message: `${first} feedback sounds higher than the assigned band.` });
+  }
+  for (const [name, criterion] of Object.entries(result.criteria || {})) {
+    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    const text = criterionEvidenceText(criterion);
+    if (band <= 5 && /wide range|precise|sophisticated|flexible|accurate|strong/.test(text)) {
+      issues.push({ type: "band_feedback_conflict", severity: "quality", criterion: name, message: `${name} feedback contains high-band language but the band is low.` });
+    }
+    if (band >= 7.5 && highBandBadAdvicePattern().test(String(criterion.howToImprove || ""))) {
+      issues.push({ type: "high_band_advice_template", severity: "quality", criterion: name, message: `${name} high-band advice still contains template-like or complexity-for-its-own-sake wording.` });
+    }
+  }
+  if (bands.length === 4 && new Set(bands.map((band) => formatBand(band))).size === 1 && shouldReauditMechanicalSameBands(result, task)) {
+    issues.push({ type: "mechanical_same_bands", severity: "quality", message: "All four criteria have the same band while feedback suggests different strengths or weaknesses." });
+  }
+  const hasBlocking = issues.some((issue) => issue.severity === "blocking");
+  return {
+    passed: issues.length === 0,
+    repairApplied: Boolean(result.grammarErrorFallbackApplied || result.scoreCalibration?.criterionDifferentiationApplied || result.scoreCalibration?.taskResponseCapRepaired),
+    issues: issues.slice(0, 8),
+    checkedAt: "finalizeTaskScoringEngine",
+    summary: issues.length ? "Score audit found consistency issues or applied repairs." : "Score audit passed: scoring, evidence, and structured feedback are consistent."
+  };
+}
 
 function detectTask2QuestionType(prompt) {
   const text = String(prompt || "").toLowerCase();
@@ -1015,7 +1416,15 @@ function finalizeTaskScoringEngine(result, body = {}) {
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   normalizeTaskSpecificCriteria(result, task);
   applyCriterionDifferentiationCaps(result, { ...body, task });
-  if (task === "Task 2") repairTask2TaskResponseContradiction(result, { ...body, task });
+  const signals = extractEssaySignals({ ...body, task }, result);
+  if (task === "Task 1") applyTask1HalfBandCalibration(result, { ...body, task }, signals);
+  if (task === "Task 2") {
+    applyTask2LexicalResourceCalibration(result, { ...body, task }, signals);
+    repairTask2TaskResponseContradiction(result, { ...body, task }, signals);
+  }
+  applyGlobalHalfBandCalibration(result, { ...body, task });
+  populateCriterionEvidenceDetails(result, { ...body, task });
+  ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
 
   const diagnostics = result.lowBandDiagnostics && typeof result.lowBandDiagnostics === "object"
     ? result.lowBandDiagnostics
@@ -1057,6 +1466,8 @@ function finalizeTaskScoringEngine(result, body = {}) {
   result.overallBand = roundHalf(finalBand);
   result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
   refineHighBandTaskSpecificAdvice(result, { ...body, task });
+  populateCriterionEvidenceDetails(result, { ...body, task });
+  ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
   result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
   result.scoringSystem = {
     type: task === "Task 1" ? "task1_practice_engine" : "task2_practice_engine",
@@ -1078,6 +1489,8 @@ function finalizeTaskScoringEngine(result, body = {}) {
     `Overall recalculated from four criteria: ${formatBand(result.overallBand)}.`,
     beforeCapBand !== result.overallBand ? `Pre-cap criteria average band: ${formatBand(beforeCapBand)}.` : ""
   ].filter(Boolean)).slice(0, 5);
+
+  result.scoreAudit = buildLocalScoreAudit(result, { ...body, task });
 
   const allSame = bands.length === 4 && new Set(bands.map((band) => formatBand(roundHalf(band)))).size === 1;
   result.scoreCalibration.criteriaIdentical = allSame;

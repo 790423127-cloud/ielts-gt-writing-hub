@@ -331,3 +331,34 @@
 
 .word-count-note{border-left:4px solid var(--amber);background:rgba(164,93,0,.08)}
 .word-count-note h4{color:var(--amber)}
+
+/* Fine-grained score evidence and audit */
+.criterion-evidence-details{
+  margin-top:10px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--soft);
+  overflow:hidden;
+}
+.criterion-evidence-details summary{
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 10px;
+  font-size:12px;
+  font-weight:850;
+  cursor:pointer;
+  color:var(--teal);
+}
+.criterion-evidence-body{padding:10px;border-top:1px solid var(--line);display:grid;gap:8px}
+.criterion-evidence-body strong{display:inline;color:var(--ink);margin:0}
+.criterion-evidence-body p{margin:0;line-height:1.5}
+.criterion-evidence-body ul{margin:4px 0 0;padding-left:18px}
+.score-audit-issues{display:grid;gap:8px;margin-top:8px}
+.score-audit-issue{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:10px}
+.score-audit-issue strong{color:var(--amber);margin-right:8px}
+.score-audit-issue span{color:var(--muted);font-size:12px;font-weight:800}
+.score-audit-issue p{margin:6px 0 0;line-height:1.5}
+.score-calculation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.score-calculation-row:last-child{border-bottom:0}
