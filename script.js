@@ -943,6 +943,27 @@ function renderStageProgress(result = {}) {
   `);
 }
 
+function renderCriterionEvidence(item = {}) {
+  const positive = Array.isArray(item.positiveEvidence) ? item.positiveEvidence.filter(Boolean) : [];
+  const limiting = Array.isArray(item.limitingEvidence) ? item.limitingEvidence.filter(Boolean) : [];
+  const quotes = Array.isArray(item.evidenceQuotes) ? item.evidenceQuotes.filter(Boolean) : [];
+  const whyThis = String(item.whyThisBand || "").trim();
+  const whyHigher = String(item.whyNotHigher || "").trim();
+  const whyLower = String(item.whyNotLower || "").trim();
+  if (!positive.length && !limiting.length && !quotes.length && !whyThis && !whyHigher && !whyLower) return "";
+  return `<details class="criterion-evidence-details">
+    <summary>评分证据 / Band evidence</summary>
+    <div class="criterion-evidence-body">
+      ${quotes.length ? `<div><strong>Evidence quotes:</strong>${listHtml(quotes)}</div>` : ""}
+      ${positive.length ? `<div><strong>Positive evidence:</strong>${listHtml(positive)}</div>` : ""}
+      ${limiting.length ? `<div><strong>Limiting evidence:</strong>${listHtml(limiting)}</div>` : ""}
+      ${whyThis ? `<p><strong>Why this band:</strong> ${escapeHtml(whyThis)}</p>` : ""}
+      ${whyHigher ? `<p><strong>Why not higher:</strong> ${escapeHtml(whyHigher)}</p>` : ""}
+      ${whyLower ? `<p><strong>Why not lower:</strong> ${escapeHtml(whyLower)}</p>` : ""}
+    </div>
+  </details>`;
+}
+
 function renderCriteria(criteria = {}) {
   const rows = Object.entries(criteria);
   if (!rows.length) return `<p class="muted">暂无四项评分。</p>`;
@@ -952,6 +973,7 @@ function renderCriteria(criteria = {}) {
       <strong>Band ${escapeHtml(item?.band ?? "-")}</strong>
       ${renderTextWithTranslation(item?.feedback || "", item?.feedbackZh, { fallback: "No feedback is available." })}
       ${item?.howToImprove ? renderTextWithTranslation(`How to improve: ${item.howToImprove}`, item?.howToImproveZh, { className: "improve" }) : ""}
+      ${renderCriterionEvidence(item || {})}
     </div>`).join("")}</div>`;
 }
 
@@ -1004,6 +1026,27 @@ function renderScoreCalculation(result = {}) {
   </section>`;
 }
 
+
+
+function renderScoreAudit(audit = {}) {
+  if (!audit || typeof audit !== "object") return "";
+  const issues = Array.isArray(audit.issues) ? audit.issues.filter(Boolean) : [];
+  const passed = audit.passed === true;
+  const summary = audit.summary || (passed ? "Score audit passed." : "Score audit found consistency issues.");
+  const body = `
+    <p><strong>审计结果：</strong>${passed ? "通过" : "需注意"}</p>
+    <p>${escapeHtml(summary)}</p>
+    ${audit.repairApplied ? `<p class="muted">系统已应用必要的本地修复或评分边界校准。</p>` : ""}
+    ${issues.length ? `<div class="score-audit-issues">${issues.map((issue) => `
+      <div class="score-audit-issue">
+        <strong>${escapeHtml(issue.type || "issue")}</strong>
+        ${issue.criterion ? `<span>${escapeHtml(issue.criterion)}</span>` : ""}
+        <p>${escapeHtml(issue.message || "")}</p>
+      </div>
+    `).join("")}</div>` : `<p class="muted">没有发现明显的分数、反馈或结构化输出矛盾。</p>`}
+  `;
+  return collapsibleSection("评分一致性审计 Score Audit", body, { defaultOpen: !passed, bodyClass: "compact-body" });
+}
 
 function renderWordCountWarningNote(result = {}) {
   const note = result.wordCountWarning && typeof result.wordCountWarning === "object" ? result.wordCountWarning : {};
@@ -1730,6 +1773,7 @@ function renderGradingResult(result = {}) {
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
     </section>
     ${renderScoreCalculation(result)}
+    ${renderScoreAudit(result.scoreAudit)}
     <section class="grading-section">
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
