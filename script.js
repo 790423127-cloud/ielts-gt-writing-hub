@@ -21,7 +21,9 @@ const els = {
 
 function unique(items) { return [...new Set(items)]; }
 function ensureArray(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== null && item !== undefined && item !== "");
+  }
   if (value === null || value === undefined || value === "") return [];
   return [value];
 }
@@ -684,6 +686,9 @@ function mergeAiStageResult(base, incoming) {
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
   const usefulScoreAudit = scoreAuditHasUsableCorrections(data);
+  const isCoreScoreStage = incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
+  const lockScores = !isCoreScoreStage && Boolean(output.criteria || output.overallBand);
+  const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"]);
   const arrayFields = [
     "spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections",
     "taskAchievementAdvice", "taskAchievementAdviceZh", "coherenceAdvice", "coherenceAdviceZh",
@@ -707,6 +712,7 @@ function mergeAiStageResult(base, incoming) {
     }
   });
   objectFields.forEach((field) => {
+    if (lockScores && scoreLockedObjectFields.has(field)) return;
     if (data[field] && typeof data[field] === "object") output[field] = { ...(output[field] || {}), ...data[field] };
   });
   [
@@ -717,17 +723,18 @@ function mergeAiStageResult(base, incoming) {
   });
 
   const canReplaceCriteria = data.criteria && typeof data.criteria === "object" && (
-    incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
+    isCoreScoreStage || !output.criteria
   );
   if (canReplaceCriteria) {
     output.criteria = output.criteria
-      ? mergeCriteriaPreservingRichText(output.criteria, data.criteria, { keepBand: !(incomingStage === "score" || incomingStage === "all" || !output.criteria) })
+      ? mergeCriteriaPreservingRichText(output.criteria, data.criteria, { keepBand: !isCoreScoreStage })
       : data.criteria;
   } else if (data.criteria && typeof data.criteria === "object") {
+    // Later stages may enrich feedback/evidence, but they must never change criterion bands.
     output.criteria = mergeCriteriaPreservingRichText(output.criteria || {}, data.criteria, { keepBand: true });
   }
 
-  const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit;
+  const mayReplaceScore = !output.overallBand || isCoreScoreStage;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
   const calculatedBand = Number(output.scoreCalculation?.finalBand ?? output.mockWritingScore?.mockWritingBand);
@@ -1012,7 +1019,10 @@ function renderStageProgress(result = {}) {
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
   const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
-  if (!progress.length && !allWarnings.length) return "";
+  const audit = result.scoreAudit && typeof result.scoreAudit === "object" ? result.scoreAudit : null;
+  const auditIssues = audit && Array.isArray(audit.issues) ? audit.issues.filter(Boolean) : [];
+  const hasAuditLog = Boolean(audit && (auditIssues.length || audit.summary || audit.repairApplied || audit.passed === false));
+  if (!progress.length && !allWarnings.length && !hasAuditLog) return "";
   return collapsibleSection("AI 批改进度与错误日志", `
     ${progress.length ? `<ul class="stage-log-list">${progress.map((item) => {
       const recovered = isNonBlockingStageWarning(item.message);
@@ -1021,6 +1031,7 @@ function renderStageProgress(result = {}) {
       return `<li class="${recovered ? "stage-recovered" : item.state === "error" ? "stage-error" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}${detail}</li>`;
     }).join("")}</ul>` : ""}
     ${allWarnings.length ? `<div class="ai-warning stage-warning-log">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
+    ${hasAuditLog ? `<div class="score-audit-log"><h4>评分一致性审计 Score Audit</h4><p><strong>审计结果：</strong>${audit.passed === true ? "通过" : "需注意"}</p>${audit.summary ? `<p>${escapeHtml(audit.summary)}</p>` : ""}${audit.repairApplied ? `<p class="muted">系统已应用必要的本地修复或评分边界校准。</p>` : ""}${auditIssues.length ? `<div class="score-audit-issues">${auditIssues.map((issue) => `<div class="score-audit-issue"><strong>${escapeHtml(issue.type || "issue")}</strong>${issue.criterion ? `<span>${escapeHtml(issue.criterion)}</span>` : ""}<p>${escapeHtml(issue.message || "")}</p></div>`).join("")}</div>` : ""}</div>` : ""}
   `);
 }
 
@@ -1980,7 +1991,6 @@ function renderGradingResult(result = {}) {
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
     </section>
     ${renderScoreCalculation(result)}
-    ${renderScoreAudit(result.scoreAudit)}
     <section class="grading-section">
       <h4>四项评分表</h4>
       ${renderCriteria(result.criteria)}
