@@ -375,3 +375,15 @@
 .criterion-evidence-body .translation-toggle{margin:8px 0 4px 0;min-height:34px;padding:0 10px;font-size:14px;width:auto}
 .criterion-evidence-body .translation-panel{margin:6px 0 10px 0;padding:10px 12px;border-radius:var(--radius);background:rgba(15,118,110,.08);border:1px solid var(--line);line-height:1.55}
 .evidence-explain-line .translation-inline,.criterion-evidence-body li .translation-inline{margin-top:6px}
+
+/* Final polish: stage recovery, evidence translations, and better-expression visibility */
+.stage-recovered{color:var(--muted)}
+.stage-recovered strong{color:var(--teal)}
+.better-expression-line{border-left:4px solid var(--teal);background:rgba(15,118,110,.07);padding:8px 10px;border-radius:0 var(--radius) var(--radius) 0}
+.criterion-evidence-body .evidence-item-text{display:inline;overflow-wrap:anywhere}
+.criterion-evidence-body li .translation-toggle{display:inline-flex;align-items:center;justify-content:center;width:auto;margin:6px 0 0 0;vertical-align:middle}
+.criterion-evidence-body li .translation-panel{display:block;margin-top:6px;max-width:100%}
+.criterion-evidence-body .translation-panel{color:var(--ink);background:rgba(15,118,110,.075)}
+.evidence-explain-line{border-top:1px dashed var(--line);padding-top:8px}
+.evidence-explain-line:first-of-type{border-top:0;padding-top:0}
+@media(max-width:760px){.criterion-evidence-body li .translation-toggle{display:flex}.better-expression-line{padding:8px}}
