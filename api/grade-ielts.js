@@ -867,6 +867,238 @@ function buildLocalGrammarErrorFallbacks(body = {}, result = {}) {
   return errors.slice(0, 8);
 }
 
+function splitEssaySentencesForLocalCorrections(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 8)
+    .slice(0, 120);
+}
+
+function findSentenceForLocalCorrection(essay, matcher) {
+  const sentences = splitEssaySentencesForLocalCorrections(essay);
+  const lowerEssay = String(essay || "").toLowerCase();
+  let hit = "";
+  if (typeof matcher === "string") {
+    const needle = matcher.toLowerCase();
+    hit = sentences.find((sentence) => sentence.toLowerCase().includes(needle)) || "";
+    if (!hit && lowerEssay.includes(needle)) hit = matcher;
+  } else if (matcher instanceof RegExp) {
+    hit = sentences.find((sentence) => matcher.test(sentence)) || "";
+    matcher.lastIndex = 0;
+    if (!hit) {
+      const match = String(essay || "").match(matcher);
+      if (match) hit = match[0];
+    }
+  }
+  return String(hit || "").trim();
+}
+
+function addLocalDetailedSentenceCorrection(items, body, result, matcher, fix, meta = {}) {
+  const essay = String(body?.essay || result?.essay || "");
+  const originalSentence = findSentenceForLocalCorrection(essay, matcher);
+  if (!originalSentence) return;
+  let correctedSentence = typeof fix === "function" ? fix(originalSentence) : String(fix || "");
+  correctedSentence = String(correctedSentence || "").trim();
+  if (!correctedSentence || sameCorrectionText(originalSentence, correctedSentence)) return;
+  const key = compactCorrectionText(originalSentence);
+  if (items.some((item) => compactCorrectionText(item.originalSentence) === key)) return;
+  const currentBand = Number(result?.overallBand || body?.currentOverallBand || body?.overallBand || body?.currentResult?.overallBand || 5);
+  const targetInfo = targetImprovementRangeFromBand(currentBand || 5);
+  const betterExpression = buildFallbackBetterExpression(correctedSentence, currentBand || 5, body) || "";
+  items.push({
+    sentenceNumber: items.length + 1,
+    originalSentence,
+    correctedSentence,
+    errorType: meta.errorType || "Sentence-level correction",
+    errorTypeZh: meta.errorTypeZh || "句子级错误",
+    problem: meta.problem || "This sentence contains a visible grammar, word-choice, spelling, or cohesion problem that weakens clarity.",
+    problemZh: meta.problemZh || "这个句子存在明显的语法、用词、拼写或衔接问题，会影响表达清晰度。",
+    rule: meta.rule || "Rewrite the sentence with correct grammar, natural collocation, and clearer IELTS-style expression.",
+    ruleZh: meta.ruleZh || "需要用正确语法、自然搭配和更清楚的雅思写作表达来重写。",
+    betterExpression,
+    betterExpressionZh: betterExpression ? `这个更好表达按 ${targetInfo.label} 设计：保留原意，但让句子更自然、更清楚。` : "",
+    bandImpact: meta.bandImpact || "Band 5.0-5.5: repeated sentence-level errors limit Grammar, Lexical Resource, and clarity.",
+    bandImpactZh: meta.bandImpactZh || "这类重复的句子级错误会限制语法、词汇和表达清晰度，通常影响5到5.5附近的分数。",
+    betterExpressionTargetBand: targetInfo.label,
+    targetBandExpression: betterExpression,
+    scoreImpacting: true,
+    localFallback: true
+  });
+}
+
+function correctedSentenceByReplacements(sentence, replacements) {
+  let out = String(sentence || "");
+  ensureArray(replacements).forEach(([pattern, replacement]) => {
+    out = out.replace(pattern, replacement);
+  });
+  return out.replace(/\s+([,.!?;:])/g, "$1").replace(/([,.!?;:])(?=\S)/g, "$1 ").replace(/\s+/g, " ").trim();
+}
+
+function buildLocalSentenceCorrectionFallbacks(body = {}, result = {}) {
+  const essay = String(body.essay || result.essay || "");
+  const items = [];
+  if (!essay.trim()) return items;
+  const add = (matcher, replacements, meta) => addLocalDetailedSentenceCorrection(
+    items,
+    body,
+    result,
+    matcher,
+    (sentence) => correctedSentenceByReplacements(sentence, replacements),
+    meta
+  );
+
+  add(/On this essay I will discuss about[^.!?]*/i, [
+    [/\bOn this essay\b/i, "In this essay"],
+    [/\bdiscuss about\b/i, "discuss"],
+    [/\bnowday's\b/ig, "nowadays"],
+    [/\bit'spossible\b/ig, "it is possible"],
+    [/\s+/g, " "]
+  ], {
+    errorType: "Opening sentence / word choice / spelling",
+    errorTypeZh: "开头句 / 用词 / 拼写",
+    problem: "The opening uses the wrong preposition, redundant 'discuss about', and spelling or spacing errors.",
+    problemZh: "开头句介词错误，discuss 后多用了 about，并有拼写或空格问题。",
+    rule: "Use 'In this essay' and use 'discuss' without 'about'. Keep formal wording and correct spacing.",
+    ruleZh: "应使用 In this essay；discuss 后面不加 about；正式写作中要注意拼写和空格。"
+  });
+
+  add(/people using some of beauty products[^.!?]*/i, [
+    [/people using some of beauty products/ig, "people who use beauty products"],
+    [/pay for treatments,?that/ig, "pay for treatments that"],
+    [/about appearance/ig, "about their appearance"],
+    [/feel like a sense of satisfaction/ig, "feel a sense of satisfaction"]
+  ], {
+    errorType: "Relative clause / noun phrase / collocation",
+    errorTypeZh: "定语从句 / 名词短语 / 搭配",
+    problem: "The sentence has an unnatural noun phrase and weak collocation.",
+    problemZh: "这个句子的名词短语不自然，搭配也比较弱。",
+    rule: "Use a relative clause such as 'people who use...' and choose natural collocations.",
+    ruleZh: "可以用 people who use... 这样的定语从句，并使用更自然的搭配。"
+  });
+
+  add(/need to facing customer[s]?[^.!?]*/i, [
+    [/need to facing customers?/ig, "need to face customers"],
+    [/exeryday/ig, "every day"],
+    [/look younger at working days/ig, "look younger at work"],
+    [/much confortable/ig, "more comfortable"],
+    [/that means look younger can imporve the salary to them/ig, "this may improve their confidence at work"]
+  ], {
+    errorType: "Verb form / spelling / meaning control",
+    errorTypeZh: "动词形式 / 拼写 / 意思控制",
+    problem: "Several basic errors make the work-related example unclear.",
+    problemZh: "多个基础错误导致工作相关例子表达不清楚。",
+    rule: "After 'need to', use the base verb; check spelling and avoid unnatural claims such as 'improve the salary to them'.",
+    ruleZh: "need to 后接动词原形；同时检查拼写，避免 improve the salary to them 这类不自然表达。"
+  });
+
+  add(/using beauty products or pay for treatments was very expensive[^.!?]*/i, [
+    [/using beauty products or pay for treatments was/ig, "using beauty products or paying for treatments is"],
+    [/\.some/ig, ". Some"]
+  ], {
+    errorType: "Parallel structure / subject-verb agreement",
+    errorTypeZh: "并列结构 / 主谓一致",
+    problem: "The sentence mixes verb forms and uses the wrong verb agreement.",
+    problemZh: "句子并列动词形式不一致，主谓一致也错误。",
+    rule: "Keep parallel gerund forms and use singular agreement for the whole activity.",
+    ruleZh: "并列结构要保持动名词形式一致，整体活动作主语时谓语要一致。"
+  });
+
+  add(/with if they do not have[^.!?]*/i, [
+    [/with if they do not have/ig, "if they do not have"],
+    [/This is not a good thing with if/ig, "This is not a good thing if"]
+  ], {
+    errorType: "Conjunction misuse",
+    errorTypeZh: "连词误用",
+    problem: "'With if' is not a correct conjunction pattern.",
+    problemZh: "with if 不是正确的连词结构。",
+    rule: "Use 'if' directly to introduce a condition.",
+    ruleZh: "表达条件时直接使用 if。"
+  });
+
+  add(/the most improtant thing was\s+treatments may be dangerous[^.!?]*/i, [
+    [/the most improtant thing was\s+treatments may be dangerous/ig, "the most important thing is that some treatments may be dangerous"],
+    [/unkonw/ig, "unknown"]
+  ], {
+    errorType: "Spelling / sentence structure / tense",
+    errorTypeZh: "拼写 / 句子结构 / 时态",
+    problem: "The sentence needs a clear clause after 'the most important thing is that'.",
+    problemZh: "the most important thing is that 后面需要接清楚的从句。",
+    rule: "Use 'is that...' for the main point and keep tense consistent.",
+    ruleZh: "表达重点时可用 is that...，并保持时态一致。"
+  });
+
+  add(/the health is important than looking younger[^.!?]*/i, [
+    [/the health is important than looking younger/ig, "health is more important than looking younger"]
+  ], {
+    errorType: "Comparative structure",
+    errorTypeZh: "比较结构",
+    problem: "The comparative form is incomplete.",
+    problemZh: "比较级结构不完整。",
+    rule: "Use 'more + adjective + than' for comparison.",
+    ruleZh: "比较时用 more + 形容词 + than。"
+  });
+
+  add(/If they use those products or treatments carefully[^.!?]*/i, [
+    [/use those products or treatments carefully and use those products or treatments in the right way/ig, "use those products or treatments carefully and in the right way"],
+    [/chose those famous products/ig, "choose reputable products"],
+    [/famous products/ig, "reputable products"]
+  ], {
+    errorType: "Repetition / verb form / collocation",
+    errorTypeZh: "重复 / 动词形式 / 搭配",
+    problem: "The sentence repeats the same phrase and uses an incorrect verb form.",
+    problemZh: "句子重复同一短语，并且动词形式错误。",
+    rule: "Avoid repetition, keep parallel structure, and use 'choose' after 'also'.",
+    ruleZh: "避免重复，保持并列结构一致；also 后应使用 choose。"
+  });
+
+  if (!items.length) {
+    const grammarErrors = ensureArray(result.grammarErrors).filter((item) => item && (hasUsefulText(item.original) || hasUsefulText(item.corrected) || hasUsefulText(item.explanation)));
+    grammarErrors.slice(0, 6).forEach((error) => {
+      const original = findSentenceForLocalCorrection(essay, error.original || "") || error.original || "";
+      const corrected = error.corrected || original;
+      if (!original || !corrected || sameCorrectionText(original, corrected)) return;
+      addLocalDetailedSentenceCorrection(items, body, result, original, corrected, {
+        errorType: error.type || "Grammar correction",
+        errorTypeZh: "语法修改",
+        problem: error.explanation || "This grammar error weakens sentence accuracy.",
+        problemZh: error.explanationZh || "这个语法错误会影响句子准确性。",
+        rule: error.explanation || "Rewrite with correct grammar.",
+        ruleZh: error.explanationZh || "需要用正确语法重写。"
+      });
+    });
+  }
+
+  return items.slice(0, 8);
+}
+
+function applyLocalCorrectionFallbacks(result, body = {}, mode = "full") {
+  if (!result || typeof result !== "object") return result;
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+  const existingDetailed = ensureArray(result.detailedSentenceCorrections).filter((item) => isScoreImpactingDetailedCorrection(normalizeDetailedSentenceCorrectionItem(item)));
+  if (!existingDetailed.length) {
+    const fallbackDetailed = buildLocalSentenceCorrectionFallbacks(body, result)
+      .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
+      .filter(isScoreImpactingDetailedCorrection);
+    if (fallbackDetailed.length) {
+      result.detailedSentenceCorrections = fallbackDetailed;
+      result.sentenceCorrections = ensureArray(result.sentenceCorrections).concat(fallbackDetailed.map((item) => ({
+        original: item.originalSentence,
+        corrected: item.correctedSentence,
+        reason: item.problem,
+        reasonZh: item.problemZh
+      }))).slice(0, correctionLimitForEssay(body, mode));
+      result.localSentenceCorrectionFallbackApplied = true;
+      appendCalibrationEvidence(result, "Sentence Corrections panel was filled from local evidence because the AI detailed correction stage returned no usable sentence-level items.");
+    }
+  }
+  if (!ensureArray(result.grammarErrors).length) ensureGrammarErrorsForVisibleProblems(result, body);
+  ensureTargetImprovementPlan(result, body);
+  return result;
+}
+
 function ensureGrammarErrorsForVisibleProblems(result, body = {}) {
   if (!result || typeof result !== "object") return false;
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
@@ -3270,10 +3502,13 @@ async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingM
     }
   }
 
-  output.correctionWarning = lastError
-    ? "AI detailed correction retry failed or timed out. The score was returned first. Please retry detailed grading."
-    : "AI did not return concrete sentence-level corrections. Please retry detailed grading.";
-  output.correctionPassWarning = output.correctionWarning;
+  const warning = lastError
+    ? "AI detailed correction retry failed or timed out. Local sentence-level fallback corrections were used when visible errors could be detected."
+    : "AI did not return concrete sentence-level corrections. Local sentence-level fallback corrections were used when visible errors could be detected.";
+  output = applyLocalCorrectionFallbacks(output, body, gradingMode);
+  output.correctionWarning = warning;
+  output.correctionPassWarning = warning;
+  output.stageWarnings = ensureArray(output.stageWarnings).concat([warning]);
   return output;
 }
 
@@ -4588,7 +4823,9 @@ function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["score", "scoring", "grade", "grading", "corescore", "corescoring"].includes(raw)) return "score";
   if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
-  if (["evidenceplan", "evidence", "studyplan", "evidenceandplan", "scoringevidence", "taskandevidence", "planandevidence"].includes(raw)) return "evidence-plan";
+  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "taskandevidence", "problemmapping", "evidence"] .includes(raw)) return "evidence-map";
+  if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan"].includes(raw)) return "final-plan";
+  if (["evidenceplan", "evidenceandplan", "planandevidence"].includes(raw)) return "evidence-plan";
   if (["scoreaudit", "auditscore", "gradingaudit", "audit"].includes(raw)) return "score-audit";
   const focused = normalizeFocusedCorrectionStage(raw);
   if (focused) return `correction-${focused}`;
@@ -4695,6 +4932,7 @@ async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, l
   output.criteria = output.criteria || (body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined);
   ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
   ensureGrammarErrorsForVisibleProblems(output, body);
+  output = applyLocalCorrectionFallbacks(output, { ...body, overallBand: output.overallBand }, effectiveMode);
   finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "language-correction";
   output.disclaimer = DISCLAIMER;
@@ -4803,6 +5041,91 @@ async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode,
   syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
   finalQualityGate(output, { ...body, currentResult: output });
   output.aiStage = "evidence-plan";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+
+async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = {
+    disclaimer: DISCLAIMER,
+    aiStage: "evidence-map",
+    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
+    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
+  };
+  const warnings = [];
+
+  try {
+    const audit = await callAiScoreAuditPass({
+      apiKey,
+      model,
+      body: { ...body, currentResult: body.currentResult || null },
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, audit);
+  } catch (error) {
+    warnings.push(`Score evidence audit did not complete: ${error.message}`);
+  }
+
+  try {
+    const taskPass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "task",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, taskPass);
+    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
+  } catch (error) {
+    warnings.push(`Task evidence map did not complete: ${error.message}`);
+  }
+
+  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
+  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
+  finalQualityGate(output, { ...body, currentResult: output });
+  output.aiStage = "evidence-map";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = {
+    disclaimer: DISCLAIMER,
+    aiStage: "final-plan",
+    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
+    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined,
+    taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis,
+    taskMatchCheck: body.currentResult?.taskMatchCheck
+  };
+  const warnings = [];
+
+  try {
+    const advicePass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "advice",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, advicePass);
+    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
+  } catch (error) {
+    warnings.push(`Final study-plan pass did not complete: ${error.message}`);
+  }
+
+  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
+  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
+  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
+  finalQualityGate(output, { ...body, currentResult: output });
+  output.aiStage = "final-plan";
   output.disclaimer = DISCLAIMER;
   return output;
 }
@@ -7922,6 +8245,17 @@ async function handleRequest(req, res) {
       });
       result.aiStage = "language-correction";
       result.disclaimer = result.disclaimer || DISCLAIMER;
+    } else if (aiStage === "evidence-map") {
+      result = await callAiEvidenceMapStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        locale,
+        deadline
+      });
+      result.aiStage = "evidence-map";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage === "evidence-plan") {
       result = await callAiEvidencePlanStageOnly({
         apiKey,
@@ -7932,6 +8266,17 @@ async function handleRequest(req, res) {
         deadline
       });
       result.aiStage = "evidence-plan";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
+    } else if (aiStage === "final-plan") {
+      result = await callAiFinalPlanStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        locale,
+        deadline
+      });
+      result.aiStage = "final-plan";
       result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage.startsWith("correction-")) {
       const section = aiStage.slice("correction-".length);

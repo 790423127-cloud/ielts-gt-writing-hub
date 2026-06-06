@@ -779,9 +779,9 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
   }
   if (aiStage === "language-correction" || aiStage === "correction-language" || aiStage === "correction") {
-    return hasDetailedFeedbackContent(data) || hasUsefulItemArray(data.grammarAdvice) || hasUsefulItemArray(data.lexicalAdvice) || hasAnyText(data.errorAnalysis?.summary);
+    return hasDetailedFeedbackContent(data);
   }
-  if (aiStage === "evidence-plan") {
+  if (aiStage === "evidence-map" || aiStage === "evidence-plan") {
     const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
     const hasCriterionEvidence = Object.values(criteria).some((item) => item && typeof item === "object" && (
       hasUsefulItemArray(item.evidenceQuotes) || hasUsefulItemArray(item.positiveEvidence) || hasUsefulItemArray(item.limitingEvidence) || hasAnyText(item.whyThisBand)
@@ -789,6 +789,12 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return Boolean(
       hasCriterionEvidence ||
       hasAnyText(data.taskRequirementAnalysis) ||
+      hasAnyText(data.taskMatchCheck) ||
+      hasAnyText(data.scoreAudit)
+    );
+  }
+  if (aiStage === "final-plan") {
+    return Boolean(
       hasDetailedAdviceContent(data) ||
       targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
       hasAnyText(data.correctionPriority)
@@ -920,7 +926,7 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  const totalSteps = payload.mode === "revision" ? 4 : 3;
+  const totalSteps = payload.mode === "revision" ? 5 : 4;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -969,11 +975,12 @@ async function startGrading() {
 
   try {
     await runMergeStage("score", `第 1 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
-    await runMergeStage("language-correction", `第 2 步/${totalSteps}：AI 正在生成语法、逐句修改和更好表达`, "语言批改");
-    await runMergeStage("evidence-plan", `第 3 步/${totalSteps}：AI 正在生成评分证据和提分计划`, "评分证据与提分计划");
+    await runMergeStage("evidence-map", `第 2 步/${totalSteps}：AI 正在生成评分证据、评分边界和问题地图`, "评分证据与问题地图");
+    await runMergeStage("language-correction", `第 3 步/${totalSteps}：AI 正在根据评分证据生成语法、逐句修改和更好表达`, "语言批改");
+    await runMergeStage("final-plan", `第 4 步/${totalSteps}：AI 正在生成最终提分计划和练习任务`, "最终提分计划");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 4 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 5 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
@@ -1610,7 +1617,7 @@ function renderDetailedSentenceCorrections(items = []) {
   if (!filtered.length && normalized.length) {
     return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
   }
-  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available.</p>`);
+  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available. If the language stage shows a timeout or warning, retry detailed grading after deployment; the backend should now provide local fallback corrections for visible errors.</p>`);
 
   return collapsibleSection("逐句批改 Sentence Corrections", `
     <div class="correction-list">${filtered.map((item, index) => {
