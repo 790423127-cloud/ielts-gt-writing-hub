@@ -20,6 +20,11 @@ const els = {
 };
 
 function unique(items) { return [...new Set(items)]; }
+function ensureArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === "") return [];
+  return [value];
+}
 function storageKey(id, part) { return `ielts-gt-writing-hub:${id}:${part}`; }
 function save(id, part, value) { localStorage.setItem(storageKey(id, part), value); }
 function load(id, part) { return localStorage.getItem(storageKey(id, part)) || ""; }
@@ -629,11 +634,15 @@ function preferRicherText(existing, incoming) {
 }
 
 function mergeUniqueArray(existing, incoming, limit = 12) {
+  const toList = (value) => Array.isArray(value) ? value : (value === null || value === undefined || value === "" ? [] : [value]);
   const out = [];
-  [...ensureArray(existing), ...ensureArray(incoming)].forEach((item) => {
+  const seen = new Set();
+  [...toList(existing), ...toList(incoming)].forEach((item) => {
     if (!hasAnyText(item)) return;
-    const key = typeof item === "object" ? JSON.stringify(item) : String(item);
-    if (!out.some((old) => (typeof old === "object" ? JSON.stringify(old) : String(old)) === key)) out.push(item);
+    const key = typeof item === "object" ? JSON.stringify(item) : String(item).trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
   });
   return out.slice(0, limit);
 }
@@ -825,7 +834,11 @@ function hasDetailedFeedbackContent(result = {}) {
     hasUsefulItemArray(result.spellingCorrections) ||
     hasUsefulItemArray(result.grammarErrors) ||
     hasUsefulItemArray(result.sentenceCorrections) ||
-    hasUsefulItemArray(result.detailedSentenceCorrections)
+    hasUsefulItemArray(result.detailedSentenceCorrections) ||
+    hasUsefulItemArray(result.corrections) ||
+    hasUsefulItemArray(result.languageCorrections) ||
+    hasUsefulItemArray(result.sentenceLevelCorrections) ||
+    hasUsefulItemArray(result.sentenceFeedback)
   );
 }
 
@@ -1516,34 +1529,104 @@ function resolveBetterExpressionForDisplay(item = {}, corrected, original) {
   return fallback || rawBetter || "";
 }
 
+function normalizeSentenceCorrectionItem(item, index = 0) {
+  if (typeof item === "string") {
+    const text = item.trim();
+    return text ? {
+      sentenceNumber: index + 1,
+      originalSentence: text,
+      correctedSentence: text,
+      problem: text,
+      errorType: "Sentence-level issue"
+    } : null;
+  }
+  if (!item || typeof item !== "object") return null;
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
+  const problem = firstNonEmpty(item.problem, item.issue, item.reason, item.explanation, item.comment);
+  const rule = firstNonEmpty(item.rule, item.grammarRule, item.suggestionRule);
+  const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
+  const bandImpact = firstNonEmpty(item.bandImpact, item.impact, item.scoreImpact, item.impactOnBand);
+
+  const normalized = {
+    ...item,
+    sentenceNumber: item.sentenceNumber || index + 1,
+    originalSentence: original,
+    correctedSentence: corrected,
+    problem,
+    rule,
+    errorType,
+    bandImpact
+  };
+  const better = resolveBetterExpressionForDisplay(normalized, corrected, original);
+  if (better) normalized.betterExpression = better;
+  if (!hasAnyText(normalized.originalSentence) && !hasAnyText(normalized.correctedSentence) && !hasAnyText(normalized.problem) && !hasAnyText(normalized.rule) && !hasAnyText(normalized.betterExpression)) return null;
+  return normalized;
+}
+
+function getSentenceCorrectionItems(result = {}) {
+  const rawItems = [
+    ...ensureArray(result.detailedSentenceCorrections),
+    ...ensureArray(result.sentenceCorrections),
+    ...ensureArray(result.corrections),
+    ...ensureArray(result.languageCorrections),
+    ...ensureArray(result.sentenceLevelCorrections),
+    ...ensureArray(result.sentenceFeedback)
+  ];
+  const seen = new Set();
+  return rawItems
+    .map((item, index) => normalizeSentenceCorrectionItem(item, index))
+    .filter((item) => {
+      if (!item) return false;
+      const key = [
+        item.originalSentence || "",
+        item.correctedSentence || "",
+        item.problem || "",
+        item.rule || ""
+      ].join("||").toLowerCase().replace(/\s+/g, " ").trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 function renderDetailedSentenceCorrections(items = []) {
-  const filtered = Array.isArray(items) ? items.filter(isScoreImpactingDetailedCorrection) : [];
-  if (!filtered.length && Array.isArray(items) && items.length) {
-    return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No score-affecting sentence-level errors were found.</p>`);
+  const normalized = ensureArray(items)
+    .map((item, index) => normalizeSentenceCorrectionItem(item, index))
+    .filter(Boolean);
+  const filtered = normalized.filter(isScoreImpactingDetailedCorrection);
+
+  if (!filtered.length && normalized.length) {
+    return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
   }
   if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available.</p>`);
+
   return collapsibleSection("逐句批改 Sentence Corrections", `
     <div class="correction-list">${filtered.map((item, index) => {
-      const original = item.originalSentence || item.original || "";
-      const corrected = item.correctedSentence || item.corrected || "";
+      const original = firstNonEmpty(item.originalSentence, item.original);
+      const corrected = firstNonEmpty(item.correctedSentence, item.corrected, original);
       const better = resolveBetterExpressionForDisplay(item, corrected, original);
       const betterTarget = firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
       const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
+      const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
+      const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
+      const problem = firstNonEmpty(item.problem, item.issue, item.reason, item.explanation, item.comment);
+      const rule = firstNonEmpty(item.rule, item.grammarRule, item.suggestionRule);
+      const bandImpact = firstNonEmpty(item.bandImpact, item.impact, item.scoreImpact, item.impactOnBand);
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
-        <p><strong>原句：</strong>${escapeHtml(original)}</p>
-        <p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>
-        <p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>
-        <p><strong>错误类型：</strong>${escapeHtml(item.errorType || "")}${item.errorTypeZh ? ` / ${escapeHtml(item.errorTypeZh)}` : ""}</p>
-        ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
-        ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
-        ${item.bandImpact ? `<p><strong>对分数影响：</strong>${escapeHtml(item.bandImpact)}</p>` : ""}
+        ${original ? `<p><strong>原句：</strong>${escapeHtml(original)}</p>` : ""}
+        ${corrected ? `<p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>` : ""}
+        ${better ? `<p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        ${errorType || errorTypeZh ? `<p><strong>错误类型：</strong>${escapeHtml(errorType)}${errorTypeZh ? ` / ${escapeHtml(errorTypeZh)}` : ""}</p>` : ""}
+        ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
+        ${rule ? `<p><strong>规则：</strong>${escapeHtml(rule)}</p>` : ""}
+        ${bandImpact ? `<p><strong>对分数影响：</strong>${escapeHtml(bandImpact)}</p>` : ""}
         ${renderZhToggle([item.problemZh, item.ruleZh, betterZh, item.bandImpactZh].filter(Boolean).join("\n"))}
       </div>`;
     }).join("")}</div>
   `);
 }
-
 function renderCorrectionPriority(priority) {
   if (!priority || typeof priority !== "object" || !hasAnyText(priority)) {
     return collapsibleSection("错误优先级", `<p class="muted">No correction priority was returned by AI.</p>`);
@@ -1881,7 +1964,8 @@ function renderGradingResult(result = {}) {
   els.gradingResults.dataset.band7 = band7;
   const taskAdviceTitle = selected?.task === "Task 1" ? "Task Achievement Advice" : "Task Response Advice";
   const mainProblems = filteredMainProblems(result.mainProblems, result.mainProblemsZh);
-  const hasDetailedSentenceCorrections = hasUsefulItemArray(result.detailedSentenceCorrections);
+  const sentenceCorrectionItems = getSentenceCorrectionItems(result);
+  const hasDetailedSentenceCorrections = hasUsefulItemArray(sentenceCorrectionItems);
   const feedbackContentHtml = `
     ${result.fallback ? `<p class="ai-warning">AI 返回内容不完整，系统已提供基础诊断。请稍后可再次点击批改获取完整反馈。</p>` : ""}
     <p class="ai-disclaimer">${escapeHtml(result.disclaimer || "This is an AI-generated estimated score and revision, not an official IELTS score.")}</p>
@@ -1904,13 +1988,13 @@ function renderGradingResult(result = {}) {
     ${collapsibleSection("Strengths", renderListWithTranslations(result.strengths, result.strengthsZh, "No strengths were returned for this response."))}
     ${collapsibleSection("Main Problems", renderListWithTranslations(mainProblems.items, mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
-    ${renderDetailedSentenceCorrections(result.detailedSentenceCorrections)}
+    ${renderDetailedSentenceCorrections(sentenceCorrectionItems)}
     ${renderCorrectionPriority(result.correctionPriority)}
     ${renderTargetImprovementPlan(result.targetImprovementPlan, result)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     ${collapsibleSection("拼写错误 Spelling Corrections", renderSpellingCorrections(result.spellingCorrections))}
     ${collapsibleSection("语法错误 Grammar Errors", renderGrammarErrors(result.grammarErrors))}
-    ${hasDetailedSentenceCorrections ? "" : collapsibleSection("Sentence Corrections", renderSentenceCorrections(result.sentenceCorrections))}
+    
     ${collapsibleSection("四项专项建议", `<div class="advice-grid">
       <div><h4>${taskAdviceTitle}</h4>${renderListWithTranslations(result.taskAchievementAdvice, result.taskAchievementAdviceZh, "No task advice is available.")}</div>
       <div><h4>Coherence Advice</h4>${renderListWithTranslations(result.coherenceAdvice, result.coherenceAdviceZh, "No coherence advice is available.")}</div>
