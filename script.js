@@ -1901,7 +1901,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         ${original ? `<p><strong>原句：</strong>${escapeHtml(original)}</p>` : ""}
         ${corrected ? `<p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>` : ""}
-        ${better ? `<p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        ${better ? `<p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : (polishItem ? "" : `<p class="muted better-expression-missing">${escapeHtml(missingBetterExpressionNotice(feedbackTrackFromResult(result, result.targetImprovementPlan || {})))}</p>`)}
         ${errorType || errorTypeZh ? `<p><strong>错误类型：</strong>${escapeHtml(errorType)}${errorTypeZh ? ` / ${escapeHtml(errorTypeZh)}` : ""}</p>` : ""}
         ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
         ${rule ? `<p><strong>规则：</strong>${escapeHtml(rule)}</p>` : ""}
@@ -1911,15 +1911,25 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
     }).join("")}</div>
   `);
 }
-function renderCorrectionPriority(priority) {
+function renderCorrectionPriority(priority, result = {}) {
+  const track = feedbackTrackFromResult(result, result.targetImprovementPlan || {});
+  const labels = priorityLabelsForTrack(track);
   if (!priority || typeof priority !== "object" || !hasAnyText(priority)) {
-    return collapsibleSection("错误优先级", `<p class="muted">No correction priority was returned by AI.</p>`);
+    return collapsibleSection(labels.title, `<p class="muted">No correction priority was returned by AI.</p>`);
   }
-  return collapsibleSection("错误优先级", `
+  const trackNote = track === "mid_band_improvement"
+    ? `<p class="muted">Band 5.5–7.0 建议顺序：先补任务回应/展开，再稳定语法和搭配，最后再润色句式和表达。</p>`
+    : track === "low_band_correction"
+      ? `<p class="muted">Band 4–5.5 建议顺序：先修句子准确、拼写词形和基础语法，再处理段落、例子和自然表达。</p>`
+      : track === "high_band_polish"
+        ? `<p class="muted">Band 7.5+ 建议顺序：重点优化自然度、精准度、论证/书信细节和衔接，不鼓励堆高级词或硬用复杂句。</p>`
+        : "";
+  return collapsibleSection(labels.title, `
+    ${trackNote}
     <div class="advice-grid">
-      <div><h4>先改 Fix First</h4>${listHtml(priority.fixFirst)}${priority.fixFirstZh?.length ? renderZhToggle(priority.fixFirstZh.join("\n")) : ""}</div>
-      <div><h4>再改 Fix Next</h4>${listHtml(priority.fixNext)}${priority.fixNextZh?.length ? renderZhToggle(priority.fixNextZh.join("\n")) : ""}</div>
-      <div><h4>最后优化 Polish Later</h4>${listHtml(priority.polishLater)}${priority.polishLaterZh?.length ? renderZhToggle(priority.polishLaterZh.join("\n")) : ""}</div>
+      <div><h4>${escapeHtml(labels.first)}</h4>${listHtml(priority.fixFirst)}${priority.fixFirstZh?.length ? renderZhToggle(priority.fixFirstZh.join("\n")) : ""}</div>
+      <div><h4>${escapeHtml(labels.next)}</h4>${listHtml(priority.fixNext)}${priority.fixNextZh?.length ? renderZhToggle(priority.fixNextZh.join("\n")) : ""}</div>
+      <div><h4>${escapeHtml(labels.polish)}</h4>${listHtml(priority.polishLater)}${priority.polishLaterZh?.length ? renderZhToggle(priority.polishLaterZh.join("\n")) : ""}</div>
     </div>
   `);
 }
@@ -2061,6 +2071,47 @@ function formatBandNumber(value) {
   return Number.isInteger(numeric) ? `${numeric}.0` : String(numeric);
 }
 
+
+function feedbackTrackFromResult(result = {}, plan = {}) {
+  const explicit = String(result.feedbackTrack || plan.feedbackTrack || "").trim();
+  if (explicit) return explicit;
+  const current = parseBandNumber(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand || result.estimatedLevel || plan.currentBand);
+  if (!current) return "unknown";
+  if (current <= 5.5) return "low_band_correction";
+  if (current <= 7.0) return "mid_band_improvement";
+  return "high_band_polish";
+}
+
+function priorityLabelsForTrack(track) {
+  if (track === "mid_band_improvement") {
+    return {
+      title: "中分提分优先级 Mid-band Improvement Priority",
+      first: "先提分 Improve First",
+      next: "再稳定 Stabilise Next",
+      polish: "最后润色 Polish Later"
+    };
+  }
+  if (track === "high_band_polish") {
+    return {
+      title: "高分润色优先级 High-band Polish Priority",
+      first: "先精修 Refine First",
+      next: "再提升 Deepen Next",
+      polish: "最后润色 Polish Later"
+    };
+  }
+  return {
+    title: "错误优先级 Correction Priority",
+    first: "先改 Fix First",
+    next: "再改 Fix Next",
+    polish: "最后优化 Polish Later"
+  };
+}
+
+function missingBetterExpressionNotice(track) {
+  if (track === "high_band_polish") return "";
+  return "AI 未返回该句的更好表达；请重试第 8 步，或检查后端是否要求每个分数相关句子返回 betterExpression。";
+}
+
 function nextBandTargetRangeForDisplay(plan = {}, result = {}) {
   const current = parseBandNumber(plan.currentBand || result.overallBand || result.scoreCalculation?.finalBand || result.estimatedLevel);
   if (!current) return "";
@@ -2079,7 +2130,17 @@ function renderTargetImprovementPlan(plan, result = {}) {
   const targetRangeText = calibratedTargetRange || plan.targetBandRange || plan.targetRange || plan.target || "";
   const targetRangeZh = plan.targetBandRangeZh || (targetRangeText ? "目标范围按当前分数上调0.5到1.0分设置，属于下一阶段可实现目标，不是长期最终目标。" : "");
   const targetReasonZh = plan.targetReasonZh || (plan.targetReason ? "这个目标按当前分数上调约0.5到1分，优先解决最影响分数的任务回应、结构、词汇或语法问题。" : "");
+  const track = feedbackTrackFromResult(result, plan);
+  const labels = priorityLabelsForTrack(track);
+  const trackNote = track === "mid_band_improvement"
+    ? `<p class="muted">当前属于中分提升逻辑：优先提升任务回应/细节展开和段落稳定性，再做词汇、衔接和句式润色。</p>`
+    : track === "low_band_correction"
+      ? `<p class="muted">当前属于基础修复逻辑：优先保证句子准确、拼写词形和基础语法，再逐步展开内容。</p>`
+      : track === "high_band_polish"
+        ? `<p class="muted">当前属于高分润色逻辑：优先优化精准度、自然度、细节质量和衔接成熟度。</p>`
+        : "";
   return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
+    ${trackNote}
     <div class="compact-facts">
       <p><strong>当前分数：</strong>${escapeHtml(formatBandNumber(parseBandNumber(plan.currentBand || result.overallBand || result.estimatedLevel)) || plan.currentBand || result.overallBand || "")}</p>
       <div><strong>目标范围：</strong>${renderTextWithTranslation(targetRangeText, targetRangeZh, { tag: "span" })}</div>
@@ -2332,7 +2393,7 @@ function renderGradingResult(result = {}) {
     ${collapsibleSection("Main Problems", renderListWithTranslations(result.mainProblemItems && result.mainProblemItems.length ? result.mainProblemItems : mainProblems.items, result.mainProblemItems && result.mainProblemItems.length ? [] : mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
     ${renderDetailedSentenceCorrections(sentenceCorrectionItems, result)}
-    ${renderCorrectionPriority(result.correctionPriority)}
+    ${renderCorrectionPriority(result.correctionPriority, result)}
     ${renderTargetImprovementPlan(result.targetImprovementPlan, result)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
     ${renderSpellingWordformSection(result)}
@@ -2489,7 +2550,7 @@ function mockPayloadForPrompt(prompt, essay) {
 const MOCK_FINAL_SCORING_STAGES = [
   ["prompt-analysis", "题目要求分析"],
   ["text-stats-completion", "文本统计与完成度检查"],
-  ["score", "内部评分信号初筛"],
+  ["score", "内部评分信号初筛/反馈分轨"],
   ["spelling-wordform", "拼写和词形诊断"],
   ["lexical-choice-collocation", "用词搭配诊断"],
   ["grammar-diagnosis", "语法诊断"],
