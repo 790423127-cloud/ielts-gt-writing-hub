@@ -1508,6 +1508,145 @@ function pickFirstUsefulValue(item, fields) {
   return "";
 }
 
+
+// Source-lock validation for sentence-level feedback.
+// This does not grade, score, or invent corrections. It only removes AI explanation fragments
+// that cite words/phrases not present in the current original/corrected sentence, preventing
+// batch cross-contamination such as mentioning "shop", "office", or "custmers" under a different sentence.
+function normalizeSourceLockText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/[-–—_/]+/g, " ")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceLockTokenSet(texts = []) {
+  const tokens = new Set();
+  texts.forEach((text) => {
+    normalizeSourceLockText(text).split(" ").filter(Boolean).forEach((token) => {
+      tokens.add(token);
+      if (token.length > 3 && token.endsWith("ies")) tokens.add(`${token.slice(0, -3)}y`);
+      if (token.length > 3 && token.endsWith("es")) tokens.add(token.slice(0, -2));
+      if (token.length > 2 && token.endsWith("s")) tokens.add(token.slice(0, -1));
+    });
+  });
+  return tokens;
+}
+
+function sourceLockTermVariants(term) {
+  const raw = normalizeSourceLockText(term);
+  if (!raw) return [];
+  const variants = new Set([raw]);
+  raw.split(" ").filter(Boolean).forEach((token) => {
+    variants.add(token);
+    if (token.length > 3 && token.endsWith("ies")) variants.add(`${token.slice(0, -3)}y`);
+    if (token.length > 3 && token.endsWith("es")) variants.add(token.slice(0, -2));
+    if (token.length > 2 && token.endsWith("s")) variants.add(token.slice(0, -1));
+  });
+  return [...variants].filter(Boolean);
+}
+
+const SOURCE_LOCK_IGNORED_QUOTES = new Set([
+  "s", "to", "a", "an", "the", "and", "or", "but", "has", "have", "is", "are", "was", "were",
+  "band", "task", "grammar", "lexical", "coherence", "cohesion", "word", "sentence", "phrase"
+]);
+
+function extractSourceLockQuotedTerms(text) {
+  const terms = [];
+  const source = String(text || "");
+  const pattern = /['"“”‘’]([^'"“”‘’]{1,90})['"“”‘’]/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    const term = String(match[1] || "").trim();
+    const norm = normalizeSourceLockText(term);
+    if (!norm || SOURCE_LOCK_IGNORED_QUOTES.has(norm)) continue;
+    // Ignore very long sentence-like quotations; the lock is for local error terms/phrases.
+    if (norm.split(" ").length > 8) continue;
+    terms.push(term);
+  }
+  return terms;
+}
+
+function sourceLockTermAppears(term, sourceTexts = []) {
+  const normTerm = normalizeSourceLockText(term);
+  if (!normTerm) return true;
+  const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
+  if (normSources.some((source) => source.includes(normTerm))) return true;
+  const tokenSet = sourceLockTokenSet(sourceTexts);
+  const variants = sourceLockTermVariants(term);
+  if (normTerm.includes(" ")) {
+    return variants.some((variant) => normSources.some((source) => source.includes(variant)));
+  }
+  return variants.some((variant) => tokenSet.has(variant));
+}
+
+function isBetterExpressionMetaClause(clause) {
+  return /^(replaces?|replaced|the upgrade|this upgrade|the rewrite|this rewrite|changed|changes|changing|uses? more formal|use more formal|more formal and precise)\b/i.test(String(clause || "").trim());
+}
+
+function splitSourceLockClauses(text) {
+  return String(text || "")
+    .replace(/\b(Also|In addition|Moreover|Furthermore)\b/g, "; $1")
+    .replace(/(另外|此外|同时|并且|而且)/g, "；$1")
+    .split(/\s*[;；]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence, options = {}) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const sourceTexts = [originalSentence, correctedSentence].filter(Boolean);
+  const kept = splitSourceLockClauses(raw).filter((clause) => {
+    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return false;
+    const quotedTerms = extractSourceLockQuotedTerms(clause);
+    if (!quotedTerms.length) return true;
+    return quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts));
+  });
+  return kept.join("; ").replace(/\s+/g, " ").trim();
+}
+
+function sourceLockDetailedCorrectionItem(item) {
+  if (!item || typeof item !== "object") return item;
+  const original = item.originalSentence || item.original || item.sourceSentence || item.sentence || item.inputSentence || item.before || "";
+  const corrected = item.correctedSentence || item.corrected || item.correction || item.fixed || item.fixedSentence || item.after || "";
+  const better = item.betterExpression || item.targetBandExpression || item.upgradedExpression || item.highBandExpression || item.polishedSentence || item.modelExpression || item.betterSentence || item.exampleUpgrade || "";
+  const locked = { ...item };
+  [
+    "problem", "issue", "reason", "explanation", "comment",
+    "rule", "grammarRule", "suggestionRule", "howToFix",
+    "bandImpact", "impact", "scoreImpact", "impactOnBand", "whyThisAffectsBand", "whyAffectsBand", "scoreReason"
+  ].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetter) {
+    locked.whyBetter = cleanIssueTextAgainstSentence(locked.whyBetter, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  ["problemZh", "issueZh", "reasonZh", "explanationZh", "commentZh", "ruleZh", "bandImpactZh", "impactZh", "scoreImpactZh", "whyThisAffectsBandZh"].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetterZh) {
+    locked.whyBetterZh = cleanIssueTextAgainstSentence(locked.whyBetterZh, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  locked.sourceLockApplied = true;
+  return locked;
+}
+
+function sourceLockSimpleSentenceCorrectionItem(item) {
+  if (!item || typeof item !== "object") return item;
+  const original = item.original || item.originalSentence || item.sentence || item.sourceSentence || "";
+  const corrected = item.corrected || item.correctedSentence || item.correction || item.fixed || "";
+  const locked = { ...item };
+  ["reason", "explanation", "problem", "rule", "comment", "reasonZh", "explanationZh", "problemZh", "ruleZh", "commentZh"].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  locked.sourceLockApplied = true;
+  return locked;
+}
+
 function normalizeSpellingCorrectionItem(item) {
   if (!item || typeof item !== "object") return null;
   return {
@@ -1756,11 +1895,13 @@ function sanitizeAiCorrectionPayload(correction) {
 
   cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
     .map((item) => normalizeSentenceCorrectionItem(item))
+    .map((item) => sourceLockSimpleSentenceCorrectionItem(item))
     .filter((item) => correctionObjectHasText(item, ["original", "corrected", "reason"]))
     .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["reason"]));
 
   cleaned.detailedSentenceCorrections = ensureArray(cleaned.detailedSentenceCorrections)
     .map((item, index) => normalizeDetailedSentenceCorrectionItem(item, index))
+    .map((item) => sourceLockDetailedCorrectionItem(item))
     .filter((item) => isScoreImpactingDetailedCorrection(item));
 
   return cleaned;
@@ -3956,8 +4097,9 @@ function normalizeDetailedSentenceCorrectionItem(item, index = 0) {
     whyThisAffectsBand: pickFirstUsefulValue(item, ["whyThisAffectsBand", "whyAffectsBand", "scoreReason"]) || "",
     betterExpressionTargetBand: pickFirstUsefulValue(item, ["betterExpressionTargetBand", "targetBandRange", "targetRange", "targetBand"]) || ""
   };
-  if (!hasUsefulText(out.originalSentence) && !hasUsefulText(out.correctedSentence) && !hasUsefulText(out.problem) && !hasUsefulText(out.rule) && !hasUsefulText(out.betterExpression)) return null;
-  return out;
+  const lockedOut = sourceLockDetailedCorrectionItem(out);
+  if (!hasUsefulText(lockedOut.originalSentence) && !hasUsefulText(lockedOut.correctedSentence) && !hasUsefulText(lockedOut.problem) && !hasUsefulText(lockedOut.rule) && !hasUsefulText(lockedOut.betterExpression)) return null;
+  return lockedOut;
 }
 
 async function ensureAiCorrectionDetails({ result, apiKey, model, body, gradingMode, locale, deadline }) {
@@ -4463,6 +4605,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }]
       }),
       "Return every score-impacting sentence-level issue in the supplied text. Do not stop at 8-15 items if more clear issues exist. correctedSentence is the direct error fix. Do not return betterExpression here; Stage 12 handles upgraded expressions separately. Do not return paragraphs. Every item with an English explanation must include the matching Chinese fields.",
+      "SOURCE LOCK: each item must discuss only the exact originalSentence in that item. Do not mention any word, phrase, spelling error, noun, or grammar issue unless it appears in that originalSentence or its correctedSentence. Do not copy notes from another sentence. Keep better-expression explanations out of problem/rule fields.",
       ...common
     ].join("\n");
   }
@@ -4475,6 +4618,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
       }),
       "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. It must be ONE usable IELTS sentence only, based on the corrected sentence, not a paragraph or explanation. Do not include meta-commentary such as 'which makes the idea clearer' or keep errors such as 'discuss about'. Every English explanation must have the matching Chinese field.",
+      "SOURCE LOCK: every betterExpression item must attach to the exact originalSentence/correctedSentence. whyBetter may explain the upgrade, but problem/rule fields in detailed corrections must not contain notes from other sentences.",
       ...common
     ].join("\n");
   }

@@ -1638,6 +1638,125 @@ function genericDisplayBetterExpression() {
   return "";
 }
 
+
+// UI-side source lock: protects the display from AI batch cross-contamination.
+// It only hides invalid explanation fragments; it does not create scoring or corrections.
+function normalizeSourceLockText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/[-–—_/]+/g, " ")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceLockTokenSet(texts = []) {
+  const tokens = new Set();
+  texts.forEach((text) => {
+    normalizeSourceLockText(text).split(" ").filter(Boolean).forEach((token) => {
+      tokens.add(token);
+      if (token.length > 3 && token.endsWith("ies")) tokens.add(`${token.slice(0, -3)}y`);
+      if (token.length > 3 && token.endsWith("es")) tokens.add(token.slice(0, -2));
+      if (token.length > 2 && token.endsWith("s")) tokens.add(token.slice(0, -1));
+    });
+  });
+  return tokens;
+}
+
+function sourceLockTermVariants(term) {
+  const raw = normalizeSourceLockText(term);
+  if (!raw) return [];
+  const variants = new Set([raw]);
+  raw.split(" ").filter(Boolean).forEach((token) => {
+    variants.add(token);
+    if (token.length > 3 && token.endsWith("ies")) variants.add(`${token.slice(0, -3)}y`);
+    if (token.length > 3 && token.endsWith("es")) variants.add(token.slice(0, -2));
+    if (token.length > 2 && token.endsWith("s")) variants.add(token.slice(0, -1));
+  });
+  return [...variants].filter(Boolean);
+}
+
+const SOURCE_LOCK_IGNORED_QUOTES = new Set([
+  "s", "to", "a", "an", "the", "and", "or", "but", "has", "have", "is", "are", "was", "were",
+  "band", "task", "grammar", "lexical", "coherence", "cohesion", "word", "sentence", "phrase"
+]);
+
+function extractSourceLockQuotedTerms(text) {
+  const terms = [];
+  const pattern = /['"“”‘’]([^'"“”‘’]{1,90})['"“”‘’]/g;
+  let match;
+  while ((match = pattern.exec(String(text || ""))) !== null) {
+    const term = String(match[1] || "").trim();
+    const norm = normalizeSourceLockText(term);
+    if (!norm || SOURCE_LOCK_IGNORED_QUOTES.has(norm)) continue;
+    if (norm.split(" ").length > 8) continue;
+    terms.push(term);
+  }
+  return terms;
+}
+
+function sourceLockTermAppears(term, sourceTexts = []) {
+  const normTerm = normalizeSourceLockText(term);
+  if (!normTerm) return true;
+  const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
+  if (normSources.some((source) => source.includes(normTerm))) return true;
+  const tokenSet = sourceLockTokenSet(sourceTexts);
+  const variants = sourceLockTermVariants(term);
+  if (normTerm.includes(" ")) return variants.some((variant) => normSources.some((source) => source.includes(variant)));
+  return variants.some((variant) => tokenSet.has(variant));
+}
+
+function isBetterExpressionMetaClause(clause) {
+  return /^(replaces?|replaced|the upgrade|this upgrade|the rewrite|this rewrite|changed|changes|changing|uses? more formal|use more formal|more formal and precise)\b/i.test(String(clause || "").trim());
+}
+
+function splitSourceLockClauses(text) {
+  return String(text || "")
+    .replace(/\b(Also|In addition|Moreover|Furthermore)\b/g, "; $1")
+    .replace(/(另外|此外|同时|并且|而且)/g, "；$1")
+    .split(/\s*[;；]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence, options = {}) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const sourceTexts = [originalSentence, correctedSentence].filter(Boolean);
+  return splitSourceLockClauses(raw).filter((clause) => {
+    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return false;
+    const quotedTerms = extractSourceLockQuotedTerms(clause);
+    if (!quotedTerms.length) return true;
+    return quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts));
+  }).join("; ").replace(/\s+/g, " ").trim();
+}
+
+function sourceLockSentenceItem(item = {}) {
+  const original = item.originalSentence || item.original || item.sourceSentence || item.sentence || item.inputSentence || item.before || "";
+  const corrected = item.correctedSentence || item.corrected || item.correction || item.fixed || item.fixedSentence || item.after || "";
+  const better = item.betterExpression || item.targetBandExpression || item.upgradedExpression || item.highBandExpression || item.polishedSentence || item.modelExpression || item.betterSentence || item.exampleUpgrade || "";
+  const locked = { ...item };
+  [
+    "problem", "issue", "reason", "explanation", "comment",
+    "rule", "grammarRule", "suggestionRule",
+    "bandImpact", "impact", "scoreImpact", "impactOnBand", "whyThisAffectsBand"
+  ].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetter) {
+    locked.whyBetter = cleanIssueTextAgainstSentence(locked.whyBetter, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  ["problemZh", "issueZh", "reasonZh", "explanationZh", "commentZh", "ruleZh", "bandImpactZh", "impactZh", "scoreImpactZh", "whyThisAffectsBandZh"].forEach((field) => {
+    if (locked[field]) locked[field] = cleanIssueTextAgainstSentence(locked[field], original, corrected);
+  });
+  if (locked.whyBetterZh) {
+    locked.whyBetterZh = cleanIssueTextAgainstSentence(locked.whyBetterZh, [original, better].filter(Boolean).join(" "), [corrected, better].filter(Boolean).join(" "), { allowMetaClause: true });
+  }
+  locked.sourceLockApplied = true;
+  return locked;
+}
+
 function resolveBetterExpressionForDisplay(item = {}, corrected, original) {
   const base = corrected || original || "";
   const rawBetter = firstNonEmpty(
@@ -1673,7 +1792,7 @@ function normalizeSentenceCorrectionItem(item, index = 0) {
   const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
   const bandImpact = firstNonEmpty(item.bandImpact, item.impact, item.scoreImpact, item.impactOnBand);
 
-  const normalized = {
+  const normalized = sourceLockSentenceItem({
     ...item,
     sentenceNumber: item.sentenceNumber || index + 1,
     originalSentence: original,
@@ -1682,7 +1801,7 @@ function normalizeSentenceCorrectionItem(item, index = 0) {
     rule,
     errorType,
     bandImpact
-  };
+  });
   const better = resolveBetterExpressionForDisplay(normalized, corrected, original);
   if (better) normalized.betterExpression = better;
   else delete normalized.betterExpression;
@@ -1882,9 +2001,10 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
       const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
       const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
       const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
-      const problem = firstNonEmpty(item.problem, item.issue, item.reason, item.explanation, item.comment, item.whyBetter);
-      const rule = firstNonEmpty(item.rule, item.grammarRule, item.suggestionRule);
-      const bandImpact = firstNonEmpty(item.bandImpact, item.impact, item.scoreImpact, item.impactOnBand);
+      const lockedDisplayItem = sourceLockSentenceItem(item);
+      const problem = firstNonEmpty(lockedDisplayItem.problem, lockedDisplayItem.issue, lockedDisplayItem.reason, lockedDisplayItem.explanation, lockedDisplayItem.comment, lockedDisplayItem.whyBetter);
+      const rule = firstNonEmpty(lockedDisplayItem.rule, lockedDisplayItem.grammarRule, lockedDisplayItem.suggestionRule);
+      const bandImpact = firstNonEmpty(lockedDisplayItem.bandImpact, lockedDisplayItem.impact, lockedDisplayItem.scoreImpact, lockedDisplayItem.impactOnBand);
       const polishItem = highBandPolish || item.polishMode === "high_band_polish" || errorType === "High-band polish";
       const upgradeFocus = firstNonEmpty(item.upgradeFocus, item.focus, item.polishFocus);
       if (polishItem) {
