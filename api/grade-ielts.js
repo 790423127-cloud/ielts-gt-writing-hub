@@ -243,12 +243,19 @@ function defaultCriterionForName(name, fallbackBand = 1) {
     howToImprove: "",
     howToImproveZh: "",
     evidence: [],
+    evidenceZh: [],
     positiveEvidence: [],
+    positiveEvidenceZh: [],
     limitingEvidence: [],
+    limitingEvidenceZh: [],
     whyThisBand: "",
+    whyThisBandZh: "",
     whyNotHigher: "",
+    whyNotHigherZh: "",
     whyNotLower: "",
-    evidenceQuotes: []
+    whyNotLowerZh: "",
+    evidenceQuotes: [],
+    evidenceQuotesZh: []
   };
 }
 
@@ -268,12 +275,19 @@ function normalizeTaskSpecificCriteria(result, task) {
       ...(source && typeof source === "object" ? source : {}),
       band: normalizeCriterionBandValue(source.band, fallbackBand),
       evidence: ensureArray(source.evidence).filter(Boolean).slice(0, 6),
+      evidenceZh: ensureArray(source.evidenceZh).filter(Boolean).slice(0, 6),
       positiveEvidence: ensureArray(source.positiveEvidence).filter(Boolean).slice(0, 4),
+      positiveEvidenceZh: ensureArray(source.positiveEvidenceZh).filter(Boolean).slice(0, 4),
       limitingEvidence: ensureArray(source.limitingEvidence).filter(Boolean).slice(0, 4),
+      limitingEvidenceZh: ensureArray(source.limitingEvidenceZh).filter(Boolean).slice(0, 4),
       whyThisBand: source.whyThisBand || source.bandJustification || "",
+      whyThisBandZh: source.whyThisBandZh || source.bandJustificationZh || "",
       whyNotHigher: source.whyNotHigher || "",
+      whyNotHigherZh: source.whyNotHigherZh || "",
       whyNotLower: source.whyNotLower || "",
-      evidenceQuotes: ensureArray(source.evidenceQuotes).filter(Boolean).slice(0, 3)
+      whyNotLowerZh: source.whyNotLowerZh || "",
+      evidenceQuotes: ensureArray(source.evidenceQuotes).filter(Boolean).slice(0, 3),
+      evidenceQuotesZh: ensureArray(source.evidenceQuotesZh).filter(Boolean).slice(0, 3)
     };
   });
 
@@ -600,11 +614,17 @@ function criterionEvidenceText(criterion = {}) {
     feedback: criterion.feedback,
     howToImprove: criterion.howToImprove,
     evidence: criterion.evidence,
+    evidenceZh: criterion.evidenceZh,
     positiveEvidence: criterion.positiveEvidence,
+    positiveEvidenceZh: criterion.positiveEvidenceZh,
     limitingEvidence: criterion.limitingEvidence,
+    limitingEvidenceZh: criterion.limitingEvidenceZh,
     whyThisBand: criterion.whyThisBand,
+    whyThisBandZh: criterion.whyThisBandZh,
     whyNotHigher: criterion.whyNotHigher,
-    whyNotLower: criterion.whyNotLower
+    whyNotHigherZh: criterion.whyNotHigherZh,
+    whyNotLower: criterion.whyNotLower,
+    whyNotLowerZh: criterion.whyNotLowerZh
   }).toLowerCase();
 }
 
@@ -881,10 +901,162 @@ function ensureGrammarErrorsForVisibleProblems(result, body = {}) {
   return false;
 }
 
+function isGenericEvidenceText(value) {
+  const text = String(value || "").toLowerCase();
+  if (!text.trim()) return true;
+  return /has enough positive evidence|shows some relevant evidence|band is limited by|balance between the positive evidence|generally good overall impression|avoid a lower band|criterion is functional|evidence sits between band/i.test(text);
+}
+
+function normalizeZhArrayLength(enItems, zhItems, fallbackFactory) {
+  const en = ensureArray(enItems).filter(Boolean);
+  const zh = ensureArray(zhItems).filter(Boolean);
+  return en.map((item, index) => zh[index] || (typeof fallbackFactory === "function" ? fallbackFactory(item, index) : ""));
+}
+
+function task2QuestionTypeZh(type) {
+  return ({
+    agree_disagree: "同意/不同意题",
+    discuss_both_views: "双方观点讨论题",
+    advantages_disadvantages: "优缺点题",
+    problem_solution: "问题解决题",
+    two_part_question: "双问题题型",
+    general_opinion: "观点类题目"
+  })[type] || "Task 2 题目";
+}
+
+function makeCriterionSpecificEvidence(name, band, task, body = {}, signals = {}, quotes = []) {
+  const formattedBand = formatBand(band);
+  const quoteHint = quotes.length ? ` Example evidence: “${quotes[0]}”` : "";
+  const quoteHintZh = quotes.length ? ` 原文证据如：“${quotes[0]}”。` : "";
+  const promptBullets = task === "Task 1" ? extractPromptBulletPoints(body.questionPrompt) : [];
+  const coveredBullets = task === "Task 1" ? task1BulletCoverageFromResult(body.currentResult || {}) : { known: false };
+  const qType = task === "Task 2" ? detectTask2QuestionType(body.questionPrompt) : "";
+  const words = Number(body.wordCount) || countWordsServer(body.essay);
+
+  const data = {
+    positive: "The response contains some relevant performance for this criterion.",
+    positiveZh: "这项评分有一定正面表现。",
+    limit: "The response still has limitations that prevent a higher band.",
+    limitZh: "仍有一些限制，暂时不能进入更高分档。",
+    why: `Band ${formattedBand} is appropriate because this criterion shows both usable performance and clear limitations.`,
+    whyZh: `${formattedBand} 分合理，因为这一项既有可评分表现，也有明显限制。`,
+    higher: "A higher band needs stronger, more consistent evidence in this criterion.",
+    higherZh: "如果要更高分，需要这一项表现更稳定、更充分。",
+    lower: "It is not lower because there is enough relevant evidence to support the assigned band.",
+    lowerZh: "没有更低，是因为原文仍有足够相关表现支撑当前分数。"
+  };
+
+  if (task === "Task 1" && name === "Task Achievement") {
+    const bulletText = promptBullets.length ? `${promptBullets.length} bullet points` : "the letter requirements";
+    data.positive = band >= 6
+      ? `The letter gives a clear purpose and addresses the main ${bulletText}.${quoteHint}`
+      : `The letter attempts to answer the main ${bulletText}, but the response is still limited.${quoteHint}`;
+    data.positiveZh = band >= 6
+      ? `书信目的比较清楚，并回应了主要题目要求。${quoteHintZh}`
+      : `文章尝试回应主要题目要求，但完成度仍有限。${quoteHintZh}`;
+    data.limit = band >= 7.5
+      ? "Further improvement depends on making the details even more precise and naturally suited to the reader."
+      : "The score is limited by incomplete or underdeveloped bullet-point detail, tone control, or letter-format precision.";
+    data.limitZh = band >= 7.5
+      ? "继续提升主要在于让细节更具体，并让语气更自然地贴合收信人。"
+      : "限制分数的主要因素是要点细节不够充分、语气控制或书信格式不够精准。";
+    data.why = `Band ${formattedBand} reflects how clearly the letter purpose and bullet points are fulfilled, not grammar alone.`;
+    data.whyZh = `${formattedBand} 分主要反映写信目的和题目要点完成度，不是单纯看语法。`;
+    data.higher = "A higher Task Achievement band needs fuller coverage of every bullet point with concrete, reader-appropriate details.";
+    data.higherZh = "如果要更高分，每个题目要点都需要更充分、更具体，并符合收信人的情境。";
+    data.lower = "It is not lower because the letter still shows an attempt to respond to the task requirements.";
+    data.lowerZh = "没有更低，是因为文章仍然尝试回应了题目要求。";
+  } else if (task === "Task 2" && name === "Task Response") {
+    data.positive = band >= 6
+      ? `The essay answers the main Task 2 question type (${qType}) and presents a relevant position or response.${quoteHint}`
+      : `The essay responds to the Task 2 question, but the answer is only partly developed.${quoteHint}`;
+    data.positiveZh = band >= 6
+      ? `文章回应了 ${task2QuestionTypeZh(qType)} 的主要要求，并给出了相关立场或回答。${quoteHintZh}`
+      : `文章回应了 Task 2 题目，但观点展开仍然比较有限。${quoteHintZh}`;
+    data.limit = band >= 7.5
+      ? "To move higher, the argument needs more nuanced reasoning or more precise examples rather than more ideas."
+      : "The score is limited by general explanation, limited example development, or an opinion that is not fully justified.";
+    data.limitZh = band >= 7.5
+      ? "如果要继续提高，需要让论证更有层次，或让例子更精确，而不是单纯增加观点数量。"
+      : "限制分数的主要原因是解释较笼统、例子展开不足，或观点论证不够充分。";
+    data.why = `Band ${formattedBand} reflects the level of answer coverage, position clarity, idea development, and support.`;
+    data.whyZh = `${formattedBand} 分反映了题目回应、立场清晰度、观点展开和论据支持的综合水平。`;
+    data.higher = "A higher Task Response band needs more specific reasoning and better-developed support for the main ideas.";
+    data.higherZh = "如果要更高分，主要观点需要更具体的原因、解释和例子支撑。";
+    data.lower = "It is not lower because the essay still addresses the question and gives a relevant opinion or answer.";
+    data.lowerZh = "没有更低，是因为文章仍然回应了题目，并给出了相关观点或回答。";
+  } else if (name === "Coherence and Cohesion") {
+    data.positive = band >= 6
+      ? `The writing has a recognisable structure with paragraphs or clear stages of the response.${quoteHint}`
+      : `There is some basic organisation, but progression is not fully controlled.${quoteHint}`;
+    data.positiveZh = band >= 6
+      ? `文章有可识别的结构，能看出分段或内容推进。${quoteHintZh}`
+      : `文章有一些基本组织，但推进和衔接控制还不稳定。${quoteHintZh}`;
+    data.limit = band >= 7.5
+      ? "Further improvement is mainly about smoother paragraph flow and less mechanical linking."
+      : "The score is limited by basic linking, repetition, unclear referencing, short paragraphs, or uneven progression.";
+    data.limitZh = band >= 7.5
+      ? "继续提升主要在于段落过渡更自然，减少机械连接词。"
+      : "限制分数的主要因素是连接方式基础、重复、指代不清、段落短或推进不均衡。";
+    data.why = `Band ${formattedBand} reflects how clearly the reader can follow the organisation and progression.`;
+    data.whyZh = `${formattedBand} 分反映读者是否能顺利跟随文章结构和逻辑推进。`;
+    data.higher = "A higher Coherence and Cohesion band needs clearer paragraph function and smoother development between ideas.";
+    data.higherZh = "如果要更高分，需要段落功能更清楚，观点之间推进更自然。";
+    data.lower = "It is not lower because the response still has an identifiable overall structure.";
+    data.lowerZh = "没有更低，是因为文章仍然有基本可识别的整体结构。";
+  } else if (name === "Lexical Resource") {
+    data.positive = band >= 6
+      ? `The writing uses some relevant topic or letter-function vocabulary.${quoteHint}`
+      : `The writing includes some relevant vocabulary for the topic, although the range is limited.${quoteHint}`;
+    data.positiveZh = band >= 6
+      ? `文章使用了一些相关的题目词汇或书信功能词汇。${quoteHintZh}`
+      : `文章有一些相关词汇，但词汇范围仍然有限。${quoteHintZh}`;
+    data.limit = band >= 7.5
+      ? "Further improvement is about choosing more exact words naturally, not forcing rare vocabulary."
+      : "The score is limited by repetition, basic word choice, spelling mistakes, word-form errors, or inaccurate collocations.";
+    data.limitZh = band >= 7.5
+      ? "继续提升应侧重自然且更精确的用词，而不是强行使用生僻词。"
+      : "限制分数的主要因素是重复、用词基础、拼写错误、词形错误或搭配不准确。";
+    data.why = `Band ${formattedBand} reflects the balance between relevant vocabulary use and limits in range, precision, spelling, or collocation.`;
+    data.whyZh = `${formattedBand} 分反映了相关词汇使用与词汇范围、准确性、拼写和搭配问题之间的平衡。`;
+    data.higher = "A higher Lexical Resource band needs more precise topic wording with fewer repeated or inaccurate expressions.";
+    data.higherZh = "如果要更高分，需要更准确的题目词汇，并减少重复或不准确表达。";
+    data.lower = "It is not lower because the writing still uses enough relevant vocabulary to communicate the main message.";
+    data.lowerZh = "没有更低，是因为文章仍然使用了足够相关词汇来表达主要意思。";
+  } else if (name === "Grammatical Range and Accuracy") {
+    data.positive = band >= 6
+      ? `The writing contains some controlled simple or complex sentence forms.${quoteHint}`
+      : `The writing communicates through basic sentence patterns, but accuracy is limited.${quoteHint}`;
+    data.positiveZh = band >= 6
+      ? `文章有一些可控制的简单句或复杂句。${quoteHintZh}`
+      : `文章主要依靠基础句型表达，但准确性有限。${quoteHintZh}`;
+    data.limit = band >= 7.5
+      ? "Further improvement is mainly minor sentence rhythm, punctuation consistency, or clause control."
+      : "The score is limited by repeated errors in verb forms, articles, plurals, agreement, punctuation, or sentence boundaries.";
+    data.limitZh = band >= 7.5
+      ? "继续提升主要是微调句子节奏、标点一致性或从句控制。"
+      : "限制分数的主要因素是动词形式、冠词、复数、主谓一致、标点或句子边界方面的重复错误。";
+    data.why = `Band ${formattedBand} reflects how much grammar control supports clear communication.`;
+    data.whyZh = `${formattedBand} 分反映语法控制对清楚表达的支持程度。`;
+    data.higher = "A higher Grammar band needs more accurate sentence control with fewer repeated basic errors.";
+    data.higherZh = "如果要更高分，需要更准确的句子控制，并减少重复基础语法错误。";
+    data.lower = "It is not lower because the meaning can still generally be understood.";
+    data.lowerZh = "没有更低，是因为整体意思通常仍然可以理解。";
+  }
+
+  if (words && words < (task === "Task 1" ? 150 : 250) && (name === "Task Achievement" || name === "Task Response")) {
+    data.limit += ` The response is also under the recommended word count (${words} words).`;
+    data.limitZh += ` 同时文章字数低于建议最低字数（${words} 词）。`;
+  }
+
+  return data;
+}
+
 function populateCriterionEvidenceDetails(result, body = {}) {
   if (!result || !result.criteria) return result;
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const essay = String(body.essay || result.essay || "");
+  const signals = extractEssaySignals(body, result);
   const quotePatterns = task === "Task 1" ? {
     "Task Achievement": [/\bwriting to\b/i, /\brequest|enquire|apolog|thank|invite|transfer|because|reason\b/i],
     "Coherence and Cohesion": [/\bfirst|second|also|however|therefore|finally|during|on the contrary\b/i],
@@ -901,27 +1073,38 @@ function populateCriterionEvidenceDetails(result, body = {}) {
     const criterion = result.criteria[name];
     if (!criterion || typeof criterion !== "object") continue;
     const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    const existingQuotes = ensureArray(criterion.evidenceQuotes).filter(Boolean);
+    const quotes = existingQuotes.length ? existingQuotes.slice(0, 3) : pickEvidenceQuotes(essay, quotePatterns[name] || [], 2);
+    criterion.evidenceQuotes = quotes;
+    const fallback = makeCriterionSpecificEvidence(name, band, task, { ...body, currentResult: result }, signals, quotes);
+
     const positives = ensureArray(criterion.positiveEvidence).filter(Boolean);
     const limits = ensureArray(criterion.limitingEvidence).filter(Boolean);
-    if (!positives.length) {
-      positives.push(band >= 6
-        ? `${name} has enough positive evidence for Band ${formatBand(band)}.`
-        : `${name} shows some relevant evidence but remains limited.`);
+    const evidence = ensureArray(criterion.evidence).filter(Boolean);
+
+    if (!positives.length || positives.every(isGenericEvidenceText)) criterion.positiveEvidence = [fallback.positive];
+    else criterion.positiveEvidence = positives.slice(0, 4);
+
+    if (!limits.length || limits.every(isGenericEvidenceText)) criterion.limitingEvidence = [fallback.limit];
+    else criterion.limitingEvidence = limits.slice(0, 4);
+
+    if (!evidence.length || evidence.every(isGenericEvidenceText)) {
+      criterion.evidence = [fallback.positive, fallback.limit].filter(Boolean).slice(0, 4);
+    } else {
+      criterion.evidence = evidence.slice(0, 6);
     }
-    if (!limits.length) {
-      limits.push(band >= 7.5
-        ? "Only minor refinements are needed for greater naturalness, precision, or control."
-        : "The band is limited by development, precision, organisation, vocabulary range, or grammar control.");
-    }
-    criterion.positiveEvidence = positives.slice(0, 4);
-    criterion.limitingEvidence = limits.slice(0, 4);
-    criterion.evidenceQuotes = ensureArray(criterion.evidenceQuotes).filter(Boolean);
-    if (!criterion.evidenceQuotes.length) criterion.evidenceQuotes = pickEvidenceQuotes(essay, quotePatterns[name] || [], 2);
-    criterion.whyThisBand = criterion.whyThisBand || `Band ${formatBand(band)} reflects the balance between the positive evidence and the limits shown in this criterion.`;
-    criterion.whyNotHigher = criterion.whyNotHigher || (band >= 8.5
-      ? "A higher score would require virtually no noticeable limitations."
-      : "A higher band needs stronger evidence in this criterion, not just a generally good overall impression.");
-    criterion.whyNotLower = criterion.whyNotLower || "The response shows enough relevant performance in this criterion to avoid a lower band.";
+
+    if (!hasUsefulText(criterion.whyThisBand) || isGenericEvidenceText(criterion.whyThisBand)) criterion.whyThisBand = fallback.why;
+    if (!hasUsefulText(criterion.whyNotHigher) || isGenericEvidenceText(criterion.whyNotHigher)) criterion.whyNotHigher = fallback.higher;
+    if (!hasUsefulText(criterion.whyNotLower) || isGenericEvidenceText(criterion.whyNotLower)) criterion.whyNotLower = fallback.lower;
+
+    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => `原文证据：${quote}`);
+    criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
+    criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
+    criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
+    if (!hasUsefulText(criterion.whyThisBandZh) || isGenericEvidenceText(criterion.whyThisBandZh)) criterion.whyThisBandZh = fallback.whyZh;
+    if (!hasUsefulText(criterion.whyNotHigherZh) || isGenericEvidenceText(criterion.whyNotHigherZh)) criterion.whyNotHigherZh = fallback.higherZh;
+    if (!hasUsefulText(criterion.whyNotLowerZh) || isGenericEvidenceText(criterion.whyNotLowerZh)) criterion.whyNotLowerZh = fallback.lowerZh;
   }
   return result;
 }
@@ -2078,10 +2261,10 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
     },
     strengths: [],
     mainProblems: [],
@@ -3037,10 +3220,10 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3275,10 +3458,10 @@ function buildMinimalAiScoringPrompt(body, gradingMode, locale = "en") {
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3552,10 +3735,10 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3602,7 +3785,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
     "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
-    "- When possible, each criterion should also include evidence, whyThisBand, whyNotHigher, and whyNotLower to support examiner-like scoring.",
+    "- Each criterion must include concrete evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower to support examiner-like scoring.",
+    "- For all criterion evidence fields, also return accurate matching Chinese fields: evidenceZh, evidenceQuotesZh, positiveEvidenceZh, limitingEvidenceZh, whyThisBandZh, whyNotHigherZh, and whyNotLowerZh. Do not use generic Chinese templates.",
     "- Do not keep all four criterion bands identical unless the evidence for all four criteria is genuinely equivalent.",
     "- High-band calibration is mandatory: when the evidence shows full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and rare minor errors, use Band 8-9. Do not force such writing into Band 7.",
     "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
@@ -4214,10 +4398,10 @@ function buildScoreAuditPrompt(body, locale = "en") {
       overallBand: 1,
       estimatedLevel: "Band 1.0",
       criteria: {
-        [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-        "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-        "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" },
-        "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" }
+        [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+        "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+        "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
+        "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
       },
       highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
       highBandDiagnosticsZh: { reasonZh: "" },

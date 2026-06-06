@@ -33,6 +33,16 @@ function listHtml(items) {
   return Array.isArray(items) && items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">暂无内容</p>`;
 }
 
+function translatedListHtml(items, zhItems) {
+  const english = Array.isArray(items) ? items.filter(Boolean) : [];
+  const chinese = Array.isArray(zhItems) ? zhItems : [];
+  if (!english.length) return `<p class="muted">暂无内容</p>`;
+  return `<ul>${english.map((item, index) => {
+    const zh = chinese[index];
+    return `<li>${escapeHtml(item)}${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</li>`;
+  }).join("")}</ul>`;
+}
+
 function proseHtml(text) {
   return text ? `<p>${escapeHtml(text)}</p>` : `<p class="muted">暂无内容</p>`;
 }
@@ -943,23 +953,36 @@ function renderStageProgress(result = {}) {
   `);
 }
 
+function renderEvidenceExplanationLine(label, englishText, chineseText) {
+  const text = String(englishText || "").trim();
+  if (!text) return "";
+  const zh = String(chineseText || "").trim();
+  return `<div class="evidence-explain-line"><p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</p>${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</div>`;
+}
+
 function renderCriterionEvidence(item = {}) {
   const positive = Array.isArray(item.positiveEvidence) ? item.positiveEvidence.filter(Boolean) : [];
+  const positiveZh = Array.isArray(item.positiveEvidenceZh) ? item.positiveEvidenceZh : [];
   const limiting = Array.isArray(item.limitingEvidence) ? item.limitingEvidence.filter(Boolean) : [];
+  const limitingZh = Array.isArray(item.limitingEvidenceZh) ? item.limitingEvidenceZh : [];
   const quotes = Array.isArray(item.evidenceQuotes) ? item.evidenceQuotes.filter(Boolean) : [];
+  const quotesZh = Array.isArray(item.evidenceQuotesZh) ? item.evidenceQuotesZh : [];
   const whyThis = String(item.whyThisBand || "").trim();
+  const whyThisZh = String(item.whyThisBandZh || "").trim();
   const whyHigher = String(item.whyNotHigher || "").trim();
+  const whyHigherZh = String(item.whyNotHigherZh || "").trim();
   const whyLower = String(item.whyNotLower || "").trim();
+  const whyLowerZh = String(item.whyNotLowerZh || "").trim();
   if (!positive.length && !limiting.length && !quotes.length && !whyThis && !whyHigher && !whyLower) return "";
   return `<details class="criterion-evidence-details">
     <summary>评分证据 / Band evidence</summary>
     <div class="criterion-evidence-body">
-      ${quotes.length ? `<div><strong>Evidence quotes:</strong>${listHtml(quotes)}</div>` : ""}
-      ${positive.length ? `<div><strong>Positive evidence:</strong>${listHtml(positive)}</div>` : ""}
-      ${limiting.length ? `<div><strong>Limiting evidence:</strong>${listHtml(limiting)}</div>` : ""}
-      ${whyThis ? `<p><strong>Why this band:</strong> ${escapeHtml(whyThis)}</p>` : ""}
-      ${whyHigher ? `<p><strong>Why not higher:</strong> ${escapeHtml(whyHigher)}</p>` : ""}
-      ${whyLower ? `<p><strong>Why not lower:</strong> ${escapeHtml(whyLower)}</p>` : ""}
+      ${quotes.length ? `<div class="evidence-block"><strong>Evidence quotes:</strong>${translatedListHtml(quotes, quotesZh)}</div>` : ""}
+      ${positive.length ? `<div class="evidence-block"><strong>Positive evidence:</strong>${translatedListHtml(positive, positiveZh)}</div>` : ""}
+      ${limiting.length ? `<div class="evidence-block"><strong>Limiting evidence:</strong>${translatedListHtml(limiting, limitingZh)}</div>` : ""}
+      ${renderEvidenceExplanationLine("Why this band", whyThis, whyThisZh)}
+      ${renderEvidenceExplanationLine("Why not higher", whyHigher, whyHigherZh)}
+      ${renderEvidenceExplanationLine("Why not lower", whyLower, whyLowerZh)}
     </div>
   </details>`;
 }
