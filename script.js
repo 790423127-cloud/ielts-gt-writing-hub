@@ -912,7 +912,8 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  const totalSteps = payload.mode === "revision" ? 5 : 4;
+  // Full grading now runs 6 AI stages. Revision mode adds one optional AI stage for model/revised essays.
+  const totalSteps = payload.mode === "revision" ? 7 : 6;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -962,11 +963,13 @@ async function startGrading() {
   try {
     await runMergeStage("score", `第 1 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
     await runMergeStage("evidence-map", `第 2 步/${totalSteps}：AI 正在生成评分证据、评分边界和问题地图`, "评分证据与问题地图");
-    await runMergeStage("language-correction", `第 3 步/${totalSteps}：AI 正在根据评分证据生成语法、逐句修改和更好表达`, "语言批改");
-    await runMergeStage("final-plan", `第 4 步/${totalSteps}：AI 正在生成最终提分计划和练习任务`, "最终提分计划");
+    await runMergeStage("correction-grammar", `第 3 步/${totalSteps}：AI 正在生成语法诊断、句法问题和语法建议`, "语法诊断");
+    await runMergeStage("correction-sentence", `第 4 步/${totalSteps}：AI 正在生成逐句批改和单句更好表达`, "逐句批改与更好表达");
+    await runMergeStage("correction-vocabulary", `第 5 步/${totalSteps}：AI 正在检查词汇、拼写、搭配和重复问题`, "词汇拼写和搭配检查");
+    await runMergeStage("correction-advice", `第 6 步/${totalSteps}：AI 正在生成最终提分计划和练习任务`, "最终提分计划");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 5 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 7 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
