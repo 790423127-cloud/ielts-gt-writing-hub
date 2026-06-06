@@ -3685,6 +3685,50 @@ function finalizeTaskScoringEngine(result, body = {}) {
   return result;
 }
 
+function resolveCurrentBandForTarget(result = {}, body = {}) {
+  const candidates = [
+    result?.targetImprovementPlan?.currentBand,
+    result?.overallBand,
+    body?.currentResult?.overallBand,
+    body?.currentOverallBand,
+    body?.overallBand,
+    body?.scoreCalculation?.finalBand
+  ];
+  for (const value of candidates) {
+    const match = String(value ?? "").match(/\d+(?:\.\d+)?/);
+    if (!match) continue;
+    const numeric = Number(match[0]);
+    if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 9) return roundHalf(numeric);
+  }
+  return null;
+}
+
+function nextBandTargetRange(currentBand) {
+  const current = Number(currentBand);
+  if (!Number.isFinite(current)) return "";
+  const lower = Math.min(9, roundHalf(current + 0.5));
+  const upper = Math.min(9, roundHalf(current + 1.0));
+  return `${formatBand(lower)}-${formatBand(upper)}`;
+}
+
+function applyNextBandTargetPlan(result = {}, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const plan = result.targetImprovementPlan;
+  if (!plan || typeof plan !== "object") return result;
+  const currentBand = resolveCurrentBandForTarget(result, body);
+  const targetRange = nextBandTargetRange(currentBand);
+  if (currentBand) plan.currentBand = formatBand(currentBand);
+  if (targetRange) {
+    plan.targetBandRange = targetRange;
+    plan.targetBandRangeZh = plan.targetBandRangeZh || `下一阶段目标按当前分数上调0.5到1.0分，当前分数为${formatBand(currentBand)}，所以目标范围应为${targetRange}。`;
+    ensureArray(plan.criterionUpgrades).forEach((item) => {
+      if (item && typeof item === "object") item.target = item.target || targetRange;
+    });
+  }
+  return result;
+}
+
+
 function normalizeAiBandsOnly(result, body) {
   return finalizeTaskScoringEngine(result, body || {});
 }
@@ -4432,36 +4476,85 @@ function mergeCorrectionItem(existing, incoming) {
   merged.scoreImpacting = existing.scoreImpacting !== false || incoming.scoreImpacting !== false;
   // Stage 11 is the direct correction source. Stage 12 returns betterExpressionItems separately.
   // Keep any already-attached betterExpression, but never let a later duplicate create a new card.
-  merged.betterExpression = firstNonEmpty(existing.betterExpression, incoming.betterExpression);
-  merged.betterExpressionZh = firstNonEmpty(existing.betterExpressionZh, incoming.betterExpressionZh);
+  const existingBetter = sanitizeBetterExpressionCandidate(existing.betterExpression, merged.correctedSentence, merged.originalSentence);
+  const incomingBetter = sanitizeBetterExpressionCandidate(incoming.betterExpression, merged.correctedSentence, merged.originalSentence);
+  merged.betterExpression = firstNonEmpty(existingBetter, incomingBetter);
+  merged.betterExpressionZh = merged.betterExpression ? firstNonEmpty(existing.betterExpressionZh, incoming.betterExpressionZh) : "";
   merged.targetBandExpression = firstNonEmpty(existing.targetBandExpression, incoming.targetBandExpression);
   return merged;
 }
 
+function betterExpressionNormalizedText(text) {
+  return normalizeCorrectionKeyText(text)
+    .replace(/[’‘`]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function hasDisallowedBetterExpressionText(text) {
-  const normalized = normalizeCorrectionKeyText(text);
+  const raw = String(text || "").trim();
+  const normalized = betterExpressionNormalizedText(raw);
   if (!normalized) return true;
+  const disallowedPatterns = [
+    /\bwhich\s+makes\s+the\s+(idea|point|sentence)\s+(clearer|more\s+specific|better)\b/i,
+    /\bthis\s+(makes|will\s+make)\s+the\s+(idea|point|sentence)\s+(clearer|more\s+specific|better)\b/i,
+    /\bclearer\s+and\s+more\s+specific\b/i,
+    /\bthis\s+improves\s+the\s+sentence\b/i,
+    /\bdiscuss\s+about\b/i,
+    /\bneed\s+to\s+facing\b/i,
+    /\bit['’]?spossible\b/i,
+    /\bshould\s+not\s+avoid\s+excessive\s+spending\b/i,
+    /\bshould\s+not\s+avoid\b/i,
+    /\bcan\s+improve\b[^.?!]{0,80}\bcan\s+be\s+beneficial\b/i,
+    /\bthat\s+means\b[^.?!]{0,80}\bcan\s+be\s+beneficial\b/i
+  ];
+  if (disallowedPatterns.some((pattern) => pattern.test(raw))) return true;
   return [
     "which makes the idea clearer",
+    "which makes the point clearer",
     "which makes the sentence clearer",
     "which is more specific",
     "this makes the idea clearer",
     "this improves the sentence",
     "clearer and more specific",
-    "discuss about"
+    "discuss about",
+    "should not avoid",
+    "need to facing",
+    "it'spossible"
   ].some((phrase) => normalized.includes(phrase));
+}
+
+function sanitizeBetterExpressionCandidate(candidate, correctedSentence = "", originalSentence = "") {
+  const text = firstNonEmpty(candidate);
+  if (!text) return "";
+  if (hasDisallowedBetterExpressionText(text)) return "";
+  if (sameCorrectionText(text, correctedSentence) || sameCorrectionText(text, originalSentence)) return "";
+  if (correctedSentence && !shouldShowBetterExpression(correctedSentence, text)) return "";
+  return text;
+}
+
+function betterExpressionIdentityKey(item = {}, index = 0) {
+  const sentenceNumber = Number(item.sentenceNumber) || 0;
+  if (sentenceNumber > 0) return `n:${sentenceNumber}`;
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence);
+  const base = normalizeCorrectionKeyText(original || corrected);
+  return base ? `o:${base}` : `idx:${index}`;
 }
 
 function normalizeBetterExpressionItems(items = []) {
   const byKey = new Map();
   ensureArray(items).forEach((item, index) => {
     if (!item || typeof item !== "object") return;
-    const originalSentence = firstNonEmpty(item.originalSentence, item.original, item.sentence);
-    const correctedSentence = firstNonEmpty(item.correctedSentence, item.corrected, originalSentence);
-    const betterExpression = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedSentence);
+    const originalSentence = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+    const correctedSentence = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, originalSentence);
+    const betterExpression = sanitizeBetterExpressionCandidate(
+      firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedSentence, item.polishedSentence),
+      correctedSentence,
+      originalSentence
+    );
     if (!originalSentence || !betterExpression) return;
-    if (hasDisallowedBetterExpressionText(betterExpression)) return;
-    const key = normalizeCorrectionKeyText(originalSentence) || `better-${index}`;
+    const key = betterExpressionIdentityKey(item, index);
     const normalized = {
       ...item,
       sentenceNumber: Number(item.sentenceNumber) || index + 1,
@@ -4490,6 +4583,27 @@ function normalizeBetterExpressionItems(items = []) {
     });
   });
   return Array.from(byKey.values());
+}
+
+function collectUnsafeBetterExpressionCandidates(items = []) {
+  const candidates = [];
+  ensureArray(items).forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const originalSentence = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+    const correctedSentence = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, originalSentence);
+    const betterExpression = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedSentence, item.polishedSentence);
+    if (!originalSentence || !correctedSentence || !betterExpression) return;
+    if (!hasDisallowedBetterExpressionText(betterExpression) && shouldShowBetterExpression(correctedSentence, betterExpression)) return;
+    candidates.push({
+      sentenceNumber: Number(item.sentenceNumber) || index + 1,
+      originalSentence,
+      correctedSentence,
+      rejectedBetterExpression: betterExpression,
+      problem: firstNonEmpty(item.problem, item.reason, item.whyBetter, item.explanation),
+      errorType: firstNonEmpty(item.errorType, item.type)
+    });
+  });
+  return dedupeCorrections(candidates).slice(0, envInt("AI_BETTER_REPAIR_MAX_ITEMS", 24, 0, 60));
 }
 
 function normalizeBatchWarning(stage, batchNumber, error) {
@@ -4553,7 +4667,7 @@ function dedupeCorrections(items = []) {
     const sentenceNumber = Number(item.sentenceNumber) || 0;
     const originalKey = normalizeCorrectionKeyText(original);
     const key = sentenceNumber > 0
-      ? `n:${sentenceNumber}|${originalKey}`
+      ? `n:${sentenceNumber}`
       : `o:${originalKey || normalizeCorrectionKeyText(corrected) || index}`;
 
     const normalized = {
@@ -4696,9 +4810,60 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
   ].join("\n");
 }
 
+function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
+  const items = candidates.map((item) => [
+    `Sentence ${item.sentenceNumber}:`,
+    `Original: ${item.originalSentence}`,
+    `Direct corrected sentence: ${item.correctedSentence}`,
+    item.rejectedBetterExpression ? `Rejected bad betterExpression: ${item.rejectedBetterExpression}` : "",
+    item.problem ? `Problem: ${item.problem}` : "",
+    item.errorType ? `Error type: ${item.errorType}` : ""
+  ].filter(Boolean).join("\n")).join("\n\n");
+  return [
+    `AI-only quality repair pass ${batchIndex + 1}/${batchCount}: rewrite only the rejected betterExpression items below.`,
+    "The previous betterExpression was rejected because it contained an error, changed meaning, or used meta-commentary.",
+    "Return a safe ONE-SENTENCE upgrade based on the direct corrected sentence. Do not explain inside the sentence.",
+    "Do not use phrases such as 'which makes the idea clearer', 'clearer and more specific', 'this improves the sentence', 'discuss about', or 'should not avoid'.",
+    "If no safe useful upgrade is possible, omit that item.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({ betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Rejected items:",
+    items
+  ].join("\n");
+}
+
+async function repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems }) {
+  const candidates = collectUnsafeBetterExpressionCandidates(rawItems);
+  if (!candidates.length || !hasEnoughAiTime(deadline, 45000)) return [];
+  const batchSize = envInt("AI_BETTER_REPAIR_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_BETTER_REPAIR_MAX_BATCHES", 6, 1, 12);
+  const batchCount = Math.min(Math.ceil(candidates.length / batchSize), maxBatches);
+  const { results } = await runBatchedAiJson({
+    items: candidates,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_BETTER_REPAIR_CONCURRENCY", 1, 1, 3),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildBetterExpressionRepairPrompt({ body, candidates: batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_BETTER_REPAIR_MAX_TOKENS", 5200, 2500, 10000),
+      deadline,
+      timeoutMs: Number(process.env.AI_BETTER_REPAIR_TIMEOUT_MS) || 100000
+    })
+  });
+  return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
+}
+
 function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
+  const currentBand = resolveCurrentBandForTarget(body.currentResult || {}, body);
+  const targetRange = nextBandTargetRange(currentBand);
   return [
     "Stage 13/13 final plan pass. Produce only correctionPriority and targetImprovementPlan based on the essay and earlier AI results. Do not rescore and do not repeat all sentence corrections.",
+    targetRange ? `Target range rule: currentBand is ${formatBand(currentBand)}. targetImprovementPlan.currentBand must be ${formatBand(currentBand)} and targetImprovementPlan.targetBandRange must be exactly ${targetRange}. Do not output a higher final-goal range such as ${nextBandTargetRange(roundHalf(Number(currentBand) + 0.5))} in this next-stage plan.` : "Target range rule: targetImprovementPlan.targetBandRange must be the next 0.5-1.0 band only, not a long-term goal.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
@@ -4765,8 +4930,10 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
     error.status = 502;
     throw error;
   }
-  const betterExpressionItems = normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
-  return {
+  const rawBetterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems));
+  const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: rawBetterExpressionItems });
+  const betterExpressionItems = normalizeBetterExpressionItems([...rawBetterExpressionItems, ...repairedBetterExpressionItems]);
+  return applyNextBandTargetPlan({
     aiStage: stage,
     disclaimer: DISCLAIMER,
     betterExpressionItems,
@@ -4774,7 +4941,7 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
     targetImprovementPlan: plan.targetImprovementPlan || {},
     betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
     stageWarnings: warnings
-  };
+  }, body);
 }
 
 function criterionNamesForTask(task) {
@@ -5003,10 +5170,12 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
     error.status = 502;
     throw error;
   }
+  const rawBetterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems));
+  const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: rawBetterExpressionItems });
   return {
     aiStage: stage,
     disclaimer: DISCLAIMER,
-    betterExpressionItems: normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems))),
+    betterExpressionItems: normalizeBetterExpressionItems([...rawBetterExpressionItems, ...repairedBetterExpressionItems]),
     betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
     stageWarnings: warnings
   };
@@ -5023,7 +5192,7 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
     deadline,
     timeoutMs: Number(process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 135000
   });
-  return { aiStage: stage, disclaimer: DISCLAIMER, ...plan };
+  return applyNextBandTargetPlan({ aiStage: stage, disclaimer: DISCLAIMER, ...plan }, body);
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
@@ -5287,6 +5456,11 @@ async function handleRequest(req, res) {
         deadline
       });
       result = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
+    }
+    result = applyNextBandTargetPlan(result, body);
+    if (result && typeof result === "object") {
+      result.detailedSentenceCorrections = dedupeCorrections(result.detailedSentenceCorrections || []);
+      result.betterExpressionItems = normalizeBetterExpressionItems(result.betterExpressionItems || []);
     }
     sendJson(req, res, 200, result);
   } catch (error) {
