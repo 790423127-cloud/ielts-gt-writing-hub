@@ -568,8 +568,8 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Incomplete essays must still be graded. A missing conclusion, missing Task 1 bullet point, one-sided Task 2 answer, or unfinished body paragraph should never cause refusal; score the submitted content and explain the completion impact.",
     "Do not mechanically assign a fixed low score merely because a response is incomplete. Decide the score impact from actual task coverage, coherence, language quality, and rateable content.",
     "Always return completionStatus when completion is relevant: isIncomplete, completionLevel, missingParts, wordCountImpact, scoreImpact, scoreCapApplied, and scoreCapReason.",
-    "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
-    "Task 2 argument caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; off-topic no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
+    "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; if the response is not recognisably a letter, uses the wrong recipient/purpose, ignores the bullet points, or is largely unrelated to the letter situation, Task Achievement normally no higher than 3.0-4.0. Wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
+    "Task 2 argument and relevance caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; a clearly off-topic or misread response normally gives Task Response no higher than 4.0; a wholly unrelated response or no relevant message normally gives Task Response no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
     "Coherence caps: no paragraphing normally no higher than 4.0-5.0; ideas listed without progression no higher than 5.0; missing/unnatural linking or repeated and/so/because should not receive high CC; Band 6+ requires clear paragraphing and mostly logical progression.",
     "Lexical caps: extremely basic vocabulary normally no higher than 4.0; frequent word-choice errors affecting meaning normally no higher than 4.0-5.0; heavy repetition or inappropriate register reduces LR; Band 6+ requires enough topic vocabulary and mostly appropriate word choice.",
     "Grammar caps: if most sentences contain serious grammar errors or errors often reduce meaning, GRA normally no higher than 4.0; only simple sentence patterns normally no higher than 5.0; frequent tense/article/plural/word-order/sentence-structure errors should not receive Band 5.5+ unless meaning remains generally clear.",
@@ -3947,20 +3947,39 @@ function buildScoreCalculation(result, task, finalBand) {
     ? criteriaBands.reduce((sum, item) => sum + Number(item.band || 0), 0) / 4
     : null;
   const strictGuardApplied = Boolean(result?.scoreCalibration?.strictBoundaryGuardApplied || result?.lowBandBoundaryAudit?.triggered);
+  const auditType = result?.lowBandBoundaryAudit?.auditType || "";
+  const strictMethod = auditType === "task_relevance_boundary"
+    ? "final_ai_reconciled_criterion_average_with_task_relevance_boundary_guard"
+    : auditType === "task1_achievement_boundary"
+      ? "final_ai_reconciled_criterion_average_with_task1_achievement_boundary_guard"
+      : "final_ai_reconciled_criterion_average_with_strict_ielts_boundary_guard";
+  const strictFormula = auditType === "task_relevance_boundary"
+    ? "final AI-reconciled four IELTS criterion bands, after Task 2 relevance/off-topic boundary audit when triggered, averaged and rounded to nearest 0.5"
+    : auditType === "task1_achievement_boundary"
+      ? "final AI-reconciled four IELTS criterion bands, after Task 1 achievement boundary audit when triggered, averaged and rounded to nearest 0.5"
+      : "final AI-reconciled four IELTS criterion bands, after strict IELTS low-band boundary audit when triggered, averaged and rounded to nearest 0.5";
   return {
     mode: getTaskScoringEngineName(task),
-    method: strictGuardApplied ? "final_ai_reconciled_criterion_average_with_strict_ielts_boundary_guard" : "final_ai_reconciled_criterion_average",
+    method: strictGuardApplied ? strictMethod : "final_ai_reconciled_criterion_average",
     formula: strictGuardApplied
-      ? "final AI-reconciled four IELTS criterion bands, after strict IELTS low-band boundary audit when triggered, averaged and rounded to nearest 0.5"
+      ? strictFormula
       : "final AI-reconciled four IELTS criterion bands averaged and rounded to nearest 0.5",
     criteriaBands,
     rawAverage: rawAverage === null ? null : Number(rawAverage.toFixed(3)),
     finalBand: Number.isFinite(Number(finalBand)) ? finalBand : null,
     explanation: strictGuardApplied
-      ? "The final display averages the final AI criterion bands after a strict IELTS low-band boundary audit. The audit only triggers for objective low-band boundary cases such as severe Task 2 underlength combined with frequent basic language errors and shallow development."
+      ? (auditType === "task_relevance_boundary"
+        ? "The final display averages the final AI criterion bands after a strict Task 2 relevance audit. The audit triggers when accumulated evidence says the answer misreads the prompt, changes the topic, or is largely off-topic."
+        : auditType === "task1_achievement_boundary"
+          ? "The final display averages the final AI criterion bands after a strict Task 1 achievement audit. The audit triggers when accumulated evidence says the letter purpose, bullet coverage, tone/register, format, or relevance is seriously weak."
+          : "The final display averages the final AI criterion bands after a strict IELTS low-band boundary audit. The audit only triggers for objective low-band boundary cases such as severe Task 2 underlength combined with frequent basic language errors and shallow development.")
       : "The server does not grade the essay. It only averages the final criterion bands returned by AI after the final reconciliation stage.",
     explanationZh: strictGuardApplied
-      ? "最终展示分数会平均第13步AI四项分数；若触发严格雅思低分边界复核，则先按边界复核结果处理四项分数，再计算平均。该复核只针对明显低分边界情况，例如 Task 2 严重字数不足并伴随基础语言错误密集、展开很浅。"
+      ? (auditType === "task_relevance_boundary"
+        ? "最终展示分数会平均第13步AI四项分数；若触发 Task 2 跑题/任务相关性复核，则先按复核边界处理相关评分项，再计算平均。"
+        : auditType === "task1_achievement_boundary"
+          ? "最终展示分数会平均第13步AI四项分数；若触发 Task 1 任务完成复核，则先按书信目的、要点覆盖、语气/格式和相关性边界处理评分项，再计算平均。"
+          : "最终展示分数会平均第13步AI四项分数；若触发严格雅思低分边界复核，则先按边界复核结果处理四项分数，再计算平均。该复核只针对明显低分边界情况，例如 Task 2 严重字数不足并伴随基础语言错误密集、展开很浅。")
       : "服务器不自行给作文打分，只平均第13步AI最终复核返回的四项分数。"
   };
 }
@@ -5324,17 +5343,31 @@ function countBoundaryAuditItems(result = {}, body = {}) {
 }
 
 function makeBoundaryAuditReason({ task, words, flags, recommendedRange }) {
-  const flagText = flags.length ? flags.join("; ") : "low-band boundary signals";
+  const flagText = flags.length ? flags.join("; ") : "IELTS boundary signals";
+  const joined = flags.join(" ").toLowerCase();
   if (task === "Task 1") {
+    if (/purpose|bullet|letter-format|letter format/.test(joined)) {
+      return `Strict IELTS Task 1 achievement audit triggered: the letter shows ${flagText}. Task Achievement must be checked against purpose, bullet coverage, tone/register, format, and relevance. Recommended examiner range: ${recommendedRange}.`;
+    }
     return `Strict IELTS boundary audit triggered: ${task} has ${words} words and shows ${flagText}. Recommended examiner range: ${recommendedRange}.`;
+  }
+  if (/off-topic|task mismatch|wholly unrelated|no relevant/.test(joined)) {
+    return `Strict IELTS Task 2 relevance audit triggered: the essay shows ${flagText}. Task Response must be capped when the answer misreads the prompt, changes the topic, or contains little relevant response, even if some paragraphs and grammar are understandable. Recommended examiner range: ${recommendedRange}.`;
   }
   return `Strict IELTS boundary audit triggered: ${task} has ${words} words and shows ${flagText}. For Task 2, underlength is not an automatic score, but when it combines with frequent basic language errors and shallow development, Band 5.0 should be treated as an upper limit, not the default. Recommended examiner range: ${recommendedRange}.`;
 }
 
 function makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) {
-  const flagText = flags.length ? flags.join("；") : "低分边界信号";
+  const flagText = flags.length ? flags.join("；") : "雅思边界信号";
+  const joined = flags.join(" ").toLowerCase();
   if (task === "Task 1") {
+    if (/purpose|bullet|letter-format|letter format/.test(joined)) {
+      return `严格雅思 Task 1 任务完成复核已触发：这封信出现 ${flagText}。Task Achievement 必须按书信目的、要点覆盖、语气/正式程度、格式和相关性重新判断。建议考官区间：${recommendedRange}。`;
+    }
     return `严格雅思边界复核已触发：${task} 当前约 ${words} 词，并出现 ${flagText}。建议考官区间：${recommendedRange}。`;
+  }
+  if (/off-topic|task mismatch|wholly unrelated|no relevant/.test(joined)) {
+    return `严格雅思 Task 2 任务相关性复核已触发：作文出现 ${flagText}。如果回答误读题目、换题或相关内容很少，Task Response 必须被限制；即使段落和部分语法可读，也不能弥补没有回答题目。建议考官区间：${recommendedRange}。`;
   }
   return `严格雅思边界复核已触发：${task} 当前约 ${words} 词，并出现 ${flagText}。Task 2 字数不足本身不是机械扣分，但如果同时存在基础语言错误密集、展开很浅，Band 5.0 应视为宽松上限，而不是默认分。建议考官区间：${recommendedRange}。`;
 }
@@ -5351,6 +5384,9 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   const hasUnderdevelopmentEvidence = /underdeveloped|lack(?:s|ing)? specific examples|shallow|listed but undeveloped|examples? (?:are )?(?:simple|general|too general|vague)|limited development|ideas? (?:are )?(?:not developed|underdeveloped|superficial)/.test(snapshot);
   const hasUnclearPositionEvidence = /unclear position|position is unclear|not consistently clear|vague position|no clear position|both good and bad|maybe not always good|definitive stance/.test(snapshot);
   const hasWeakCoherenceEvidence = /weak progression|limited cohesion|no clear logical link|paragraph unity|basic connectors|repetitive connectors|vague referencing|not always logical/.test(snapshot);
+  const hasSevereTask2OffTopicEvidence = /(clearly off[- ]topic|off[- ]topic|does not address the prompt|does not answer the question|content does not address the prompt|misinterprets? the topic|misread(?:s)? the prompt|wrong topic|task mismatch|instead of products or treatments|instead of buying products|instead of treatments to look younger|straying from the topic|further straying from the topic|unrelated to the task|not related to the prompt|changes? the topic|discusses? .* instead of)/.test(snapshot);
+  const hasWhollyUnrelatedEvidence = /(wholly unrelated|completely unrelated|entirely unrelated|no relevant message|almost no relevant message|no rateable relevant response|blank response|mostly non-english|mostly copied)/.test(snapshot);
+  const hasTask1PurposeMismatchEvidence = /(unclear letter purpose|no clear purpose|wrong purpose|wrong recipient|recipient relationship.*wrong|does not fit the recipient|inappropriate tone|wrong tone|not recognisably a letter|not recognizable as a letter|not a letter|essay instead of a letter|missing letter format|no opening|no closing|missing salutation|missing sign-off|ignores? the bullet points|bullet points? not covered|no bullet point coverage|missing major bullet|only one bullet|two bullet points.*missing|one bullet point.*missing|largely unrelated to the letter situation)/.test(snapshot);
 
   if (task === "Task 2" && words < 180) flags.push(`Task 2 below 180 words (${words})`);
   else if (task === "Task 2" && words < 200) flags.push(`Task 2 below 200 words (${words})`);
@@ -5359,6 +5395,8 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   if (hasUnderdevelopmentEvidence) flags.push("underdeveloped ideas/details");
   if (hasUnclearPositionEvidence) flags.push(task === "Task 1" ? "unclear letter purpose" : "unclear or weak position");
   if (hasWeakCoherenceEvidence) flags.push("weak coherence/progression");
+  if (task === "Task 2" && hasSevereTask2OffTopicEvidence) flags.push(hasWhollyUnrelatedEvidence ? "wholly unrelated or no relevant Task 2 response" : "clear Task 2 task mismatch/off-topic content");
+  if (task === "Task 1" && hasTask1PurposeMismatchEvidence) flags.push("Task 1 purpose/bullet/letter-format mismatch");
   if (hasFrequentLexicalEvidence) flags.push("frequent spelling/word-choice errors");
   if (hasFrequentGrammarEvidence) flags.push("frequent basic grammar errors");
   if (issueCount >= 10) flags.push(`high correction density (${issueCount} AI issue items)`);
@@ -5371,46 +5409,67 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   let boundaryPosition = "";
 
   if (task === "Task 2") {
+    if (hasSevereTask2OffTopicEvidence || hasWhollyUnrelatedEvidence) {
+      triggered = true;
+      recommendedRange = hasWhollyUnrelatedEvidence ? "Band 1.0-3.0 for Task Response unless there is a small relevant attempt" : "Band 3.5-4.5, depending on how much relevant content remains";
+      strictExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.0 or below for Task Response" : "Band 3.5-4.0 for Task Response";
+      generousExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.5" : "Band 4.5";
+      boundaryPosition = "Task 2 task-relevance boundary: off-topic/misread prompt review";
+      caps["Task Response"] = hasWhollyUnrelatedEvidence ? 3.0 : 4.0;
+      if (hasWeakCoherenceEvidence || hasSevereTask2OffTopicEvidence) caps["Coherence and Cohesion"] = 4.5;
+      if (hasFrequentLexicalEvidence) caps["Lexical Resource"] = 4.5;
+      if (hasFrequentGrammarEvidence) caps["Grammatical Range and Accuracy"] = 4.5;
+    }
     const severeLowBoundary = words > 0 && words < 180 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || issueCount >= 8) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence || hasWeakCoherenceEvidence);
     const moderateLowBoundary = words >= 180 && words < 200 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence);
     const veryShortBoundary = words > 0 && words < 150;
     if (severeLowBoundary || veryShortBoundary) {
       triggered = true;
-      recommendedRange = words < 150 ? "Band 4.0 or below unless the response is unusually strong" : "Band 4.0-4.5, with Band 5.0 only as a generous upper limit";
-      strictExaminerBand = words < 150 ? "Band 4.0" : "Band 4.0-4.5";
-      generousExaminerBand = words < 150 ? "Band 4.5" : "Band 5.0";
-      boundaryPosition = "low-band boundary: 4.0/4.5/5.0 strict review";
-      caps["Task Response"] = words < 150 ? 4.0 : 4.5;
-      caps["Coherence and Cohesion"] = hasWeakCoherenceEvidence || words < 180 ? 4.5 : 5.0;
-      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? 4.0 : 4.5;
-      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? 4.0 : 4.5;
+      if (!recommendedRange) recommendedRange = words < 150 ? "Band 4.0 or below unless the response is unusually strong" : "Band 4.0-4.5, with Band 5.0 only as a generous upper limit";
+      if (!strictExaminerBand) strictExaminerBand = words < 150 ? "Band 4.0" : "Band 4.0-4.5";
+      if (!generousExaminerBand) generousExaminerBand = words < 150 ? "Band 4.5" : "Band 5.0";
+      if (!boundaryPosition) boundaryPosition = "low-band boundary: 4.0/4.5/5.0 strict review";
+      caps["Task Response"] = Math.min(Number(caps["Task Response"] ?? 9), words < 150 ? 4.0 : 4.5);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), hasWeakCoherenceEvidence || words < 180 ? 4.5 : 5.0);
+      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.0 : 4.5);
+      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.0 : 4.5);
     } else if (moderateLowBoundary) {
       triggered = true;
-      recommendedRange = "Band 4.5-5.0";
-      strictExaminerBand = "Band 4.5";
-      generousExaminerBand = "Band 5.0";
-      boundaryPosition = "low-band boundary: 4.5/5.0/5.5 strict review";
-      caps["Task Response"] = 4.5;
-      caps["Coherence and Cohesion"] = 5.0;
-      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? 4.5 : 5.0;
-      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? 4.5 : 5.0;
+      if (!recommendedRange) recommendedRange = "Band 4.5-5.0";
+      if (!strictExaminerBand) strictExaminerBand = "Band 4.5";
+      if (!generousExaminerBand) generousExaminerBand = "Band 5.0";
+      if (!boundaryPosition) boundaryPosition = "low-band boundary: 4.5/5.0/5.5 strict review";
+      caps["Task Response"] = Math.min(Number(caps["Task Response"] ?? 9), 4.5);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), 5.0);
+      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.5 : 5.0);
+      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.5 : 5.0);
     }
   } else {
+    if (hasTask1PurposeMismatchEvidence) {
+      triggered = true;
+      recommendedRange = "Band 3.0-4.5 for Task Achievement, depending on how many bullet points and letter functions remain";
+      strictExaminerBand = "Band 3.0-4.0 for Task Achievement";
+      generousExaminerBand = "Band 4.5";
+      boundaryPosition = "Task 1 task-achievement boundary: purpose/bullet/tone/letter-format review";
+      caps["Task Achievement"] = /no bullet point coverage|ignores? the bullet points|not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated/.test(snapshot) ? 3.5 : 4.0;
+      if (/missing letter format|no opening|no closing|missing salutation|missing sign-off|not a letter|essay instead of a letter/.test(snapshot)) caps["Coherence and Cohesion"] = 4.5;
+      if (hasFrequentLexicalEvidence) caps["Lexical Resource"] = 4.5;
+      if (hasFrequentGrammarEvidence) caps["Grammatical Range and Accuracy"] = 4.5;
+    }
     const task1LowBoundary = words > 0 && words < 80 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || hasUnderdevelopmentEvidence);
     const task1ModerateBoundary = words >= 80 && words < 120 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && hasUnderdevelopmentEvidence;
     if (task1LowBoundary || task1ModerateBoundary) {
       triggered = true;
-      recommendedRange = task1LowBoundary ? "Band 4.0-4.5" : "Band 4.5-5.0";
-      strictExaminerBand = task1LowBoundary ? "Band 4.0" : "Band 4.5";
-      generousExaminerBand = task1LowBoundary ? "Band 4.5" : "Band 5.0";
-      boundaryPosition = "Task 1 low-band boundary strict review";
-      caps["Task Achievement"] = task1LowBoundary ? 4.0 : 4.5;
-      caps["Coherence and Cohesion"] = task1LowBoundary ? 4.5 : 5.0;
-      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0;
-      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0;
+      if (!recommendedRange) recommendedRange = task1LowBoundary ? "Band 4.0-4.5" : "Band 4.5-5.0";
+      if (!strictExaminerBand) strictExaminerBand = task1LowBoundary ? "Band 4.0" : "Band 4.5";
+      if (!generousExaminerBand) generousExaminerBand = task1LowBoundary ? "Band 4.5" : "Band 5.0";
+      if (!boundaryPosition) boundaryPosition = "Task 1 low-band boundary strict review";
+      caps["Task Achievement"] = Math.min(Number(caps["Task Achievement"] ?? 9), task1LowBoundary ? 4.0 : 4.5);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), task1LowBoundary ? 4.5 : 5.0);
+      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0);
+      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0);
     }
   }
-
   return {
     triggered,
     task,
@@ -5424,9 +5483,10 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
     boundaryPosition,
     reason: triggered ? makeBoundaryAuditReason({ task, words, flags, recommendedRange }) : "",
     reasonZh: triggered ? makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) : "",
+    auditType: boundaryPosition && boundaryPosition.includes("task-relevance") ? "task_relevance_boundary" : boundaryPosition && boundaryPosition.includes("Task 1 task-achievement") ? "task1_achievement_boundary" : "low_word_count_boundary",
     capRule: task === "Task 2"
-      ? "For Task 2 below 180 words, Band 5.0 is normally only a generous upper limit when there are frequent basic language errors and shallow development."
-      : "For very short Task 1 letters, Task Achievement and language criteria must be checked against low-band boundaries."
+      ? "For Task 2, clear task mismatch/off-topic content caps Task Response; below 180 words with frequent basic errors treats Band 5.0 as a generous upper limit, not a default."
+      : "For Task 1 letters, Task Achievement is capped by letter purpose, bullet coverage, tone/register, format, and relevance; very short letters also trigger low-band boundary review."
   };
 }
 
@@ -5461,14 +5521,26 @@ function applyStrictLowBandBoundaryGuard(result = {}, body = {}) {
       item.band = cap;
       changed = true;
       appliedCaps.push(`${name}: ${formatBand(currentBand)} → ${formatBand(cap)}`);
-      const note = `Strict low-band boundary guard: capped at Band ${formatBand(cap)} because ${audit.reason}`;
-      const noteZh = `严格低分边界保护：由于${audit.reasonZh}，该项最高按 Band ${formatBand(cap)} 处理。`;
+      const guardLabel = audit.auditType === "task_relevance_boundary" ? "Strict Task 2 relevance boundary guard" : audit.auditType === "task1_achievement_boundary" ? "Strict Task 1 achievement boundary guard" : "Strict low-band boundary guard";
+      const guardLabelZh = audit.auditType === "task_relevance_boundary" ? "严格 Task 2 跑题/任务相关性边界保护" : audit.auditType === "task1_achievement_boundary" ? "严格 Task 1 任务完成边界保护" : "严格低分边界保护";
+      const note = `${guardLabel}: capped at Band ${formatBand(cap)} because ${audit.reason}`;
+      const noteZh = `${guardLabelZh}：由于${audit.reasonZh}，该项最高按 Band ${formatBand(cap)} 处理。`;
       item.whyThisBand = appendBoundaryNote(item.whyThisBand, note);
       item.whyThisBandZh = appendBoundaryNote(item.whyThisBandZh, noteZh);
-      item.halfBandDecision = appendBoundaryNote(item.halfBandDecision, `Boundary decision: Band ${formatBand(cap)} is stricter and more realistic than Band ${formatBand(currentBand)} for this low-band response.`);
-      item.halfBandDecisionZh = appendBoundaryNote(item.halfBandDecisionZh, `边界判断：对这类低分作文，Band ${formatBand(cap)} 比 Band ${formatBand(currentBand)} 更符合严格雅思评分。`);
-      item.whyNotHigher = appendBoundaryNote(item.whyNotHigher, "The response is too short and error-dense for the higher half-band under strict IELTS boundary logic.");
-      item.whyNotHigherZh = appendBoundaryNote(item.whyNotHigherZh, "在严格雅思边界逻辑下，该回答字数不足且基础错误密集，不足以支持更高半档。 ");
+      item.halfBandDecision = appendBoundaryNote(item.halfBandDecision, `Boundary decision: Band ${formatBand(cap)} is stricter and more realistic than Band ${formatBand(currentBand)} for this IELTS boundary case.`);
+      item.halfBandDecisionZh = appendBoundaryNote(item.halfBandDecisionZh, `边界判断：对这类雅思边界情况，Band ${formatBand(cap)} 比 Band ${formatBand(currentBand)} 更稳妥。`);
+      const higherReason = audit.auditType === "task_relevance_boundary"
+        ? "The response is too far from the Task 2 prompt for the higher Task Response half-band."
+        : audit.auditType === "task1_achievement_boundary"
+          ? "The letter purpose, bullet coverage, tone, or format is too weak for the higher Task Achievement half-band."
+          : "The response is too short and error-dense for the higher half-band under strict IELTS boundary logic.";
+      const higherReasonZh = audit.auditType === "task_relevance_boundary"
+        ? "回答与 Task 2 题目偏离较明显，不足以支持更高的任务回应半档。"
+        : audit.auditType === "task1_achievement_boundary"
+          ? "书信目的、要点覆盖、语气或格式不足，不足以支持更高的任务完成半档。"
+          : "在严格雅思边界逻辑下，该回答字数不足且基础错误密集，不足以支持更高半档。 ";
+      item.whyNotHigher = appendBoundaryNote(item.whyNotHigher, higherReason);
+      item.whyNotHigherZh = appendBoundaryNote(item.whyNotHigherZh, higherReasonZh);
     }
   });
 
@@ -5476,14 +5548,24 @@ function applyStrictLowBandBoundaryGuard(result = {}, body = {}) {
   scoreCalibration.strictBoundaryGuardApplied = Boolean(changed);
   scoreCalibration.capApplied = Boolean(changed) || Boolean(scoreCalibration.capApplied);
   scoreCalibration.capReason = appendBoundaryNote(scoreCalibration.capReason, audit.reason);
-  scoreCalibration.whyNotHigher = appendBoundaryNote(scoreCalibration.whyNotHigher, "Band 5.0 is treated as a generous upper limit, not the default, when Task 2 is below 180 words and has frequent basic grammar/lexical errors.");
+  const calibrationHigherReason = audit.auditType === "task_relevance_boundary"
+    ? "Task Response is capped because the answer is off-topic or misreads the Task 2 prompt; readable English cannot compensate for not answering the question."
+    : audit.auditType === "task1_achievement_boundary"
+      ? "Task Achievement is capped because the answer does not sufficiently meet the Task 1 letter purpose, bullet coverage, tone/register, or format requirements."
+      : "Band 5.0 is treated as a generous upper limit, not the default, when Task 2 is below 180 words and has frequent basic grammar/lexical errors.";
+  scoreCalibration.whyNotHigher = appendBoundaryNote(scoreCalibration.whyNotHigher, calibrationHigherReason);
   scoreCalibration.evidence = [...ensureArray(scoreCalibration.evidence), ...audit.flags].filter(Boolean).slice(0, 12);
   scoreCalibration.appliedCaps = appliedCaps;
   result.scoreCalibration = scoreCalibration;
 
   const scoreCalibrationZh = result.scoreCalibrationZh && typeof result.scoreCalibrationZh === "object" ? result.scoreCalibrationZh : {};
   scoreCalibrationZh.capReasonZh = appendBoundaryNote(scoreCalibrationZh.capReasonZh, audit.reasonZh);
-  scoreCalibrationZh.whyNotHigherZh = appendBoundaryNote(scoreCalibrationZh.whyNotHigherZh, "当 Task 2 少于 180 词且基础语法/词汇错误密集时，Band 5.0 应视为宽松上限，而不是默认分。 ");
+  const calibrationHigherReasonZh = audit.auditType === "task_relevance_boundary"
+    ? "由于回答跑题或误读 Task 2 题目，任务回应分会被限制；英语句子可读不能弥补没有回答题目。"
+    : audit.auditType === "task1_achievement_boundary"
+      ? "由于书信目的、要点覆盖、语气/正式程度或格式没有充分满足 Task 1 要求，任务完成分会被限制。"
+      : "当 Task 2 少于 180 词且基础语法/词汇错误密集时，Band 5.0 应视为宽松上限，而不是默认分。 ";
+  scoreCalibrationZh.whyNotHigherZh = appendBoundaryNote(scoreCalibrationZh.whyNotHigherZh, calibrationHigherReasonZh);
   scoreCalibrationZh.evidenceZh = [...ensureArray(scoreCalibrationZh.evidenceZh), ...audit.flags].filter(Boolean).slice(0, 12);
   result.scoreCalibrationZh = scoreCalibrationZh;
 
@@ -5564,13 +5646,18 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     task === "Task 1"
       ? "Task 1 scoring rule: use Task Achievement as the first criterion. Assess bullet-point coverage, letter purpose, recipient relationship, tone/register, opening/closing, relevance, and development. Do NOT assess Task 1 as an essay or require an essay thesis."
       : "Task 2 scoring rule: use Task Response as the first criterion. Assess all question parts, clear position where required, relevance, development, examples/reasoning, and conclusion. Do NOT assess Task 2 as a letter.",
+    task === "Task 1"
+      ? "Task 1 strict relevance rule: if the answer is not recognisably a letter, uses the wrong recipient/purpose, misses most bullet points, or is largely unrelated to the situation, Task Achievement must be capped around Band 3.0-4.0. If two bullet points are covered but one is missing, Task Achievement is normally no higher than Band 5.0; if only one is covered, normally no higher than Band 4.0."
+      : "Task 2 strict relevance rule: if the essay clearly misreads the prompt or discusses a different topic, Task Response is normally no higher than Band 4.0. If it is wholly unrelated or has no relevant message, Task Response is normally Band 1.0-3.0. Do not let good paragraphing or readable grammar rescue Task Response when the task is not answered.",
     "For Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy, use IELTS Writing public band-descriptor logic appropriate to the selected task.",
     "The final score must be evidence-based. If all four criterion bands are identical, explain why each criterion independently sits at the same band; do not use a safe default.",
     "For every criterion, include a visible 0.5 half-band decision: why not 0.5 lower, why not 0.5 higher, and why this exact final band was selected.",
     "Strict IELTS low-band boundary rule: for Task 2 below 180 words, Band 5.0 is normally only a generous upper limit unless the language is unusually strong. If the essay is below 180 words AND has frequent basic grammar, spelling, word-choice errors, shallow development, or unclear position, explicitly compare Band 4.0, 4.5, and 5.0, and prefer the stricter lower band unless evidence clearly supports 5.0.",
     "Strict IELTS low-band rule for Task 2 below 200 words: do not treat 'normally no higher than Band 5.0' as 'give Band 5.0'. Underlength must be combined with development and language evidence. If frequent basic errors and weak development are present, TR/LR/GRA should usually fall around Band 4.0-4.5; CC may be 4.5-5.0 only if paragraphing and progression are clearly present.",
     "If all four criteria would be Band 5.0 for a short low-level Task 2, re-check whether Task Response, Lexical Resource, and Grammatical Range and Accuracy should instead be Band 4.0 or 4.5. Do not give four identical Band 5.0 bands as a safe default.",
-    "The server normally averages the four AI-returned final criterion bands. For clear objective low-band boundary conflicts, a strict IELTS boundary audit may flag or cap the displayed criterion bands; therefore your AI bands must already reflect strict low-band IELTS boundaries.",
+    "If Task 2 content is mostly about another topic, finalCriteria for Task Response must explicitly say why it is Band 3.0, 3.5, 4.0, or 4.5 rather than a normal developed Task 2 score.",
+    "If Task 1 content is not a functional letter or fails major bullet/purpose/tone requirements, finalCriteria for Task Achievement must explicitly say why it is capped and must not borrow Task 2 essay logic.",
+    "The server normally averages the four AI-returned final criterion bands. For clear objective low-band boundary conflicts, task-relevance conflicts, or Task 1 achievement conflicts, a strict IELTS boundary audit may flag or cap the displayed criterion bands; therefore your AI bands must already reflect strict IELTS boundaries.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
     buildFeedbackTrackInstruction(body),
