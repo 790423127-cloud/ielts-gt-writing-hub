@@ -1105,18 +1105,18 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
     // Prefer an AI repair call before showing a partial recovery.
     // Earlier versions returned partial data immediately, which caused user-visible
     // messages such as "AI partial output recovered this score" and removed Chinese buttons.
-    if (allowRepair && hasEnoughAiTime(deadline, 12000)) {
+    if (allowRepair && hasEnoughAiTime(deadline, Number(process.env.AI_JSON_REPAIR_MIN_TIME_MS) || 45000)) {
       try {
         const repairedText = await callDeepSeek({
           apiKey,
           model,
           systemPrompt: "You repair malformed JSON. Return exactly one valid JSON object and nothing else.",
           userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
-          maxTokens: Math.min(Math.max(maxTokens, 1000), 1700),
+          maxTokens: envInt("AI_JSON_REPAIR_MAX_TOKENS", Math.min(Math.max(maxTokens, 2500), 5000), 1500, 9000),
           temperature: 0.0,
           jsonMode: true,
           deadline,
-          timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+          timeoutMs: Math.min(Number(process.env.AI_JSON_REPAIR_TIMEOUT_MS) || 45000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
         return parseJsonFromProvider(repairedText);
       } catch (repairCallError) {
@@ -1736,7 +1736,7 @@ async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTo
         temperature: 0.0,
         jsonMode: true,
         deadline,
-        timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+        timeoutMs: Math.min(Number(process.env.AI_JSON_REPAIR_TIMEOUT_MS) || 45000, AI_SINGLE_REQUEST_TIMEOUT_MS)
       });
       return parseJsonFromProvider(repairedText);
     } catch (repairError) {
@@ -2098,7 +2098,7 @@ async function callAiCompactScoringRetry({ apiKey, model, body, gradingMode, loc
     temperature: 0.1,
     jsonMode: true,
     deadline,
-    timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
+    timeoutMs: Math.min(Number(process.env.AI_JSON_REPAIR_TIMEOUT_MS) || 45000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
   return await parseOrRepairAiJson({
     apiKey,
@@ -3952,13 +3952,20 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 // --- AI-only 10-step grading stages (maximum-detail, no local scoring) ---
 const TEN_STEP_AI_STAGES = new Set([
   "prompt-analysis",
-  "score-boundary",
+  "half-band-summary",
+  "criterion-boundary",
   "evidence-map",
   "task-diagnosis",
   "coherence-diagnosis",
-  "lexical-diagnosis",
+  "spelling-wordform",
+  "lexical-choice-collocation",
   "grammar-diagnosis",
   "sentence-corrections",
+  "better-expressions",
+  "final-plan",
+  // Backward-compatible stage names still accepted.
+  "score-boundary",
+  "lexical-diagnosis",
   "better-expression-plan"
 ]);
 
@@ -3966,15 +3973,18 @@ function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
   if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "stage2", "step2"].includes(raw)) return "score";
-  if (["scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage3", "step3"].includes(raw)) return "score-boundary";
-  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage4", "step4"].includes(raw)) return "evidence-map";
-  if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage5", "step5"].includes(raw)) return "task-diagnosis";
-  if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage6", "step6"].includes(raw)) return "coherence-diagnosis";
-  if (["lexicaldiagnosis", "lexical", "lexicalresource", "vocabulary", "wordchoice", "collocation", "spelling", "stage7", "step7"].includes(raw)) return "lexical-diagnosis";
-  if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage8", "step8"].includes(raw)) return "grammar-diagnosis";
-  if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage9", "step9"].includes(raw)) return "sentence-corrections";
-  if (["betterexpressionplan", "betterexpression", "betterexpressions", "finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "stage10", "step10"].includes(raw)) return "better-expression-plan";
-  if (["revision", "model", "modelanswer", "revisedessay", "stage11", "step11"].includes(raw)) return "revision";
+  if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary", "stage3", "step3"].includes(raw)) return "half-band-summary";
+  if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage4", "step4"].includes(raw)) return "criterion-boundary";
+  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage5", "step5"].includes(raw)) return "evidence-map";
+  if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage6", "step6"].includes(raw)) return "task-diagnosis";
+  if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage7", "step7"].includes(raw)) return "coherence-diagnosis";
+  if (["spellingwordform", "spellingandwordform", "spelling", "wordform", "wordformation", "stage8", "step8"].includes(raw)) return "spelling-wordform";
+  if (["lexicalchoicecollocation", "lexicaldiagnosis", "lexical", "lexicalresource", "vocabulary", "wordchoice", "collocation", "repetition", "stage9", "step9"].includes(raw)) return "lexical-choice-collocation";
+  if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage10", "step10"].includes(raw)) return "grammar-diagnosis";
+  if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage11", "step11"].includes(raw)) return "sentence-corrections";
+  if (["betterexpressions", "betterexpression", "betterexpressionitems", "targetexpression", "stage12", "step12"].includes(raw)) return "better-expressions";
+  if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "betterexpressionplan", "stage13", "step13"].includes(raw)) return "final-plan";
+  if (["revision", "model", "modelanswer", "revisedessay", "stage14", "step14"].includes(raw)) return "revision";
   if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
   if (["evidenceplan", "evidenceandplan", "planandevidence"].includes(raw)) return "evidence-plan";
   const focused = normalizeFocusedCorrectionStage(raw);
@@ -3999,13 +4009,19 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     : "Main fields must be English. Put concise, accurate Chinese helper notes only in fields ending with Zh. Match the adjacent English field. Do not translate the full essay.";
   const stageNames = {
     "prompt-analysis": "question requirement analysis only",
+    "half-band-summary": "overall half-band boundary summary only",
+    "criterion-boundary": "one-criterion-at-a-time half-band boundary explanation only",
     "score-boundary": "IELTS half-band boundary explanation only",
     "evidence-map": "criterion evidence mapping only",
     "task-diagnosis": "Task Response/Task Achievement diagnosis only",
     "coherence-diagnosis": "Coherence and Cohesion diagnosis only",
+    "spelling-wordform": "spelling and word-formation diagnosis only",
+    "lexical-choice-collocation": "word choice, collocation, repetition, and lexical precision diagnosis only",
     "lexical-diagnosis": "Lexical Resource diagnosis only",
     "grammar-diagnosis": "Grammatical Range and Accuracy diagnosis only",
     "sentence-corrections": "sentence-level direct corrections only",
+    "better-expressions": "single-sentence upgraded better expressions only",
+    "final-plan": "correction priority and final study plan only",
     "better-expression-plan": "single-sentence better expressions and final study plan only"
   };
   return [
@@ -4049,6 +4065,35 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         wordCountWarning: { message: "", messageZh: "" }
       }),
       "For Task 1, list each bullet point or required function. For Task 2, list each question part and whether an opinion/position is required.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "half-band-summary") {
+    return [
+      "Stage 3/13. Explain the overall score and half-band boundary summary only. Do not change any score and do not correct sentences.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
+        scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+        halfBandBoundary: { summary: "", summaryZh: "", overallAverage: "", finalBand: "", roundingExplanation: "", roundingExplanationZh: "" },
+        strengthItems: [{ text: "", zh: "" }],
+        mainProblemItems: [{ text: "", zh: "" }]
+      }),
+      "Explain the final band and the 0.5 boundary. Keep it concise but concrete. Every English item must include a Chinese helper field in the paired object or *Zh field.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "criterion-boundary") {
+    return [
+      "Stage 4/13. Explain detailed half-band boundaries criterion by criterion. This non-batched prompt is a fallback; prefer the internal criterion batches when available. Do not change criterion bands.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: tenStepCriterionShape(task),
+        halfBandBoundary: { criterionBoundaries: [{ criterion: "", currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] }
+      }),
+      "For every criterion, explain why this exact band is correct, why not 0.5 higher, and why not 0.5 lower. Do not write a generic band number that conflicts with the actual band.",
       ...common
     ].join("\n");
   }
@@ -4107,6 +4152,36 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     ].join("\n");
   }
 
+  if (stage === "spelling-wordform") {
+    return [
+      "Stage 8/13. Diagnose spelling and word-formation issues only. Do not assess collocation unless it is caused by word form. Do not do full sentence correction.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        spellingCorrections: [{ originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }],
+        detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Spelling / word formation", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true }],
+        lexicalAdvice: [], lexicalAdviceZh: [],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Return every visible spelling or word-formation issue in the supplied essay. Do not invent spelling errors. Every English explanation must have the matching Chinese field.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "lexical-choice-collocation") {
+    return [
+      "Stage 9/13. Diagnose word choice, collocation, repetition, register, and lexical precision only. Do not do grammar correction except where word choice is the main issue.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        lexicalAdvice: [], lexicalAdviceZh: [],
+        detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / repetition", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }],
+        errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
+      }),
+      "Return all clear score-affecting lexical choice/collocation/repetition issues. Every English explanation must have the matching Chinese field.",
+      ...common
+    ].join("\n");
+  }
+
   if (stage === "lexical-diagnosis") {
     return [
       "Stage 7/10. Diagnose Lexical Resource only. Include spelling, word choice, collocation, word formation, register, and repetition. Do not correct grammar unless it is word formation.",
@@ -4151,8 +4226,35 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     ].join("\n");
   }
 
+  if (stage === "better-expressions") {
+    return [
+      "Stage 12/13. Produce upgraded single-sentence better expressions only. Do not rescore and do not write the final study plan.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Better expression", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }],
+        betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
+      }),
+      "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. betterExpression must be ONE sentence only, not a paragraph. Every English explanation must have the matching Chinese field.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "final-plan") {
+    return [
+      "Stage 13/13. Produce only correction priority and final target improvement plan. Do not rescore and do not repeat all sentence corrections.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
+        targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: "Task Response / Task Achievement", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] },
+        band5FixPlan: [], band5FixPlanZh: [], band6UpgradePlan: [], band6UpgradePlanZh: [], band7UpgradePlan: [], band7UpgradePlanZh: []
+      }),
+      "The plan must be concrete and based on this essay. Every English array item must have a same-index Chinese item in the matching *Zh array.",
+      ...common
+    ].join("\n");
+  }
+
   return [
-    "Stage 10/10. Produce upgraded single-sentence better expressions and the final study plan. Do not rescore.",
+    "Backward-compatible stage. Produce upgraded single-sentence better expressions and final study plan. Do not rescore.",
     "Return JSON with this exact shape:",
     JSON.stringify({
       detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Better expression", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }],
@@ -4168,28 +4270,38 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
 function tenStepStageMaxTokens(stage) {
   return ({
-    "prompt-analysis": 3200,
-    "score-boundary": 4300,
-    "evidence-map": 5000,
-    "task-diagnosis": 5200,
-    "coherence-diagnosis": 4500,
-    "lexical-diagnosis": 5600,
-    "grammar-diagnosis": 5200,
-    "sentence-corrections": 6500,
-    "better-expression-plan": 7000
-  })[stage] || 4800;
+    "prompt-analysis": envInt("AI_STAGE_PROMPT_ANALYSIS_TOKENS", 4500, 2500, 9000),
+    "half-band-summary": envInt("AI_STAGE_HALF_BAND_SUMMARY_TOKENS", 5500, 3000, 11000),
+    "criterion-boundary": envInt("AI_STAGE_CRITERION_BOUNDARY_TOKENS", 6500, 3500, 12000),
+    "score-boundary": envInt("AI_STAGE_SCORE_BOUNDARY_TOKENS", 6500, 3500, 12000),
+    "evidence-map": envInt("AI_STAGE_EVIDENCE_MAP_TOKENS", 6500, 3500, 12000),
+    "task-diagnosis": envInt("AI_STAGE_TASK_DIAGNOSIS_TOKENS", 7000, 3500, 12000),
+    "coherence-diagnosis": envInt("AI_STAGE_COHERENCE_DIAGNOSIS_TOKENS", 6500, 3500, 12000),
+    "spelling-wordform": envInt("AI_STAGE_SPELLING_WORDFORM_TOKENS", 6000, 3000, 12000),
+    "lexical-choice-collocation": envInt("AI_STAGE_LEXICAL_CHOICE_TOKENS", 7500, 3500, 13000),
+    "lexical-diagnosis": envInt("AI_STAGE_LEXICAL_DIAGNOSIS_TOKENS", 7500, 3500, 13000),
+    "grammar-diagnosis": envInt("AI_STAGE_GRAMMAR_DIAGNOSIS_TOKENS", 7000, 3500, 12000),
+    "sentence-corrections": envInt("AI_STAGE_SENTENCE_CORRECTIONS_TOKENS", 8000, 3500, 14000),
+    "better-expressions": envInt("AI_STAGE_BETTER_EXPRESSIONS_TOKENS", 8000, 3500, 14000),
+    "better-expression-plan": envInt("AI_STAGE_BETTER_EXPRESSION_PLAN_TOKENS", 8000, 3500, 14000),
+    "final-plan": envInt("AI_STAGE_FINAL_PLAN_TOKENS", 7000, 3500, 12000)
+  })[stage] || envInt("AI_STAGE_DEFAULT_TOKENS", 6000, 3000, 12000);
 }
 
 function tenStepStageHasUsableContent(stage, output) {
   if (!output || typeof output !== "object") return false;
   if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
-  if (stage === "score-boundary") return hasUsefulText(output.scoreCalibration) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher));
+  if (stage === "half-band-summary") return hasUsefulText(output.scoreCalibration) || hasUsefulText(output.halfBandBoundary) || ensureArray(output.strengthItems).length || ensureArray(output.mainProblemItems).length;
+  if (stage === "criterion-boundary" || stage === "score-boundary") return hasUsefulText(output.halfBandBoundary) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher) || hasUsefulText(item?.whyNotLower));
   if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
   if (stage === "task-diagnosis") return ensureArray(output.taskAchievementAdvice).length || hasUsefulText(output.task1LetterCorrections) || hasUsefulText(output.task2EssayCorrections) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "coherence-diagnosis") return ensureArray(output.coherenceAdvice).length || hasUsefulText(output.criteria?.["Coherence and Cohesion"]) || hasUsefulText(output.errorAnalysis?.summary);
-  if (stage === "lexical-diagnosis") return ensureArray(output.lexicalAdvice).length || ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.criteria?.["Lexical Resource"]) || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "spelling-wordform") return ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "lexical-choice-collocation" || stage === "lexical-diagnosis") return ensureArray(output.lexicalAdvice).length || ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.criteria?.["Lexical Resource"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
+  if (stage === "better-expressions") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length;
+  if (stage === "final-plan") return hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority) || ensureArray(output.band5FixPlan).length || ensureArray(output.band6UpgradePlan).length || ensureArray(output.band7UpgradePlan).length;
   if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
   return hasUsefulText(output);
 }
@@ -4241,6 +4353,25 @@ function compactScoreSnapshot(body = {}) {
   }).slice(0, 2200);
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === null || typeof value === "undefined") continue;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const found = value.find((item) => hasUsefulText(item));
+      if (typeof found === "string") return found.trim();
+      if (found) return found;
+      continue;
+    }
+    if (value) return value;
+  }
+  return "";
+}
+
 function normalizeBatchWarning(stage, batchNumber, error) {
   return `${stage} batch ${batchNumber} failed: ${error?.message || error?.name || String(error)}`;
 }
@@ -4255,7 +4386,7 @@ async function callTenStepBatchJson({ apiKey, model, stage, locale, userPrompt, 
     temperature: 0.06,
     jsonMode: true,
     deadline,
-    timeoutMs: safePassTimeout(deadline, timeoutMs || (Number(process.env.AI_TEN_STEP_BATCH_TIMEOUT_MS) || 120000), 70000)
+    timeoutMs: safePassTimeout(deadline, timeoutMs || (Number(process.env.AI_TEN_STEP_BATCH_TIMEOUT_MS) || 150000), 70000)
   });
   return parseOrRepairAiJson({
     apiKey,
@@ -4310,7 +4441,7 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
   return [
-    `Stage 9/10 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
+    `Stage 11/13 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
     "This is still AI-only: identify and correct all clear score-impacting issues in this batch. Do not skip visible errors to keep the output short.",
     "If a sentence has several grammar/word-choice/punctuation errors, return one item with the fully corrected sentence and a concise combined problem description.",
     "If a listed sentence has no score-impacting problem, omit it. Do not invent errors.",
@@ -4343,7 +4474,7 @@ async function callAiBatchedSentenceCorrections({ apiKey, model, body, effective
     throw error;
   }
   const batchSize = envInt("AI_SENTENCE_BATCH_SIZE", 5, 2, 8);
-  const maxBatches = envInt("AI_SENTENCE_MAX_BATCHES", 8, 1, 12);
+  const maxBatches = envInt("AI_SENTENCE_MAX_BATCHES", 12, 1, 20);
   const concurrency = envInt("AI_SENTENCE_BATCH_CONCURRENCY", 2, 1, 4);
   const batchCount = Math.min(Math.ceil(units.length / batchSize), maxBatches);
   const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
@@ -4357,7 +4488,7 @@ async function callAiBatchedSentenceCorrections({ apiKey, model, body, effective
       stage,
       locale,
       userPrompt: buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
-      maxTokens: envInt("AI_SENTENCE_BATCH_MAX_TOKENS", 5200, 2500, 9000),
+      maxTokens: envInt("AI_SENTENCE_BATCH_MAX_TOKENS", 6200, 3000, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_SENTENCE_BATCH_TIMEOUT_MS) || 120000
     })
@@ -4405,7 +4536,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     item.errorType ? `Error type: ${item.errorType}` : ""
   ].filter(Boolean).join("\n")).join("\n\n");
   return [
-    `Stage 10/10 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
+    `Stage 12/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
     "Do not skip an item merely to keep output short. If an item is already natural, still provide a modest clearer Band +0.5 style sentence unless it would change the meaning.",
     "betterExpression must be ONE sentence only, not a paragraph. It must preserve the user's meaning and be realistic for the next 0.5-1 band improvement.",
     "Return exactly one valid JSON object with this shape:",
@@ -4422,7 +4553,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
 
 function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
   return [
-    "Stage 10/10 final plan sub-pass. Produce only correctionPriority and targetImprovementPlan based on the essay and earlier AI results. Do not rescore and do not repeat all sentence corrections.",
+    "Stage 13/13 final plan pass. Produce only correctionPriority and targetImprovementPlan based on the essay and earlier AI results. Do not rescore and do not repeat all sentence corrections.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
@@ -4448,7 +4579,7 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
     throw error;
   }
   const batchSize = envInt("AI_BETTER_BATCH_SIZE", 5, 2, 8);
-  const maxBatches = envInt("AI_BETTER_MAX_BATCHES", 8, 1, 12);
+  const maxBatches = envInt("AI_BETTER_MAX_BATCHES", 12, 1, 20);
   const concurrency = envInt("AI_BETTER_BATCH_CONCURRENCY", 2, 1, 4);
   const batchCount = Math.min(Math.ceil(sources.length / batchSize), maxBatches);
   const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
@@ -4462,7 +4593,7 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
       stage,
       locale,
       userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
-      maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 5200, 2500, 9000),
+      maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 6200, 3000, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_BETTER_BATCH_TIMEOUT_MS) || 120000
     })
@@ -4475,7 +4606,7 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
       stage,
       locale,
       userPrompt: buildFinalPlanPrompt({ body, effectiveMode, locale }),
-      maxTokens: envInt("AI_FINAL_PLAN_MAX_TOKENS", 4800, 2500, 9000),
+      maxTokens: envInt("AI_FINAL_PLAN_MAX_TOKENS", 7000, 3500, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 120000
     });
@@ -4503,6 +4634,256 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
   };
 }
 
+function criterionNamesForTask(task) {
+  return [firstCriterionName(task), "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+}
+
+function buildCriterionBoundaryBatchPrompt({ body, effectiveMode, locale, criterion, index, total }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const criterionSnapshot = current.criteria && current.criteria[criterion] ? current.criteria[criterion] : {};
+  return [
+    `Stage 4/13 internal criterion-boundary batch ${index + 1}/${total}. Explain ONLY this criterion: ${criterion}.`,
+    "Do not change the band. Explain why this exact band is right, why not 0.5 higher, and why not 0.5 lower.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      criteria: { [criterion]: { evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "" } },
+      halfBandBoundary: { criterionBoundaries: [{ criterion, currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] }
+    }),
+    "Use short evidence quotes from the essay. Every English explanation must include the matching Chinese field.",
+    `Task: ${task}`,
+    `Current criterion snapshot: ${JSON.stringify(criterionSnapshot).slice(0, 2500)}`,
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+async function callAiBatchedCriterionBoundary({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const criteria = criterionNamesForTask(task).map((criterion, index) => ({ criterion, index }));
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: criteria,
+    batchSize: 1,
+    maxBatches: 4,
+    concurrency: envInt("AI_CRITERION_BOUNDARY_CONCURRENCY", 2, 1, 4),
+    runBatch: (batch, batchIndex) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildCriterionBoundaryBatchPrompt({ body, effectiveMode, locale, criterion: batch[0].criterion, index: batchIndex, total: criteria.length }),
+      maxTokens: envInt("AI_CRITERION_BOUNDARY_BATCH_MAX_TOKENS", 5200, 3000, 10000),
+      deadline,
+      timeoutMs: Number(process.env.AI_CRITERION_BOUNDARY_BATCH_TIMEOUT_MS) || 135000
+    })
+  });
+  if (!results.length) {
+    const error = new Error(`AI criterion-boundary batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  const output = { aiStage: stage, disclaimer: DISCLAIMER, criteria: {}, halfBandBoundary: { criterionBoundaries: [] }, stageWarnings: warnings };
+  results.forEach((result) => {
+    if (result.criteria && typeof result.criteria === "object") output.criteria = { ...output.criteria, ...result.criteria };
+    const boundaries = ensureArray(result.halfBandBoundary?.criterionBoundaries);
+    if (boundaries.length) output.halfBandBoundary.criterionBoundaries.push(...boundaries);
+  });
+  output.criterionBoundaryBatchMeta = { attemptedBatches: attempted, successfulBatches: results.length };
+  return output;
+}
+
+function buildSpellingWordformBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
+  const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
+  return [
+    `Stage 8/13 internal spelling-wordform batch ${batchIndex + 1}/${batchCount}. Diagnose spelling and word-formation issues in these sentences only.`,
+    "Return every visible spelling or word-formation issue. Do not invent errors. Do not handle collocation or grammar unless word form is the main issue.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      spellingCorrections: [{ originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }],
+      detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Spelling / word formation", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true }],
+      lexicalAdvice: [], lexicalAdviceZh: []
+    }),
+    "Every English explanation must have the matching Chinese field.",
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Sentences:",
+    sentenceList
+  ].join("\n");
+}
+
+async function callAiBatchedSpellingWordform({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const units = splitEssayIntoSentenceUnits(body.essay);
+  if (!units.length) {
+    const error = new Error("AI spelling-wordform stage cannot run because no essay sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const batchSize = envInt("AI_SPELLING_BATCH_SIZE", 7, 3, 10);
+  const maxBatches = envInt("AI_SPELLING_MAX_BATCHES", 10, 1, 20);
+  const batchCount = Math.min(Math.ceil(units.length / batchSize), maxBatches);
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: units,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_SPELLING_BATCH_CONCURRENCY", 2, 1, 4),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildSpellingWordformBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_SPELLING_BATCH_MAX_TOKENS", 5200, 3000, 10000),
+      deadline,
+      timeoutMs: Number(process.env.AI_SPELLING_BATCH_TIMEOUT_MS) || 135000
+    })
+  });
+  if (!results.length) {
+    const error = new Error(`AI spelling-wordform batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    spellingCorrections: results.flatMap((r) => ensureArray(r.spellingCorrections)).filter((item) => hasUsefulText(item)),
+    detailedSentenceCorrections: dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections))),
+    lexicalAdvice: results.flatMap((r) => ensureArray(r.lexicalAdvice)).filter((item) => hasUsefulText(item)),
+    lexicalAdviceZh: results.flatMap((r) => ensureArray(r.lexicalAdviceZh)).filter((item) => hasUsefulText(item)),
+    spellingWordformBatchMeta: { totalSentenceUnits: units.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(units.length / batchSize) > maxBatches },
+    stageWarnings: warnings
+  };
+}
+
+function buildLexicalChoiceBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
+  const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
+  return [
+    `Stage 9/13 internal lexical-choice batch ${batchIndex + 1}/${batchCount}. Diagnose word choice, collocation, repetition, register, and lexical precision in these sentences only.`,
+    "Return every clear score-impacting lexical issue. Do not reduce issue count for brevity. Do not invent issues.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      lexicalAdvice: [], lexicalAdviceZh: [],
+      detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / repetition", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }]
+    }),
+    "Every English explanation must have the matching Chinese field. correctedSentence should only fix the lexical issue, not rewrite the whole paragraph.",
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Sentences:",
+    sentenceList
+  ].join("\n");
+}
+
+async function callAiBatchedLexicalChoice({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const units = splitEssayIntoSentenceUnits(body.essay);
+  if (!units.length) {
+    const error = new Error("AI lexical-choice stage cannot run because no essay sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const batchSize = envInt("AI_LEXICAL_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_LEXICAL_MAX_BATCHES", 12, 1, 20);
+  const batchCount = Math.min(Math.ceil(units.length / batchSize), maxBatches);
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: units,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_LEXICAL_BATCH_CONCURRENCY", 2, 1, 4),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildLexicalChoiceBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_LEXICAL_BATCH_MAX_TOKENS", 6200, 3000, 12000),
+      deadline,
+      timeoutMs: Number(process.env.AI_LEXICAL_BATCH_TIMEOUT_MS) || 135000
+    })
+  });
+  if (!results.length) {
+    const error = new Error(`AI lexical-choice batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    lexicalAdvice: results.flatMap((r) => ensureArray(r.lexicalAdvice)).filter((item) => hasUsefulText(item)),
+    lexicalAdviceZh: results.flatMap((r) => ensureArray(r.lexicalAdviceZh)).filter((item) => hasUsefulText(item)),
+    detailedSentenceCorrections: dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections))),
+    lexicalBatchMeta: { totalSentenceUnits: units.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(units.length / batchSize) > maxBatches },
+    stageWarnings: warnings
+  };
+}
+
+async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const sources = correctionSourcesForBetterExpression(body);
+  if (!sources.length) {
+    const error = new Error("AI better-expressions stage cannot run because no source sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const batchSize = envInt("AI_BETTER_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_BETTER_MAX_BATCHES", 12, 1, 20);
+  const batchCount = Math.min(Math.ceil(sources.length / batchSize), maxBatches);
+  const { results, warnings, batchCount: attempted } = await runBatchedAiJson({
+    items: sources,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_BETTER_BATCH_CONCURRENCY", 2, 1, 4),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 6200, 3000, 12000),
+      deadline,
+      timeoutMs: Number(process.env.AI_BETTER_BATCH_TIMEOUT_MS) || 135000
+    })
+  });
+  if (!results.length) {
+    const error = new Error(`AI better-expressions batching failed. ${warnings.join(" | ")}`);
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    detailedSentenceCorrections: dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections))),
+    betterExpressionItems: results.flatMap((r) => ensureArray(r.betterExpressionItems)).filter((item) => hasUsefulText(item)),
+    betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
+    stageWarnings: warnings
+  };
+}
+
+async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const plan = await callTenStepBatchJson({
+    apiKey,
+    model,
+    stage,
+    locale,
+    userPrompt: buildFinalPlanPrompt({ body, effectiveMode, locale }),
+    maxTokens: envInt("AI_FINAL_PLAN_MAX_TOKENS", 7000, 3500, 12000),
+    deadline,
+    timeoutMs: Number(process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 135000
+  });
+  return { aiStage: stage, disclaimer: DISCLAIMER, ...plan };
+}
+
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
   if (!String(body.essay || "").trim() && stage !== "prompt-analysis") {
     const error = new Error(`AI ${stage} stage cannot run because the essay is empty.`);
@@ -4511,8 +4892,23 @@ async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stag
     error.status = 400;
     throw error;
   }
+  if (stage === "criterion-boundary" || stage === "score-boundary") {
+    return callAiBatchedCriterionBoundary({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+  if (stage === "spelling-wordform") {
+    return callAiBatchedSpellingWordform({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+  if (stage === "lexical-choice-collocation") {
+    return callAiBatchedLexicalChoice({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
   if (stage === "sentence-corrections") {
     return callAiBatchedSentenceCorrections({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+  if (stage === "better-expressions") {
+    return callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
+  if (stage === "final-plan") {
+    return callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage, locale, deadline });
   }
   if (stage === "better-expression-plan") {
     return callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiveMode, stage, locale, deadline });
@@ -4528,7 +4924,7 @@ async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stag
     temperature: stage === "score-boundary" || stage === "evidence-map" ? 0.05 : 0.08,
     jsonMode: true,
     deadline,
-    timeoutMs: safePassTimeout(deadline, Math.max(70000, Number(process.env.AI_TEN_STEP_STAGE_TIMEOUT_MS) || 105000), 70000)
+    timeoutMs: safePassTimeout(deadline, Math.max(70000, Number(process.env.AI_TEN_STEP_STAGE_TIMEOUT_MS) || 135000), 70000)
   });
 
   let parsed = await parseOrRepairAiJson({
