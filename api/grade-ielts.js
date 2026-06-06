@@ -916,6 +916,77 @@ function extractDeepSeekText(data) {
   return "";
 }
 
+function stripJsonCodeFence(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function extractFirstJsonObject(text) {
+  const raw = stripJsonCodeFence(text);
+  const start = raw.indexOf("{");
+  if (start < 0) return "";
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "{") depth += 1;
+    if (ch === "}") depth -= 1;
+
+    if (depth === 0) {
+      return raw.slice(start, i + 1);
+    }
+  }
+
+  return "";
+}
+
+function parseJsonFromProvider(text) {
+  const cleaned = stripJsonCodeFence(text);
+  if (!cleaned) {
+    throw new Error("AI returned empty JSON text.");
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (firstError) {
+    const extracted = extractFirstJsonObject(cleaned);
+    if (!extracted) {
+      throw new Error(`AI returned malformed JSON: ${firstError.message}`);
+    }
+
+    try {
+      return JSON.parse(extracted);
+    } catch (secondError) {
+      throw new Error(`AI returned malformed JSON: ${secondError.message}`);
+    }
+  }
+}
+
+
 async function callDeepSeek({ apiKey, model, systemPrompt, userPrompt, maxTokens, temperature = 0.2, jsonMode = false, deadline, timeoutMs }) {
   if (!apiKey) {
     const error = new Error("DeepSeek API key is missing.");
@@ -1043,7 +1114,7 @@ async function parseOrRepairAiJson({ apiKey, model, rawText, body, locale, maxTo
           userPrompt: buildCompactAiOnlyRepairPrompt(rawText, body, locale),
           maxTokens: Math.min(Math.max(maxTokens, 1000), 1700),
           temperature: 0.0,
-          jsonMode: false,
+          jsonMode: true,
           deadline,
           timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
         });
@@ -1663,13 +1734,14 @@ async function parseCorrectionJson({ apiKey, model, rawText, body, locale, maxTo
         ].join("\n"),
         maxTokens: 1800,
         temperature: 0.0,
-        jsonMode: false,
+        jsonMode: true,
         deadline,
         timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
       });
       return parseJsonFromProvider(repairedText);
-    } catch {
-      return {};
+    } catch (repairError) {
+      parseError.message = `AI correction JSON parse failed and AI repair failed: ${repairError.message || repairError.name || parseError.message}`;
+      throw parseError;
     }
   }
 }
@@ -1685,7 +1757,7 @@ async function callAiCorrectionPass({ apiKey, model, body, effectiveMode, locale
     userPrompt: buildAiCorrectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, locale),
     maxTokens,
     temperature: 0.1,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs
   });
@@ -1782,7 +1854,7 @@ async function callAiFocusedCorrectionPass({ apiKey, model, body, effectiveMode,
     userPrompt: buildFocusedAiCorrectionPrompt({ ...body, mode: effectiveMode }, effectiveMode, locale),
     maxTokens,
     temperature: 0.0,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs: safePassTimeout(deadline, timeoutMs || Math.min(45000, AI_SINGLE_REQUEST_TIMEOUT_MS), 28000)
   });
@@ -2024,7 +2096,7 @@ async function callAiCompactScoringRetry({ apiKey, model, body, gradingMode, loc
     userPrompt: buildCompactAiOnlyPrompt({ ...body, mode: gradingMode }, locale, "Previous full scoring pass timed out; return a smaller complete scoring JSON."),
     maxTokens: 1800,
     temperature: 0.1,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs: Math.min(12000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
@@ -2059,7 +2131,7 @@ async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, 
     userPrompt,
     maxTokens: cappedMaxTokens,
     temperature: 0.1,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs
   });
@@ -2188,7 +2260,7 @@ async function callAiMinimalScoringPass({ apiKey, model, body, gradingMode, loca
     userPrompt: buildMinimalAiScoringPrompt({ ...body, mode: gradingMode }, gradingMode, locale),
     maxTokens: 1200,
     temperature: 0.0,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs: Math.min(10000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
@@ -2336,7 +2408,7 @@ async function callAiNoTemplateScoringPass({ apiKey, model, body, gradingMode, l
     userPrompt: buildNoTemplateAiScoringPrompt({ ...body, mode: gradingMode }, gradingMode, locale),
     maxTokens: 3600,
     temperature: 0.0,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs: Math.min(60000, AI_SINGLE_REQUEST_TIMEOUT_MS)
   });
@@ -2497,7 +2569,7 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     userPrompt: buildLeanScorePrompt({ ...body, mode: gradingMode }, gradingMode, locale),
     maxTokens: 5200,
     temperature: 0.05,
-    jsonMode: false,
+    jsonMode: true,
     deadline,
     timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(120000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 190000))
   });
@@ -2660,7 +2732,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       `Scan the whole essay sentence by sentence. Return up to ${limit} sentenceCorrections and up to ${limit} detailedSentenceCorrections.`,
       "Return only sentence issues that affect IELTS band. Do not include errorType None, No significant improvement needed, No impact on band score, unchanged corrections, or correct salutations/closings.",
       "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, betterExpressionTargetBand, problem, rule, band impact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
-    "betterExpression must be present for every score-impacting correction below Band 9. If the corrected sentence is too similar to the betterExpression, rewrite it again so it shows a realistic 0.5-1 band upgrade while preserving all task-relevant meaning. Keep it at the target range, not far above the learner level.",
+    "betterExpression must be present for every score-impacting correction below Band 9. It must be ONE sentence only, not a paragraph. If the original text contains multiple sentences, choose the sentence being corrected and return a single upgraded sentence. If the corrected sentence is too similar to the betterExpression, rewrite it again so it shows a realistic 0.5-1 band upgrade while preserving all task-relevant meaning. Keep it at the target range, not far above the learner level.",
       "Do not make Band 3-5 learners imitate Band 8-9 language. Upgrade only to the next realistic target range.",
       ...common
     ].join("\n");
@@ -2829,18 +2901,18 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
 
 async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMode, section, locale, deadline }) {
   const maxTokensBySection = {
-    task: 9000,
-    language: 11000,
-    vocabulary: 9000,
-    spelling: 4200,
-    grammar: 9000,
-    sentence: 12000,
-    advice: 11000
+    task: 7000,
+    language: 8000,
+    vocabulary: 7000,
+    spelling: 3600,
+    grammar: 7000,
+    sentence: 8500,
+    advice: 7500
   };
   const sectionTimeout = safePassTimeout(
     deadline,
-    Math.max(90000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 135000),
-    90000
+    Math.max(60000, Number(process.env.AI_CORRECTION_STAGE_TIMEOUT_MS) || 90000),
+    60000
   );
   const configuredAttempts = Math.max(1, Math.min(Number(process.env.AI_SECTION_RETRY_ATTEMPTS) || 1, 2));
   const maxAttempts = section === "advice" ? Math.max(2, configuredAttempts) : configuredAttempts;
@@ -2860,7 +2932,7 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
         userPrompt,
         maxTokens: maxTokensBySection[section] || 5200,
         temperature: attempt === 1 ? 0.1 : 0.0,
-        jsonMode: false,
+        jsonMode: true,
         deadline,
         timeoutMs: sectionTimeout
       });
@@ -2896,52 +2968,27 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     return bestOutput;
   }
 
-
-  if (section === "grammar") {
-    bestOutput.sectionStage = section;
-    bestOutput.sectionWarning = "";
-    bestOutput.stageWarnings = ensureArray(bestOutput.stageWarnings).filter((item) => !isNonBlockingGrammarWarningText(item));
-    bestOutput.grammarErrors = ensureArray(bestOutput.grammarErrors);
-    bestOutput.detailedSentenceCorrections = ensureArray(bestOutput.detailedSentenceCorrections);
-    bestOutput.grammarAdvice = ensureArray(bestOutput.grammarAdvice);
-    bestOutput.grammarAdviceZh = ensureArray(bestOutput.grammarAdviceZh);
-    bestOutput.errorAnalysis = bestOutput.errorAnalysis && typeof bestOutput.errorAnalysis === "object" ? bestOutput.errorAnalysis : {};
-    bestOutput.errorAnalysis.summary = bestOutput.errorAnalysis.summary || "No major grammar-specific issue was returned in this stage; rely on the overall language, sentence-level, and polishing feedback.";
-    bestOutput.errorAnalysis.summaryZh = bestOutput.errorAnalysis.summaryZh || "本次语法专项没有返回明显语法问题；可参考总体语言、逐句修改和润色建议。";
-    bestOutput.grammarPassRecovered = true;
-    return bestOutput;
-  }
-
-  const warning = lastError?.message || `AI ${section} stage returned no usable detailed content.`;
-  bestOutput.sectionStage = section;
-  bestOutput.sectionWarning = warning;
-  bestOutput.stageWarnings = ensureArray(bestOutput.stageWarnings).concat([
-    `${section} stage did not return enough usable detail. Existing grading results were kept.`
-  ]);
-  if (section === "vocabulary") {
-    bestOutput.spellingCorrections = ensureArray(bestOutput.spellingCorrections);
-    bestOutput.detailedSentenceCorrections = ensureArray(bestOutput.detailedSentenceCorrections);
-    bestOutput.lexicalAdvice = ensureArray(bestOutput.lexicalAdvice);
-    bestOutput.errorAnalysis = bestOutput.errorAnalysis && typeof bestOutput.errorAnalysis === "object" ? bestOutput.errorAnalysis : {};
-    bestOutput.errorAnalysis.summary = bestOutput.errorAnalysis.summary || "The vocabulary stage did not return enough usable detail; retry this stage for a fuller lexical check.";
-    bestOutput.errorAnalysis.summaryZh = bestOutput.errorAnalysis.summaryZh || "词汇检查阶段返回内容不足；可重试获得更完整的词汇反馈。";
-  }
-  return bestOutput;
+  const error = new Error(lastError?.message || `AI ${section} stage failed or returned no usable detailed content.`);
+  error.provider = DEFAULT_PROVIDER;
+  error.aiStage = `correction-${section}`;
+  error.status = 502;
+  throw error;
 }
 
 
 
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
-  if (["score", "scoring", "grade", "grading", "corescore", "corescoring"].includes(raw)) return "score";
-  if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
-  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "taskandevidence", "problemmapping", "evidence"] .includes(raw)) return "evidence-map";
-  if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan"].includes(raw)) return "final-plan";
+  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "stage1", "step1"].includes(raw)) return "score";
+  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "taskandevidence", "problemmapping", "evidence", "taskmap", "questionmap", "stage2", "step2"].includes(raw)) return "evidence-map";
+  if (["languagediagnosis", "languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence", "stage3", "step3"].includes(raw)) return "language-correction";
+  if (["sentencecorrection", "sentencecorrections", "sentencelevelcorrection", "sentencelevelcorrections", "sentence", "sentences", "detailedsentence", "betterexpression", "betterexpressions", "stage4", "step4"].includes(raw)) return "correction-sentence";
+  if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "stage5", "step5"].includes(raw)) return "final-plan";
+  if (["revision", "model", "modelanswer", "revisedessay", "stage6", "step6"].includes(raw)) return "revision";
   if (["evidenceplan", "evidenceandplan", "planandevidence"].includes(raw)) return "evidence-plan";
   const focused = normalizeFocusedCorrectionStage(raw);
   if (focused) return `correction-${focused}`;
   if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
-  if (["revision", "model", "modelanswer", "revisedessay"].includes(raw)) return "revision";
   return "all";
 }
 
@@ -3007,27 +3054,29 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
 }
 
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
-  let output = { disclaimer: DISCLAIMER };
-  const words = Number(body.wordCount) || countWordsServer(body.essay);
-  if (!String(body.essay || "").trim()) return output;
-
-  try {
-    const correction = await callAiCorrectionPass({
-      apiKey,
-      model,
-      body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
-      effectiveMode,
-      locale,
-      deadline,
-      maxTokensOverride: Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 320, words < 80 ? 5000 : 9000), effectiveMode === "revision" ? 18000 : 15000),
-      timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
-    });
-    output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
-  } catch (firstError) {
-    output.correctionWarning = isDeepSeekTimeoutError(firstError)
-      ? "AI detailed correction pass timed out. A focused retry will be attempted when enough server time remains."
-      : "AI detailed correction pass failed. A focused retry will be attempted when enough server time remains.";
+  let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
+  if (!String(body.essay || "").trim()) {
+    const error = new Error("AI language-correction stage cannot run because the essay is empty.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "language-correction";
+    error.status = 400;
+    throw error;
   }
+
+  const correction = await callAiCorrectionPass({
+    apiKey,
+    model,
+    body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
+    effectiveMode,
+    locale,
+    deadline,
+    maxTokensOverride: Math.min(
+      Math.max(correctionLimitForEssay(body, effectiveMode) * 280, (Number(body.wordCount) || countWordsServer(body.essay)) < 80 ? 4200 : 7600),
+      effectiveMode === "revision" ? 12000 : 9500
+    ),
+    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
+  });
+  output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
 
   output = await ensureAiCorrectionDetails({
     result: output,
@@ -3039,8 +3088,16 @@ async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, l
     deadline
   });
 
-  output.overallBand = output.overallBand || body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
-  output.criteria = output.criteria || (body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined);
+  if (!hasAiCorrectionContent(output) && !hasUsefulText(output.errorAnalysis?.summary)) {
+    const error = new Error("AI language-correction stage returned no usable correction content.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "language-correction";
+    error.status = 502;
+    throw error;
+  }
+
+  output.overallBand = body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
+  output.criteria = body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : output.criteria;
   output.aiStage = "language-correction";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -3089,49 +3146,8 @@ function mergeStagePayloadForEvidencePlan(output, payload) {
 }
 
 async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
-  let output = {
-    disclaimer: DISCLAIMER,
-    aiStage: "evidence-plan",
-    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
-    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
-  };
-  const warnings = [];
-
-  try {
-    const taskPass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "task",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, taskPass);
-    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
-  } catch (error) {
-    warnings.push(`Task evidence pass did not complete: ${error.message}`);
-  }
-
-  try {
-    const advicePass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "advice",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, advicePass);
-    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
-  } catch (error) {
-    warnings.push(`Study-plan pass did not complete: ${error.message}`);
-  }
-
-  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  const output = await callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline });
   output.aiStage = "evidence-plan";
-  output.disclaimer = DISCLAIMER;
   return output;
 }
 
@@ -3143,25 +3159,19 @@ async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, 
     overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
     criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
   };
-  const warnings = [];
 
-  try {
-    const taskPass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "task",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, taskPass);
-    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
-  } catch (error) {
-    warnings.push(`Task evidence map did not complete: ${error.message}`);
-  }
+  const taskPass = await callAiFocusedSectionStageOnly({
+    apiKey,
+    model,
+    body,
+    effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+    section: "task",
+    locale,
+    deadline
+  });
 
-  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  output = mergeStagePayloadForEvidencePlan(output, taskPass);
+  output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
   output.aiStage = "evidence-map";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -3176,25 +3186,19 @@ async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, lo
     taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis,
     taskMatchCheck: body.currentResult?.taskMatchCheck
   };
-  const warnings = [];
 
-  try {
-    const advicePass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "advice",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, advicePass);
-    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
-  } catch (error) {
-    warnings.push(`Final study-plan pass did not complete: ${error.message}`);
-  }
+  const advicePass = await callAiFocusedSectionStageOnly({
+    apiKey,
+    model,
+    body,
+    effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+    section: "advice",
+    locale,
+    deadline
+  });
 
-  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  output = mergeStagePayloadForEvidencePlan(output, advicePass);
+  output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
   output.aiStage = "final-plan";
   output.disclaimer = DISCLAIMER;
   return output;
@@ -3827,26 +3831,28 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
 
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
-  if (!String(body.essay || "").trim()) return output;
-
-  try {
-    const correction = await callAiCorrectionPass({
-      apiKey,
-      model,
-      body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
-      effectiveMode,
-      locale,
-      deadline,
-      maxTokensOverride: Math.min(Math.max(correctionLimitForEssay(body, effectiveMode) * 320, (Number(body.wordCount) || countWordsServer(body.essay)) < 80 ? 5000 : 9000), effectiveMode === "revision" ? 18000 : 15000),
-      timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
-    });
-    output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
-  } catch (error) {
-    const warning = `AI detailed correction pass failed: ${error.message || error.name || "unknown error"}. No non-AI correction was generated.`;
-    output.correctionWarning = warning;
-    output.correctionPassWarning = warning;
-    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
+  if (!String(body.essay || "").trim()) {
+    const error = new Error("AI language-correction stage cannot run because the essay is empty.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "language-correction";
+    error.status = 400;
+    throw error;
   }
+
+  const correction = await callAiCorrectionPass({
+    apiKey,
+    model,
+    body: { ...body, mode: effectiveMode, currentOverallBand: body.currentOverallBand || body.overallBand },
+    effectiveMode,
+    locale,
+    deadline,
+    maxTokensOverride: Math.min(
+      Math.max(correctionLimitForEssay(body, effectiveMode) * 280, (Number(body.wordCount) || countWordsServer(body.essay)) < 80 ? 4200 : 7600),
+      effectiveMode === "revision" ? 12000 : 9500
+    ),
+    timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(60000, Number(process.env.AI_CORRECTION_TIMEOUT_MS) || 90000))
+  });
+  output = mergeAiCorrectionDetails(output, correction, body, effectiveMode);
 
   output = await ensureAiCorrectionDetails({
     result: output,
@@ -3857,6 +3863,14 @@ async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, l
     locale,
     deadline
   });
+
+  if (!hasAiCorrectionContent(output) && !hasUsefulText(output.errorAnalysis?.summary)) {
+    const error = new Error("AI language-correction stage returned no usable correction content.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "language-correction";
+    error.status = 502;
+    throw error;
+  }
 
   output.overallBand = body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
   output.criteria = body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : output.criteria;
@@ -3872,30 +3886,26 @@ async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, 
     overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
     criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
   };
-  try {
-    const taskPass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "task",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, taskPass);
-    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
-  } catch (error) {
-    const warning = `AI evidence-map stage failed: ${error.message || error.name || "unknown error"}. No non-AI evidence was generated.`;
-    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
-    output.sectionWarning = warning;
-  }
+
+  const taskPass = await callAiFocusedSectionStageOnly({
+    apiKey,
+    model,
+    body,
+    effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+    section: "task",
+    locale,
+    deadline
+  });
+
+  output = mergeStagePayloadForEvidencePlan(output, taskPass);
+  output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
   output.aiStage = "evidence-map";
   output.disclaimer = DISCLAIMER;
   return output;
 }
 
 async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
-  let output = await callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline });
+  const output = await callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, locale, deadline });
   output.aiStage = "evidence-plan";
   return output;
 }
@@ -3909,23 +3919,19 @@ async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, lo
     taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis,
     taskMatchCheck: body.currentResult?.taskMatchCheck
   };
-  try {
-    const advicePass = await callAiFocusedSectionStageOnly({
-      apiKey,
-      model,
-      body,
-      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
-      section: "advice",
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, advicePass);
-    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
-  } catch (error) {
-    const warning = `AI final study-plan stage failed: ${error.message || error.name || "unknown error"}. No non-AI study plan was generated.`;
-    output.stageWarnings = aiOnlyArray(output.stageWarnings).concat([warning]);
-    output.sectionWarning = warning;
-  }
+
+  const advicePass = await callAiFocusedSectionStageOnly({
+    apiKey,
+    model,
+    body,
+    effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+    section: "advice",
+    locale,
+    deadline
+  });
+
+  output = mergeStagePayloadForEvidencePlan(output, advicePass);
+  output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
   output.aiStage = "final-plan";
   output.disclaimer = DISCLAIMER;
   return output;
