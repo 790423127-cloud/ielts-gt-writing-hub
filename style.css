@@ -387,3 +387,11 @@
 .evidence-explain-line{border-top:1px dashed var(--line);padding-top:8px}
 .evidence-explain-line:first-of-type{border-top:0;padding-top:0}
 @media(max-width:760px){.criterion-evidence-body li .translation-toggle{display:flex}.better-expression-line{padding:8px}}
+
+/* Three-stage grading log */
+.stage-log-list{display:grid;gap:8px;margin:0;padding-left:20px}
+.stage-log-list li{line-height:1.55}
+.stage-error{color:var(--rose)}
+.stage-error strong{color:var(--rose)}
+.stage-warning-log{margin-top:10px}
+.stage-log-detail{margin:6px 0 0;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);color:var(--muted);font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto}
