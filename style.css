@@ -370,3 +370,8 @@
 .criterion-evidence-body li .translation-panel{margin-top:6px}
 .evidence-explain-line{display:grid;gap:6px}
 .evidence-explain-line .translation-toggle{justify-self:start;width:auto}
+
+
+.criterion-evidence-body .translation-toggle{margin:8px 0 4px 0;min-height:34px;padding:0 10px;font-size:14px;width:auto}
+.criterion-evidence-body .translation-panel{margin:6px 0 10px 0;padding:10px 12px;border-radius:var(--radius);background:rgba(15,118,110,.08);border:1px solid var(--line);line-height:1.55}
+.evidence-explain-line .translation-inline,.criterion-evidence-body li .translation-inline{margin-top:6px}
