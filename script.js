@@ -33,12 +33,25 @@ function listHtml(items) {
   return Array.isArray(items) && items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">暂无内容</p>`;
 }
 
-function translatedListHtml(items, zhItems) {
+function fallbackEvidenceZh(label, englishText) {
+  const text = String(englishText || "").trim();
+  if (!text) return "";
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("quote")) return `原文证据：${text}`;
+  if (normalized.includes("positive")) return `正面评分证据：${text}`;
+  if (normalized.includes("limiting")) return `限制分数的证据：${text}`;
+  if (normalized.includes("why this")) return `为什么是这个分数：${text}`;
+  if (normalized.includes("why not higher")) return `为什么不能更高：${text}`;
+  if (normalized.includes("why not lower")) return `为什么没有更低：${text}`;
+  return `中文解释：${text}`;
+}
+
+function translatedListHtml(items, zhItems, label = "") {
   const english = Array.isArray(items) ? items.filter(Boolean) : [];
   const chinese = Array.isArray(zhItems) ? zhItems : [];
   if (!english.length) return `<p class="muted">暂无内容</p>`;
   return `<ul>${english.map((item, index) => {
-    const zh = chinese[index];
+    const zh = hasTranslationValue(chinese[index]) ? chinese[index] : fallbackEvidenceZh(label, item);
     return `<li>${escapeHtml(item)}${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</li>`;
   }).join("")}</ul>`;
 }
@@ -956,7 +969,7 @@ function renderStageProgress(result = {}) {
 function renderEvidenceExplanationLine(label, englishText, chineseText) {
   const text = String(englishText || "").trim();
   if (!text) return "";
-  const zh = String(chineseText || "").trim();
+  const zh = hasTranslationValue(chineseText) ? String(chineseText || "").trim() : fallbackEvidenceZh(label, text);
   return `<div class="evidence-explain-line"><p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</p>${hasTranslationValue(zh) ? renderZhToggle(zh) : ""}</div>`;
 }
 
@@ -977,9 +990,9 @@ function renderCriterionEvidence(item = {}) {
   return `<details class="criterion-evidence-details">
     <summary>评分证据 / Band evidence</summary>
     <div class="criterion-evidence-body">
-      ${quotes.length ? `<div class="evidence-block"><strong>Evidence quotes:</strong>${translatedListHtml(quotes, quotesZh)}</div>` : ""}
-      ${positive.length ? `<div class="evidence-block"><strong>Positive evidence:</strong>${translatedListHtml(positive, positiveZh)}</div>` : ""}
-      ${limiting.length ? `<div class="evidence-block"><strong>Limiting evidence:</strong>${translatedListHtml(limiting, limitingZh)}</div>` : ""}
+      ${quotes.length ? `<div class="evidence-block"><strong>Evidence quotes:</strong>${translatedListHtml(quotes, quotesZh, "Evidence quotes")}</div>` : ""}
+      ${positive.length ? `<div class="evidence-block"><strong>Positive evidence:</strong>${translatedListHtml(positive, positiveZh, "Positive evidence")}</div>` : ""}
+      ${limiting.length ? `<div class="evidence-block"><strong>Limiting evidence:</strong>${translatedListHtml(limiting, limitingZh, "Limiting evidence")}</div>` : ""}
       ${renderEvidenceExplanationLine("Why this band", whyThis, whyThisZh)}
       ${renderEvidenceExplanationLine("Why not higher", whyHigher, whyHigherZh)}
       ${renderEvidenceExplanationLine("Why not lower", whyLower, whyLowerZh)}

@@ -904,7 +904,38 @@ function ensureGrammarErrorsForVisibleProblems(result, body = {}) {
 function isGenericEvidenceText(value) {
   const text = String(value || "").toLowerCase();
   if (!text.trim()) return true;
-  return /has enough positive evidence|shows some relevant evidence|band is limited by|balance between the positive evidence|generally good overall impression|avoid a lower band|criterion is functional|evidence sits between band/i.test(text);
+  return /has enough positive evidence|shows some relevant evidence|band is limited by|balance between the positive evidence|generally good overall impression|avoid a lower band|criterion is functional|evidence sits between band|typical of band|higher band needs stronger evidence|not just a generally good overall impression/i.test(text);
+}
+
+function extractBandMentionsFromText(value) {
+  const text = String(value || "");
+  const matches = [...text.matchAll(/Band\s+([1-9](?:\.0|\.5)?)/gi)];
+  return matches
+    .map((match) => clampAiBand(match[1], NaN))
+    .filter((band) => Number.isFinite(Number(band)));
+}
+
+function explanationBandMentionsMismatch(value, actualBand) {
+  const text = String(value || "");
+  if (!text.trim()) return false;
+  const actual = normalizeCriterionBandValue(actualBand, 1);
+  const mentions = extractBandMentionsFromText(text);
+  if (!mentions.length) return false;
+
+  // Phrases such as "between Band 5 and Band 6" are acceptable only when the actual
+  // band is the corresponding half band. Otherwise, regenerate the explanation.
+  const betweenMatch = text.match(/between\s+Band\s+([1-9](?:\.0|\.5)?)\s+and\s+Band\s+([1-9](?:\.0|\.5)?)/i);
+  if (betweenMatch) {
+    const low = clampAiBand(betweenMatch[1], NaN);
+    const high = clampAiBand(betweenMatch[2], NaN);
+    if (Number.isFinite(low) && Number.isFinite(high) && Math.abs(actual - ((low + high) / 2)) < 0.01) return false;
+  }
+
+  return !mentions.some((band) => Math.abs(band - actual) < 0.01);
+}
+
+function shouldReplaceCriterionExplanation(value, actualBand) {
+  return !hasUsefulText(value) || isGenericEvidenceText(value) || explanationBandMentionsMismatch(value, actualBand);
 }
 
 function normalizeZhArrayLength(enItems, zhItems, fallbackFactory) {
@@ -1094,17 +1125,44 @@ function populateCriterionEvidenceDetails(result, body = {}) {
       criterion.evidence = evidence.slice(0, 6);
     }
 
-    if (!hasUsefulText(criterion.whyThisBand) || isGenericEvidenceText(criterion.whyThisBand)) criterion.whyThisBand = fallback.why;
-    if (!hasUsefulText(criterion.whyNotHigher) || isGenericEvidenceText(criterion.whyNotHigher)) criterion.whyNotHigher = fallback.higher;
-    if (!hasUsefulText(criterion.whyNotLower) || isGenericEvidenceText(criterion.whyNotLower)) criterion.whyNotLower = fallback.lower;
+    if (shouldReplaceCriterionExplanation(criterion.whyThisBand, band)) criterion.whyThisBand = fallback.why;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotHigher, band)) criterion.whyNotHigher = fallback.higher;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotLower, band)) criterion.whyNotLower = fallback.lower;
 
     criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => `原文证据：${quote}`);
     criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
     criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
     criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
-    if (!hasUsefulText(criterion.whyThisBandZh) || isGenericEvidenceText(criterion.whyThisBandZh)) criterion.whyThisBandZh = fallback.whyZh;
-    if (!hasUsefulText(criterion.whyNotHigherZh) || isGenericEvidenceText(criterion.whyNotHigherZh)) criterion.whyNotHigherZh = fallback.higherZh;
-    if (!hasUsefulText(criterion.whyNotLowerZh) || isGenericEvidenceText(criterion.whyNotLowerZh)) criterion.whyNotLowerZh = fallback.lowerZh;
+    if (shouldReplaceCriterionExplanation(criterion.whyThisBandZh, band)) criterion.whyThisBandZh = fallback.whyZh;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotHigherZh, band)) criterion.whyNotHigherZh = fallback.higherZh;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotLowerZh, band)) criterion.whyNotLowerZh = fallback.lowerZh;
+  }
+  return result;
+}
+
+function syncCriterionEvidenceWithFinalBands(result, body = {}) {
+  if (!result || !result.criteria || typeof result.criteria !== "object") return result;
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const signals = extractEssaySignals(body, result);
+  for (const name of getWritingCriterionNames(task)) {
+    const criterion = result.criteria[name];
+    if (!criterion || typeof criterion !== "object") continue;
+    const band = normalizeCriterionBandValue(criterion.band, result.overallBand || 1);
+    const quotes = ensureArray(criterion.evidenceQuotes).filter(Boolean).slice(0, 3);
+    const fallback = makeCriterionSpecificEvidence(name, band, task, { ...body, currentResult: result }, signals, quotes);
+
+    if (shouldReplaceCriterionExplanation(criterion.whyThisBand, band)) criterion.whyThisBand = fallback.why;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotHigher, band)) criterion.whyNotHigher = fallback.higher;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotLower, band)) criterion.whyNotLower = fallback.lower;
+
+    if (shouldReplaceCriterionExplanation(criterion.whyThisBandZh, band)) criterion.whyThisBandZh = fallback.whyZh;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotHigherZh, band)) criterion.whyNotHigherZh = fallback.higherZh;
+    if (shouldReplaceCriterionExplanation(criterion.whyNotLowerZh, band)) criterion.whyNotLowerZh = fallback.lowerZh;
+
+    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => `原文证据：${quote}`);
+    criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
+    criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
+    criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
   }
   return result;
 }
@@ -1650,6 +1708,7 @@ function finalizeTaskScoringEngine(result, body = {}) {
   result.estimatedLevel = `Band ${formatBand(result.overallBand)}`;
   refineHighBandTaskSpecificAdvice(result, { ...body, task });
   populateCriterionEvidenceDetails(result, { ...body, task });
+  syncCriterionEvidenceWithFinalBands(result, { ...body, task });
   ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
   result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
   result.scoringSystem = {
