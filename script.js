@@ -1561,14 +1561,18 @@ function isInvalidBetterExpression(value) {
   if (!text) return true;
   const compact = compactFeedbackText(text);
   if (!compact) return true;
-  // These phrases are explanations about the rewrite, not usable IELTS sentences.
-  if (/\b(which|this)\s+(makes|make)\s+the\s+(idea|point|sentence)\s+(clearer|more\s+specific|better)\b/i.test(text)) return true;
-  if (/\bclearer\s+and\s+more\s+specific\b/i.test(text)) return true;
-  // Do not display a better expression that still keeps obvious low-level errors.
-  if (/\bdiscuss\s+about\b/i.test(text)) return true;
-  if (/\bneed\s+to\s+facing\b/i.test(text)) return true;
-  if (/\bit['’]?spossible\b/i.test(text)) return true;
-  return false;
+  const badPatterns = [
+    /\b(which|this)\s+(makes|make|will\s+make)\s+the\s+(idea|point|sentence)\s+(clearer|more\s+specific|better)\b/i,
+    /\bclearer\s+and\s+more\s+specific\b/i,
+    /\bthis\s+improves\s+the\s+sentence\b/i,
+    /\bdiscuss\s+about\b/i,
+    /\bneed\s+to\s+facing\b/i,
+    /\bit['’]?spossible\b/i,
+    /\bshould\s+not\s+avoid\b/i,
+    /\bcan\s+improve\b[^.?!]{0,80}\bcan\s+be\s+beneficial\b/i,
+    /\bthat\s+means\b[^.?!]{0,80}\bcan\s+be\s+beneficial\b/i
+  ];
+  return badPatterns.some((pattern) => pattern.test(text));
 }
 
 function genericDisplayBetterExpression() {
@@ -1640,12 +1644,63 @@ function normalizeCorrectionIdentityText(value) {
 }
 
 function correctionIdentityKey(item = {}) {
+  const number = String(item.sentenceNumber || "").trim();
+  if (number && /^\d+$/.test(number)) return `num:${number}`;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
   const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
   const base = normalizeCorrectionIdentityText(original || corrected);
-  if (base) return `text:${base}`;
-  const number = String(item.sentenceNumber || "").trim();
-  return number ? `num:${number}` : "";
+  return base ? `text:${base}` : "";
+}
+
+function sentenceIdentityTokens(value) {
+  return normalizeCorrectionIdentityText(value)
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 1);
+}
+
+function sentenceIdentitySimilarity(a, b) {
+  const left = sentenceIdentityTokens(a);
+  const right = sentenceIdentityTokens(b);
+  if (!left.length || !right.length) return 0;
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  let overlap = 0;
+  leftSet.forEach((token) => { if (rightSet.has(token)) overlap += 1; });
+  return overlap / Math.max(leftSet.size, rightSet.size);
+}
+
+function findMatchingCorrectionIndex(corrections = [], item = {}) {
+  const key = correctionIdentityKey(item);
+  if (key && key.startsWith("num:")) {
+    const number = key.slice(4);
+    const indexByNumber = corrections.findIndex((entry) => String(entry.sentenceNumber || "") === number);
+    if (indexByNumber >= 0) return indexByNumber;
+  }
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence);
+  const normalized = normalizeCorrectionIdentityText(original);
+  if (!normalized) return -1;
+  let bestIndex = -1;
+  let bestScore = 0;
+  corrections.forEach((entry, index) => {
+    const entryOriginal = firstNonEmpty(entry.originalSentence, entry.original, entry.sourceSentence, entry.sentence);
+    const entryNorm = normalizeCorrectionIdentityText(entryOriginal);
+    if (!entryNorm) return;
+    if (entryNorm === normalized || entryNorm.includes(normalized) || normalized.includes(entryNorm)) {
+      const lengthRatio = Math.min(entryNorm.length, normalized.length) / Math.max(entryNorm.length, normalized.length);
+      if (lengthRatio >= 0.45 && lengthRatio > bestScore) {
+        bestScore = lengthRatio;
+        bestIndex = index;
+      }
+      return;
+    }
+    const score = sentenceIdentitySimilarity(entryOriginal, original);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  return bestScore >= 0.82 ? bestIndex : -1;
 }
 
 function mergeCorrectionText(existing, incoming) {
@@ -1683,14 +1738,6 @@ function mergeCorrectionItem(existing = {}, incoming = {}) {
 }
 
 function attachBetterExpressionItems(corrections = [], betterItems = []) {
-  const byOriginal = new Map();
-  const byNumber = new Map();
-  corrections.forEach((item, index) => {
-    const key = correctionIdentityKey(item);
-    if (key) byOriginal.set(key, index);
-    if (item.sentenceNumber) byNumber.set(String(item.sentenceNumber), index);
-  });
-
   ensureArray(betterItems).forEach((raw, rawIndex) => {
     if (!raw || typeof raw !== "object") return;
     const item = normalizeSentenceCorrectionItem({
@@ -1705,23 +1752,12 @@ function attachBetterExpressionItems(corrections = [], betterItems = []) {
       errorType: raw.errorType || "Better expression"
     }, rawIndex);
     if (!item || !hasAnyText(item.betterExpression)) return;
-    const key = correctionIdentityKey(item);
-    let matchIndex = key && byOriginal.has(key) ? byOriginal.get(key) : -1;
-    if (matchIndex < 0 && item.sentenceNumber && byNumber.has(String(item.sentenceNumber))) {
-      matchIndex = byNumber.get(String(item.sentenceNumber));
-    }
+    const matchIndex = findMatchingCorrectionIndex(corrections, item);
     if (matchIndex >= 0) {
       corrections[matchIndex] = mergeCorrectionItem(corrections[matchIndex], item);
-      return;
     }
-    // Only create a standalone card when AI supplied a real original/corrected sentence.
-    // This prevents betterExpressionItems from duplicating existing cards with weak keys.
-    if (hasAnyText(item.originalSentence) && hasAnyText(item.correctedSentence)) {
-      const nextIndex = corrections.length;
-      corrections.push(item);
-      if (key) byOriginal.set(key, nextIndex);
-      if (item.sentenceNumber) byNumber.set(String(item.sentenceNumber), nextIndex);
-    }
+    // AI-only display rule: betterExpressionItems must attach to an existing correction.
+    // Do not create standalone cards here; that was the remaining source of duplicate sentence cards.
   });
   return corrections;
 }
@@ -1735,23 +1771,23 @@ function getSentenceCorrectionItems(result = {}) {
     ...ensureArray(result.sentenceLevelCorrections),
     ...ensureArray(result.sentenceFeedback)
   ];
-  const map = new Map();
-  const fallback = [];
+  const merged = [];
   rawItems
     .map((item, index) => normalizeSentenceCorrectionItem(item, index))
     .filter(Boolean)
     .forEach((item) => {
-      const key = correctionIdentityKey(item);
-      if (!key) {
-        fallback.push(item);
-        return;
+      const matchIndex = findMatchingCorrectionIndex(merged, item);
+      if (matchIndex >= 0) {
+        merged[matchIndex] = mergeCorrectionItem(merged[matchIndex], item);
+      } else {
+        merged.push(item);
       }
-      map.set(key, map.has(key) ? mergeCorrectionItem(map.get(key), item) : item);
     });
 
-  const merged = [...map.values(), ...fallback];
   attachBetterExpressionItems(merged, result.betterExpressionItems);
-  return merged.filter(isScoreImpactingDetailedCorrection);
+  return merged
+    .filter(isScoreImpactingDetailedCorrection)
+    .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
 }
 
 function renderDetailedSentenceCorrections(items = []) {
@@ -1928,18 +1964,40 @@ function targetImprovementPlanHasUsefulContent(plan) {
   );
 }
 
+function parseBandNumber(value) {
+  const match = String(value ?? "").match(/\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const numeric = Number(match[0]);
+  return Number.isFinite(numeric) ? Math.max(1, Math.min(9, Math.round(numeric * 2) / 2)) : null;
+}
+
+function formatBandNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "";
+  return Number.isInteger(numeric) ? `${numeric}.0` : String(numeric);
+}
+
+function nextBandTargetRangeForDisplay(plan = {}, result = {}) {
+  const current = parseBandNumber(plan.currentBand || result.overallBand || result.scoreCalculation?.finalBand || result.estimatedLevel);
+  if (!current) return "";
+  const lower = Math.min(9, Math.round((current + 0.5) * 2) / 2);
+  const upper = Math.min(9, Math.round((current + 1.0) * 2) / 2);
+  return `${formatBandNumber(lower)}-${formatBandNumber(upper)}`;
+}
+
 function renderTargetImprovementPlan(plan, result = {}) {
   if (!plan || typeof plan !== "object" || !targetImprovementPlanHasUsefulContent(plan)) {
     return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `<p class="muted">No detailed improvement plan is available.</p>`);
   }
   let criterionUpgrades = getPlanUpgradeSource(plan).map(normalizeCriterionUpgradeItem).filter(Boolean).filter((item) => item.action || item.criterion || item.target);
   if (!criterionUpgrades.length) criterionUpgrades = fallbackCriterionUpgrades(plan, result);
-  const targetRangeText = plan.targetBandRange || plan.targetRange || plan.target || "";
-  const targetRangeZh = plan.targetBandRangeZh || (targetRangeText ? "目标范围按当前分数设置，控制在下一阶段可模仿、可实现的提升区间。" : "");
+  const calibratedTargetRange = nextBandTargetRangeForDisplay(plan, result);
+  const targetRangeText = calibratedTargetRange || plan.targetBandRange || plan.targetRange || plan.target || "";
+  const targetRangeZh = plan.targetBandRangeZh || (targetRangeText ? "目标范围按当前分数上调0.5到1.0分设置，属于下一阶段可实现目标，不是长期最终目标。" : "");
   const targetReasonZh = plan.targetReasonZh || (plan.targetReason ? "这个目标按当前分数上调约0.5到1分，优先解决最影响分数的任务回应、结构、词汇或语法问题。" : "");
   return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
     <div class="compact-facts">
-      <p><strong>当前分数：</strong>${escapeHtml(plan.currentBand || result.overallBand || "")}</p>
+      <p><strong>当前分数：</strong>${escapeHtml(formatBandNumber(parseBandNumber(plan.currentBand || result.overallBand || result.estimatedLevel)) || plan.currentBand || result.overallBand || "")}</p>
       <div><strong>目标范围：</strong>${renderTextWithTranslation(targetRangeText, targetRangeZh, { tag: "span" })}</div>
       ${plan.targetReason ? `<div><strong>为什么是这个目标：</strong>${renderTextWithTranslation(plan.targetReason, targetReasonZh, { tag: "span" })}</div>` : ""}
     </div>
@@ -1948,7 +2006,7 @@ function renderTargetImprovementPlan(plan, result = {}) {
         <div class="correction-item">
           <p><strong>项目：</strong>${escapeHtml(item.criterion || "General improvement")}</p>
           ${item.currentWeakness ? `<p><strong>Current weakness:</strong> ${escapeHtml(item.currentWeakness)}</p>` : ""}
-          <p><strong>目标：</strong>${escapeHtml(item.target || plan.targetBandRange || "Next realistic band range")}</p>
+          <p><strong>目标：</strong>${escapeHtml(item.target || targetRangeText || "Next realistic band range")}</p>
           <p><strong>具体动作：</strong>${escapeHtml(item.action || "Use the feedback above to make this criterion stronger.")}</p>
           ${item.exampleUpgrade ? `<p><strong>Example upgrade:</strong> ${escapeHtml(item.exampleUpgrade)}</p>` : ""}
           ${renderZhToggle([item.currentWeaknessZh, item.targetZh, item.actionZh, item.adviceZh, item.exampleUpgradeZh].filter(Boolean).join("\n"))}
