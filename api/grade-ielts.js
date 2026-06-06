@@ -4095,7 +4095,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       `Scan the whole essay sentence by sentence. Return up to ${limit} sentenceCorrections and up to ${limit} detailedSentenceCorrections.`,
       "Return only sentence issues that affect IELTS band. Do not include errorType None, No significant improvement needed, No impact on band score, unchanged corrections, or correct salutations/closings.",
       "For each useful issue, provide original sentence, corrected sentence, better expression at the realistic target band, betterExpressionTargetBand, problem, rule, band impact, scoreImpacting=true, whyThisAffectsBand, and targetBandExpression.",
-    "betterExpression must usually be present for every score-impacting correction below Band 9 when there is a safe next-band model. Keep it at the target range, not far above the learner level, and preserve all task-relevant meaning.",
+    "betterExpression must be present for every score-impacting correction below Band 9. If the corrected sentence is too similar to the betterExpression, rewrite it again so it shows a realistic 0.5-1 band upgrade while preserving all task-relevant meaning. Keep it at the target range, not far above the learner level.",
       "Do not make Band 3-5 learners imitate Band 8-9 language. Upgrade only to the next realistic target range.",
       ...common
     ].join("\n");
@@ -4586,7 +4586,9 @@ async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
 
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
-  if (["score", "scoring", "grade", "grading"].includes(raw)) return "score";
+  if (["score", "scoring", "grade", "grading", "corescore", "corescoring"].includes(raw)) return "score";
+  if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
+  if (["evidenceplan", "evidence", "studyplan", "evidenceandplan", "scoringevidence", "taskandevidence", "planandevidence"].includes(raw)) return "evidence-plan";
   if (["scoreaudit", "auditscore", "gradingaudit", "audit"].includes(raw)) return "score-audit";
   const focused = normalizeFocusedCorrectionStage(raw);
   if (focused) return `correction-${focused}`;
@@ -4689,7 +4691,118 @@ async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, l
     deadline
   });
 
-  output.aiStage = "correction";
+  output.overallBand = output.overallBand || body.currentOverallBand || body.overallBand || body.currentResult?.overallBand;
+  output.criteria = output.criteria || (body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined);
+  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
+  ensureGrammarErrorsForVisibleProblems(output, body);
+  finalQualityGate(output, { ...body, currentResult: output });
+  output.aiStage = "language-correction";
+  output.disclaimer = DISCLAIMER;
+  return output;
+}
+
+
+function mergeStagePayloadForEvidencePlan(output, payload) {
+  const target = output && typeof output === "object" ? output : {};
+  const data = payload && typeof payload === "object" ? payload : {};
+  const arrayFields = [
+    "taskAchievementAdvice", "taskAchievementAdviceZh", "coherenceAdvice", "coherenceAdviceZh",
+    "lexicalAdvice", "lexicalAdviceZh", "grammarAdvice", "grammarAdviceZh",
+    "band5FixPlan", "band5FixPlanZh", "band6UpgradePlan", "band6UpgradePlanZh", "band7UpgradePlan", "band7UpgradePlanZh",
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "stageWarnings"
+  ];
+  const objectFields = [
+    "taskRequirementAnalysis", "taskRequirementAnalysisZh", "task1LetterCorrections", "task2EssayCorrections",
+    "correctionPriority", "targetImprovementPlan", "errorAnalysis", "scoreCalibration", "scoreCalibrationZh", "scoreAudit"
+  ];
+  arrayFields.forEach((field) => {
+    const incoming = ensureArray(data[field]).filter(Boolean);
+    if (incoming.length) target[field] = incoming;
+  });
+  objectFields.forEach((field) => {
+    if (data[field] && typeof data[field] === "object") {
+      target[field] = { ...(target[field] && typeof target[field] === "object" ? target[field] : {}), ...data[field] };
+    }
+  });
+  if (data.criteria && typeof data.criteria === "object") {
+    target.criteria = target.criteria && typeof target.criteria === "object" ? target.criteria : {};
+    Object.entries(data.criteria).forEach(([name, incoming]) => {
+      if (!incoming || typeof incoming !== "object") return;
+      const existing = target.criteria[name] && typeof target.criteria[name] === "object" ? target.criteria[name] : {};
+      target.criteria[name] = {
+        ...existing,
+        ...incoming,
+        band: existing.band ?? incoming.band,
+        feedback: existing.feedback || incoming.feedback || "",
+        feedbackZh: existing.feedbackZh || incoming.feedbackZh || "",
+        howToImprove: existing.howToImprove || incoming.howToImprove || "",
+        howToImproveZh: existing.howToImproveZh || incoming.howToImproveZh || ""
+      };
+    });
+  }
+  return target;
+}
+
+async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  let output = {
+    disclaimer: DISCLAIMER,
+    aiStage: "evidence-plan",
+    overallBand: body.currentOverallBand || body.overallBand || body.currentResult?.overallBand,
+    criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
+  };
+  const warnings = [];
+
+  try {
+    const audit = await callAiScoreAuditPass({
+      apiKey,
+      model,
+      body: { ...body, currentResult: body.currentResult || null },
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, audit);
+  } catch (error) {
+    warnings.push(`Score evidence audit did not complete: ${error.message}`);
+  }
+
+  try {
+    const taskPass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "task",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, taskPass);
+    output = mergeAiCorrectionDetails(output, taskPass, body, effectiveMode);
+  } catch (error) {
+    warnings.push(`Task evidence pass did not complete: ${error.message}`);
+  }
+
+  try {
+    const advicePass = await callAiFocusedSectionStageOnly({
+      apiKey,
+      model,
+      body,
+      effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+      section: "advice",
+      locale,
+      deadline
+    });
+    output = mergeStagePayloadForEvidencePlan(output, advicePass);
+    output = mergeAiCorrectionDetails(output, advicePass, body, effectiveMode);
+  } catch (error) {
+    warnings.push(`Study-plan pass did not complete: ${error.message}`);
+  }
+
+  output.stageWarnings = ensureArray(output.stageWarnings).concat(warnings);
+  ensureTargetImprovementPlan(output, { ...body, overallBand: output.overallBand });
+  populateCriterionEvidenceDetails(output, { ...body, currentResult: output });
+  syncCriterionEvidenceWithFinalBands(output, { ...body, currentResult: output });
+  finalQualityGate(output, { ...body, currentResult: output });
+  output.aiStage = "evidence-plan";
   output.disclaimer = DISCLAIMER;
   return output;
 }
@@ -7065,7 +7178,37 @@ function buildGenericIeltsBetterExpression(correctedSentence, bandValue, body = 
 }
 
 function buildFallbackBetterExpression(correctedSentence, bandValue, body = {}) {
-  return buildGenericIeltsBetterExpression(correctedSentence, bandValue, body);
+  const source = normalizeGenericBetterSource(correctedSentence);
+  if (!source) return "";
+  const level = betterExpressionLevelFromBand(bandValue);
+  if (level.band >= 9) return "";
+  const generated = buildGenericIeltsBetterExpression(source, bandValue, body);
+  if (generated) return generated;
+
+  let upgraded = upgradeCommonIeltsWording(source)
+    .replace(/\bI think\b/i, "I believe")
+    .replace(/\bgood thing\b/gi, "positive development")
+    .replace(/\bbad thing\b/gi, "negative outcome")
+    .replace(/\bvery expensive\b/gi, "costly")
+    .replace(/\bspend too much money\b/gi, "avoid excessive spending")
+    .replace(/\buse it carefully\b/gi, "use it responsibly")
+    .replace(/\bmake people feel more confident\b/gi, "increase people’s confidence");
+
+  const functionType = detectSentenceFunction(source, body?.task === "Task 1" ? "Task 1" : "Task 2");
+  if (/^if\b/i.test(upgraded)) {
+    const core = upgraded.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
+    upgraded = `${core.charAt(0).toUpperCase()}${core.slice(1)} can be beneficial, provided that people use it responsibly`;
+  } else if (functionType === "opinion" && !/\b(if|provided that|because|although|while)\b/i.test(upgraded)) {
+    upgraded = upgraded.replace(/[.!?]*$/, ", provided that the possible risks are managed responsibly");
+  } else if (functionType === "drawback" && !/\bwhich\b/i.test(upgraded)) {
+    upgraded = upgraded.replace(/[.!?]*$/, ", which may create financial pressure or practical risks");
+  } else if (sameCorrectionText(upgraded, source) || !hasBetterExpressionUpgradeSignal(source, upgraded)) {
+    upgraded = source.replace(/[.!?]*$/, ", which makes the idea clearer and more specific");
+  }
+
+  upgraded = normalizeGenericBetterSource(upgraded);
+  if (!/[.!?]$/.test(upgraded)) upgraded += ".";
+  return upgraded;
 }
 
 function suppressNonBlockingGrammarWarningsFinal(result) {
@@ -7309,15 +7452,12 @@ function ensureTargetImprovementPlan(result, body) {
     const candidates = [item.betterExpression, item.targetBandExpression, fallbackBetter]
       .map((value) => String(value || "").trim())
       .filter(Boolean);
-    const chosen = candidates.find((candidate) => shouldShowBetterExpression(baseSentence, candidate)) || "";
+    const chosen = candidates.find((candidate) => shouldShowBetterExpression(baseSentence, candidate)) || fallbackBetter || candidates[0] || "";
     if (chosen) {
       item.betterExpression = chosen;
       if (!item.targetBandExpression || !shouldShowBetterExpression(baseSentence, item.targetBandExpression)) item.targetBandExpression = chosen;
       if (!item.betterExpressionTargetBand) item.betterExpressionTargetBand = targetLabel;
       if (!item.betterExpressionZh) item.betterExpressionZh = `这个更好表达按 ${targetLabel} 设计：保留原意，但让句子更自然、更正式或更清楚。`;
-    } else {
-      item.betterExpression = "";
-      item.betterExpressionZh = "";
     }
   });
 }
@@ -7771,6 +7911,28 @@ async function handleRequest(req, res) {
         deadline
       });
       result.aiStage = "score-audit";
+    } else if (aiStage === "language-correction") {
+      result = await callAiCorrectionStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        locale,
+        deadline
+      });
+      result.aiStage = "language-correction";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
+    } else if (aiStage === "evidence-plan") {
+      result = await callAiEvidencePlanStageOnly({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "revision" : "full",
+        locale,
+        deadline
+      });
+      result.aiStage = "evidence-plan";
+      result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage.startsWith("correction-")) {
       const section = aiStage.slice("correction-".length);
       result = await callAiFocusedSectionStageOnly({
@@ -7793,7 +7955,7 @@ async function handleRequest(req, res) {
         locale,
         deadline
       });
-      result.aiStage = "correction";
+      result.aiStage = "language-correction";
       result.disclaimer = result.disclaimer || DISCLAIMER;
     } else if (aiStage === "revision") {
       result = await callAiRevisionStageOnly({

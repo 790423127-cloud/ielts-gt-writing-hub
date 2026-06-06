@@ -612,6 +612,64 @@ function scoreAuditHasUsableCorrections(data = {}) {
   return Object.values(criteria).some((item) => item && typeof item === "object" && (hasAnyText(item.feedback) || hasAnyText(item.howToImprove)) && Number(item.band) > 1);
 }
 
+function richTextScore(value) {
+  const text = String(value || "").trim();
+  if (!text) return 0;
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const specifics = /(because|however|for example|specific|evidence|band|task|grammar|vocabulary|paragraph|coherence|lexical|sentence|development|position|bullet|tone|reason|example)/i.test(text) ? 12 : 0;
+  return text.length + words * 2 + specifics;
+}
+
+function preferRicherText(existing, incoming) {
+  const oldText = String(existing || "").trim();
+  const newText = String(incoming || "").trim();
+  if (!oldText) return newText;
+  if (!newText) return oldText;
+  return richTextScore(newText) > richTextScore(oldText) * 1.12 ? newText : oldText;
+}
+
+function mergeUniqueArray(existing, incoming, limit = 12) {
+  const out = [];
+  [...ensureArray(existing), ...ensureArray(incoming)].forEach((item) => {
+    if (!hasAnyText(item)) return;
+    const key = typeof item === "object" ? JSON.stringify(item) : String(item);
+    if (!out.some((old) => (typeof old === "object" ? JSON.stringify(old) : String(old)) === key)) out.push(item);
+  });
+  return out.slice(0, limit);
+}
+
+function mergeCriterionItem(existing = {}, incoming = {}, options = {}) {
+  const keepBand = options.keepBand !== false;
+  const merged = { ...(existing && typeof existing === "object" ? existing : {}) };
+  const incomingObj = incoming && typeof incoming === "object" ? incoming : {};
+  Object.entries(incomingObj).forEach(([key, value]) => {
+    if (key === "band" && keepBand && typeof merged.band !== "undefined") return;
+    if (Array.isArray(value)) {
+      const limit = /evidenceQuotes/i.test(key) ? 3 : /Evidence/i.test(key) ? 6 : 12;
+      merged[key] = mergeUniqueArray(merged[key], value, limit);
+    } else if (value && typeof value === "object") {
+      merged[key] = { ...(merged[key] && typeof merged[key] === "object" ? merged[key] : {}), ...value };
+    } else if (typeof value === "string") {
+      if (["feedback", "feedbackZh", "howToImprove", "howToImproveZh", "whyThisBand", "whyThisBandZh", "whyNotHigher", "whyNotHigherZh", "whyNotLower", "whyNotLowerZh"].includes(key)) {
+        merged[key] = preferRicherText(merged[key], value);
+      } else if (value.trim()) {
+        merged[key] = value;
+      }
+    } else if (typeof value !== "undefined" && value !== null) {
+      merged[key] = value;
+    }
+  });
+  return merged;
+}
+
+function mergeCriteriaPreservingRichText(existingCriteria = {}, incomingCriteria = {}, options = {}) {
+  const merged = { ...(existingCriteria && typeof existingCriteria === "object" ? existingCriteria : {}) };
+  Object.entries(incomingCriteria && typeof incomingCriteria === "object" ? incomingCriteria : {}).forEach(([name, incoming]) => {
+    merged[name] = mergeCriterionItem(merged[name], incoming, options);
+  });
+  return merged;
+}
+
 function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
@@ -630,10 +688,14 @@ function mergeAiStageResult(base, incoming) {
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
-    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"
+    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "scoreAudit"
   ];
   arrayFields.forEach((field) => {
-    if (Array.isArray(data[field]) && data[field].length) output[field] = data[field];
+    if (Array.isArray(data[field]) && data[field].length) {
+      const existing = Array.isArray(output[field]) ? output[field] : [];
+      const incomingLonger = data[field].length >= existing.length;
+      output[field] = incomingLonger ? data[field] : existing;
+    }
   });
   objectFields.forEach((field) => {
     if (data[field] && typeof data[field] === "object") output[field] = { ...(output[field] || {}), ...data[field] };
@@ -642,12 +704,20 @@ function mergeAiStageResult(base, incoming) {
     "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline",
     "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "sectionWarning", "disclaimer"
   ].forEach((field) => {
-    if (typeof data[field] === "string" && data[field].trim()) output[field] = data[field];
+    if (typeof data[field] === "string" && data[field].trim()) output[field] = preferRicherText(output[field], data[field]);
   });
+
   const canReplaceCriteria = data.criteria && typeof data.criteria === "object" && (
     incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit || !output.criteria
   );
-  if (canReplaceCriteria) output.criteria = data.criteria;
+  if (canReplaceCriteria) {
+    output.criteria = output.criteria
+      ? mergeCriteriaPreservingRichText(output.criteria, data.criteria, { keepBand: !(incomingStage === "score" || incomingStage === "all" || !output.criteria) })
+      : data.criteria;
+  } else if (data.criteria && typeof data.criteria === "object") {
+    output.criteria = mergeCriteriaPreservingRichText(output.criteria || {}, data.criteria, { keepBand: true });
+  }
+
   const mayReplaceScore = !output.overallBand || incomingStage === "score" || incomingStage === "all" || !incomingStage || usefulScoreAudit;
   if (mayReplaceScore && typeof data.overallBand !== "undefined") output.overallBand = data.overallBand;
   if (mayReplaceScore && typeof data.estimatedLevel !== "undefined") output.estimatedLevel = data.estimatedLevel;
@@ -689,6 +759,30 @@ function adviceTranslationsComplete(data = {}) {
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
+  if (aiStage === "score") {
+    return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
+  }
+  if (aiStage === "language-correction" || aiStage === "correction-language" || aiStage === "correction") {
+    return hasDetailedFeedbackContent(data) || hasUsefulItemArray(data.grammarAdvice) || hasUsefulItemArray(data.lexicalAdvice) || hasAnyText(data.errorAnalysis?.summary);
+  }
+  if (aiStage === "evidence-plan") {
+    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
+    const hasCriterionEvidence = Object.values(criteria).some((item) => item && typeof item === "object" && (
+      hasUsefulItemArray(item.evidenceQuotes) || hasUsefulItemArray(item.positiveEvidence) || hasUsefulItemArray(item.limitingEvidence) || hasAnyText(item.whyThisBand)
+    ));
+    return Boolean(
+      hasCriterionEvidence ||
+      hasAnyText(data.taskRequirementAnalysis) ||
+      hasDetailedAdviceContent(data) ||
+      targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
+      hasAnyText(data.correctionPriority)
+    );
+  }
+  if (aiStage === "revision") {
+    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline);
+  }
+
+  // Backward-compatible checks for older endpoints/stages.
   if (aiStage === "score-audit") {
     if (data.scoreAuditSkipped || Array.isArray(data.stageWarnings)) return true;
     return scoreAuditHasUsableCorrections(data);
@@ -705,25 +799,11 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
       hasMatchingTranslationArray(data.taskAchievementAdvice, data.taskAchievementAdviceZh) &&
       hasMatchingTranslationArray(data.coherenceAdvice, data.coherenceAdviceZh);
   }
-  if (aiStage === "correction-language") {
-    return hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
-  }
   if (aiStage === "correction-vocabulary") {
     return hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary);
   }
   if (aiStage === "improvement-plan" || aiStage === "correction-advice") {
-    const hasAdvice = Boolean(
-      targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
-      hasAnyText(data.correctionPriority) ||
-      hasUsefulItemArray(data.taskAchievementAdvice) ||
-      hasUsefulItemArray(data.coherenceAdvice) ||
-      hasUsefulItemArray(data.lexicalAdvice) ||
-      hasUsefulItemArray(data.grammarAdvice) ||
-      hasUsefulItemArray(data.band5FixPlan) ||
-      hasUsefulItemArray(data.band6UpgradePlan) ||
-      hasUsefulItemArray(data.band7UpgradePlan)
-    );
-    return hasAdvice && adviceTranslationsComplete(data);
+    return hasDetailedAdviceContent(data) && adviceTranslationsComplete(data);
   }
   if (aiStage === "correction-spelling") {
     return hasUsefulItemArray(data.spellingCorrections) || hasAnyText(data.errorAnalysis?.summary);
@@ -736,27 +816,6 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   }
   if (aiStage === "correction-sentence") {
     return hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections);
-  }
-  if (aiStage === "correction-advice") {
-    return Boolean(
-      hasUsefulItemArray(data.taskAchievementAdvice) ||
-      hasUsefulItemArray(data.coherenceAdvice) ||
-      hasUsefulItemArray(data.lexicalAdvice) ||
-      hasUsefulItemArray(data.grammarAdvice) ||
-      hasUsefulItemArray(data.band5FixPlan) ||
-      hasUsefulItemArray(data.band6UpgradePlan) ||
-      hasUsefulItemArray(data.band7UpgradePlan) ||
-      targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) ||
-      hasAnyText(data.correctionPriority) ||
-      hasAnyText(data.task1LetterCorrections) ||
-      hasAnyText(data.task2EssayCorrections)
-    );
-  }
-  if (aiStage === "correction") {
-    return hasDetailedFeedbackContent(data) || hasDetailedAdviceContent(data);
-  }
-  if (aiStage === "revision") {
-    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline);
   }
   return true;
 }
@@ -841,7 +900,7 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  const totalSteps = payload.mode === "revision" ? 8 : 7;
+  const totalSteps = payload.mode === "revision" ? 4 : 3;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -852,12 +911,12 @@ async function startGrading() {
     result.stageProgress = stageProgress.slice();
   }
 
-  function markStage(label, state, message) {
-    stageProgress.push({ label, state, message });
+  function markStage(label, state, message, detail = "") {
+    stageProgress.push({ label, state, message, detail, at: new Date().toISOString() });
     syncStageMeta();
   }
 
-  async function runMergeStage(aiStage, statusText, warningPrefix) {
+  async function runMergeStage(aiStage, statusText, warningPrefix, options = {}) {
     markStage(warningPrefix, "running", statusText);
     try {
       const stageResult = await postAiStage(endpoint, { ...payload, currentOverallBand: result?.overallBand, currentResult: result || null }, aiStage, statusText);
@@ -865,11 +924,9 @@ async function startGrading() {
       result = mergeAiStageResult(result || {}, stageResult);
 
       if (!hasExpectedContent) {
-        const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的具体内容，系统会尝试补充完整详细反馈。`;
+        const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的完整结构化内容。`;
         stageWarnings.push(warning);
-        if (aiStage.startsWith("correction")) result.correctionWarning = warning;
-        if (aiStage === "revision") result.revisionWarning = warning;
-        markStage(warningPrefix, "warning", warning);
+        markStage(warningPrefix, "warning", warning, JSON.stringify(stageResult || {}).slice(0, 1200));
       } else {
         markStage(warningPrefix, "done", `${warningPrefix}已完成。`);
       }
@@ -881,70 +938,30 @@ async function startGrading() {
       const warning = `${warningPrefix}：${stageError.message}`;
       stageWarnings.push(warning);
       if (result) {
-        if (aiStage.startsWith("correction")) result.correctionWarning = warning;
-        if (aiStage === "revision") result.revisionWarning = warning;
-        markStage(warningPrefix, "error", warning);
+        markStage(warningPrefix, options.required ? "error" : "warning", warning, stageError.stack || stageError.message || "");
         syncStageMeta();
         renderGradingResult(result);
       }
+      if (options.required) throw stageError;
       return false;
     }
   }
 
   try {
-    const scoreResult = await postAiStage(endpoint, payload, "score", `第 1 步/${totalSteps}：AI 正在评分与分析题目`);
-    result = mergeAiStageResult({}, scoreResult);
-    markStage("评分与题目分析", "done", `第 1 步/${totalSteps} 已完成：AI 已返回分数和题目分析。`);
-    syncStageMeta();
-    renderGradingResult(result);
-
-    const correctionStages = [
-      ["score-audit", `第 2 步/${totalSteps}：AI 正在审核评分一致性`, "评分一致性审核"],
-      ["correction-task", `第 3 步/${totalSteps}：AI 正在检查任务回应、结构和题目覆盖`, "任务回应与结构检查"],
-      ["correction-grammar", `第 4 步/${totalSteps}：AI 正在逐项检查语法、词形和句法错误`, "语法专项检查"],
-      ["correction-sentence", `第 5 步/${totalSteps}：AI 正在生成逐句修改和更好表达`, "逐句批改检查"],
-      ["correction-vocabulary", `第 6 步/${totalSteps}：AI 正在检查词汇、拼写、搭配和重复问题`, "词汇拼写和搭配检查"],
-      ["correction-advice", `第 7 步/${totalSteps}：AI 正在生成下一阶段提分计划和练习任务`, "提分计划生成"]
-    ];
-
-    for (const [stage, statusText, warningPrefix] of correctionStages) {
-      await runMergeStage(stage, statusText, warningPrefix);
-    }
-
-    if (!hasDetailedFeedbackContent(result) || !hasDetailedAdviceContent(result)) {
-      await runMergeStage(
-        "correction",
-        `补充步骤：AI 正在补充完整详细反馈，包含错误订正和提分建议，请等待。`,
-        "完整详细反馈补充"
-      );
-    }
-
-    if (!hasDetailedFeedbackContent(result)) {
-      const warning = "详细错误订正仍不完整：AI 没有返回足够的原句、修改句和错误原因。请再次点击开始批改重试详细订正阶段。";
-      stageWarnings.push(warning);
-      result.correctionWarning = warning;
-      markStage("详细错误订正完整性检查", "warning", warning);
-    }
-    if (!hasDetailedAdviceContent(result)) {
-      const warning = "提分建议仍不完整：AI 没有返回足够的下一阶段目标、四项提分动作或练习任务。请再次点击开始批改重试提分建议阶段。";
-      stageWarnings.push(warning);
-      result.correctionWarning = warning;
-      markStage("提分建议完整性检查", "warning", warning);
-    }
-    syncStageMeta();
-    renderGradingResult(result);
+    await runMergeStage("score", `第 1 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
+    await runMergeStage("language-correction", `第 2 步/${totalSteps}：AI 正在生成语法、逐句修改和更好表达`, "语言批改");
+    await runMergeStage("evidence-plan", `第 3 步/${totalSteps}：AI 正在生成评分证据和提分计划`, "评分证据与提分计划");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 ${totalSteps} 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 4 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
-      setGradingStatus("AI 正在整理最终批改结果。", "loading");
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
       renderGradingResult(result);
     }
 
-    if (stageWarnings.some(isUserVisibleSystemWarning)) {
-      setGradingStatus("批改完成，但部分详细阶段需要重试。可在下方“AI 批改进度与提示”中查看详情。", "warning");
+    if (stageWarnings.length) {
+      setGradingStatus("批改完成；部分阶段有记录，请查看下方“AI 批改进度与错误日志”。", "warning");
     } else {
       setGradingStatus("批改完成", "done");
     }
@@ -981,16 +998,16 @@ function renderStageProgress(result = {}) {
   const warnings = Array.isArray(result.stageWarnings) ? result.stageWarnings : [];
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
-  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => isUserVisibleSystemWarning(item) && arr.indexOf(item) === index);
+  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
   if (!progress.length && !allWarnings.length) return "";
-  return collapsibleSection("AI 批改进度与提示", `
-    ${progress.length ? `<ul>${progress.map((item) => {
-      const nonBlocking = isNonBlockingStageWarning(item.message);
-      const stateText = nonBlocking ? "已补全" : item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? "需注意" : "未完成";
-      const message = nonBlocking ? "该阶段返回不完整，系统已用其他批改结果和本地检查补全。" : (item.message || "");
-      return `<li class="${nonBlocking ? "stage-recovered" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(message)}</li>`;
+  return collapsibleSection("AI 批改进度与错误日志", `
+    ${progress.length ? `<ul class="stage-log-list">${progress.map((item) => {
+      const recovered = isNonBlockingStageWarning(item.message);
+      const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? (recovered ? "已补全/有记录" : "需注意") : "失败";
+      const detail = item.detail ? `<pre class="stage-log-detail">${escapeHtml(item.detail)}</pre>` : "";
+      return `<li class="${recovered ? "stage-recovered" : item.state === "error" ? "stage-error" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}${detail}</li>`;
     }).join("")}</ul>` : ""}
-    ${allWarnings.length ? `<div class="ai-warning">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
+    ${allWarnings.length ? `<div class="ai-warning stage-warning-log">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
   `);
 }
 
@@ -1113,11 +1130,14 @@ function renderScoreAudit(audit = {}) {
 }
 
 function renderWordCountWarningNote(result = {}) {
+  const task = selected?.task === "Task 1" ? "Task 1" : "Task 2";
+  const minWords = task === "Task 1" ? 150 : 250;
+  const words = Number(result.actualWordCount || result.wordCount || countWords(els.essayInput?.value || "")) || 0;
+  if (words >= minWords) return "";
   const note = result.wordCountWarning && typeof result.wordCountWarning === "object" ? result.wordCountWarning : {};
   const candidates = [note.message, note.warning, note.note, result.lowBandDiagnostics?.reason, result.scoreCalibration?.capReason, result.scoreCalibration?.whyNotHigher];
-  const message = candidates.map((item) => String(item || "").trim()).find((item) => isWordCountWarningText(item)) || "";
-  if (!message) return "";
-  const zh = note.messageZh || note.warningZh || "字数不足会限制内容展开和任务完成度，但这不是答错题；匹配检查只判断是否回答了当前题目。";
+  const message = candidates.map((item) => String(item || "").trim()).find((item) => isWordCountWarningText(item)) || `${task} has ${words} words, below the recommended minimum of ${minWords} words.`;
+  const zh = note.messageZh || note.warningZh || `${task} 当前约 ${words} 词，低于建议最低 ${minWords} 词，可能影响任务回应和内容展开。`;
   return `<section class="grading-section word-count-note"><h4>字数与限分说明</h4>${renderTextWithTranslation(message, zh)}</section>`;
 }
 
@@ -1458,6 +1478,44 @@ function filteredMainProblems(items = [], translations = []) {
   return { items: kept, translations: keptZh };
 }
 
+
+function genericDisplayBetterExpression(source) {
+  const original = String(source || "").trim();
+  if (!original) return "";
+  let s = original
+    .replace(/\bI think\b/i, "I believe")
+    .replace(/\bin my opinion,?\s*/i, "In my view, ")
+    .replace(/\bgood thing\b/gi, "positive development")
+    .replace(/\bbad thing\b/gi, "negative outcome")
+    .replace(/\bvery expensive\b/gi, "costly")
+    .replace(/\bspend too much money\b/gi, "avoid excessive spending")
+    .replace(/\buse it carefully\b/gi, "use it responsibly")
+    .replace(/\buse these products carefully\b/gi, "use these products responsibly")
+    .replace(/\bmake people feel more confident\b/gi, "increase people’s confidence")
+    .replace(/\bmore important than\b/gi, "more important than");
+
+  if (/^if\b/i.test(s)) {
+    const core = s.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
+    s = `${core.charAt(0).toUpperCase()}${core.slice(1)} can be beneficial, provided that people use it responsibly.`;
+  } else if (/\bhowever\b|\bbut\b/i.test(s) && !/\balthough\b|\bwhile\b/i.test(s)) {
+    s = s.replace(/\bbut\b/i, "However,");
+  } else if (/\bbecause\b/i.test(s) && !/\bwhich\b|\btherefore\b/i.test(s)) {
+    s = s.replace(/[.!?]*$/, ", which makes the point clearer.");
+  } else if (!shouldShowBetterExpression(original, s)) {
+    s = original.replace(/[.!?]*$/, ", which makes the idea clearer and more specific.");
+  }
+  if (!/[.!?]$/.test(s)) s += ".";
+  return s;
+}
+
+function resolveBetterExpressionForDisplay(item = {}, corrected, original) {
+  const base = corrected || original || "";
+  const rawBetter = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedExpression, item.highBandExpression, item.polishedSentence, item.modelExpression, item.exampleUpgrade, item.betterSentence);
+  if (shouldShowBetterExpression(base, rawBetter)) return rawBetter;
+  const fallback = genericDisplayBetterExpression(base);
+  return fallback || rawBetter || "";
+}
+
 function renderDetailedSentenceCorrections(items = []) {
   const filtered = Array.isArray(items) ? items.filter(isScoreImpactingDetailedCorrection) : [];
   if (!filtered.length && Array.isArray(items) && items.length) {
@@ -1468,19 +1526,19 @@ function renderDetailedSentenceCorrections(items = []) {
     <div class="correction-list">${filtered.map((item, index) => {
       const original = item.originalSentence || item.original || "";
       const corrected = item.correctedSentence || item.corrected || "";
-      const rawBetter = firstNonEmpty(item.betterExpression, item.targetBandExpression, item.upgradedExpression, item.highBandExpression, item.polishedSentence, item.modelExpression, item.exampleUpgrade, item.betterSentence);
-      const better = shouldShowBetterExpression(corrected || original, rawBetter) ? rawBetter : "";
-      const betterTarget = firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel);
+      const better = resolveBetterExpressionForDisplay(item, corrected, original);
+      const betterTarget = firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
+      const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         <p><strong>原句：</strong>${escapeHtml(original)}</p>
         <p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>
-        ${better ? `<p class="better-expression-line"><strong>更好表达${betterTarget ? `（目标 ${escapeHtml(betterTarget)}）` : ""}：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+        <p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>
         <p><strong>错误类型：</strong>${escapeHtml(item.errorType || "")}${item.errorTypeZh ? ` / ${escapeHtml(item.errorTypeZh)}` : ""}</p>
         ${item.problem ? `<p><strong>问题：</strong>${escapeHtml(item.problem)}</p>` : ""}
         ${item.rule ? `<p><strong>规则：</strong>${escapeHtml(item.rule)}</p>` : ""}
         ${item.bandImpact ? `<p><strong>对分数影响：</strong>${escapeHtml(item.bandImpact)}</p>` : ""}
-        ${renderZhToggle([item.problemZh, item.ruleZh, better ? item.betterExpressionZh : "", item.bandImpactZh].filter(Boolean).join("\n"))}
+        ${renderZhToggle([item.problemZh, item.ruleZh, betterZh, item.bandImpactZh].filter(Boolean).join("\n"))}
       </div>`;
     }).join("")}</div>
   `);
