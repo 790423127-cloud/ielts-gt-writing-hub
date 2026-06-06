@@ -362,3 +362,11 @@
 .score-audit-issue p{margin:6px 0 0;line-height:1.5}
 .score-calculation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .score-calculation-row:last-child{border-bottom:0}
+
+/* Evidence translation polish */
+.criterion-evidence-body .evidence-block{display:grid;gap:4px}
+.criterion-evidence-body li{margin-bottom:8px;line-height:1.5}
+.criterion-evidence-body li .translation-toggle{display:inline-flex;width:auto;margin:6px 0 0 0}
+.criterion-evidence-body li .translation-panel{margin-top:6px}
+.evidence-explain-line{display:grid;gap:6px}
+.evidence-explain-line .translation-toggle{justify-self:start;width:auto}
