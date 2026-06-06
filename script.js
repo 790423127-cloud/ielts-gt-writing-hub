@@ -612,12 +612,6 @@ function gradingPayload() {
 }
 
 
-function scoreAuditHasUsableCorrections(data = {}) {
-  if (!data || typeof data !== "object" || data.scoreAuditSkipped) return false;
-  if (data.aiStage !== "score-audit") return false;
-  const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
-  return Object.values(criteria).some((item) => item && typeof item === "object" && (hasAnyText(item.feedback) || hasAnyText(item.howToImprove)) && Number(item.band) > 1);
-}
 
 function richTextScore(value) {
   const text = String(value || "").trim();
@@ -685,7 +679,6 @@ function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
-  const usefulScoreAudit = scoreAuditHasUsableCorrections(data);
   const isCoreScoreStage = incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
   const lockScores = !isCoreScoreStage && Boolean(output.criteria || output.overallBand);
   const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"]);
@@ -702,7 +695,7 @@ function mergeAiStageResult(base, incoming) {
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
-    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "scoreAudit"
+    "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
@@ -789,9 +782,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return Boolean(
       hasCriterionEvidence ||
       hasAnyText(data.taskRequirementAnalysis) ||
-      hasAnyText(data.taskMatchCheck) ||
-      hasAnyText(data.scoreAudit)
-    );
+      hasAnyText(data.taskMatchCheck) );
   }
   if (aiStage === "final-plan") {
     return Boolean(
@@ -803,12 +794,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "revision") {
     return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline);
   }
-
   // Backward-compatible checks for older endpoints/stages.
-  if (aiStage === "score-audit") {
-    if (data.scoreAuditSkipped || Array.isArray(data.stageWarnings)) return true;
-    return scoreAuditHasUsableCorrections(data);
-  }
   if (aiStage === "correction-task") {
     const hasTaskContent = Boolean(
       hasUsefulItemArray(data.taskAchievementAdvice) ||
@@ -1026,10 +1012,7 @@ function renderStageProgress(result = {}) {
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
   const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
-  const audit = result.scoreAudit && typeof result.scoreAudit === "object" ? result.scoreAudit : null;
-  const auditIssues = audit && Array.isArray(audit.issues) ? audit.issues.filter(Boolean) : [];
-  const hasAuditLog = Boolean(audit && (auditIssues.length || audit.summary || audit.repairApplied || audit.passed === false));
-  if (!progress.length && !allWarnings.length && !hasAuditLog) return "";
+  if (!progress.length && !allWarnings.length) return "";
   return collapsibleSection("AI 批改进度与错误日志", `
     ${progress.length ? `<ul class="stage-log-list">${progress.map((item) => {
       const recovered = isNonBlockingStageWarning(item.message);
@@ -1038,7 +1021,6 @@ function renderStageProgress(result = {}) {
       return `<li class="${recovered ? "stage-recovered" : item.state === "error" ? "stage-error" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}${detail}</li>`;
     }).join("")}</ul>` : ""}
     ${allWarnings.length ? `<div class="ai-warning stage-warning-log">${allWarnings.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
-    ${hasAuditLog ? `<div class="score-audit-log"><h4>评分一致性审计 Score Audit</h4><p><strong>审计结果：</strong>${audit.passed === true ? "通过" : "需注意"}</p>${audit.summary ? `<p>${escapeHtml(audit.summary)}</p>` : ""}${audit.repairApplied ? `<p class="muted">系统已应用必要的本地修复或评分边界校准。</p>` : ""}${auditIssues.length ? `<div class="score-audit-issues">${auditIssues.map((issue) => `<div class="score-audit-issue"><strong>${escapeHtml(issue.type || "issue")}</strong>${issue.criterion ? `<span>${escapeHtml(issue.criterion)}</span>` : ""}<p>${escapeHtml(issue.message || "")}</p></div>`).join("")}</div>` : ""}</div>` : ""}
   `);
 }
 
@@ -1140,25 +1122,6 @@ function renderScoreCalculation(result = {}) {
 
 
 
-function renderScoreAudit(audit = {}) {
-  if (!audit || typeof audit !== "object") return "";
-  const issues = Array.isArray(audit.issues) ? audit.issues.filter(Boolean) : [];
-  const passed = audit.passed === true;
-  const summary = audit.summary || (passed ? "Score audit passed." : "Score audit found consistency issues.");
-  const body = `
-    <p><strong>审计结果：</strong>${passed ? "通过" : "需注意"}</p>
-    <p>${escapeHtml(summary)}</p>
-    ${audit.repairApplied ? `<p class="muted">系统已应用必要的本地修复或评分边界校准。</p>` : ""}
-    ${issues.length ? `<div class="score-audit-issues">${issues.map((issue) => `
-      <div class="score-audit-issue">
-        <strong>${escapeHtml(issue.type || "issue")}</strong>
-        ${issue.criterion ? `<span>${escapeHtml(issue.criterion)}</span>` : ""}
-        <p>${escapeHtml(issue.message || "")}</p>
-      </div>
-    `).join("")}</div>` : `<p class="muted">没有发现明显的分数、反馈或结构化输出矛盾。</p>`}
-  `;
-  return collapsibleSection("评分一致性审计 Score Audit", body, { defaultOpen: !passed, bodyClass: "compact-body" });
-}
 
 function renderWordCountWarningNote(result = {}) {
   const task = selected?.task === "Task 1" ? "Task 1" : "Task 2";
@@ -1617,7 +1580,7 @@ function renderDetailedSentenceCorrections(items = []) {
   if (!filtered.length && normalized.length) {
     return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
   }
-  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available. If the language stage shows a timeout or warning, retry detailed grading after deployment; the backend should now provide local fallback corrections for visible errors.</p>`);
+  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available. If the language stage shows a timeout or warning, the AI did not return sentence-level corrections for this run.</p>`);
 
   return collapsibleSection("逐句批改 Sentence Corrections", `
     <div class="correction-list">${filtered.map((item, index) => {

@@ -34,9 +34,6 @@ const AI_TOTAL_REQUEST_TIMEOUT_MS = Math.max(
   120000,
   Math.min(Number(process.env.AI_TOTAL_REQUEST_TIMEOUT_MS) || 285000, 290000)
 );
-const AI_CACHE_TTL_MS = Math.max(0, Math.min(Number(process.env.AI_CACHE_TTL_MS) || 30 * 60 * 1000, 6 * 60 * 60 * 1000));
-const AI_RESPONSE_CACHE = globalThis.__IELTS_AI_RESPONSE_CACHE__ || new Map();
-globalThis.__IELTS_AI_RESPONSE_CACHE__ = AI_RESPONSE_CACHE;
 
 function remainingAiTime(deadline) {
   if (!deadline) return AI_SINGLE_REQUEST_TIMEOUT_MS;
@@ -2771,90 +2768,6 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
 
 
 
-function buildScoreAuditPrompt(body, locale = "en") {
-  const current = body.currentResult || {};
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const firstCriterion = firstCriterionName(task);
-  return [
-    "Re-audit this IELTS Writing score using the original prompt and essay. Return one valid JSON object only.",
-    "This audit is allowed to correct the overallBand and criterion bands when the current score contradicts the essay evidence, including cases where all four criterion bands were mechanically copied from the overall band.",
-    "Do not merely polish wording if the score is wrong. Re-read the original essay and recalibrate using IELTS band descriptor logic.",
-    "Do not use Band 7 as a safe default. If the essay fully satisfies the prompt, is naturally organised, uses precise vocabulary, has flexible grammar, and only rare minor errors, correct the score to Band 8-9 as appropriate.",
-    "Score each IELTS criterion independently. Do not keep four identical criterion bands unless the essay evidence genuinely supports equal performance in all four criteria. If the current score is kept, explain exactly why it is not higher with concrete evidence from the essay.",
-    "Task-specific scoring engine:",
-    buildTaskSpecificScoringRubric(task),
-    "The server will recalculate the final displayed overallBand from the four returned criterion bands, so return the most accurate independent criterion bands.",
-    "If Band 7.5+ is awarded, feedback and advice must sound like minor refinement, not basic control problems.",
-    "mainProblems must contain only real problems, not strengths.",
-    "Chinese *Zh fields must accurately match adjacent English fields and must not be generic templates.",
-    "Return this shape. Include every key if you correct the score; otherwise return scoreAuditSkipped true with a short reason.",
-    JSON.stringify({
-      scoreAuditSkipped: false,
-      overallBand: 1,
-      estimatedLevel: "Band 1.0",
-      criteria: {
-        [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-        "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-        "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-        "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
-      },
-      highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
-      highBandDiagnosticsZh: { reasonZh: "" },
-      scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
-      scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
-      strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [],
-      taskAchievementAdvice: [], taskAchievementAdviceZh: [], coherenceAdvice: [], coherenceAdviceZh: [], lexicalAdvice: [], lexicalAdviceZh: [], grammarAdvice: [], grammarAdviceZh: [],
-      stageWarnings: []
-    }),
-    "Current result:",
-    JSON.stringify(current).slice(0, 6000),
-    "Question:",
-    String(body.questionPrompt || "").slice(0, 2500),
-    "Essay:",
-    String(body.essay || "").slice(0, 6500)
-  ].join("\n");
-}
-
-async function callAiScoreAuditPass({ apiKey, model, body, locale, deadline }) {
-  try {
-    const rawText = await callDeepSeek({
-      apiKey,
-      model,
-      systemPrompt: "You are a strict IELTS senior examiner. Re-audit scoring when evidence contradicts the current band. Return one valid compact JSON object only.",
-      userPrompt: buildScoreAuditPrompt(body, locale),
-      maxTokens: 4200,
-      temperature: 0.0,
-      jsonMode: false,
-      deadline,
-      timeoutMs: Math.min(90000, AI_SINGLE_REQUEST_TIMEOUT_MS)
-    });
-    const parsed = await parseOrRepairAiJson({
-      apiKey,
-      model,
-      rawText,
-      body,
-      locale,
-      maxTokens: 4200,
-      allowRepair: true,
-      deadline
-    });
-    if (parsed && typeof parsed === "object" && !parsed.scoreAuditSkipped) {
-      normalizeAiBandsOnly(parsed, body);
-    }
-    return {
-      ...(parsed && typeof parsed === "object" ? parsed : {}),
-      aiStage: "score-audit",
-      stageWarnings: ensureArray(parsed?.stageWarnings)
-    };
-  } catch (error) {
-    return {
-      aiStage: "score-audit",
-      scoreAuditSkipped: true,
-      stageWarnings: ["Score audit timed out or returned invalid JSON. The original AI score was kept."]
-    };
-  }
-}
-
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["score", "scoring", "grade", "grading", "corescore", "corescoring"].includes(raw)) return "score";
@@ -2862,7 +2775,6 @@ function normalizeAiStage(value) {
   if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "taskandevidence", "problemmapping", "evidence"] .includes(raw)) return "evidence-map";
   if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan"].includes(raw)) return "final-plan";
   if (["evidenceplan", "evidenceandplan", "planandevidence"].includes(raw)) return "evidence-plan";
-  if (["scoreaudit", "auditscore", "gradingaudit", "audit"].includes(raw)) return "score-audit";
   const focused = normalizeFocusedCorrectionStage(raw);
   if (focused) return `correction-${focused}`;
   if (["correction", "corrections", "error", "errors", "detailedcorrection", "detailedcorrections"].includes(raw)) return "correction";
@@ -2983,7 +2895,7 @@ function mergeStagePayloadForEvidencePlan(output, payload) {
   ];
   const objectFields = [
     "taskRequirementAnalysis", "taskRequirementAnalysisZh", "task1LetterCorrections", "task2EssayCorrections",
-    "correctionPriority", "targetImprovementPlan", "errorAnalysis", "scoreCalibration", "scoreCalibrationZh", "scoreAudit"
+    "correctionPriority", "targetImprovementPlan", "errorAnalysis", "scoreCalibration", "scoreCalibrationZh"
   ];
   arrayFields.forEach((field) => {
     const incoming = ensureArray(data[field]).filter(Boolean);
@@ -3021,19 +2933,6 @@ async function callAiEvidencePlanStageOnly({ apiKey, model, body, effectiveMode,
     criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
   };
   const warnings = [];
-
-  try {
-    const audit = await callAiScoreAuditPass({
-      apiKey,
-      model,
-      body: { ...body, currentResult: body.currentResult || null },
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, audit);
-  } catch (error) {
-    warnings.push(`Score evidence audit did not complete: ${error.message}`);
-  }
 
   try {
     const taskPass = await callAiFocusedSectionStageOnly({
@@ -3082,19 +2981,6 @@ async function callAiEvidenceMapStageOnly({ apiKey, model, body, effectiveMode, 
     criteria: body.currentResult?.criteria && typeof body.currentResult.criteria === "object" ? body.currentResult.criteria : undefined
   };
   const warnings = [];
-
-  try {
-    const audit = await callAiScoreAuditPass({
-      apiKey,
-      model,
-      body: { ...body, currentResult: body.currentResult || null },
-      locale,
-      deadline
-    });
-    output = mergeStagePayloadForEvidencePlan(output, audit);
-  } catch (error) {
-    warnings.push(`Score evidence audit did not complete: ${error.message}`);
-  }
 
   try {
     const taskPass = await callAiFocusedSectionStageOnly({
@@ -3957,12 +3843,6 @@ async function handleRequest(req, res) {
   const deadline = Date.now() + AI_TOTAL_REQUEST_TIMEOUT_MS;
 
   const aiStage = normalizeAiStage(body.aiStage || body.stage || body.gradingStage);
-  const cacheKey = buildAiCacheKey(body, `${effectiveMode}:${aiStage}`, model, locale);
-  const cachedResult = getCachedAiResult(cacheKey);
-  if (cachedResult) {
-    sendJson(req, res, 200, { ...cachedResult, cacheHit: true });
-    return;
-  }
 
   try {
     let result;
@@ -3979,15 +3859,6 @@ async function handleRequest(req, res) {
       });
       result.aiStage = "score";
       result = normalizeResultForMode(result, "full", veryShort, body, locale);
-    } else if (aiStage === "score-audit") {
-      result = await callAiScoreAuditPass({
-        apiKey,
-        model,
-        body: { ...body, currentResult: body.currentResult || null },
-        locale,
-        deadline
-      });
-      result.aiStage = "score-audit";
     } else if (aiStage === "language-correction") {
       result = await callAiCorrectionStageOnly({
         apiKey,
@@ -4082,8 +3953,6 @@ async function handleRequest(req, res) {
       });
       result = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
     }
-
-    setCachedAiResult(cacheKey, result);
     sendJson(req, res, 200, result);
   } catch (error) {
     if (sendProviderError(req, res, error)) return;
