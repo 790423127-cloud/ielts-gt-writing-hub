@@ -1204,6 +1204,23 @@ function averageCriterionBands(bands = []) {
   return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
 }
 
+
+function renderStrictBoundaryAudit(result = {}) {
+  const audit = result.lowBandBoundaryAudit || result.strictLowBandBoundaryAudit || result.boundaryAudit;
+  if (!audit || typeof audit !== "object" || !audit.triggered) return "";
+  const flags = ensureArray(audit.flags).filter(Boolean);
+  const caps = audit.caps && typeof audit.caps === "object" ? Object.entries(audit.caps).filter(([, value]) => String(value ?? "").trim()) : [];
+  const capHtml = caps.length
+    ? `<div class="score-calculation-grid boundary-cap-grid">${caps.map(([criterion, band]) => `<div class="score-calculation-row"><span>${escapeHtml(criterion)}</span><strong>最高 Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>`
+    : "";
+  return `<div class="ai-warning strict-boundary-audit">
+    <p><strong>严格雅思低分边界复核：</strong>${escapeHtml(audit.reason || result.boundaryReason || "已触发低分边界复核。")}${renderZhToggle(audit.reasonZh || result.boundaryReasonZh || "")}</p>
+    ${audit.recommendedRange ? `<p><strong>建议考官区间：</strong>${escapeHtml(audit.recommendedRange)}</p>` : ""}
+    ${flags.length ? `<p><strong>触发原因：</strong>${escapeHtml(flags.join("；"))}</p>` : ""}
+    ${capHtml}
+  </div>`;
+}
+
 function renderScoreCalculation(result = {}) {
   const calc = result.scoreCalculation && typeof result.scoreCalculation === "object" ? result.scoreCalculation : {};
   const scoringSystem = result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {};
@@ -1234,6 +1251,7 @@ function renderScoreCalculation(result = {}) {
     ${rows}
     ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
     ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatMockBand(finalBand))}</p>` : ""}
+    ${renderStrictBoundaryAudit(result)}
     ${sameBands ? `<p class="muted">四项分数相同：系统允许这种情况，但要求评分证据能支持四项确实处在同一水平。</p>` : ""}
     ${reviewNeeded ? `<p class="ai-warning">四项分数完全相同，但反馈证据显示不同弱点；后端已标记需要评分一致性复核。</p>` : ""}
     ${calc.explanation ? renderTextWithTranslation(calc.explanation, calc.explanationZh, { tag: "p" }) : ""}

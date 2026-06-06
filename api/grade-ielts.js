@@ -3946,14 +3946,22 @@ function buildScoreCalculation(result, task, finalBand) {
   const rawAverage = criteriaBands.length === 4
     ? criteriaBands.reduce((sum, item) => sum + Number(item.band || 0), 0) / 4
     : null;
+  const strictGuardApplied = Boolean(result?.scoreCalibration?.strictBoundaryGuardApplied || result?.lowBandBoundaryAudit?.triggered);
   return {
     mode: getTaskScoringEngineName(task),
-    method: "final_ai_reconciled_criterion_average",
-    formula: "final AI-reconciled four IELTS criterion bands averaged and rounded to nearest 0.5",
+    method: strictGuardApplied ? "final_ai_reconciled_criterion_average_with_strict_ielts_boundary_guard" : "final_ai_reconciled_criterion_average",
+    formula: strictGuardApplied
+      ? "final AI-reconciled four IELTS criterion bands, after strict IELTS low-band boundary audit when triggered, averaged and rounded to nearest 0.5"
+      : "final AI-reconciled four IELTS criterion bands averaged and rounded to nearest 0.5",
     criteriaBands,
     rawAverage: rawAverage === null ? null : Number(rawAverage.toFixed(3)),
     finalBand: Number.isFinite(Number(finalBand)) ? finalBand : null,
-    explanation: "The server does not grade the essay. It only averages the final criterion bands returned by AI after the final reconciliation stage."
+    explanation: strictGuardApplied
+      ? "The final display averages the final AI criterion bands after a strict IELTS low-band boundary audit. The audit only triggers for objective low-band boundary cases such as severe Task 2 underlength combined with frequent basic language errors and shallow development."
+      : "The server does not grade the essay. It only averages the final criterion bands returned by AI after the final reconciliation stage.",
+    explanationZh: strictGuardApplied
+      ? "最终展示分数会平均第13步AI四项分数；若触发严格雅思低分边界复核，则先按边界复核结果处理四项分数，再计算平均。该复核只针对明显低分边界情况，例如 Task 2 严重字数不足并伴随基础语言错误密集、展开很浅。"
+      : "服务器不自行给作文打分，只平均第13步AI最终复核返回的四项分数。"
   };
 }
 
@@ -5262,6 +5270,237 @@ function criterionFromFinalReconciliationItem(item = {}, existing = {}, fallback
   };
 }
 
+
+function boundaryAuditTextSnapshot(result = {}, body = {}) {
+  const current = body?.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const pieces = [
+    body?.essay,
+    body?.questionPrompt,
+    current.taskRequirementAnalysis,
+    current.taskRequirementAnalysisZh,
+    current.mainProblems,
+    current.mainProblemsZh,
+    current.lowBandDiagnostics?.reason,
+    current.lowBandDiagnosticsZh?.reasonZh,
+    current.scoreCalibration?.capReason,
+    current.scoreCalibration?.whyNotHigher,
+    result.boundaryReason,
+    result.scoreCalibration?.capReason,
+    result.scoreCalibration?.whyNotHigher,
+    JSON.stringify(current.criteria || {}),
+    JSON.stringify(result.criteria || {}),
+    JSON.stringify(current.errorAnalysis || {}),
+    JSON.stringify(current.correctionPriority || {}),
+    JSON.stringify(current.sentenceCorrectionSummary || {}),
+    JSON.stringify(current.spellingWordformBatchMeta || {}),
+    JSON.stringify(current.sentenceBatchMeta || {}),
+    JSON.stringify(current.grammarBatchMeta || {})
+  ];
+  return pieces.map((item) => {
+    if (item === undefined || item === null) return "";
+    if (typeof item === "string") return item;
+    try { return JSON.stringify(item); } catch (_) { return String(item || ""); }
+  }).join("\n").toLowerCase();
+}
+
+function countBoundaryAuditItems(result = {}, body = {}) {
+  const current = body?.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const sources = [result, current];
+  const arrayKeys = [
+    "spellingCorrections", "spellingWordformSentenceIssues", "lexicalAdvice", "grammarErrors",
+    "sentenceCorrections", "detailedSentenceCorrections", "betterExpressionItems",
+    "mainProblemItems", "priorityFixes", "errorPatterns"
+  ];
+  let count = 0;
+  sources.forEach((source) => {
+    if (!source || typeof source !== "object") return;
+    arrayKeys.forEach((key) => { count += ensureArray(source[key]).length; });
+    if (source.errorAnalysis && typeof source.errorAnalysis === "object") {
+      count += ensureArray(source.errorAnalysis.errorPatterns).length;
+      count += ensureArray(source.errorAnalysis.priorityFixes).length;
+    }
+  });
+  return count;
+}
+
+function makeBoundaryAuditReason({ task, words, flags, recommendedRange }) {
+  const flagText = flags.length ? flags.join("; ") : "low-band boundary signals";
+  if (task === "Task 1") {
+    return `Strict IELTS boundary audit triggered: ${task} has ${words} words and shows ${flagText}. Recommended examiner range: ${recommendedRange}.`;
+  }
+  return `Strict IELTS boundary audit triggered: ${task} has ${words} words and shows ${flagText}. For Task 2, underlength is not an automatic score, but when it combines with frequent basic language errors and shallow development, Band 5.0 should be treated as an upper limit, not the default. Recommended examiner range: ${recommendedRange}.`;
+}
+
+function makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) {
+  const flagText = flags.length ? flags.join("；") : "低分边界信号";
+  if (task === "Task 1") {
+    return `严格雅思边界复核已触发：${task} 当前约 ${words} 词，并出现 ${flagText}。建议考官区间：${recommendedRange}。`;
+  }
+  return `严格雅思边界复核已触发：${task} 当前约 ${words} 词，并出现 ${flagText}。Task 2 字数不足本身不是机械扣分，但如果同时存在基础语言错误密集、展开很浅，Band 5.0 应视为宽松上限，而不是默认分。建议考官区间：${recommendedRange}。`;
+}
+
+function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(body?.wordCount) || Number(result?.actualWordCount) || countWordsServer(body?.essay);
+  const snapshot = boundaryAuditTextSnapshot(result, body);
+  const issueCount = countBoundaryAuditItems(result, body);
+  const flags = [];
+
+  const hasFrequentGrammarEvidence = /frequent[^.]{0,90}(grammar|grammatical|verb|article|plural|subject-verb|tense|sentence)|grammar[^.]{0,80}(frequent|limited|errors? often|obscure|weak)|errors? often obscure|basic grammar errors|limited grammatical range/.test(snapshot);
+  const hasFrequentLexicalEvidence = /frequent[^.]{0,90}(spelling|word choice|word-choice|lexical|word form|vocabulary)|lexical[^.]{0,80}(limited|frequent|errors)|spelling[^.]{0,80}(frequent|errors)|word choice[^.]{0,80}(errors|limited)|limited vocabulary/.test(snapshot);
+  const hasUnderdevelopmentEvidence = /underdeveloped|lack(?:s|ing)? specific examples|shallow|listed but undeveloped|examples? (?:are )?(?:simple|general|too general|vague)|limited development|ideas? (?:are )?(?:not developed|underdeveloped|superficial)/.test(snapshot);
+  const hasUnclearPositionEvidence = /unclear position|position is unclear|not consistently clear|vague position|no clear position|both good and bad|maybe not always good|definitive stance/.test(snapshot);
+  const hasWeakCoherenceEvidence = /weak progression|limited cohesion|no clear logical link|paragraph unity|basic connectors|repetitive connectors|vague referencing|not always logical/.test(snapshot);
+
+  if (task === "Task 2" && words < 180) flags.push(`Task 2 below 180 words (${words})`);
+  else if (task === "Task 2" && words < 200) flags.push(`Task 2 below 200 words (${words})`);
+  if (task === "Task 1" && words < 80) flags.push(`Task 1 very short (${words})`);
+  else if (task === "Task 1" && words < 120) flags.push(`Task 1 below 120 words (${words})`);
+  if (hasUnderdevelopmentEvidence) flags.push("underdeveloped ideas/details");
+  if (hasUnclearPositionEvidence) flags.push(task === "Task 1" ? "unclear letter purpose" : "unclear or weak position");
+  if (hasWeakCoherenceEvidence) flags.push("weak coherence/progression");
+  if (hasFrequentLexicalEvidence) flags.push("frequent spelling/word-choice errors");
+  if (hasFrequentGrammarEvidence) flags.push("frequent basic grammar errors");
+  if (issueCount >= 10) flags.push(`high correction density (${issueCount} AI issue items)`);
+
+  const caps = {};
+  let triggered = false;
+  let recommendedRange = "";
+  let strictExaminerBand = "";
+  let generousExaminerBand = "";
+  let boundaryPosition = "";
+
+  if (task === "Task 2") {
+    const severeLowBoundary = words > 0 && words < 180 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || issueCount >= 8) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence || hasWeakCoherenceEvidence);
+    const moderateLowBoundary = words >= 180 && words < 200 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence);
+    const veryShortBoundary = words > 0 && words < 150;
+    if (severeLowBoundary || veryShortBoundary) {
+      triggered = true;
+      recommendedRange = words < 150 ? "Band 4.0 or below unless the response is unusually strong" : "Band 4.0-4.5, with Band 5.0 only as a generous upper limit";
+      strictExaminerBand = words < 150 ? "Band 4.0" : "Band 4.0-4.5";
+      generousExaminerBand = words < 150 ? "Band 4.5" : "Band 5.0";
+      boundaryPosition = "low-band boundary: 4.0/4.5/5.0 strict review";
+      caps["Task Response"] = words < 150 ? 4.0 : 4.5;
+      caps["Coherence and Cohesion"] = hasWeakCoherenceEvidence || words < 180 ? 4.5 : 5.0;
+      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? 4.0 : 4.5;
+      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? 4.0 : 4.5;
+    } else if (moderateLowBoundary) {
+      triggered = true;
+      recommendedRange = "Band 4.5-5.0";
+      strictExaminerBand = "Band 4.5";
+      generousExaminerBand = "Band 5.0";
+      boundaryPosition = "low-band boundary: 4.5/5.0/5.5 strict review";
+      caps["Task Response"] = 4.5;
+      caps["Coherence and Cohesion"] = 5.0;
+      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? 4.5 : 5.0;
+      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? 4.5 : 5.0;
+    }
+  } else {
+    const task1LowBoundary = words > 0 && words < 80 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || hasUnderdevelopmentEvidence);
+    const task1ModerateBoundary = words >= 80 && words < 120 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && hasUnderdevelopmentEvidence;
+    if (task1LowBoundary || task1ModerateBoundary) {
+      triggered = true;
+      recommendedRange = task1LowBoundary ? "Band 4.0-4.5" : "Band 4.5-5.0";
+      strictExaminerBand = task1LowBoundary ? "Band 4.0" : "Band 4.5";
+      generousExaminerBand = task1LowBoundary ? "Band 4.5" : "Band 5.0";
+      boundaryPosition = "Task 1 low-band boundary strict review";
+      caps["Task Achievement"] = task1LowBoundary ? 4.0 : 4.5;
+      caps["Coherence and Cohesion"] = task1LowBoundary ? 4.5 : 5.0;
+      caps["Lexical Resource"] = hasFrequentLexicalEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0;
+      caps["Grammatical Range and Accuracy"] = hasFrequentGrammarEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0;
+    }
+  }
+
+  return {
+    triggered,
+    task,
+    wordCount: words,
+    issueCount,
+    flags,
+    caps,
+    recommendedRange,
+    strictExaminerBand,
+    generousExaminerBand,
+    boundaryPosition,
+    reason: triggered ? makeBoundaryAuditReason({ task, words, flags, recommendedRange }) : "",
+    reasonZh: triggered ? makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) : "",
+    capRule: task === "Task 2"
+      ? "For Task 2 below 180 words, Band 5.0 is normally only a generous upper limit when there are frequent basic language errors and shallow development."
+      : "For very short Task 1 letters, Task Achievement and language criteria must be checked against low-band boundaries."
+  };
+}
+
+function appendBoundaryNote(existing, note) {
+  const base = String(existing || "").trim();
+  const extra = String(note || "").trim();
+  if (!extra) return base;
+  if (!base) return extra;
+  if (base.includes(extra)) return base;
+  return `${base} ${extra}`;
+}
+
+function applyStrictLowBandBoundaryGuard(result = {}, body = {}) {
+  const audit = buildStrictLowBandBoundaryAudit(result, body);
+  result.lowBandBoundaryAudit = audit;
+  if (!audit.triggered || !audit.caps || !Object.keys(audit.caps).length) return result;
+
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  normalizeTaskSpecificCriteria(result, task);
+  const names = getWritingCriterionNames(task);
+  let changed = false;
+  const appliedCaps = [];
+
+  names.forEach((name) => {
+    const cap = Number(audit.caps[name]);
+    if (!Number.isFinite(cap)) return;
+    const item = result.criteria?.[name];
+    if (!item || typeof item !== "object") return;
+    const currentBand = Number(item.band);
+    if (Number.isFinite(currentBand) && currentBand > cap) {
+      item.originalAiBandBeforeBoundaryGuard = currentBand;
+      item.band = cap;
+      changed = true;
+      appliedCaps.push(`${name}: ${formatBand(currentBand)} → ${formatBand(cap)}`);
+      const note = `Strict low-band boundary guard: capped at Band ${formatBand(cap)} because ${audit.reason}`;
+      const noteZh = `严格低分边界保护：由于${audit.reasonZh}，该项最高按 Band ${formatBand(cap)} 处理。`;
+      item.whyThisBand = appendBoundaryNote(item.whyThisBand, note);
+      item.whyThisBandZh = appendBoundaryNote(item.whyThisBandZh, noteZh);
+      item.halfBandDecision = appendBoundaryNote(item.halfBandDecision, `Boundary decision: Band ${formatBand(cap)} is stricter and more realistic than Band ${formatBand(currentBand)} for this low-band response.`);
+      item.halfBandDecisionZh = appendBoundaryNote(item.halfBandDecisionZh, `边界判断：对这类低分作文，Band ${formatBand(cap)} 比 Band ${formatBand(currentBand)} 更符合严格雅思评分。`);
+      item.whyNotHigher = appendBoundaryNote(item.whyNotHigher, "The response is too short and error-dense for the higher half-band under strict IELTS boundary logic.");
+      item.whyNotHigherZh = appendBoundaryNote(item.whyNotHigherZh, "在严格雅思边界逻辑下，该回答字数不足且基础错误密集，不足以支持更高半档。 ");
+    }
+  });
+
+  const scoreCalibration = result.scoreCalibration && typeof result.scoreCalibration === "object" ? result.scoreCalibration : {};
+  scoreCalibration.strictBoundaryGuardApplied = Boolean(changed);
+  scoreCalibration.capApplied = Boolean(changed) || Boolean(scoreCalibration.capApplied);
+  scoreCalibration.capReason = appendBoundaryNote(scoreCalibration.capReason, audit.reason);
+  scoreCalibration.whyNotHigher = appendBoundaryNote(scoreCalibration.whyNotHigher, "Band 5.0 is treated as a generous upper limit, not the default, when Task 2 is below 180 words and has frequent basic grammar/lexical errors.");
+  scoreCalibration.evidence = [...ensureArray(scoreCalibration.evidence), ...audit.flags].filter(Boolean).slice(0, 12);
+  scoreCalibration.appliedCaps = appliedCaps;
+  result.scoreCalibration = scoreCalibration;
+
+  const scoreCalibrationZh = result.scoreCalibrationZh && typeof result.scoreCalibrationZh === "object" ? result.scoreCalibrationZh : {};
+  scoreCalibrationZh.capReasonZh = appendBoundaryNote(scoreCalibrationZh.capReasonZh, audit.reasonZh);
+  scoreCalibrationZh.whyNotHigherZh = appendBoundaryNote(scoreCalibrationZh.whyNotHigherZh, "当 Task 2 少于 180 词且基础语法/词汇错误密集时，Band 5.0 应视为宽松上限，而不是默认分。 ");
+  scoreCalibrationZh.evidenceZh = [...ensureArray(scoreCalibrationZh.evidenceZh), ...audit.flags].filter(Boolean).slice(0, 12);
+  result.scoreCalibrationZh = scoreCalibrationZh;
+
+  if (changed) {
+    result.scoreChanged = true;
+    result.scoreChangeReason = appendBoundaryNote(result.scoreChangeReason, `Strict IELTS low-band boundary guard adjusted criterion bands: ${appliedCaps.join("; ")}.`);
+    result.scoreChangeReasonZh = appendBoundaryNote(result.scoreChangeReasonZh, `严格雅思低分边界保护已调整四项分数：${appliedCaps.join("；")}。`);
+  }
+  result.bandRange = result.bandRange || audit.recommendedRange;
+  result.boundaryPosition = result.boundaryPosition || audit.boundaryPosition;
+  result.strictExaminerBand = result.strictExaminerBand || audit.strictExaminerBand;
+  result.generousExaminerBand = result.generousExaminerBand || audit.generousExaminerBand;
+  result.boundaryReason = result.boundaryReason || audit.reason;
+  result.boundaryReasonZh = result.boundaryReasonZh || audit.reasonZh;
+  return result;
+}
+
 function applyFinalScoringReconciliation(result = {}, body = {}) {
   if (!result || typeof result !== "object") return result;
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
@@ -5288,6 +5527,7 @@ function applyFinalScoringReconciliation(result = {}, body = {}) {
     throw error;
   }
 
+  applyStrictLowBandBoundaryGuard(result, body);
   finalizeTaskScoringEngine(result, body);
   result.finalCriteria = finalCriteria;
   result.finalOverallBand = result.overallBand;
@@ -5327,7 +5567,10 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "For Coherence and Cohesion, Lexical Resource, and Grammatical Range and Accuracy, use IELTS Writing public band-descriptor logic appropriate to the selected task.",
     "The final score must be evidence-based. If all four criterion bands are identical, explain why each criterion independently sits at the same band; do not use a safe default.",
     "For every criterion, include a visible 0.5 half-band decision: why not 0.5 lower, why not 0.5 higher, and why this exact final band was selected.",
-    "The server will only average the four AI-returned final criterion bands. The server will not create a non-AI score.",
+    "Strict IELTS low-band boundary rule: for Task 2 below 180 words, Band 5.0 is normally only a generous upper limit unless the language is unusually strong. If the essay is below 180 words AND has frequent basic grammar, spelling, word-choice errors, shallow development, or unclear position, explicitly compare Band 4.0, 4.5, and 5.0, and prefer the stricter lower band unless evidence clearly supports 5.0.",
+    "Strict IELTS low-band rule for Task 2 below 200 words: do not treat 'normally no higher than Band 5.0' as 'give Band 5.0'. Underlength must be combined with development and language evidence. If frequent basic errors and weak development are present, TR/LR/GRA should usually fall around Band 4.0-4.5; CC may be 4.5-5.0 only if paragraphing and progression are clearly present.",
+    "If all four criteria would be Band 5.0 for a short low-level Task 2, re-check whether Task Response, Lexical Resource, and Grammatical Range and Accuracy should instead be Band 4.0 or 4.5. Do not give four identical Band 5.0 bands as a safe default.",
+    "The server normally averages the four AI-returned final criterion bands. For clear objective low-band boundary conflicts, a strict IELTS boundary audit may flag or cap the displayed criterion bands; therefore your AI bands must already reflect strict low-band IELTS boundaries.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
     buildFeedbackTrackInstruction(body),
