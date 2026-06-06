@@ -811,9 +811,12 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "prompt-analysis") {
     return Boolean(hasAnyText(data.taskRequirementAnalysis) || hasAnyText(data.taskMatchCheck));
   }
-  if (aiStage === "score-boundary") {
+  if (aiStage === "half-band-summary") {
+    return Boolean(hasAnyText(data.scoreCalibration) || hasAnyText(data.halfBandBoundary) || hasUsefulItemArray(data.strengthItems) || hasUsefulItemArray(data.mainProblemItems));
+  }
+  if (aiStage === "criterion-boundary" || aiStage === "score-boundary") {
     const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
-    return Boolean(hasAnyText(data.scoreCalibration) || Object.values(criteria).some((item) => hasAnyText(item?.whyThisBand) || hasAnyText(item?.whyNotHigher) || hasAnyText(item?.whyNotLower)));
+    return Boolean(hasAnyText(data.halfBandBoundary) || Object.values(criteria).some((item) => hasAnyText(item?.whyThisBand) || hasAnyText(item?.whyNotHigher) || hasAnyText(item?.whyNotLower)));
   }
   if (aiStage === "task-diagnosis") {
     return Boolean(hasUsefulItemArray(data.taskAchievementAdvice) || hasAnyText(data.task1LetterCorrections) || hasAnyText(data.task2EssayCorrections) || hasAnyText(data.errorAnalysis?.summary));
@@ -821,7 +824,10 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "coherence-diagnosis") {
     return Boolean(hasUsefulItemArray(data.coherenceAdvice) || hasAnyText(data.criteria?.["Coherence and Cohesion"]) || hasAnyText(data.errorAnalysis?.summary));
   }
-  if (aiStage === "lexical-diagnosis") {
+  if (aiStage === "spelling-wordform") {
+    return Boolean(hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary));
+  }
+  if (aiStage === "lexical-choice-collocation" || aiStage === "lexical-diagnosis") {
     return Boolean(hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.criteria?.["Lexical Resource"]) || hasAnyText(data.errorAnalysis?.summary));
   }
   if (aiStage === "grammar-diagnosis") {
@@ -829,6 +835,10 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   }
   if (aiStage === "sentence-corrections") {
     return Boolean(hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections));
+  }
+  if (aiStage === "better-expressions") {
+    const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
+    return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || hasUsefulItemArray(data.betterExpressionItems));
   }
   if (aiStage === "better-expression-plan") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
@@ -975,8 +985,8 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Full grading now runs 10 small AI stages. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 11 : 10;
+  // Full grading now runs 13 smaller AI stages. Revision mode adds one optional AI stage for model/revised essays.
+  const totalSteps = payload.mode === "revision" ? 14 : 13;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1026,17 +1036,20 @@ async function startGrading() {
   try {
     await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
     await runMergeStage("score", `第 2 步/${totalSteps}：AI 正在生成核心评分`, "核心评分", { required: true });
-    await runMergeStage("score-boundary", `第 3 步/${totalSteps}：AI 正在解释半分边界`, "半分边界解释");
-    await runMergeStage("evidence-map", `第 4 步/${totalSteps}：AI 正在提取评分证据`, "评分证据");
-    await runMergeStage("task-diagnosis", `第 5 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
-    await runMergeStage("coherence-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
-    await runMergeStage("lexical-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断词汇、拼写和搭配`, "词汇诊断");
-    await runMergeStage("grammar-diagnosis", `第 8 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
-    await runMergeStage("sentence-corrections", `第 9 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
-    await runMergeStage("better-expression-plan", `第 10 步/${totalSteps}：AI 正在生成单句更好表达和最终提分计划`, "更好表达与提分计划");
+    await runMergeStage("half-band-summary", `第 3 步/${totalSteps}：AI 正在解释总分和半分边界`, "总分半分边界");
+    await runMergeStage("criterion-boundary", `第 4 步/${totalSteps}：AI 正在逐项解释四项评分边界`, "四项评分边界");
+    await runMergeStage("evidence-map", `第 5 步/${totalSteps}：AI 正在提取评分证据`, "评分证据");
+    await runMergeStage("task-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
+    await runMergeStage("spelling-wordform", `第 8 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
+    await runMergeStage("lexical-choice-collocation", `第 9 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
+    await runMergeStage("grammar-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("sentence-corrections", `第 11 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
+    await runMergeStage("better-expressions", `第 12 步/${totalSteps}：AI 正在生成单句更好表达`, "更好表达");
+    await runMergeStage("final-plan", `第 13 步/${totalSteps}：AI 正在生成错误优先级和最终提分计划`, "最终提分计划");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 11 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 14 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
