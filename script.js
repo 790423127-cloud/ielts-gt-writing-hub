@@ -834,7 +834,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return Boolean(hasUsefulItemArray(data.coherenceAdvice) || hasAnyText(data.criteria?.["Coherence and Cohesion"]) || hasAnyText(data.errorAnalysis?.summary));
   }
   if (aiStage === "spelling-wordform") {
-    return Boolean(hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.errorAnalysis?.summary));
+    return Boolean(data.stageStatus === "no_issues" || hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.spellingWordformSentenceIssues) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.noIssueReason) || hasAnyText(data.errorAnalysis?.summary));
   }
   if (aiStage === "lexical-choice-collocation" || aiStage === "lexical-diagnosis") {
     return Boolean(hasUsefulItemArray(data.lexicalAdvice) || hasUsefulItemArray(data.spellingCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections) || hasAnyText(data.criteria?.["Lexical Resource"]) || hasAnyText(data.errorAnalysis?.summary));
@@ -1025,6 +1025,8 @@ async function startGrading() {
         const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的完整结构化内容。`;
         stageWarnings.push(warning);
         markStage(warningPrefix, "warning", warning, JSON.stringify(stageResult || {}).slice(0, 1200));
+      } else if (stageResult?.stageStatus === "no_issues") {
+        markStage(warningPrefix, "done", `${warningPrefix}已完成：${stageResult.noIssueReasonZh || stageResult.noIssueReason || "未发现明显问题。"}`);
       } else {
         markStage(warningPrefix, "done", `${warningPrefix}已完成。`);
       }
@@ -1750,27 +1752,39 @@ function mergeCorrectionItem(existing = {}, incoming = {}) {
   return merged;
 }
 
-function attachBetterExpressionItems(corrections = [], betterItems = []) {
+function isHighBandPolishResult(result = {}) {
+  return result?.betterExpressionMode === "high_band_polish" || result?.highBandPolish === true;
+}
+
+function attachBetterExpressionItems(corrections = [], betterItems = [], options = {}) {
+  const allowStandalone = Boolean(options.allowStandalone);
   ensureArray(betterItems).forEach((raw, rawIndex) => {
     if (!raw || typeof raw !== "object") return;
     const item = normalizeSentenceCorrectionItem({
       sentenceNumber: raw.sentenceNumber,
       originalSentence: firstNonEmpty(raw.originalSentence, raw.original, raw.sourceSentence),
-      correctedSentence: firstNonEmpty(raw.correctedSentence, raw.corrected, raw.revisedSentence),
+      correctedSentence: firstNonEmpty(raw.correctedSentence, raw.corrected, raw.revisedSentence, raw.originalSentence, raw.original, raw.sourceSentence),
       betterExpression: firstNonEmpty(raw.betterExpression, raw.upgradedExpression, raw.highBandExpression, raw.polishedSentence, raw.modelExpression, raw.betterSentence),
       betterExpressionZh: firstNonEmpty(raw.betterExpressionZh, raw.whyBetterZh),
       betterExpressionTargetBand: firstNonEmpty(raw.targetBand, raw.targetBandRange, raw.targetLevel),
       problem: firstNonEmpty(raw.problem, raw.whyBetter),
       problemZh: firstNonEmpty(raw.problemZh, raw.whyBetterZh),
-      errorType: raw.errorType || "Better expression"
+      whyBetter: firstNonEmpty(raw.whyBetter),
+      whyBetterZh: firstNonEmpty(raw.whyBetterZh),
+      upgradeFocus: firstNonEmpty(raw.upgradeFocus, raw.focus, raw.polishFocus),
+      errorType: raw.errorType || (allowStandalone ? "High-band polish" : "Better expression"),
+      polishMode: allowStandalone ? "high_band_polish" : raw.polishMode
     }, rawIndex);
     if (!item || !hasAnyText(item.betterExpression)) return;
     const matchIndex = findMatchingCorrectionIndex(corrections, item);
     if (matchIndex >= 0) {
       corrections[matchIndex] = mergeCorrectionItem(corrections[matchIndex], item);
     }
-    // AI-only display rule: betterExpressionItems must attach to an existing correction.
-    // Do not create standalone cards here; that was the remaining source of duplicate sentence cards.
+    if (allowStandalone) {
+      corrections.push(item);
+    }
+    // Low/mid-band AI-only display rule: betterExpressionItems must attach to an existing correction.
+    // High-band polish mode is the only case where standalone polish cards are allowed.
   });
   return corrections;
 }
@@ -1797,24 +1811,27 @@ function getSentenceCorrectionItems(result = {}) {
       }
     });
 
-  attachBetterExpressionItems(merged, result.betterExpressionItems);
+  attachBetterExpressionItems(merged, result.betterExpressionItems, { allowStandalone: isHighBandPolishResult(result) || !merged.length });
   return merged
     .filter(isScoreImpactingDetailedCorrection)
     .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
 }
 
-function renderDetailedSentenceCorrections(items = []) {
+function renderDetailedSentenceCorrections(items = [], result = {}) {
   const normalized = ensureArray(items)
     .map((item, index) => normalizeSentenceCorrectionItem(item, index))
     .filter(Boolean);
   const filtered = normalized.filter(isScoreImpactingDetailedCorrection);
 
+  const highBandPolish = isHighBandPolishResult(result) || filtered.some((item) => item.polishMode === "high_band_polish" || item.errorType === "High-band polish");
+  const title = highBandPolish ? "高分表达优化 High-band Polish" : "逐句批改 Sentence Corrections";
   if (!filtered.length && normalized.length) {
-    return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
+    return collapsibleSection(title, `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
   }
-  if (!filtered.length) return collapsibleSection("逐句批改 Sentence Corrections", `<p class="muted">No sentence-level corrections are available. If the language stage shows a timeout or warning, the AI did not return sentence-level corrections for this run.</p>`);
+  if (!filtered.length) return collapsibleSection(title, `<p class="muted">No sentence-level corrections are available. If this is a high-band essay, Stage 12 should return high-band polish suggestions; otherwise check the AI stage log.</p>`);
 
-  return collapsibleSection("逐句批改 Sentence Corrections", `
+  return collapsibleSection(title, `
+    ${highBandPolish ? `<p class="muted">这些不是错误修正，而是针对 Band 7+ 作文的可选高分润色，目标是提升约 0.5–1.0 分。</p>` : ""}
     <div class="correction-list">${filtered.map((item, index) => {
       const original = firstNonEmpty(item.originalSentence, item.original);
       const corrected = firstNonEmpty(item.correctedSentence, item.corrected, original);
@@ -1823,9 +1840,21 @@ function renderDetailedSentenceCorrections(items = []) {
       const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
       const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
       const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
-      const problem = firstNonEmpty(item.problem, item.issue, item.reason, item.explanation, item.comment);
+      const problem = firstNonEmpty(item.problem, item.issue, item.reason, item.explanation, item.comment, item.whyBetter);
       const rule = firstNonEmpty(item.rule, item.grammarRule, item.suggestionRule);
       const bandImpact = firstNonEmpty(item.bandImpact, item.impact, item.scoreImpact, item.impactOnBand);
+      const polishItem = highBandPolish || item.polishMode === "high_band_polish" || errorType === "High-band polish";
+      const upgradeFocus = firstNonEmpty(item.upgradeFocus, item.focus, item.polishFocus);
+      if (polishItem) {
+        return `<div class="correction-item high-band-polish-item">
+          <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
+          ${original ? `<p><strong>原句：</strong>${escapeHtml(original)}</p>` : ""}
+          ${better ? `<p class="better-expression-line"><strong>优化句（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
+          ${upgradeFocus ? `<p><strong>优化重点：</strong>${escapeHtml(upgradeFocus)}</p>` : ""}
+          ${problem ? `<p><strong>为什么更好：</strong>${escapeHtml(problem)}</p>` : ""}
+          ${renderZhToggle([item.problemZh, item.whyBetterZh, betterZh].filter(Boolean).join("\n"))}
+        </div>`;
+      }
       return `<div class="correction-item">
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         ${original ? `<p><strong>原句：</strong>${escapeHtml(original)}</p>` : ""}
@@ -2098,6 +2127,15 @@ function renderRevisionLimitWarning(result = {}) {
   return "";
 }
 
+function renderSpellingWordformSection(result = {}) {
+  if (result.stageStatus === "no_issues" || (result.spellingWordformBatchMeta && !hasUsefulItemArray(result.spellingCorrections) && !hasUsefulItemArray(result.spellingWordformSentenceIssues))) {
+    const reason = result.noIssueReason || "No clear spelling or word-form errors were detected by AI in this essay.";
+    const reasonZh = result.noIssueReasonZh || "AI未发现明显拼写或词形错误。";
+    return collapsibleSection("拼写错误 Spelling Corrections", renderTextWithTranslation(reason, reasonZh, { fallback: "未发现明显拼写或词形错误。" }));
+  }
+  return collapsibleSection("拼写错误 Spelling Corrections", renderSpellingCorrections(result.spellingCorrections));
+}
+
 function renderSpellingCorrections(items = []) {
   const list = Array.isArray(items)
     ? items.filter((item) => item && (String(item.originalWord || "").trim() || String(item.correctedWord || "").trim() || String(item.sentence || "").trim() || String(item.explanation || "").trim()))
@@ -2203,10 +2241,19 @@ function renderFinalScoreArea(result = {}) {
   const changeNote = result.scoreChanged
     ? `<p class="ai-warning"><strong>评分复核已调整：</strong>${escapeHtml(result.scoreChangeReason || "Final AI reconciliation adjusted the criterion bands based on the detailed evidence.")}${renderZhToggle(result.scoreChangeReasonZh || "")}</p>`
     : "";
+  const boundaryNote = (result.bandRange || result.boundaryPosition || result.boundaryReason)
+    ? `<div class="boundary-note">
+        ${result.bandRange ? `<p><strong>边界范围：</strong>${escapeHtml(result.bandRange)}</p>` : ""}
+        ${result.boundaryPosition ? `<p><strong>边界位置：</strong>${escapeHtml(result.boundaryPosition)}</p>` : ""}
+        ${result.strictExaminerBand || result.generousExaminerBand ? `<p><strong>严格/宽松考官：</strong>${escapeHtml(result.strictExaminerBand || "-")} / ${escapeHtml(result.generousExaminerBand || "-")}</p>` : ""}
+        ${result.boundaryReason ? renderTextWithTranslation(result.boundaryReason, result.boundaryReasonZh, { tag: "p" }) : ""}
+      </div>`
+    : "";
   return `<section class="grading-section">
       <h4>Overall estimated band</h4>
       <div class="overall-wrap"><div class="overall-band">${escapeHtml(result.overallBand ?? "-")}</div>${renderTextWithTranslation(result.estimatedLevel || "", result.estimatedLevelZh, { tag: "span" })}</div>
       ${changeNote}
+      ${boundaryNote}
     </section>
     ${renderScoreCalculation(result)}
     <section class="grading-section">
@@ -2241,11 +2288,11 @@ function renderGradingResult(result = {}) {
     ${collapsibleSection("Strengths", renderListWithTranslations(result.strengthItems && result.strengthItems.length ? result.strengthItems : result.strengths, result.strengthItems && result.strengthItems.length ? [] : result.strengthsZh, "No strengths were returned for this response."))}
     ${collapsibleSection("Main Problems", renderListWithTranslations(result.mainProblemItems && result.mainProblemItems.length ? result.mainProblemItems : mainProblems.items, result.mainProblemItems && result.mainProblemItems.length ? [] : mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
     ${renderErrorAnalysis(result.errorAnalysis)}
-    ${renderDetailedSentenceCorrections(sentenceCorrectionItems)}
+    ${renderDetailedSentenceCorrections(sentenceCorrectionItems, result)}
     ${renderCorrectionPriority(result.correctionPriority)}
     ${renderTargetImprovementPlan(result.targetImprovementPlan, result)}
     ${selected?.task === "Task 1" ? renderTask1LetterCorrections(result.task1LetterCorrections) : renderTask2EssayCorrections(result.task2EssayCorrections)}
-    ${collapsibleSection("拼写错误 Spelling Corrections", renderSpellingCorrections(result.spellingCorrections))}
+    ${renderSpellingWordformSection(result)}
     ${collapsibleSection("语法错误 Grammar Errors", renderGrammarErrors(result.grammarErrors))}
     
     ${collapsibleSection("四项专项建议", `<div class="advice-grid">

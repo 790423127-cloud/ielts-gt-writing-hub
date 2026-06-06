@@ -464,6 +464,8 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "For Band 7.5+ Task 2 essays, improvement advice must be about argument nuance, paragraph progression, example quality, topic-specific precision, and grammar that clarifies reasoning. Do not suggest rare words, inflated vocabulary, mechanical linking words, or complexity for its own sake.",
     "Task 2 question-type scoring: agree/disagree requires a clear and consistent position; discuss-both-views requires both views plus the writer's own opinion; advantages/disadvantages requires both sides and, when asked, a clear judgement about which side is stronger; problem/solution requires both problem/cause and solution/measure; two-part questions require both questions to be answered.",
     "Task 2 high-band advice should never focus on simply adding more ideas. It should focus on developing the strongest idea with clearer reasoning, a more precise example, a consequence, or a qualification.",
+    "For Band 7.0+ writing, Stage 12 must still provide high-band polish suggestions even when there are few or no clear errors. Select 3-6 sentences that can realistically improve the response by about 0.5-1.0 band through precision, nuance, cohesion, concision, register, or argument depth.",
+    "For high-band polish, do not invent errors. The suggested sentence must remain one sentence, preserve meaning, avoid new evidence, and improve the writer's own sentence rather than rewriting the whole paragraph.",
 
     "mainProblems must contain only actual problems. Move strengths such as fully addresses, appropriate tone, clear purpose, well-developed, coherent, accurate language, or few errors into strengths instead.",
     "targetImprovementPlan.criterionUpgrades must include currentWeakness, target, action, and exampleUpgrade for each IELTS criterion. Each action should help improve about 0.5-1 band from the current level.",
@@ -3729,6 +3731,25 @@ function applyNextBandTargetPlan(result = {}, body = {}) {
   return result;
 }
 
+function resolveCurrentBandForPolish(body = {}) {
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  return resolveCurrentBandForTarget(current, {
+    ...body,
+    currentResult: current,
+    currentOverallBand: body.currentOverallBand || current.finalOverallBand || current.overallBand
+  });
+}
+
+function shouldUseHighBandPolish(body = {}) {
+  const band = resolveCurrentBandForPolish(body);
+  return Number.isFinite(Number(band)) && Number(band) >= 7;
+}
+
+function betterExpressionTargetRangeForBody(body = {}) {
+  const band = resolveCurrentBandForPolish(body);
+  return nextBandTargetRange(band) || "next +0.5-1.0 band";
+}
+
 
 function normalizeAiBandsOnly(result, body) {
   return finalizeTaskScoringEngine(result, body || {});
@@ -4330,7 +4351,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
   if (stage === "task-diagnosis") return ensureArray(output.taskAchievementAdvice).length || hasUsefulText(output.task1LetterCorrections) || hasUsefulText(output.task2EssayCorrections) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "coherence-diagnosis") return ensureArray(output.coherenceAdvice).length || hasUsefulText(output.criteria?.["Coherence and Cohesion"]) || hasUsefulText(output.errorAnalysis?.summary);
-  if (stage === "spelling-wordform") return ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.errorAnalysis?.summary);
+  if (stage === "spelling-wordform") return output.stageStatus === "no_issues" || ensureArray(output.spellingCorrections).length || ensureArray(output.spellingWordformSentenceIssues).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "lexical-choice-collocation" || stage === "lexical-diagnosis") return ensureArray(output.lexicalAdvice).length || ensureArray(output.spellingCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.criteria?.["Lexical Resource"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
@@ -4772,7 +4793,8 @@ function correctionSourcesForBetterExpression(body = {}) {
   return splitEssayIntoSentenceUnits(body.essay).map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text, problem: "", errorType: "" }));
 }
 
-function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
+function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount, highBandPolish = false }) {
+  const targetRange = betterExpressionTargetRangeForBody(body);
   const items = batch.map((item) => [
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
@@ -4780,19 +4802,32 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     item.problem ? `Problem: ${item.problem}` : "",
     item.errorType ? `Error type: ${item.errorType}` : ""
   ].filter(Boolean).join("\n")).join("\n\n");
+  const modeLines = highBandPolish
+    ? [
+      `Stage 12/13 high-band polish batch ${batchIndex + 1}/${batchCount}. The essay appears to be Band 7.0 or above. Do not return an empty betterExpressionItems array just because there are few errors.`,
+      "Select the strongest 3-6 candidate sentences across the run when possible. For this batch, return only sentences that can be polished for a realistic +0.5 to +1.0 band improvement.",
+      "This is not error correction. It is high-band sentence polishing: improve precision, argument nuance, cohesion, concision, register control, or natural academic phrasing.",
+      `Target range for the upgraded sentences: ${targetRange}.`
+    ]
+    : [
+      `Stage 12/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
+      "For every score-impacting sentence, include a betterExpression when a safe next-band upgrade is possible."
+    ];
   return [
-    `Stage 12/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
+    ...modeLines,
     "Return only betterExpressionItems. Do not return detailedSentenceCorrections in this stage; direct corrections already came from Stage 11.",
     "betterExpression must be based on the direct corrected sentence, not on the original wrong sentence.",
     "betterExpression must be ONE usable IELTS sentence only, not a paragraph and not an explanation.",
     "It must first fix all obvious errors from the corrected sentence. Never keep errors such as 'discuss about', 'need to facing', wrong spelling, wrong tense, or broken punctuation.",
     "Do not add meta-commentary or filler such as 'which makes the idea clearer', 'which is more specific', 'this improves the sentence', or similar wording. The sentence itself must be the improved answer.",
     "Do not add new ideas that were not in the original meaning. Do not delete reasons, purposes, conditions, contrast, or result relationships from the original meaning.",
-    "The upgrade should be realistic for the next 0.5-1.0 band, not a Band 8-9 rewrite for a weak sentence.",
-    "If no safe useful upgrade exists, omit that item rather than returning a weak or meta betterExpression.",
+    "Do not use rare vocabulary, forced inversion, or artificial complexity. The upgraded sentence must sound natural and usable in IELTS writing.",
+    highBandPolish ? "For high-band polish, do not invent a mistake. Use upgradeFocus to explain the improvement area, such as precision, cohesion, concision, nuance, register, or argument depth." : "The upgrade should be realistic for the next 0.5-1.0 band, not a Band 8-9 rewrite for a weak sentence.",
+    "If no safe useful upgrade exists for a listed item, omit that item rather than returning a weak or meta betterExpression.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
-      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
+      betterExpressionMode: highBandPolish ? "high_band_polish" : "correction_based",
+      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "" }]
     }),
     "Chinese requirement: every betterExpression item must include betterExpressionZh and whyBetterZh. Do not translate the full essay.",
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -4960,6 +4995,8 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "The final score must be evidence-based. If all four criterion bands are identical, explain why each criterion independently sits at the same band; do not use a safe default.",
     "For every criterion, include a visible 0.5 half-band decision: why not 0.5 lower, why not 0.5 higher, and why this exact final band was selected.",
     "The server will only average the four AI-returned final criterion bands. The server will not create a non-AI score.",
+    "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
+    "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       finalCriteria: {
@@ -4975,6 +5012,12 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
         "Grammatical Range and Accuracy": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
       },
       finalOverallBand: "",
+      bandRange: "",
+      boundaryPosition: "",
+      strictExaminerBand: "",
+      generousExaminerBand: "",
+      boundaryReason: "",
+      boundaryReasonZh: "",
       scoreChanged: false,
       scoreChangeReason: "",
       scoreChangeReasonZh: "",
@@ -5019,7 +5062,7 @@ async function callAiBatchedBetterExpressionPlan({ apiKey, model, body, effectiv
       model,
       stage,
       locale,
-      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount, highBandPolish: false }),
       maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 6200, 3000, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_BETTER_BATCH_TIMEOUT_MS) || 120000
@@ -5177,13 +5220,21 @@ async function callAiBatchedSpellingWordform({ apiKey, model, body, effectiveMod
     error.status = 502;
     throw error;
   }
+  const spellingCorrections = results.flatMap((r) => ensureArray(r.spellingCorrections)).filter((item) => hasUsefulText(item));
+  const spellingWordformSentenceIssues = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
+  const lexicalAdvice = results.flatMap((r) => ensureArray(r.lexicalAdvice)).filter((item) => hasUsefulText(item));
+  const lexicalAdviceZh = results.flatMap((r) => ensureArray(r.lexicalAdviceZh)).filter((item) => hasUsefulText(item));
+  const noIssues = !spellingCorrections.length && !spellingWordformSentenceIssues.length && !lexicalAdvice.length;
   return {
     aiStage: stage,
     disclaimer: DISCLAIMER,
-    spellingCorrections: results.flatMap((r) => ensureArray(r.spellingCorrections)).filter((item) => hasUsefulText(item)),
-    spellingWordformSentenceIssues: dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections))),
-    lexicalAdvice: results.flatMap((r) => ensureArray(r.lexicalAdvice)).filter((item) => hasUsefulText(item)),
-    lexicalAdviceZh: results.flatMap((r) => ensureArray(r.lexicalAdviceZh)).filter((item) => hasUsefulText(item)),
+    stageStatus: noIssues ? "no_issues" : "completed",
+    noIssueReason: noIssues ? "No clear spelling or word-formation errors were detected by AI in this essay." : "",
+    noIssueReasonZh: noIssues ? "AI未发现明显拼写或词形错误。" : "",
+    spellingCorrections,
+    spellingWordformSentenceIssues,
+    lexicalAdvice,
+    lexicalAdviceZh,
     spellingWordformBatchMeta: { totalSentenceUnits: units.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(units.length / batchSize) > maxBatches },
     stageWarnings: warnings
   };
@@ -5252,7 +5303,84 @@ async function callAiBatchedLexicalChoice({ apiKey, model, body, effectiveMode, 
   };
 }
 
+function buildHighBandPolishPrompt({ body, effectiveMode, locale, sources }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const targetRange = betterExpressionTargetRangeForBody(body);
+  const sourceText = sources.map((item) => `${item.sentenceNumber}. ${item.originalSentence}`).join("\n");
+  return [
+    "Stage 12/13 high-band polish mode. The essay appears to be Band 7.0 or above or has few score-impacting sentence errors.",
+    "Do not return an empty betterExpressionItems array. Select 3-6 sentences that can be improved by about +0.5 to +1.0 band through high-band polishing.",
+    "This is not error correction. Do not invent errors. Choose sentences where precision, nuance, cohesion, concision, register, or argument depth can be improved.",
+    task === "Task 1"
+      ? "For Task 1, polish for natural letter tone, recipient-appropriate register, concision, specificity, and smoother purpose/bullet-point flow."
+      : "For Task 2, polish for argument nuance, topic-specific precision, sentence economy, cohesion, and clearer reasoning.",
+    `Target range for each upgraded sentence: ${targetRange}.`,
+    "Each betterExpression must be ONE sentence only, preserve the original meaning, avoid adding new evidence, avoid rewriting the whole paragraph, and avoid artificial complexity.",
+    "Never include meta-commentary inside the sentence, such as 'which makes the idea clearer', 'this improves the sentence', or 'clearer and more specific'.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      betterExpressionMode: "high_band_polish",
+      highBandPolish: true,
+      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "precision / cohesion / concision / nuance / register / argument depth" }]
+    }),
+    "Chinese requirement: every betterExpression item must include betterExpressionZh and whyBetterZh. Do not translate the full essay.",
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "Candidate sentences from the essay:",
+    sourceText
+  ].join("\n");
+}
+
+async function callAiHighBandPolishExpressionsOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  const units = splitEssayIntoSentenceUnits(body.essay).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_SENTENCES", 18, 6, 30));
+  if (!units.length) {
+    const error = new Error("AI high-band polish stage cannot run because no essay sentences were found.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 400;
+    throw error;
+  }
+  const raw = await callTenStepBatchJson({
+    apiKey,
+    model,
+    stage,
+    locale,
+    userPrompt: buildHighBandPolishPrompt({
+      body,
+      effectiveMode,
+      locale,
+      sources: units.map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text }))
+    }),
+    maxTokens: envInt("AI_HIGH_BAND_POLISH_MAX_TOKENS", 7800, 3500, 14000),
+    deadline,
+    timeoutMs: Number(process.env.AI_HIGH_BAND_POLISH_TIMEOUT_MS) || 150000
+  });
+  const rawItems = ensureArray(raw.betterExpressionItems).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+  const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems });
+  const betterExpressionItems = normalizeBetterExpressionItems([...rawItems, ...repairedBetterExpressionItems]).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+  if (!betterExpressionItems.length) {
+    const error = new Error("AI high-band polish returned no usable sentence upgrades.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = stage;
+    error.status = 502;
+    throw error;
+  }
+  return {
+    aiStage: stage,
+    disclaimer: DISCLAIMER,
+    betterExpressionMode: "high_band_polish",
+    highBandPolish: true,
+    betterExpressionItems,
+    betterExpressionBatchMeta: { sourceItems: units.length, attemptedBatches: 1, successfulBatches: 1, highBandPolish: true },
+    stageWarnings: ensureArray(raw.stageWarnings)
+  };
+}
+
 async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  if (shouldUseHighBandPolish(body)) {
+    return callAiHighBandPolishExpressionsOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline });
+  }
   const sources = correctionSourcesForBetterExpression(body);
   if (!sources.length) {
     const error = new Error("AI better-expressions stage cannot run because no source sentences were found.");
@@ -5274,7 +5402,7 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
       model,
       stage,
       locale,
-      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount }),
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount, highBandPolish: false }),
       maxTokens: envInt("AI_BETTER_BATCH_MAX_TOKENS", 6200, 3000, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_BETTER_BATCH_TIMEOUT_MS) || 135000
