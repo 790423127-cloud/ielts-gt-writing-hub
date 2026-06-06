@@ -1210,12 +1210,24 @@ function renderStrictBoundaryAudit(result = {}) {
   if (!audit || typeof audit !== "object" || !audit.triggered) return "";
   const flags = ensureArray(audit.flags).filter(Boolean);
   const caps = audit.caps && typeof audit.caps === "object" ? Object.entries(audit.caps).filter(([, value]) => String(value ?? "").trim()) : [];
+  const title = audit.auditType === "task_relevance_boundary"
+    ? "严格雅思任务相关性复核"
+    : audit.auditType === "task1_achievement_boundary"
+      ? "严格雅思 Task 1 任务完成复核"
+      : "严格雅思低分边界复核";
+  const fallbackMessage = audit.auditType === "task_relevance_boundary"
+    ? "已触发跑题/任务相关性边界复核。"
+    : audit.auditType === "task1_achievement_boundary"
+      ? "已触发 Task 1 目的、要点、语气或格式边界复核。"
+      : "已触发低分边界复核。";
+  const capLabel = audit.auditType === "task_relevance_boundary" || audit.auditType === "task1_achievement_boundary" ? "边界上限" : "最高";
   const capHtml = caps.length
-    ? `<div class="score-calculation-grid boundary-cap-grid">${caps.map(([criterion, band]) => `<div class="score-calculation-row"><span>${escapeHtml(criterion)}</span><strong>最高 Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>`
+    ? `<div class="score-calculation-grid boundary-cap-grid">${caps.map(([criterion, band]) => `<div class="score-calculation-row"><span>${escapeHtml(criterion)}</span><strong>${capLabel} Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>`
     : "";
   return `<div class="ai-warning strict-boundary-audit">
-    <p><strong>严格雅思低分边界复核：</strong>${escapeHtml(audit.reason || result.boundaryReason || "已触发低分边界复核。")}${renderZhToggle(audit.reasonZh || result.boundaryReasonZh || "")}</p>
+    <p><strong>${escapeHtml(title)}：</strong>${escapeHtml(audit.reason || result.boundaryReason || fallbackMessage)}${renderZhToggle(audit.reasonZh || result.boundaryReasonZh || "")}</p>
     ${audit.recommendedRange ? `<p><strong>建议考官区间：</strong>${escapeHtml(audit.recommendedRange)}</p>` : ""}
+    ${audit.boundaryPosition ? `<p><strong>边界类型：</strong>${escapeHtml(audit.boundaryPosition)}</p>` : ""}
     ${flags.length ? `<p><strong>触发原因：</strong>${escapeHtml(flags.join("；"))}</p>` : ""}
     ${capHtml}
   </div>`;
