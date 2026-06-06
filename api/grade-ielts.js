@@ -909,10 +909,37 @@ function isGenericEvidenceText(value) {
 
 function extractBandMentionsFromText(value) {
   const text = String(value || "");
-  const matches = [...text.matchAll(/Band\s+([1-9](?:\.0|\.5)?)/gi)];
+  const matches = [...text.matchAll(/\bBand\s+([1-9](?:\.0|\.5)?)/gi)];
   return matches
     .map((match) => clampAiBand(match[1], NaN))
     .filter((band) => Number.isFinite(Number(band)));
+}
+
+function extractChineseBandMentionsFromText(value) {
+  const text = String(value || "");
+  const patterns = [
+    /([1-9](?:\.0|\.5)?)\s*分/g,
+    /Band\s*([1-9](?:\.0|\.5)?)/gi,
+    /符合\s*([1-9](?:\.0|\.5)?)\s*分/g,
+    /达到\s*([1-9](?:\.0|\.5)?)\s*分/g
+  ];
+  const values = [];
+  patterns.forEach((pattern) => {
+    [...text.matchAll(pattern)].forEach((match) => {
+      const band = clampAiBand(match[1], NaN);
+      if (Number.isFinite(Number(band))) values.push(band);
+    });
+  });
+  return values;
+}
+
+function chineseBandMentionMismatch(value, actualBand) {
+  const text = String(value || "");
+  if (!text.trim()) return false;
+  const actual = normalizeCriterionBandValue(actualBand, 1);
+  const mentions = extractChineseBandMentionsFromText(text);
+  if (!mentions.length) return false;
+  return !mentions.some((band) => Math.abs(band - actual) < 0.01);
 }
 
 function explanationBandMentionsMismatch(value, actualBand) {
@@ -935,7 +962,10 @@ function explanationBandMentionsMismatch(value, actualBand) {
 }
 
 function shouldReplaceCriterionExplanation(value, actualBand) {
-  return !hasUsefulText(value) || isGenericEvidenceText(value) || explanationBandMentionsMismatch(value, actualBand);
+  return !hasUsefulText(value) ||
+    isGenericEvidenceText(value) ||
+    explanationBandMentionsMismatch(value, actualBand) ||
+    chineseBandMentionMismatch(value, actualBand);
 }
 
 function normalizeZhArrayLength(enItems, zhItems, fallbackFactory) {
@@ -1083,6 +1113,29 @@ function makeCriterionSpecificEvidence(name, band, task, body = {}, signals = {}
   return data;
 }
 
+function buildEvidenceQuoteZh(name, band, quote, task = "Task 2") {
+  const formattedBand = formatBand(normalizeCriterionBandValue(band, 1));
+  const cleanQuote = String(quote || "").replace(/\s+/g, " ").trim();
+  const quotePreview = cleanQuote ? `原文片段：“${cleanQuote.slice(0, 80)}${cleanQuote.length > 80 ? "..." : ""}”。` : "";
+
+  if (name === "Task Achievement") {
+    return `${quotePreview}这句用于判断书信任务完成度：它能显示写信目的、题目要点覆盖或细节展开情况，因此支撑 Band ${formattedBand} 的 Task Achievement 判断。`;
+  }
+  if (name === "Task Response") {
+    return `${quotePreview}这句用于判断 Task Response：它显示作者是否回应题目、是否有立场，以及观点是否得到展开，因此支撑 Band ${formattedBand} 的任务回应判断。`;
+  }
+  if (name === "Coherence and Cohesion") {
+    return `${quotePreview}这句用于判断结构和衔接：它反映段落推进、连接词使用或观点之间的衔接是否清楚，因此支撑 Band ${formattedBand} 的 Coherence and Cohesion 判断。`;
+  }
+  if (name === "Lexical Resource") {
+    return `${quotePreview}这句用于判断词汇：它能体现话题词、搭配、重复、拼写或用词准确度，因此支撑 Band ${formattedBand} 的 Lexical Resource 判断。`;
+  }
+  if (name === "Grammatical Range and Accuracy") {
+    return `${quotePreview}这句用于判断语法：它能体现句型控制、动词形式、从句、标点或错误是否影响理解，因此支撑 Band ${formattedBand} 的 Grammar 判断。`;
+  }
+  return `${quotePreview}这句是当前评分项的原文证据，用来解释为什么该项被评为 Band ${formattedBand}。`;
+}
+
 function populateCriterionEvidenceDetails(result, body = {}) {
   if (!result || !result.criteria) return result;
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
@@ -1129,7 +1182,7 @@ function populateCriterionEvidenceDetails(result, body = {}) {
     if (shouldReplaceCriterionExplanation(criterion.whyNotHigher, band)) criterion.whyNotHigher = fallback.higher;
     if (shouldReplaceCriterionExplanation(criterion.whyNotLower, band)) criterion.whyNotLower = fallback.lower;
 
-    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => `原文证据：${quote}`);
+    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => buildEvidenceQuoteZh(name, band, quote, task));
     criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
     criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
     criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
@@ -1159,7 +1212,7 @@ function syncCriterionEvidenceWithFinalBands(result, body = {}) {
     if (shouldReplaceCriterionExplanation(criterion.whyNotHigherZh, band)) criterion.whyNotHigherZh = fallback.higherZh;
     if (shouldReplaceCriterionExplanation(criterion.whyNotLowerZh, band)) criterion.whyNotLowerZh = fallback.lowerZh;
 
-    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => `原文证据：${quote}`);
+    criterion.evidenceQuotesZh = normalizeZhArrayLength(criterion.evidenceQuotes, criterion.evidenceQuotesZh, (quote) => buildEvidenceQuoteZh(name, band, quote, task));
     criterion.positiveEvidenceZh = normalizeZhArrayLength(criterion.positiveEvidence, criterion.positiveEvidenceZh, () => fallback.positiveZh);
     criterion.limitingEvidenceZh = normalizeZhArrayLength(criterion.limitingEvidence, criterion.limitingEvidenceZh, () => fallback.limitZh);
     criterion.evidenceZh = normalizeZhArrayLength(criterion.evidence, criterion.evidenceZh, (item, index) => index === 0 ? fallback.positiveZh : fallback.limitZh);
@@ -1710,6 +1763,7 @@ function finalizeTaskScoringEngine(result, body = {}) {
   populateCriterionEvidenceDetails(result, { ...body, task });
   syncCriterionEvidenceWithFinalBands(result, { ...body, task });
   ensureGrammarErrorsForVisibleProblems(result, { ...body, task });
+  suppressNonBlockingGrammarWarningsFinal(result);
   result.scoreCalculation = buildScoreCalculation(result, task, result.overallBand);
   result.scoringSystem = {
     type: task === "Task 1" ? "task1_practice_engine" : "task2_practice_engine",
@@ -4356,6 +4410,7 @@ async function callAiFocusedSectionStageOnly({ apiKey, model, body, effectiveMod
     bestOutput.errorAnalysis = bestOutput.errorAnalysis && typeof bestOutput.errorAnalysis === "object" ? bestOutput.errorAnalysis : {};
     bestOutput.errorAnalysis.summary = bestOutput.errorAnalysis.summary || "No major grammar-specific issue was returned in this stage; rely on the overall language, sentence-level, and polishing feedback.";
     bestOutput.errorAnalysis.summaryZh = bestOutput.errorAnalysis.summaryZh || "本次语法专项没有返回明显语法问题；可参考总体语言、逐句修改和润色建议。";
+    bestOutput.grammarPassRecovered = true;
     return bestOutput;
   }
 
@@ -6783,7 +6838,7 @@ function repairTaskRequirementAnalysisFinal(result, body = {}) {
 
 
 function isNonBlockingGrammarWarningText(value) {
-  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON/i.test(String(value || ""));
+  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON|failed to fetch|fetch failed|network error|request timed out|timeout|aborted/i.test(String(value || ""));
 }
 
 function ensureAlignedZhArrayFinal(items, zhItems, dictionary = {}) {
@@ -6842,46 +6897,175 @@ function betterExpressionTargetRangeLabel(bandValue) {
   return targetImprovementRangeFromBand(bandValue).label;
 }
 
-function buildFallbackBetterExpression(correctedSentence, bandValue, body = {}) {
+function normalizeGenericBetterSource(source) {
+  return String(source || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/([,.!?;:])([A-Za-z])/g, "$1 $2")
+    .trim();
+}
+
+function betterExpressionLevelFromBand(bandValue) {
   const band = clampAiBand(bandValue, 5);
-  if (band >= 9) return "";
-  const source = String(correctedSentence || "").trim();
-  if (!source || tokenizeExpressionForComparison(source).length < 4) return "";
-  let upgraded = source;
+  const range = targetImprovementRangeFromBand(band);
+  return {
+    band,
+    lower: range.lower,
+    upper: range.upper,
+    label: range.label,
+    isHigh: range.lower >= 7,
+    isMid: range.lower >= 6 && range.lower < 7,
+    isLowMid: range.lower < 6
+  };
+}
 
-  const replacements = [
-    [/\bI write this letter because I want to go to another department\b/i, "I am writing to request a transfer to another department because I would like to develop my skills"],
-    [/\bI am writing this letter because I want to go to another department\b/i, "I am writing to request a transfer to another department because I would like to develop my skills"],
-    [/\bI write this letter because I want to\b/i, "I am writing to request permission to"],
-    [/\bI am writing this letter because I want to\b/i, "I am writing to request permission to"],
-    [/\bI want to go to another department\b/i, "I would like to transfer to another department"],
-    [/\bwant to go to another department\b/i, "would like to transfer to another department"],
-    [/\bgo to another department\b/i, "transfer to another department"],
-    [/\bI want to\b/i, "I would like to"],
-    [/\bI need to\b/i, "I would like to"],
-    [/\bdo some job\b/i, "carry out my work"],
-    [/\bmake better use of\b/i, "make more effective use of"],
-    [/\bgood for me\b/i, "helpful for my development"],
-    [/\bvery good\b/i, "very useful"],
-    [/\bnice\b/i, "helpful"],
-    [/\bpeople is\b/i, "people are"],
-    [/\bother department\b/i, "another department"]
-  ];
-  replacements.forEach(([pattern, replacement]) => {
-    upgraded = upgraded.replace(pattern, replacement);
-  });
+function detectSentenceFunction(sentence, task = "Task 2") {
+  const s = String(sentence || "").toLowerCase();
+  if (task === "Task 1") {
+    if (/\b(i am writing|i would like|i want|request|enquire|ask|could you|would you)\b/.test(s)) return "letter_request";
+    if (/\b(apolog|sorry|regret)\b/.test(s)) return "letter_apology";
+    if (/\b(thank|grateful|appreciate)\b/.test(s)) return "letter_thanks";
+    if (/\b(arrange|available|appointment|meeting|schedule)\b/.test(s)) return "letter_arrangement";
+    if (/\b(complain|problem|noise|refund|issue)\b/.test(s)) return "letter_complaint";
+  }
+  if (/^\s*(in conclusion|to conclude|overall)\b|\b(in conclusion|to conclude|overall)\b/.test(s)) return "conclusion";
+  if (/^\s*(if|provided that|as long as)\b|\bif\b/.test(s)) return "condition";
+  if (/\b(however|but|although|whereas|on the other hand|nevertheless)\b/.test(s)) return "contrast";
+  if (/\b(for example|for instance|such as|e\.g\.)\b/.test(s)) return "example";
+  if (/\b(because|reason|this is because|due to|as a result|therefore|so)\b/.test(s)) return "reason_result";
+  if (/\b(benefit|advantage|good thing|positive|help|improve|useful|confidence|opportunity)\b/.test(s)) return "benefit";
+  if (/\b(disadvantage|drawback|bad thing|negative|risk|dangerous|expensive|harm|problem|cost)\b/.test(s)) return "drawback";
+  if (/\b(i think|i believe|in my opinion|my view|i agree|i disagree)\b/.test(s)) return "opinion";
+  return "general";
+}
 
-  if (sameCorrectionText(upgraded, source)) {
-    if (/^I am writing to request\b/i.test(source) && !/\b(because|as|so that|in order to)\b/i.test(source)) {
-      upgraded = source.replace(/[.。!?]*$/, "") + " because I believe this change would support my professional development.";
-    } else if (/^I am writing\b/i.test(source) && /\btransfer\b|\bdepartment\b/i.test(source) && !/\b(because|as)\b/i.test(source)) {
-      upgraded = source.replace(/[.。!?]*$/, "") + ", as I hope to develop my skills in a new role.";
+function upgradeCommonIeltsWording(sentence) {
+  return normalizeGenericBetterSource(sentence)
+    .replace(/\bvery good\b/gi, "highly beneficial")
+    .replace(/\bgood thing\b/gi, "positive development")
+    .replace(/\bbad thing\b/gi, "negative development")
+    .replace(/\bgood\b/gi, "beneficial")
+    .replace(/\bbad\b/gi, "harmful")
+    .replace(/\bnice\b/gi, "positive")
+    .replace(/\bmany things\b/gi, "a number of issues")
+    .replace(/\bmany thing\b/gi, "many things")
+    .replace(/\bspend too much money\b/gi, "spend excessively")
+    .replace(/\btoo much money\b/gi, "an excessive amount of money")
+    .replace(/\bfamous products\b/gi, "reputable products")
+    .replace(/\bwell-known products\b/gi, "reputable products");
+}
+
+function task1GenericBetterExpression(source, functionType, level) {
+  let s = upgradeCommonIeltsWording(source);
+  if (functionType === "letter_request") {
+    s = s
+      .replace(/\bI write this letter because I want to\b/i, "I am writing to ask whether I could")
+      .replace(/\bI am writing this letter because I want to\b/i, "I am writing to ask whether I could")
+      .replace(/\bI want to\b/i, "I would like to")
+      .replace(/\bI need to\b/i, "I would appreciate the opportunity to");
+    if (!/\b(because|as|so that|in order to)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + ", as this would help me address the situation more effectively";
+    }
+  } else if (functionType === "letter_apology") {
+    s = s.replace(/\bI am sorry\b/i, "I would like to apologise").replace(/[.!?]*$/, "") + " and explain how I intend to resolve the matter";
+  } else if (functionType === "letter_thanks") {
+    s = s.replace(/\bthank you\b/i, "I would like to thank you").replace(/[.!?]*$/, "") + " because your support has been very helpful";
+  } else if (functionType === "letter_complaint") {
+    s = s.replace(/\bthere is a problem\b/i, "there is a serious issue").replace(/[.!?]*$/, "") + ", and I would appreciate it if this could be addressed promptly";
+  } else if (functionType === "letter_arrangement") {
+    s = s.replace(/\bI can\b/i, "I would be available to").replace(/[.!?]*$/, "") + ", if this is convenient for you";
+  }
+  if (level.isHigh && /^I\b/.test(s)) s = s.replace(/^I would like to/i, "I would be grateful if I could");
+  return normalizeGenericBetterSource(s);
+}
+
+function task2GenericBetterExpression(source, functionType, level) {
+  const original = normalizeGenericBetterSource(source);
+  let s = upgradeCommonIeltsWording(original);
+
+  if (functionType === "opinion") {
+    s = s
+      .replace(/\bI think\b/i, "I believe")
+      .replace(/\bin my opinion,?\s*/i, "In my view, ");
+    if (!/\b(provided that|although|because|as long as|while)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? " because it has both benefits and risks" : ", provided that the possible risks are managed responsibly");
+    }
+  } else if (functionType === "benefit") {
+    if (/can bring some benefits/i.test(s)) {
+      s = s.replace(/can bring some benefits/i, level.isLowMid ? "can bring clear benefits" : "can offer clear practical benefits");
+    }
+    if (!/\b(such as|especially|because|by)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", such as greater confidence" : ", especially when it improves confidence or daily life");
+    }
+  } else if (functionType === "drawback") {
+    s = s.replace(/\bit is expensive\b/i, "it can be expensive").replace(/\bvery expensive\b/i, "costly");
+    if (!/\b(such as|especially|because|as this|which)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", which can create problems for some people" : ", which may create financial pressure or health risks");
+    }
+  } else if (functionType === "condition") {
+    if (/^if\b/i.test(s)) {
+      const withoutIf = s.replace(/^if\s+/i, "").replace(/[.!?]*$/, "");
+      if (level.isLowMid) {
+        s = `If ${withoutIf}, this can be beneficial`;
+      } else {
+        const conditionCore = withoutIf
+          .replace(/\bthey use\b/i, "people use")
+          .replace(/\bit can be\b.*$/i, "")
+          .replace(/\bthis can be\b.*$/i, "")
+          .trim();
+        s = `${conditionCore.charAt(0).toUpperCase()}${conditionCore.slice(1)} can be beneficial, provided that people choose safe options and use them responsibly`;
+      }
+    }
+    s = s
+      .replace(/Using\s+can be/gi, "Using this can be")
+      .replace(/\bthey use those products or treatments carefully and in the right way, and also choose\b/gi, "people use those products or treatments carefully and choose")
+      .replace(/\bpeople use those products or treatments carefully and in the right way, and also choose\b/gi, "people use those products or treatments carefully and choose");
+  } else if (functionType === "reason_result") {
+    if (!/^this is because\b/i.test(s)) s = s.replace(/\bbecause\b/i, level.isLowMid ? "because" : "This is because");
+    if (!/\b(for example|for instance|therefore|as a result|which means)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", so the idea is easier to understand" : ", which makes the argument clearer and more convincing");
+    }
+  } else if (functionType === "example") {
+    if (!/\b(specific|concrete|realistic)\b/i.test(s)) {
+      s = s.replace(/\bfor example\b/i, "For example").replace(/[.!?]*$/, "") + ", which gives the point more concrete support";
+    }
+  } else if (functionType === "contrast") {
+    s = s.replace(/\bbut\b/i, "However,").replace(/\bhowever, however\b/i, "However");
+    if (!/\b(although|whereas|while|nevertheless)\b/i.test(s) && level.isMid) {
+      s = s.replace(/[.!?]*$/, "") + ", although this depends on how people use it";
+    }
+  } else if (functionType === "conclusion") {
+    s = s.replace(/\bin conclusion,?\s*/i, "Overall, ");
+    if (!/\b(therefore|balanced|responsible|main reason|as a whole)\b/i.test(s)) {
+      s = s.replace(/[.!?]*$/, "") + (level.isLowMid ? ", so it should be used carefully" : ", so the trend should be judged in a balanced and responsible way");
+    }
+  } else {
+    if (sameCorrectionText(s, original)) {
+      s = original.replace(/[.!?]*$/, "") + (level.isLowMid ? ", which makes the idea clearer" : ", which makes the point more specific and persuasive");
     }
   }
+
+  return normalizeGenericBetterSource(s);
+}
+
+function buildGenericIeltsBetterExpression(correctedSentence, bandValue, body = {}) {
+  const level = betterExpressionLevelFromBand(bandValue);
+  if (level.band >= 9) return "";
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const source = normalizeGenericBetterSource(correctedSentence);
+  if (!source || tokenizeExpressionForComparison(source).length < 4) return "";
+  const functionType = detectSentenceFunction(source, task);
+  let upgraded = task === "Task 1"
+    ? task1GenericBetterExpression(source, functionType, level)
+    : task2GenericBetterExpression(source, functionType, level);
 
   if (!/[.!?]$/.test(upgraded)) upgraded += ".";
   if (!shouldShowBetterExpression(source, upgraded)) return "";
   return upgraded;
+}
+
+function buildFallbackBetterExpression(correctedSentence, bandValue, body = {}) {
+  return buildGenericIeltsBetterExpression(correctedSentence, bandValue, body);
 }
 
 function suppressNonBlockingGrammarWarningsFinal(result) {
