@@ -365,8 +365,25 @@ function renderErrorDetails(errorInfo) {
   els.gradingResults.innerHTML = collapsibleSection("查看详细错误", `${detailBlock}${rawBlock}`, { className: "error-details" });
 }
 
+
+function dedupeTextLines(value) {
+  const lines = String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  lines.forEach((line) => {
+    const key = compactTranslationCompare(line);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(line);
+  });
+  return out.join("\n");
+}
+
 function renderZhToggle(text) {
-  const value = String(text || "").trim();
+  const value = dedupeTextLines(text);
   if (!value) return "";
   return `<button class="secondary translation-toggle zh-toggle" type="button" aria-expanded="false">中文解释</button><div class="translation-panel zh-note hidden">${escapeHtml(value)}</div>`;
 }
@@ -731,6 +748,7 @@ function mergeAiStageResult(base, incoming) {
     "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
+    "completionStatus", "textStats",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
@@ -784,6 +802,7 @@ function mergeAiStageResult(base, incoming) {
   if (typeof data.actualWordCount !== "undefined") output.actualWordCount = data.actualWordCount;
   if (typeof data.wordCountThresholdUsed !== "undefined") output.wordCountThresholdUsed = data.wordCountThresholdUsed;
   if (typeof data.wordCountStatus !== "undefined") output.wordCountStatus = data.wordCountStatus;
+  if (typeof data.completionLevel !== "undefined") output.completionLevel = data.completionLevel;
   output.overallEstimatedBand = output.overallBand;
   output.revisedEssay = output.revisedEssayBand7 || output.revisedEssayBand6 || output.revisedEssayBand5 || output.revisedEssay || "";
   return output;
@@ -820,6 +839,9 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "prompt-analysis") {
     return Boolean(hasAnyText(data.taskRequirementAnalysis) || hasAnyText(data.taskMatchCheck));
   }
+  if (aiStage === "text-stats-completion") {
+    return Boolean(Number.isFinite(Number(data.actualWordCount)) || hasAnyText(data.textStats) || hasAnyText(data.completionStatus));
+  }
   if (aiStage === "half-band-summary") {
     return Boolean(hasAnyText(data.scoreCalibration) || hasAnyText(data.halfBandBoundary) || hasUsefulItemArray(data.strengthItems) || hasUsefulItemArray(data.mainProblemItems));
   }
@@ -843,11 +865,11 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     return Boolean(hasUsefulItemArray(data.grammarErrors) || hasUsefulItemArray(data.grammarAdvice) || hasAnyText(data.criteria?.["Grammatical Range and Accuracy"]) || hasAnyText(data.errorAnalysis?.summary));
   }
   if (aiStage === "sentence-corrections") {
-    return Boolean(hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections));
+    return Boolean(data.stageStatus === "no_issues" || hasAnyText(data.noIssueReason) || hasAnyText(data.sentenceCorrectionSummary) || hasUsefulItemArray(data.sentenceCorrections) || hasUsefulItemArray(data.detailedSentenceCorrections));
   }
   if (aiStage === "better-expressions") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
-    return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || hasUsefulItemArray(data.betterExpressionItems));
+    return Boolean(data.stageStatus === "no_issues" || hasAnyText(data.noIssueReason) || detailed.some((item) => hasAnyText(item?.betterExpression)) || hasUsefulItemArray(data.betterExpressionItems));
   }
   if (aiStage === "better-expression-plan") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
@@ -992,7 +1014,7 @@ async function startGrading() {
 
   setGradingStatus("AI is scoring and analysing the task.", "loading");
   els.gradingResults.innerHTML = isUnderMinimum
-    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数，AI 仍会批改，但 Task Achievement / Task Response 可能会受到影响。</p>`
+    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数或作文可能未完成，AI 仍会正常批改并在最终复核中判断完成度对分数的影响。</p>`
     : "";
   els.revisionCompareArea.classList.add("hidden");
 
@@ -1049,17 +1071,17 @@ async function startGrading() {
 
   try {
     await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
-    await runMergeStage("score", `第 2 步/${totalSteps}：AI 正在进行内部评分信号分析（暂不展示分数）`, "评分信号分析", { required: true });
-    await runMergeStage("half-band-summary", `第 3 步/${totalSteps}：AI 正在整理半分边界信号`, "半分边界信号");
-    await runMergeStage("criterion-boundary", `第 4 步/${totalSteps}：AI 正在逐项整理四项评分边界证据`, "四项边界证据");
-    await runMergeStage("evidence-map", `第 5 步/${totalSteps}：AI 正在提取评分证据`, "评分证据");
-    await runMergeStage("task-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
-    await runMergeStage("coherence-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
-    await runMergeStage("spelling-wordform", `第 8 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
-    await runMergeStage("lexical-choice-collocation", `第 9 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
-    await runMergeStage("grammar-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
-    await runMergeStage("sentence-corrections", `第 11 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
-    await runMergeStage("better-expressions", `第 12 步/${totalSteps}：AI 正在生成单句更好表达`, "更好表达");
+    await runMergeStage("text-stats-completion", `第 2 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
+    await runMergeStage("score", `第 3 步/${totalSteps}：AI 正在进行内部评分信号初筛（暂不展示分数）`, "评分信号初筛", { required: true });
+    await runMergeStage("spelling-wordform", `第 4 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
+    await runMergeStage("lexical-choice-collocation", `第 5 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
+    await runMergeStage("grammar-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("sentence-corrections", `第 7 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
+    await runMergeStage("better-expressions", `第 8 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
+    await runMergeStage("task-diagnosis", `第 9 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
+    await runMergeStage("evidence-map", `第 11 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
+    await runMergeStage("criterion-boundary", `第 12 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
     await runMergeStage("final-plan", `第 13 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
@@ -1231,6 +1253,26 @@ function renderWordCountWarningNote(result = {}) {
   const message = candidates.map((item) => String(item || "").trim()).find((item) => isWordCountWarningText(item)) || `${task} has ${words} words, below the recommended minimum of ${minWords} words.`;
   const zh = note.messageZh || note.warningZh || `${task} 当前约 ${words} 词，低于建议最低 ${minWords} 词，可能影响任务回应和内容展开。`;
   return `<section class="grading-section word-count-note"><h4>字数与限分说明</h4>${renderTextWithTranslation(message, zh)}</section>`;
+}
+
+
+function renderCompletionStatus(result = {}) {
+  const status = result.completionStatus && typeof result.completionStatus === "object" ? result.completionStatus : null;
+  if (!status || !hasAnyText(status)) return "";
+  const missing = ensureArray(status.missingParts).filter(Boolean);
+  const signals = ensureArray(status.completionSignals).filter(Boolean);
+  const isIncomplete = Boolean(status.isIncomplete) || String(status.completionLevel || "").toLowerCase().includes("incomplete") || missing.length;
+  if (!isIncomplete && !missing.length && !status.wordCountImpact && !status.scoreImpact) return "";
+  return `<section class="grading-section completion-status-card">
+    <h4>作文完成度提示</h4>
+    <p><strong>状态：</strong>${escapeHtml(status.completionLevel || (isIncomplete ? "possibly incomplete" : "complete/rateable"))}</p>
+    ${missing.length ? `<div><strong>可能缺失：</strong>${listHtml(missing)}</div>` : ""}
+    ${signals.length ? `<p><strong>完成度信号：</strong>${escapeHtml(signals.join(", "))}</p>` : ""}
+    ${status.wordCountImpact ? renderTextWithTranslation(status.wordCountImpact, status.wordCountImpactZh, { tag: "p" }) : ""}
+    ${status.scoreImpact ? renderTextWithTranslation(status.scoreImpact, status.scoreImpactZh, { tag: "p" }) : ""}
+    ${typeof status.scoreCapApplied !== "undefined" ? `<p><strong>是否由 AI 应用限分：</strong>${boolText(status.scoreCapApplied)}</p>` : ""}
+    ${status.scoreCapReason ? renderTextWithTranslation(status.scoreCapReason, status.scoreCapReasonZh, { tag: "p" }) : ""}
+  </section>`;
 }
 
 function renderScoreCalibration(calibration, calibrationZh = {}) {
@@ -2281,6 +2323,7 @@ function renderGradingResult(result = {}) {
     ${renderStageProgress(result)}
     ${renderTaskRequirementAnalysis(result.taskRequirementAnalysis, result.taskMatchCheck, result.taskRequirementAnalysisZh)}
     ${renderWordCountWarningNote(result)}
+    ${renderCompletionStatus(result)}
     ${result.scoreFinalized ? renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh) : ""}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
     ${renderHighBandDiagnostics(result.highBandDiagnostics, result.highBandDiagnosticsZh)}
@@ -2445,13 +2488,17 @@ function mockPayloadForPrompt(prompt, essay) {
 
 const MOCK_FINAL_SCORING_STAGES = [
   ["prompt-analysis", "题目要求分析"],
-  ["score", "内部评分信号分析"],
-  ["evidence-map", "评分证据提取"],
+  ["text-stats-completion", "文本统计与完成度检查"],
+  ["score", "内部评分信号初筛"],
+  ["spelling-wordform", "拼写和词形诊断"],
+  ["lexical-choice-collocation", "用词搭配诊断"],
+  ["grammar-diagnosis", "语法诊断"],
+  ["sentence-corrections", "逐句批改"],
+  ["better-expressions", "更好表达/高分表达优化"],
   ["task-diagnosis", "任务完成/回应诊断"],
   ["coherence-diagnosis", "结构与衔接诊断"],
-  ["spelling-wordform", "拼写和词形诊断"],
-  ["lexical-choice-collocation", "词汇选择和搭配诊断"],
-  ["grammar-diagnosis", "语法诊断"],
+  ["evidence-map", "评分证据地图"],
+  ["criterion-boundary", "半分边界判断"],
   ["final-plan", "最终评分复核"]
 ];
 
@@ -2605,7 +2652,7 @@ async function submitMockExam() {
   if (!endpoint) { setMockStatus("请先填写批改接口地址。", "error"); return; }
   const t1Essay = String($("mockTask1Essay")?.value || "").trim();
   const t2Essay = String($("mockTask2Essay")?.value || "").trim();
-  if (!t1Essay || !t2Essay) { setMockStatus("请先完成 Task 1 和 Task 2 两篇作文。", "error"); return; }
+  if (!t1Essay && !t2Essay) { setMockStatus("两篇都为空也可以提交，AI 会按无有效作答评分；建议至少保留真实考试中写下的内容。", "warning"); }
   const btn = $("mockSubmitBtn");
   if (btn) { btn.disabled = true; btn.textContent = "评分中..."; }
   try {

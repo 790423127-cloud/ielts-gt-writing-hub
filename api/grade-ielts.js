@@ -176,6 +176,103 @@ function countWordsServer(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
 }
 
+function countParagraphsServer(text) {
+  return String(text || "")
+    .split(/\n\s*\n|\r?\n/)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
+
+function simpleSentenceUnitsServer(text) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const matches = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  return matches.map((part, index) => ({ sentenceNumber: index + 1, text: part.trim() })).filter((item) => item.text);
+}
+
+function buildCompletionStatusFromStats(body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const essay = String(body.essay || "");
+  const words = Number(body.wordCount) || countWordsServer(essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const paragraphs = countParagraphsServer(essay);
+  const sentenceUnits = simpleSentenceUnitsServer(essay);
+  const missingParts = [];
+  const completionSignals = [];
+
+  if (words === 0) {
+    missingParts.push("No answer was written.");
+    completionSignals.push("blank_response");
+  } else if (words < threshold) {
+    missingParts.push(`Below the recommended ${threshold}-word minimum for ${task}.`);
+    completionSignals.push("under_recommended_word_count");
+  }
+  if (task === "Task 2" && words > 0 && !/\b(in conclusion|to conclude|overall|ultimately|in summary|therefore)\b/i.test(essay)) {
+    missingParts.push("No clear conclusion marker was detected; AI must decide whether the response is actually incomplete.");
+    completionSignals.push("possible_missing_conclusion");
+  }
+  if (paragraphs <= 1 && words >= 40) {
+    missingParts.push("Only one paragraph or no clear paragraph break was detected.");
+    completionSignals.push("limited_paragraphing");
+  }
+  if (task === "Task 1" && words > 0 && words < threshold) {
+    missingParts.push("The letter may not have enough space to cover all bullet points fully; AI must check actual coverage.");
+    completionSignals.push("possible_incomplete_bullet_coverage");
+  }
+
+  let completionLevel = "complete_or_rateable";
+  if (words === 0) completionLevel = "blank_or_no_attempt";
+  else if (task === "Task 1" ? words < 50 : words < 80) completionLevel = "severely_incomplete";
+  else if (words < threshold || (task === "Task 2" && !/\b(in conclusion|to conclude|overall|ultimately|in summary|therefore)\b/i.test(essay))) completionLevel = "partial_or_possibly_incomplete";
+  else completionLevel = "mostly_complete_or_complete";
+
+  return {
+    isIncomplete: completionLevel !== "mostly_complete_or_complete" && completionLevel !== "complete_or_rateable",
+    completionLevel,
+    missingParts,
+    completionSignals,
+    wordCountImpact: words < threshold ? `${task} has ${words} words, below the recommended minimum of ${threshold}. This should be considered by AI, but the essay must still be scored.` : "Word count meets the recommended minimum.",
+    scoreImpact: "AI must decide the actual score impact from the submitted content. The server does not score or cap locally.",
+    scoreCapApplied: false,
+    scoreCapReason: "Not locally applied. Final AI reconciliation must decide whether any IELTS task cap applies.",
+    canSubmitForScoring: true
+  };
+}
+
+function buildTextStatsCompletionStage(body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const essay = String(body.essay || "");
+  const words = Number(body.wordCount) || countWordsServer(essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const sentenceUnits = simpleSentenceUnitsServer(essay);
+  const paragraphs = countParagraphsServer(essay);
+  const completionStatus = buildCompletionStatusFromStats({ ...body, wordCount: words });
+  return {
+    aiStage: "text-stats-completion",
+    disclaimer: DISCLAIMER,
+    actualWordCount: words,
+    wordCountThresholdUsed: threshold,
+    wordCountStatus: words >= threshold ? `meets_${task === "Task 1" ? "task1" : "task2"}_minimum` : "below_recommended_minimum_but_rateable",
+    textStats: {
+      task,
+      wordCount: words,
+      paragraphCount: paragraphs,
+      sentenceUnitCount: sentenceUnits.length,
+      sentenceUnits: sentenceUnits.slice(0, 80)
+    },
+    completionStatus,
+    wordCountWarning: words < threshold
+      ? {
+          message: `${task} has ${words} words, below the recommended minimum of ${threshold}; AI will still score the submitted response and consider incomplete-task impact in the final reconciliation.`,
+          messageZh: `${task} 当前约 ${words} 词，低于建议最低 ${threshold} 词；AI仍会根据已提交内容评分，并在最终复核中考虑未完成影响。`
+        }
+      : { message: "", messageZh: "" },
+    stageStatus: "complete",
+    noIssueReason: "Text statistics and completion signals were generated. Final score impact is decided by AI in Stage 13.",
+    noIssueReasonZh: "已生成文本统计和完成度信号；最终分数影响由第13步AI复核决定。"
+  };
+}
+
 function roundHalf(value) {
   return Math.max(0, Math.min(9, Math.round(Number(value || 0) * 2) / 2));
 }
@@ -429,6 +526,9 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Task 1 word count caps: blank/non-English/no rateable attempt = Band 1; isolated words or mostly copied prompt = Band 1; 20 words or fewer normally no higher than Band 2; under 50 words normally no higher than Band 3; 50-79 words normally no higher than Band 4; 80-119 words normally no higher than Band 5; 120-149 words may score normally but mention limited development if relevant.",
     "Task 2 word count caps: blank/non-English/no rateable attempt = Band 1; isolated words or mostly copied prompt = Band 1; 20 words or fewer normally no higher than Band 2; under 80 words normally no higher than Band 3; 80-149 words normally no higher than Band 4; 150-199 words normally no higher than Band 5; 200-249 words may score normally but mention limited development if relevant.",
     "Do not reject short essays. Grade them, but apply caps.",
+    "Incomplete essays must still be graded. A missing conclusion, missing Task 1 bullet point, one-sided Task 2 answer, or unfinished body paragraph should never cause refusal; score the submitted content and explain the completion impact.",
+    "Do not mechanically assign a fixed low score merely because a response is incomplete. Decide the score impact from actual task coverage, coherence, language quality, and rateable content.",
+    "Always return completionStatus when completion is relevant: isIncomplete, completionLevel, missingParts, wordCountImpact, scoreImpact, scoreCapApplied, and scoreCapReason.",
     "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
     "Task 2 argument caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; off-topic no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
     "Coherence caps: no paragraphing normally no higher than 4.0-5.0; ideas listed without progression no higher than 5.0; missing/unnatural linking or repeated and/so/because should not receive high CC; Band 6+ requires clear paragraphing and mostly logical progression.",
@@ -521,6 +621,7 @@ function buildExpectedJsonShape(task, locale = "en") {
     taskRequirementAnalysisZh: { taskPurposeZh: emptyForLocaleZh("", locale), requiredToneZh: emptyForLocaleZh("", locale), letterTypeZh: emptyForLocaleZh("", locale), taskMatchSummaryZh: emptyForLocaleZh("", locale), bulletPointsZh: emptyForLocaleZh([], locale), requiredPartsZh: emptyForLocaleZh([], locale) },
     taskMatchCheck: { appearsToAnswerSelectedPrompt: true, reason: "", warning: "" },
     wordCountWarning: { message: "", messageZh: "" },
+    completionStatus: { isIncomplete: false, completionLevel: "", missingParts: [], completionSignals: [], wordCountImpact: "", scoreImpact: "", scoreCapApplied: false, scoreCapReason: "", canSubmitForScoring: true },
     highBandDiagnostics: {
       fullyAddressesTask: false,
       clearProgression: false,
@@ -3682,6 +3783,7 @@ function finalizeTaskScoringEngine(result, body = {}) {
     scorer: "ai_only",
     serverScoringDisabled: true
   };
+  if (!result.completionStatus || typeof result.completionStatus !== "object") result.completionStatus = buildCompletionStatusFromStats(body);
   result.actualWordCount = Number(body?.wordCount) || countWordsServer(body?.essay);
   result.wordCountThresholdUsed = task === "Task 1" ? 150 : 250;
   result.disclaimer = result.disclaimer || DISCLAIMER;
@@ -4018,6 +4120,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 // --- AI-only 10-step grading stages (maximum-detail, no local scoring) ---
 const TEN_STEP_AI_STAGES = new Set([
   "prompt-analysis",
+  "text-stats-completion",
   "half-band-summary",
   "criterion-boundary",
   "evidence-map",
@@ -4038,17 +4141,18 @@ const TEN_STEP_AI_STAGES = new Set([
 function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
-  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "stage2", "step2"].includes(raw)) return "score";
-  if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary", "stage3", "step3"].includes(raw)) return "half-band-summary";
-  if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage4", "step4"].includes(raw)) return "criterion-boundary";
-  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage5", "step5"].includes(raw)) return "evidence-map";
-  if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage6", "step6"].includes(raw)) return "task-diagnosis";
-  if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage7", "step7"].includes(raw)) return "coherence-diagnosis";
-  if (["spellingwordform", "spellingandwordform", "spelling", "wordform", "wordformation", "stage8", "step8"].includes(raw)) return "spelling-wordform";
-  if (["lexicalchoicecollocation", "lexicaldiagnosis", "lexical", "lexicalresource", "vocabulary", "wordchoice", "collocation", "repetition", "stage9", "step9"].includes(raw)) return "lexical-choice-collocation";
-  if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage10", "step10"].includes(raw)) return "grammar-diagnosis";
-  if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage11", "step11"].includes(raw)) return "sentence-corrections";
-  if (["betterexpressions", "betterexpression", "betterexpressionitems", "targetexpression", "stage12", "step12"].includes(raw)) return "better-expressions";
+  if (["textstatscompletion", "textstats", "completioncheck", "completionstatus", "basicstats", "sentencesplit", "stage2", "step2"].includes(raw)) return "text-stats-completion";
+  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "scoresignal", "scoresignals", "stage3", "step3"].includes(raw)) return "score";
+  if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary"].includes(raw)) return "half-band-summary";
+  if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage12", "step12"].includes(raw)) return "criterion-boundary";
+  if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage11", "step11"].includes(raw)) return "evidence-map";
+  if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage9", "step9"].includes(raw)) return "task-diagnosis";
+  if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage10", "step10"].includes(raw)) return "coherence-diagnosis";
+  if (["spellingwordform", "spellingandwordform", "spelling", "wordform", "wordformation", "stage4", "step4"].includes(raw)) return "spelling-wordform";
+  if (["lexicalchoicecollocation", "lexicaldiagnosis", "lexical", "lexicalresource", "vocabulary", "wordchoice", "collocation", "repetition", "stage5", "step5"].includes(raw)) return "lexical-choice-collocation";
+  if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage6", "step6"].includes(raw)) return "grammar-diagnosis";
+  if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage7", "step7"].includes(raw)) return "sentence-corrections";
+  if (["betterexpressions", "betterexpression", "betterexpressionitems", "targetexpression", "stage8", "step8"].includes(raw)) return "better-expressions";
   if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "betterexpressionplan", "stage13", "step13"].includes(raw)) return "final-plan";
   if (["revision", "model", "modelanswer", "revisedessay", "stage14", "step14"].includes(raw)) return "revision";
   if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
@@ -4075,6 +4179,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     : "Main fields must be English. Put concise, accurate Chinese helper notes only in fields ending with Zh. Match the adjacent English field. Do not translate the full essay.";
   const stageNames = {
     "prompt-analysis": "question requirement analysis only",
+    "text-stats-completion": "basic text statistics, sentence splitting, and completion-status check only",
     "half-band-summary": "overall half-band boundary summary only",
     "criterion-boundary": "one-criterion-at-a-time half-band boundary explanation only",
     "score-boundary": "IELTS half-band boundary explanation only",
@@ -4135,9 +4240,27 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     ].join("\n");
   }
 
+
+  if (stage === "text-stats-completion") {
+    return [
+      "Stage 2/13. Basic text statistics, sentence splitting, and completion-status check. Do not score and do not correct sentences.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        actualWordCount: 0,
+        wordCountThresholdUsed: task === "Task 1" ? 150 : 250,
+        wordCountStatus: "",
+        textStats: { task: task, wordCount: 0, paragraphCount: 0, sentenceUnitCount: 0, sentenceUnits: [{ sentenceNumber: 1, text: "" }] },
+        completionStatus: { isIncomplete: false, completionLevel: "", missingParts: [], completionSignals: [], wordCountImpact: "", scoreImpact: "", scoreCapApplied: false, scoreCapReason: "", canSubmitForScoring: true },
+        wordCountWarning: { message: "", messageZh: "" }
+      }),
+      "This stage only identifies completion signals. The final score impact must be decided by Stage 13 AI reconciliation.",
+      ...common
+    ].join("\n");
+  }
+
   if (stage === "half-band-summary") {
     return [
-      "Stage 3/13. Prepare half-band boundary signals from the accumulated AI evidence. Do not finalise or display any score and do not correct sentences.",
+      "Stage 12/13. Make the final half-band boundary judgement from the accumulated evidence. Do not display or lock the final score here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
@@ -4153,7 +4276,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "criterion-boundary") {
     return [
-      "Stage 4/13. Explain detailed half-band boundary signals criterion by criterion. This non-batched prompt is a fallback; prefer internal criterion batches when available. Do not finalise the score.",
+      "Stage 12/13. Explain detailed half-band boundary signals criterion by criterion. This non-batched prompt is a fallback; prefer internal criterion batches when available. Do not finalise the score.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: tenStepCriterionShape(task),
@@ -4181,7 +4304,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "evidence-map") {
     return [
-      "Stage 5/13. Map essay evidence to the four IELTS criteria. Do not give final scores and do not correct sentences.",
+      "Stage 11/13. Map essay evidence to the four IELTS criteria after language, task, and coherence diagnosis. Do not give final scores and do not correct sentences.",
       "Return JSON with this exact shape:",
       JSON.stringify({ criteria: tenStepCriterionShape(task), strengthItems: [{ text: "", zh: "" }], mainProblemItems: [{ text: "", zh: "" }], strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
       "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Also return strengthItems and mainProblemItems as paired objects where every English text has a non-empty zh Chinese helper note. If you also use strengths/strengthsZh or mainProblems/mainProblemsZh, their item counts must match exactly.",
@@ -4191,7 +4314,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "task-diagnosis") {
     return [
-      "Stage 6/13. Diagnose Task Response/Task Achievement and task-specific structure only. Do not do grammar, vocabulary, or sentence correction.",
+      "Stage 9/13. Diagnose Task Response/Task Achievement and task-specific structure only, using earlier language evidence where useful. Do not do grammar, vocabulary, or sentence correction.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         taskAchievementAdvice: [], taskAchievementAdviceZh: [],
@@ -4206,7 +4329,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "coherence-diagnosis") {
     return [
-      "Stage 7/13. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
+      "Stage 10/13. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: { "Coherence and Cohesion": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
@@ -4220,7 +4343,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "spelling-wordform") {
     return [
-      "Stage 8/13. Diagnose spelling and word-formation issues only. Do not assess collocation unless it is caused by word form. Do not do full sentence correction.",
+      "Stage 4/13. Diagnose spelling and word-formation issues only. Do not assess collocation unless it is caused by word form. Do not do full sentence correction.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         spellingCorrections: [{ originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }],
@@ -4235,7 +4358,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "lexical-choice-collocation") {
     return [
-      "Stage 9/13. Diagnose word choice, collocation, repetition, register, and lexical precision only. Do not do grammar correction except where word choice is the main issue.",
+      "Stage 5/13. Diagnose word choice, collocation, repetition, register, and lexical precision only. Do not do grammar correction except where word choice is the main issue.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
@@ -4266,7 +4389,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "grammar-diagnosis") {
     return [
-      "Stage 10/13. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
+      "Stage 6/13. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         criteria: { "Grammatical Range and Accuracy": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
@@ -4281,7 +4404,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "sentence-corrections") {
     return [
-      "Stage 11/13. Produce direct sentence-level corrections only. Do not write the final study plan here.",
+      "Stage 7/13. Produce direct sentence-level corrections only. Do not write the final study plan here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         sentenceCorrections: [{ original: "", corrected: "", reason: "", reasonZh: "" }],
@@ -4294,7 +4417,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
   if (stage === "better-expressions") {
     return [
-      "Stage 12/13. Produce upgraded single-sentence better expressions only. Do not rescore, do not repeat direct corrections, and do not write the final study plan.",
+      "Stage 8/13. Produce upgraded single-sentence better expressions or high-band polish only. Do not rescore, do not repeat direct corrections, and do not write the final study plan.",
       "Return JSON with this exact shape:",
       JSON.stringify({
         betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
@@ -4326,6 +4449,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 function tenStepStageMaxTokens(stage) {
   return ({
     "prompt-analysis": envInt("AI_STAGE_PROMPT_ANALYSIS_TOKENS", 4500, 2500, 9000),
+    "text-stats-completion": envInt("AI_STAGE_TEXT_STATS_TOKENS", 2500, 1000, 6000),
     "half-band-summary": envInt("AI_STAGE_HALF_BAND_SUMMARY_TOKENS", 5500, 3000, 11000),
     "criterion-boundary": envInt("AI_STAGE_CRITERION_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "score-boundary": envInt("AI_STAGE_SCORE_BOUNDARY_TOKENS", 6500, 3500, 12000),
@@ -4346,6 +4470,7 @@ function tenStepStageMaxTokens(stage) {
 function tenStepStageHasUsableContent(stage, output) {
   if (!output || typeof output !== "object") return false;
   if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
+  if (stage === "text-stats-completion") return Number.isFinite(Number(output.actualWordCount)) || hasUsefulText(output.textStats) || hasUsefulText(output.completionStatus);
   if (stage === "half-band-summary") return hasUsefulText(output.scoreCalibration) || hasUsefulText(output.halfBandBoundary) || ensureArray(output.strengthItems).length || ensureArray(output.mainProblemItems).length;
   if (stage === "criterion-boundary" || stage === "score-boundary") return hasUsefulText(output.halfBandBoundary) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher) || hasUsefulText(item?.whyNotLower));
   if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
@@ -4707,7 +4832,7 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
   return [
-    `Stage 11/13 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
+    `Stage 7/13 internal batch ${batchIndex + 1}/${batchCount}. Produce direct sentence-level corrections for the listed sentences only.`,
     "This is still AI-only: identify and correct all clear score-impacting issues in this batch. Do not skip visible errors to keep the output short.",
     "If a sentence has several grammar/word-choice/punctuation errors, return one item with the fully corrected sentence and a concise combined problem description.",
     "If a listed sentence has no score-impacting problem, omit it. Do not invent errors.",
@@ -4768,9 +4893,13 @@ async function callAiBatchedSentenceCorrections({ apiKey, model, body, effective
   }
   const detailed = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
   const simple = dedupeCorrections(results.flatMap((r) => ensureArray(r.sentenceCorrections)));
+  const noIssues = !simple.length && !detailed.length;
   return {
     aiStage: stage,
     disclaimer: DISCLAIMER,
+    stageStatus: noIssues ? "no_issues" : "complete",
+    noIssueReason: noIssues ? "AI reviewed the submitted sentences and found no clear score-impacting sentence-level corrections." : "",
+    noIssueReasonZh: noIssues ? "AI已检查提交句子，未发现明显需要逐句纠错的问题。" : "",
     sentenceCorrectionSummary: `AI reviewed ${units.length} sentence unit(s) in ${attempted} batch(es).`,
     sentenceCorrectionSummaryZh: `AI已分${attempted}批检查${units.length}个句子单位。`,
     sentenceCorrections: simple,
@@ -4804,13 +4933,13 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
   ].filter(Boolean).join("\n")).join("\n\n");
   const modeLines = highBandPolish
     ? [
-      `Stage 12/13 high-band polish batch ${batchIndex + 1}/${batchCount}. The essay appears to be Band 7.0 or above. Do not return an empty betterExpressionItems array just because there are few errors.`,
+      `Stage 8/13 high-band polish batch ${batchIndex + 1}/${batchCount}. The essay appears to be Band 7.0 or above. Do not return an empty betterExpressionItems array just because there are few errors.`,
       "Select the strongest 3-6 candidate sentences across the run when possible. For this batch, return only sentences that can be polished for a realistic +0.5 to +1.0 band improvement.",
       "This is not error correction. It is high-band sentence polishing: improve precision, argument nuance, cohesion, concision, register control, or natural academic phrasing.",
       `Target range for the upgraded sentences: ${targetRange}.`
     ]
     : [
-      `Stage 12/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
+      `Stage 8/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
       "For every score-impacting sentence, include a betterExpression when a safe next-band upgrade is possible."
     ];
   return [
@@ -5012,6 +5141,7 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
         "Grammatical Range and Accuracy": { band: "", feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
       },
       finalOverallBand: "",
+      completionStatus: { isIncomplete: false, completionLevel: "", missingParts: [], completionSignals: [], wordCountImpact: "", scoreImpact: "", scoreCapApplied: false, scoreCapReason: "", canSubmitForScoring: true },
       bandRange: "",
       boundaryPosition: "",
       strictExaminerBand: "",
@@ -5029,6 +5159,7 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     }),
     "Chinese requirement: every English explanation must have a matching accurate Chinese helper in the paired *Zh field. Do not translate full essay text.",
     "Do not output Task Response for Task 1. Do not output Task Achievement for Task 2.",
+    "If the essay is unfinished, still produce final criterion bands. Explain completionStatus and score impact. Do not refuse to score incomplete responses.",
     `Mode: ${effectiveMode}`,
     `Task: ${task}`,
     `Accumulated earlier AI evidence and diagnostics: ${diagnosticSnapshot}`,
@@ -5113,7 +5244,7 @@ function buildCriterionBoundaryBatchPrompt({ body, effectiveMode, locale, criter
   const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
   const criterionSnapshot = current.criteria && current.criteria[criterion] ? current.criteria[criterion] : {};
   return [
-    `Stage 4/13 internal criterion-boundary batch ${index + 1}/${total}. Explain ONLY this criterion: ${criterion}.`,
+    `Stage 12/13 internal criterion-boundary batch ${index + 1}/${total}. Explain ONLY this criterion: ${criterion}.`,
     "Do not finalise or change the displayed score. Explain the likely half-band boundary signals for this criterion and what evidence would push it 0.5 higher or lower.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
@@ -5170,7 +5301,7 @@ async function callAiBatchedCriterionBoundary({ apiKey, model, body, effectiveMo
 function buildSpellingWordformBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount }) {
   const sentenceList = batch.map((item) => `${item.sentenceNumber}. ${item.text}`).join("\n");
   return [
-    `Stage 8/13 internal spelling-wordform batch ${batchIndex + 1}/${batchCount}. Diagnose spelling and word-formation issues in these sentences only.`,
+    `Stage 4/13 internal spelling-wordform batch ${batchIndex + 1}/${batchCount}. Diagnose spelling and word-formation issues in these sentences only.`,
     "Return every visible spelling or word-formation issue. Do not invent errors. Do not handle collocation or grammar unless word form is the main issue.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
@@ -5308,7 +5439,7 @@ function buildHighBandPolishPrompt({ body, effectiveMode, locale, sources }) {
   const targetRange = betterExpressionTargetRangeForBody(body);
   const sourceText = sources.map((item) => `${item.sentenceNumber}. ${item.originalSentence}`).join("\n");
   return [
-    "Stage 12/13 high-band polish mode. The essay appears to be Band 7.0 or above or has few score-impacting sentence errors.",
+    "Stage 8/13 high-band polish mode. The essay appears to be Band 7.0 or above or has few score-impacting sentence errors.",
     "Do not return an empty betterExpressionItems array. Select 3-6 sentences that can be improved by about +0.5 to +1.0 band through high-band polishing.",
     "This is not error correction. Do not invent errors. Choose sentences where precision, nuance, cohesion, concision, register, or argument depth can be improved.",
     task === "Task 1"
@@ -5442,7 +5573,9 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
-  if (!String(body.essay || "").trim() && stage !== "prompt-analysis") {
+  if (stage === "text-stats-completion") return buildTextStatsCompletionStage(body);
+  const emptyAllowedStages = new Set(["prompt-analysis", "score", "final-plan"]);
+  if (!String(body.essay || "").trim() && !emptyAllowedStages.has(stage)) {
     const error = new Error(`AI ${stage} stage cannot run because the essay is empty.`);
     error.provider = DEFAULT_PROVIDER;
     error.aiStage = stage;
