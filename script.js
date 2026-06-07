@@ -1252,6 +1252,45 @@ function renderStrictBoundaryAudit(result = {}) {
   </div>`;
 }
 
+
+function renderBandRowsForAudit(bands = []) {
+  const rows = ensureArray(bands).filter((item) => item && item.criterion && String(item.band ?? "").trim());
+  if (!rows.length) return `<p class="muted">暂无四项分数据。</p>`;
+  return `<div class="score-calculation-grid">${rows.map((item) => `
+    <div class="score-calculation-row"><span>${escapeHtml(item.criterion)}</span><strong>Band ${escapeHtml(formatMockBand(item.band))}</strong></div>
+  `).join("")}</div>`;
+}
+
+function renderLocalScoreAudit(result = {}) {
+  const audit = result.localScoreAudit && typeof result.localScoreAudit === "object" ? result.localScoreAudit : null;
+  const scoringSystem = result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {};
+  if (!audit && !scoringSystem.localScoringInterventionDisabled) return "";
+  const sourceBands = audit?.aiOriginalCriteriaBands || result.scoreCalculation?.aiOriginalCriteriaBands || result.scoreCalculation?.criteriaBands || [];
+  const finalBands = audit?.finalCriteriaBands || result.scoreCalculation?.criteriaBands || sourceBands;
+  const capChanges = ensureArray(audit?.localCapChanges);
+  const warnings = ensureArray(audit?.objectiveWarnings);
+  const warningsZh = ensureArray(audit?.objectiveWarningsZh);
+  const checks = audit?.objectiveChecks && typeof audit.objectiveChecks === "object" ? audit.objectiveChecks : {};
+  const localCapApplied = Boolean(audit?.localCapApplied);
+  const localDisabled = audit ? audit.localScoringInterventionDisabled !== false : Boolean(scoringSystem.localScoringInterventionDisabled);
+  return `<div class="local-score-audit ai-info">
+    <p><strong>本地是否介入评分：</strong>${localDisabled ? "否" : "是"}</p>
+    <p><strong>本地是否 cap / 压分 / 提分：</strong>${localCapApplied ? "是" : "否"}</p>
+    <p><strong>说明：</strong>${escapeHtml(audit?.localCapReason || "本地不修改AI四项分数，只展示AI分数并机械计算平均分。")}${renderZhToggle(audit?.localCapReasonZh || "本地不修改AI四项分数，只展示AI分数并机械计算平均分。")}</p>
+    <details class="feedback-collapse">
+      <summary>AI 原始四项分</summary>
+      <div class="feedback-collapse-body compact-body">${renderBandRowsForAudit(sourceBands)}</div>
+    </details>
+    <details class="feedback-collapse">
+      <summary>最终展示四项分</summary>
+      <div class="feedback-collapse-body compact-body">${renderBandRowsForAudit(finalBands)}</div>
+    </details>
+    <p><strong>cap 前后变化：</strong>${capChanges.length ? escapeHtml(capChanges.join("；")) : "无。本地没有改动AI分数。"}</p>
+    ${checks.wordCount !== undefined ? `<p><strong>客观检查：</strong>${escapeHtml(checks.task || "Task")}；字数 ${escapeHtml(checks.wordCount)} / ${escapeHtml(checks.recommendedMinimum || "-")}；段落 ${escapeHtml(checks.paragraphCount ?? "-")}；句子 ${escapeHtml(checks.sentenceUnitCount ?? "-")}</p>` : ""}
+    ${warnings.length ? `<div><strong>本地客观提醒（warning-only，不改分）：</strong>${translatedListHtml(warnings, warningsZh, "Objective warning")}</div>` : ""}
+  </div>`;
+}
+
 function renderScoreCalculation(result = {}) {
   const calc = result.scoreCalculation && typeof result.scoreCalculation === "object" ? result.scoreCalculation : {};
   const scoringSystem = result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {};
@@ -1279,6 +1318,7 @@ function renderScoreCalculation(result = {}) {
     <h4>评分计算说明</h4>
     <p><strong>评分系统：</strong>${escapeHtml(systemLabel)}</p>
     <p><strong>计算方式：</strong>${escapeHtml(formula)}</p>
+    ${renderLocalScoreAudit(result)}
     ${rows}
     ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
     ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatMockBand(finalBand))}</p>` : ""}
@@ -1327,8 +1367,8 @@ function renderCompletionStatus(result = {}) {
 function renderScoreCalibration(calibration, calibrationZh = {}) {
   if (!calibration || typeof calibration !== "object") return collapsibleSection("评分校准说明", `<p class="muted">No detailed score calibration is available.</p>`);
   return collapsibleSection("评分校准说明", `
-      <p><strong>是否应用限分规则：</strong>${boolText(calibration.capApplied)}</p>
-      <div><strong>限分原因：</strong>${renderTextWithTranslation(calibration.capReason || "No cap was applied.", calibrationZh.capReasonZh, { tag: "span" })}</div>
+      <p><strong>是否由 AI 在评分中考虑限分/低分边界：</strong>${boolText(calibration.capApplied)}</p>
+      <div><strong>AI评分原因/限分原因：</strong>${renderTextWithTranslation(calibration.capReason || "No AI cap was reported.", calibrationZh.capReasonZh, { tag: "span" })}</div>
       <div><strong>为什么不能更高：</strong>${renderTextWithTranslation(calibration.whyNotHigher || "No detailed score calibration is available.", calibrationZh.whyNotHigherZh, { tag: "span" })}</div>
       <div><strong>为什么没有更低：</strong>${renderTextWithTranslation(calibration.whyNotLower || "No detailed score calibration is available.", calibrationZh.whyNotLowerZh, { tag: "span" })}</div>
       <div><strong>评分证据：</strong>${renderListWithTranslations(calibration.evidence, calibrationZh.evidenceZh, "No detailed score calibration is available.")}</div>
@@ -1757,13 +1797,26 @@ function sourceLockPhraseAppears(phrase, normalizedSources = []) {
   return normalizedSources.some((source) => pattern.test(source));
 }
 
+function sourceLockPhraseVariants(term) {
+  const raw = normalizeSourceLockText(term);
+  if (!raw) return [];
+  const words = raw.split(" ").filter(Boolean);
+  if (words.length <= 1) return sourceLockTermVariants(raw);
+  const variants = new Set([raw]);
+  const last = words[words.length - 1];
+  if (last.length > 3 && last.endsWith("ies")) variants.add([...words.slice(0, -1), `${last.slice(0, -3)}y`].join(" "));
+  if (last.length > 3 && last.endsWith("es")) variants.add([...words.slice(0, -1), last.slice(0, -2)].join(" "));
+  if (last.length > 2 && last.endsWith("s")) variants.add([...words.slice(0, -1), last.slice(0, -1)].join(" "));
+  return [...variants].filter(Boolean);
+}
+
 function sourceLockTermAppears(term, sourceTexts = []) {
   const normTerm = normalizeSourceLockText(term);
   if (!normTerm) return true;
   const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
+  if (normTerm.includes(" ")) return sourceLockPhraseVariants(term).some((variant) => sourceLockPhraseAppears(variant, normSources));
   const tokenSet = sourceLockTokenSet(sourceTexts);
   const variants = sourceLockTermVariants(term);
-  if (normTerm.includes(" ")) return variants.some((variant) => sourceLockPhraseAppears(variant, normSources));
   return variants.some((variant) => tokenSet.has(variant));
 }
 
@@ -1928,12 +1981,12 @@ function normalizeCorrectionIdentityText(value) {
 }
 
 function correctionIdentityKey(item = {}) {
-  const number = String(item.sentenceNumber || "").trim();
-  if (number && /^\d+$/.test(number)) return `num:${number}`;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
   const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
   const base = normalizeCorrectionIdentityText(original || corrected);
-  return base ? `text:${base}` : "";
+  if (base) return `text:${base}`;
+  const number = String(item.sentenceNumber || "").trim();
+  return number && /^\d+$/.test(number) ? `num:${number}` : "";
 }
 
 function sentenceIdentityTokens(value) {
@@ -1955,36 +2008,44 @@ function sentenceIdentitySimilarity(a, b) {
 }
 
 function findMatchingCorrectionIndex(corrections = [], item = {}) {
-  const key = correctionIdentityKey(item);
-  if (key && key.startsWith("num:")) {
-    const number = key.slice(4);
-    const indexByNumber = corrections.findIndex((entry) => String(entry.sentenceNumber || "") === number);
-    if (indexByNumber >= 0) return indexByNumber;
-  }
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence);
   const normalized = normalizeCorrectionIdentityText(original);
-  if (!normalized) return -1;
   let bestIndex = -1;
   let bestScore = 0;
-  corrections.forEach((entry, index) => {
-    const entryOriginal = firstNonEmpty(entry.originalSentence, entry.original, entry.sourceSentence, entry.sentence);
-    const entryNorm = normalizeCorrectionIdentityText(entryOriginal);
-    if (!entryNorm) return;
-    if (entryNorm === normalized || entryNorm.includes(normalized) || normalized.includes(entryNorm)) {
-      const lengthRatio = Math.min(entryNorm.length, normalized.length) / Math.max(entryNorm.length, normalized.length);
-      if (lengthRatio >= 0.45 && lengthRatio > bestScore) {
-        bestScore = lengthRatio;
+  if (normalized) {
+    corrections.forEach((entry, index) => {
+      const entryOriginal = firstNonEmpty(entry.originalSentence, entry.original, entry.sourceSentence, entry.sentence);
+      const entryNorm = normalizeCorrectionIdentityText(entryOriginal);
+      if (!entryNorm) return;
+      if (entryNorm === normalized || entryNorm.includes(normalized) || normalized.includes(entryNorm)) {
+        const lengthRatio = Math.min(entryNorm.length, normalized.length) / Math.max(entryNorm.length, normalized.length);
+        if (lengthRatio >= 0.45 && lengthRatio > bestScore) {
+          bestScore = lengthRatio;
+          bestIndex = index;
+        }
+        return;
+      }
+      const score = sentenceIdentitySimilarity(entryOriginal, original);
+      if (score > bestScore) {
+        bestScore = score;
         bestIndex = index;
       }
-      return;
-    }
-    const score = sentenceIdentitySimilarity(entryOriginal, original);
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  });
-  return bestScore >= 0.82 ? bestIndex : -1;
+    });
+    if (bestScore >= 0.82) return bestIndex;
+  }
+
+  // Fall back to sentenceNumber only when one side lacks original text. If both sides have
+  // text and they do not match, do not attach the item by number; this prevents sentence 5
+  // from receiving sentence 4's problem/betterExpression after an AI batch numbering error.
+  const number = String(item.sentenceNumber || "").trim();
+  if (number && /^\d+$/.test(number)) {
+    return corrections.findIndex((entry) => {
+      if (String(entry.sentenceNumber || "") !== number) return false;
+      const entryOriginal = firstNonEmpty(entry.originalSentence, entry.original, entry.sourceSentence, entry.sentence);
+      return !normalized || !normalizeCorrectionIdentityText(entryOriginal);
+    });
+  }
+  return -1;
 }
 
 function mergeCorrectionText(existing, incoming) {
@@ -2338,7 +2399,7 @@ function priorityLabelsForTrack(track) {
 
 function missingBetterExpressionNotice(track) {
   if (track === "high_band_polish") return "";
-  return "这一句先保留基础修正；系统没有展示不够安全或不够有提升价值的下一档表达。";
+  return "这一句已有基础修正，但AI没有返回可安全展示的下一档表达；请重试“更好表达/高分表达优化”阶段。";
 }
 
 function finalDisplayBandForTarget(result = {}, plan = {}) {
