@@ -311,6 +311,184 @@ function buildTask1PromptRelevanceProfile(body = {}) {
   return { promptTopicTokens: [...promptTopics], overlapCount, topicCount, coverage, letterSignal, functionalAttempt };
 }
 
+
+function cleanPromptRequirementText(value) {
+  return String(value || "")
+    .replace(/^[-*•·]\s+/, "")
+    .replace(/^(\d+)[.)]\s+/, "")
+    .replace(/^and\s+/i, "")
+    .replace(/[.;:,\s]+$/g, "")
+    .trim();
+}
+
+function stringArray(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanPromptRequirementText(item)).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return value.split(/\r?\n|;/).map(cleanPromptRequirementText).filter(Boolean);
+  return [];
+}
+
+function extractTask1BulletPointsFromPromptServer(text) {
+  const source = String(text || "");
+  const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const direct = lines
+    .filter((line) => /^[-*•·]\s+/.test(line) || /^(\d+)[.)]\s+/.test(line))
+    .map(cleanPromptRequirementText)
+    .filter(Boolean);
+  if (direct.length) return direct.slice(0, 5);
+
+  const afterInYourLetter = source.split(/In your letter[:,]?/i)[1] || source.split(/You should/i)[1] || "";
+  const candidateSource = afterInYourLetter || source;
+  let candidates = candidateSource
+    .split(/\r?\n|;/)
+    .map(cleanPromptRequirementText)
+    .filter((part) => /^(give|explain|describe|say|tell|ask|suggest|apologise|apologize|thank|invite|offer|request|remind|include|state|mention|why|what|how)/i.test(part));
+  if (!candidates.length) {
+    const matches = [];
+    const pattern = /(?:^|[.;:\n])\s*(say|tell|explain|describe|suggest|ask|give|thank|apologise|apologize|invite|offer|request|state|mention)\b[^.\n;]+/gi;
+    let match;
+    while ((match = pattern.exec(candidateSource)) && matches.length < 5) matches.push(cleanPromptRequirementText(match[0]));
+    candidates = matches;
+  }
+  return candidates.filter(Boolean).slice(0, 5);
+}
+
+function resolveTask1BulletPoints(body = {}) {
+  const provided = stringArray(body.task1BulletPoints);
+  if (provided.length) return provided.slice(0, 5);
+  return extractTask1BulletPointsFromPromptServer(body.questionPrompt || body.promptText || "");
+}
+
+function inferTask2QuestionProfileFromPrompt(promptText) {
+  const prompt = String(promptText || "");
+  const lower = prompt.toLowerCase();
+  const requiredParts = [];
+  let questionType = "general_essay";
+  const add = (label) => { if (!requiredParts.includes(label)) requiredParts.push(label); };
+
+  const asksOpinion = /\b(your opinion|what is your opinion|give your opinion|to what extent do you agree|agree or disagree|do you agree|disagree)\b/i.test(prompt);
+  const asksBothViews = /\b(discuss both views|discuss both these views|both views)\b/i.test(prompt);
+  const asksAdvantage = /\b(advantage|advantages|benefit|benefits)\b/i.test(prompt);
+  const asksDisadvantage = /\b(disadvantage|disadvantages|drawback|drawbacks)\b/i.test(prompt);
+  const asksOutweigh = /\boutweigh\b/i.test(prompt);
+  const asksCause = /\b(cause|causes|reason|reasons|why)\b/i.test(prompt);
+  const asksProblem = /\b(problem|problems|issue|issues)\b/i.test(prompt);
+  const asksSolution = /\b(solution|solutions|solve|measures|what can be done|how can this be)\b/i.test(prompt);
+  const asksPositiveNegative = /\b(positive or negative|positive development|negative development|good thing or bad thing|is this a positive|is this a negative)\b/i.test(prompt);
+
+  if (asksBothViews) {
+    questionType = "discuss_both_views_with_opinion";
+    add("discuss view 1");
+    add("discuss view 2");
+    if (asksOpinion) add("give your own opinion");
+  } else if (asksOutweigh || (asksAdvantage && asksDisadvantage)) {
+    questionType = asksOutweigh ? "advantages_disadvantages_outweigh" : "advantages_and_disadvantages";
+    if (asksAdvantage) add("advantages");
+    if (asksDisadvantage) add("disadvantages");
+    if (asksOutweigh) add("state whether advantages outweigh disadvantages");
+  } else if (asksCause && asksSolution) {
+    questionType = "causes_and_solutions";
+    add("causes or reasons");
+    add("solutions or measures");
+  } else if (asksProblem && asksSolution) {
+    questionType = "problems_and_solutions";
+    add("problems");
+    add("solutions");
+  } else if (asksPositiveNegative) {
+    questionType = "positive_negative_development";
+    add("state whether it is mainly positive or negative");
+    add("support the judgement with reasons");
+  } else if (asksOpinion) {
+    questionType = "opinion_agree_disagree";
+    add("clear position");
+    add("reasons supporting the position");
+  }
+
+  const questionSentences = (prompt.match(/[^?]+\?/g) || []).map((item) => item.trim()).filter(Boolean);
+  if (questionSentences.length >= 2 && questionType === "general_essay") {
+    questionType = "two_part_question";
+    questionSentences.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
+  } else if (questionSentences.length >= 2) {
+    questionSentences.forEach((q, index) => {
+      const label = `answer question ${index + 1}: ${q}`;
+      if (!requiredParts.some((part) => String(part).includes(q))) add(label);
+    });
+  }
+
+  if (!requiredParts.length) add("answer all parts of the prompt");
+
+  return {
+    questionType,
+    requiredParts,
+    positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative,
+    bothSidesRequired: asksBothViews,
+    causeRequired: asksCause,
+    problemRequired: asksProblem,
+    solutionRequired: asksSolution,
+    advantageRequired: asksAdvantage,
+    disadvantageRequired: asksDisadvantage,
+    outweighRequired: asksOutweigh,
+    positiveNegativeRequired: asksPositiveNegative,
+    questionCount: questionSentences.length,
+    inferredFromPrompt: true
+  };
+}
+
+function resolveTask2QuestionProfile(body = {}) {
+  if (body.task2QuestionProfile && typeof body.task2QuestionProfile === "object") {
+    const profile = { ...body.task2QuestionProfile };
+    profile.requiredParts = stringArray(profile.requiredParts);
+    if (!profile.requiredParts.length) profile.requiredParts = inferTask2QuestionProfileFromPrompt(body.questionPrompt || body.promptText || "").requiredParts;
+    return profile;
+  }
+  return inferTask2QuestionProfileFromPrompt(body.questionPrompt || body.promptText || body.task2Instruction || "");
+}
+
+function buildTaskRequirementRequestFields(body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  if (task === "Task 1") {
+    const task1BulletPoints = resolveTask1BulletPoints(body);
+    return {
+      task1BulletPoints,
+      taskRequirementProfile: {
+        taskType: "task1",
+        bulletPoints: task1BulletPoints,
+        mandatoryCheck: "AI must assess each Task 1 bullet point separately for covered / partly covered / missing and reflect this in Task Achievement."
+      }
+    };
+  }
+  const task2QuestionProfile = resolveTask2QuestionProfile(body);
+  return {
+    task2QuestionProfile,
+    taskRequirementProfile: {
+      taskType: "task2",
+      questionType: task2QuestionProfile.questionType,
+      requiredParts: task2QuestionProfile.requiredParts,
+      mandatoryCheck: "AI must identify the Task 2 question type, check every required part, check whether a position is required/present, and reflect missing parts in Task Response."
+    }
+  };
+}
+
+function buildTaskRequirementInstruction(body = {}) {
+  const fields = buildTaskRequirementRequestFields(body);
+  if (body.task === "Task 1") {
+    const bullets = fields.task1BulletPoints || [];
+    return [
+      "Mandatory Task 1 requirement profile:",
+      bullets.length ? `Task 1 bullet points to check separately: ${bullets.map((item, index) => `${index + 1}. ${item}`).join(" | ")}` : "No bullet points were extracted; use the full prompt and identify the letter requirements before scoring.",
+      "For Task 1 scoring: Task Achievement must explicitly consider whether each bullet point is covered, partly covered, or missing; whether purpose and recipient relationship are clear; and whether tone/register fits the situation."
+    ].join("\n");
+  }
+  const profile = fields.task2QuestionProfile || {};
+  return [
+    "Mandatory Task 2 requirement profile:",
+    `Question type: ${profile.questionType || "unknown"}.`,
+    `Required parts: ${stringArray(profile.requiredParts).join(" | ") || "answer all parts of the prompt"}.`,
+    `Position required: ${profile.positionRequired ? "yes" : "no/depends on prompt"}. Both sides required: ${profile.bothSidesRequired ? "yes" : "no"}. Cause required: ${profile.causeRequired ? "yes" : "no"}. Solution required: ${profile.solutionRequired ? "yes" : "no"}. Advantages/disadvantages required: ${profile.advantageRequired || profile.disadvantageRequired ? "yes" : "no"}.`,
+    "For Task 2 scoring: Task Response must explicitly consider question type, required parts, relevance, position when required, development, examples/reasoning, and conclusion. Missing required parts must limit Task Response."
+  ].join("\n");
+}
+
+
 function stripPreviousBoundaryGuardText(value) {
   return String(value || "")
     .split(/\n+/)
@@ -469,7 +647,7 @@ function buildTaskSpecificScoringRubric(task) {
     return [
       "Task-specific scoring engine: IELTS General Training Writing Task 1 letter.",
       "Use Task Achievement as the first criterion, not Task Response.",
-      "Task Achievement must assess: clear letter purpose, coverage of all prompt bullet points, development of each bullet point, recipient relationship, formal/semi-formal/informal tone, opening/closing, letter format, relevance, and word-count impact.",
+      "Task Achievement must assess: clear letter purpose, coverage of all prompt bullet points, development of each bullet point, recipient relationship, formal/semi-formal/informal tone, opening/closing, letter format, relevance, and word-count impact. If task1BulletPoints are provided in request data, treat them as mandatory requirements and assess each one separately.",
       "For Task 1, differentiate criterion bands: a letter may mention all bullet points but still have weaker vocabulary or grammar. Do not let Task Achievement automatically raise Coherence, Lexical Resource, or Grammar.",
       "Do not assess Task 1 as an essay. Do not require thesis statement, argument, counterargument, essay conclusion, or a clear opinion position unless the prompt itself asks for an opinion in a letter context.",
       "Coherence and Cohesion for Task 1 must assess letter organisation, paragraphing by purpose/bullet point, logical ordering of request/explanation/thanks/apology/invitation details, natural linking, and referencing.",
@@ -480,7 +658,7 @@ function buildTaskSpecificScoringRubric(task) {
   return [
     "Task-specific scoring engine: IELTS Writing Task 2 essay.",
     "Use Task Response as the first criterion, not Task Achievement.",
-    "Task Response must assess: whether all parts of the question are answered, whether a clear position is present when required, relevance of main ideas, depth of development, reasoning, examples, conclusion, and whether the response matches the question type.",
+    "Task Response must assess: whether all parts of the question are answered, whether a clear position is present when required, relevance of main ideas, depth of development, reasoning, examples, conclusion, and whether the response matches the question type. If task2QuestionProfile is provided in request data, use it to check question type, required parts, and position requirements before assigning Task Response.",
     "Task Response must be capped conservatively when the essay is short, only lists ideas, lacks clear examples, fails to answer both sides/parts of the question, has no clear position where required, or has a conclusion that does not reflect the argument.",
     "For Task 2, differentiate criterion bands: a response may answer the task better than it controls grammar, or have basic organisation but weaker vocabulary. Do not assign all four bands the same value unless the evidence is genuinely equal across all four criteria.",
     "Do not assess Task 2 as a letter. Do not use recipient relationship, letter opening/closing, formal letter tone, or bullet-point coverage as Task Response evidence.",
@@ -1037,6 +1215,8 @@ function buildUserPrompt(body, veryShort, locale = "en") {
     underMinimumInstruction,
     "Task-specific scoring engine:",
     buildTaskSpecificScoringRubric(body.task),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "Scoring order: first assign the four task-specific criterion bands independently from essay evidence; then estimate overallBand. The server will finally recalculate the displayed overallBand from the four criteria.",
     body.isUnderMinimum ? "Important: even though the response is under the recommended word count, you must still grade it as an IELTS response using DeepSeek, start from Band 1 when there is no rateable content, return all sections, apply strict word-count caps, and do not return empty modules." : "",
     "No maximum word count rule: do not cap or penalise high word counts by length alone. Penalise only actual IELTS problems such as repetition, irrelevance, weak organisation, or unclear language.",
@@ -1052,6 +1232,7 @@ function buildUserPrompt(body, veryShort, locale = "en") {
       questionPrompt: body.questionPrompt,
       promptText: body.questionPrompt,
       taskType: body.task === "Task 1" ? "task1" : "task2",
+      ...buildTaskRequirementRequestFields(body),
       gradingMode: effectiveMode,
       outputLanguage: normalizeLocale(locale),
       actualWordCount: body.wordCount,
@@ -1154,10 +1335,13 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     "Rules: DeepSeek must score this response. Use Band 1-9 only, allow half bands, do not output 0. Penalise low word count strictly but do not reject the answer. No maximum word-count cap. Score the four task-specific criteria independently; the server will recalculate the displayed overallBand from those four criteria. Keep strings concise but specific. Arrays may contain up to 12 items for correction fields when visible issues exist. If the essay has any English content, strengths, mainProblems, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, band plans, errorAnalysis.summary, correctionPriority.fixFirst, spellingCorrections, grammarErrors, sentenceCorrections, detailedSentenceCorrections, and task-specific advice must not be empty when visible errors exist. Never return blank correction objects. Main feedback English. *Zh fields may be brief Chinese helper notes only.",
     "Task-specific scoring engine:",
     buildTaskSpecificScoringRubric(body.task),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "Request:",
     JSON.stringify({
       task: body.task,
       taskType,
+      ...buildTaskRequirementRequestFields(body),
       mode: normalizeMode(body.mode),
       questionTitle: body.questionTitle,
       questionPrompt: body.questionPrompt,
@@ -2536,6 +2720,8 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     "Scoring requirements:",
     "Task-specific scoring engine:",
     buildTaskSpecificScoringRubric(task),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "- Assign four task-specific IELTS criterion bands independently; the server will recalculate the displayed overallBand from the four criteria.",
     "- Explain why the score is not higher and not lower.",
     "- Analyse the selected prompt before scoring.",
@@ -2546,6 +2732,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     JSON.stringify({
       task,
       taskType,
+      ...buildTaskRequirementRequestFields(body),
       gradingMode,
       questionTitle: body.questionTitle,
       questionPrompt: body.questionPrompt,
@@ -2897,6 +3084,8 @@ function buildMinimalAiScoringPrompt(body, gradingMode, locale = "en") {
     `Task: ${task}`,
     `Mode: ${gradingMode}`,
     `Word count: ${words}/${threshold}`,
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "Question:",
     String(body.questionPrompt || "").slice(0, 1500),
     "Essay:",
@@ -3032,6 +3221,8 @@ function buildNoTemplateAiScoringPrompt(body, gradingMode, locale = "en") {
     `criteria must contain exactly these four keys: ${firstCriterion}, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy.`,
     "Task-specific scoring engine:",
     buildTaskSpecificScoringRubric(task),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "Score each criterion independently from its own evidence. The server will recalculate the displayed overallBand from the four criterion bands.",
     "Each criterion object must contain: band, feedback, feedbackZh, howToImprove, howToImproveZh.",
     "Every English feedback/howToImprove field must be filled with a concrete sentence based on the essay.",
@@ -3184,6 +3375,8 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "Important scoring rules:",
     "Task-specific scoring engine:",
     buildTaskSpecificScoringRubric(task),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "- Do not copy template values. Replace Band 1 placeholders with real criterion bands.",
     "- Give specific evidence from the essay for each criterion.",
     body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If all four criterion bands are identical, keep them identical only when concrete evidence proves all four criteria are genuinely the same level; otherwise differentiate the bands. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
@@ -3205,6 +3398,7 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     JSON.stringify({
       task,
       taskType,
+      ...buildTaskRequirementRequestFields(body),
       gradingMode,
       questionTitle: body.questionTitle,
       questionPrompt: body.questionPrompt,
@@ -3288,6 +3482,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
     `Current estimated band from score stage: ${body.currentOverallBand || body.overallBand || "unknown"}`,
     `Word count: ${words}`,
     buildTargetImprovementInstruction(body),
+    "Mandatory task requirement profile:",
+    buildTaskRequirementInstruction(body),
     "Question:",
     String(body.questionPrompt || ""),
     "Essay:",

@@ -150,6 +150,79 @@ function extractBulletPointsFromPrompt(text) {
   return candidates.filter(Boolean).slice(0, 5);
 }
 
+
+function buildTask2QuestionProfile(text) {
+  const prompt = String(text || "");
+  const requiredParts = [];
+  const add = (label) => { if (!requiredParts.includes(label)) requiredParts.push(label); };
+
+  const asksOpinion = /\b(your opinion|what is your opinion|give your opinion|to what extent do you agree|agree or disagree|do you agree|disagree)\b/i.test(prompt);
+  const asksBothViews = /\b(discuss both views|discuss both these views|both views)\b/i.test(prompt);
+  const asksAdvantage = /\b(advantage|advantages|benefit|benefits)\b/i.test(prompt);
+  const asksDisadvantage = /\b(disadvantage|disadvantages|drawback|drawbacks)\b/i.test(prompt);
+  const asksOutweigh = /\boutweigh\b/i.test(prompt);
+  const asksCause = /\b(cause|causes|reason|reasons|why)\b/i.test(prompt);
+  const asksProblem = /\b(problem|problems|issue|issues)\b/i.test(prompt);
+  const asksSolution = /\b(solution|solutions|solve|measures|what can be done|how can this be)\b/i.test(prompt);
+  const asksPositiveNegative = /\b(positive or negative|positive development|negative development|good thing or bad thing|is this a positive|is this a negative)\b/i.test(prompt);
+
+  let questionType = "general_essay";
+  if (asksBothViews) {
+    questionType = "discuss_both_views_with_opinion";
+    add("discuss view 1");
+    add("discuss view 2");
+    if (asksOpinion) add("give your own opinion");
+  } else if (asksOutweigh || (asksAdvantage && asksDisadvantage)) {
+    questionType = asksOutweigh ? "advantages_disadvantages_outweigh" : "advantages_and_disadvantages";
+    if (asksAdvantage) add("advantages");
+    if (asksDisadvantage) add("disadvantages");
+    if (asksOutweigh) add("state whether advantages outweigh disadvantages");
+  } else if (asksCause && asksSolution) {
+    questionType = "causes_and_solutions";
+    add("causes or reasons");
+    add("solutions or measures");
+  } else if (asksProblem && asksSolution) {
+    questionType = "problems_and_solutions";
+    add("problems");
+    add("solutions");
+  } else if (asksPositiveNegative) {
+    questionType = "positive_negative_development";
+    add("state whether it is mainly positive or negative");
+    add("support the judgement with reasons");
+  } else if (asksOpinion) {
+    questionType = "opinion_agree_disagree";
+    add("clear position");
+    add("reasons supporting the position");
+  }
+
+  const questionSentences = (prompt.match(/[^?]+\?/g) || []).map((item) => item.trim()).filter(Boolean);
+  if (questionSentences.length >= 2 && questionType === "general_essay") {
+    questionType = "two_part_question";
+    questionSentences.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
+  } else if (questionSentences.length >= 2) {
+    questionSentences.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
+  }
+
+  if (!requiredParts.length) add("answer all parts of the prompt");
+
+  return {
+    questionType,
+    requiredParts,
+    positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative,
+    bothSidesRequired: asksBothViews,
+    causeRequired: asksCause,
+    problemRequired: asksProblem,
+    solutionRequired: asksSolution,
+    advantageRequired: asksAdvantage,
+    disadvantageRequired: asksDisadvantage,
+    outweighRequired: asksOutweigh,
+    positiveNegativeRequired: asksPositiveNegative,
+    questionCount: questionSentences.length,
+    inferredFromPrompt: true
+  };
+}
+
+
 function fillSelect(select, values, allText) {
   select.innerHTML = `<option value="all">${allText}</option>` + values.map((v) => `<option value="${v}">${v}</option>`).join("");
 }
@@ -644,6 +717,7 @@ function gradingPayload() {
     questionPrompt: selected.prompt,
     promptText: selected.prompt,
     task1BulletPoints: selected.task === "Task 1" ? extractBulletPointsFromPrompt(selected.prompt) : [],
+    task2QuestionProfile: selected.task === "Task 2" ? buildTask2QuestionProfile(selected.prompt) : null,
     task2Instruction: selected.task === "Task 2" ? selected.prompt : "",
     essay,
     wordCount,
@@ -3071,6 +3145,7 @@ function mockPayloadForPrompt(prompt, essay) {
     questionPrompt: prompt.prompt,
     promptText: prompt.prompt,
     task1BulletPoints: prompt.task === "Task 1" ? extractBulletPointsFromPrompt(prompt.prompt) : [],
+    task2QuestionProfile: prompt.task === "Task 2" ? buildTask2QuestionProfile(prompt.prompt) : null,
     task2Instruction: prompt.task === "Task 2" ? prompt.prompt : "",
     essay,
     wordCount,
