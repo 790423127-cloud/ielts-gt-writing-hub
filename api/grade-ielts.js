@@ -1190,7 +1190,11 @@ function buildExpectedJsonShape(task, locale = "en") {
         type: "tense / article / subject-verb agreement / word form / sentence structure / punctuation / other",
         original: "...",
         corrected: "...",
-        explanation: "...",
+        problem: "What is grammatically wrong in this exact text.",
+        rule: "The grammar rule or sentence-control principle.",
+        whyCorrected: "Why the corrected wording fixes the grammar problem.",
+        bandImpact: "How this affects Grammatical Range and Accuracy.",
+        explanation: "A concise combined explanation.",
         explanationZh: emptyForLocaleZh("Brief Chinese explanation", locale)
       }
     ],
@@ -1852,7 +1856,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
       { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
     ],
     grammarErrors: [
-      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+      { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
     ],
     sentenceCorrections: [
       { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -1920,7 +1924,9 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "If the essay has more than 30 words, quote and correct at least 8 clear original errors unless there are genuinely fewer visible errors. For essays above 150 words, aim for 12+ concrete corrections across spellingCorrections, grammarErrors, sentenceCorrections, and detailedSentenceCorrections when errors exist.",
     "For high-band writing with few errors, do not invent errors; instead give precise polishing advice with evidence, but do not display harmless salutation/closing items as errors.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
-    "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
+    "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, preposition, clause, and sentence-structure errors.",
+    "Grammar Errors must NOT include spelling-only, typo-only, or misspelling-only errors. If the only issue is incorrect spelling, return it only in spellingCorrections, not grammarErrors.",
+    "For each grammarErrors item, fill problem, rule, whyCorrected, and bandImpact. Explain what is wrong, what it changes to, why the correction is grammatically necessary, and how it affects Grammatical Range and Accuracy.",
     "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, targetBandExpression, and betterExpressionTargetBand when a useful next-band expression exists.",
     "betterExpression must be a realistic next-step expression: Band 0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0.",
     "Do not omit betterExpression just because the upgrade is modest. Show it when it is complete, preserves meaning, and is more natural or clearer at the target band.",
@@ -2183,13 +2189,68 @@ function normalizeSpellingCorrectionItem(item) {
   };
 }
 
+function compactErrorText(value) {
+  return String(value || "").toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9]+/g, "").trim();
+}
+
+function isSingleTokenText(value) {
+  const text = String(value || "").trim();
+  return Boolean(text && /^[A-Za-z][A-Za-z'’-]*$/.test(text));
+}
+
+function isSpellingOnlyGrammarError(item) {
+  if (!item || typeof item !== "object") return false;
+  const type = String(item.type || item.errorType || item.category || "").toLowerCase();
+  const explanation = String(item.explanation || item.problem || item.reason || item.comment || "").toLowerCase();
+  const original = String(item.original || item.originalSentence || item.sentence || item.wrong || "").trim();
+  const corrected = String(item.corrected || item.correctedSentence || item.correction || item.fixed || item.right || "").trim();
+  const typeSaysSpelling = /\b(spelling|misspelling|typo)\b/.test(type);
+  const explanationOnlySpelling = /incorrect spelling|misspell|misspelling|spelling error|typo/.test(explanation) &&
+    !/verb|tense|article|plural|agreement|preposition|clause|fragment|run[- ]on|punctuation|word order|sentence structure|grammar/.test(explanation);
+  if (typeSaysSpelling) return true;
+  if (isSingleTokenText(original) && isSingleTokenText(corrected) && compactErrorText(original) !== compactErrorText(corrected) && explanationOnlySpelling) return true;
+  return false;
+}
+
+function spellingKeyFromWords(originalWord, correctedWord) {
+  return `${compactErrorText(originalWord)}→${compactErrorText(correctedWord)}`;
+}
+
+function addSpellingCorrectionIfMissing(list, item) {
+  const originalWord = pickFirstUsefulValue(item, ["originalWord", "misspelledWord", "incorrectWord", "word", "original", "wrongWord"]);
+  const correctedWord = pickFirstUsefulValue(item, ["correctedWord", "correctWord", "correction", "corrected", "correctSpelling", "rightWord"]);
+  if (!isSingleTokenText(originalWord) || !isSingleTokenText(correctedWord) || compactErrorText(originalWord) === compactErrorText(correctedWord)) return list;
+  const key = spellingKeyFromWords(originalWord, correctedWord);
+  const exists = ensureArray(list).some((entry) => spellingKeyFromWords(entry.originalWord, entry.correctedWord) === key);
+  if (exists) return list;
+  return ensureArray(list).concat([{
+    originalWord,
+    correctedWord,
+    sentence: pickFirstUsefulValue(item, ["sentence", "context", "originalSentence", "sourceSentence", "where", "original"]),
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "comment"]) || `Incorrect spelling of '${correctedWord}'.`,
+    explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "commentZh"]) || "这是单词拼写错误，已移到拼写错误栏。"
+  }]);
+}
+
 function normalizeGrammarErrorItem(item) {
   if (!item || typeof item !== "object") return null;
+  const problem = pickFirstUsefulValue(item, ["problem", "issue", "whatIsWrong", "explanation", "reason", "comment"]);
+  const rule = pickFirstUsefulValue(item, ["rule", "grammarRule", "howToFix", "grammarPoint"]);
+  const whyCorrected = pickFirstUsefulValue(item, ["whyCorrected", "whyThisCorrection", "whyChange", "whyThisIsCorrect", "correctionReason"]);
+  const bandImpact = pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact", "whyThisAffectsBand", "whyAffectsBand"]);
   return {
     type: pickFirstUsefulValue(item, ["type", "errorType", "category", "ruleType"]) || "grammar",
     original: pickFirstUsefulValue(item, ["original", "originalSentence", "sentence", "sourceSentence", "wrong"]),
     corrected: pickFirstUsefulValue(item, ["corrected", "correctedSentence", "correction", "fixed", "right"]),
-    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "rule", "comment"]),
+    problem,
+    rule,
+    whyCorrected,
+    bandImpact,
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "comment"]) || [problem, rule, whyCorrected].filter(Boolean).join(" "),
+    problemZh: pickFirstUsefulValue(item, ["problemZh", "issueZh", "whatIsWrongZh"]),
+    ruleZh: pickFirstUsefulValue(item, ["ruleZh", "grammarRuleZh", "howToFixZh", "grammarPointZh"]),
+    whyCorrectedZh: pickFirstUsefulValue(item, ["whyCorrectedZh", "whyThisCorrectionZh", "whyChangeZh", "whyThisIsCorrectZh", "correctionReasonZh"]),
+    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh", "whyThisAffectsBandZh", "whyAffectsBandZh"]),
     explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "ruleZh", "commentZh"])
   };
 }
@@ -2448,10 +2509,17 @@ function sanitizeAiCorrectionPayload(correction) {
     .map((item) => normalizeSpellingCorrectionItem(item))
     .filter((item) => correctionObjectHasText(item, ["originalWord", "correctedWord", "sentence", "explanation"]));
 
-  cleaned.grammarErrors = ensureArray(cleaned.grammarErrors)
+  const normalizedGrammarErrors = ensureArray(cleaned.grammarErrors)
     .map((item) => normalizeGrammarErrorItem(item))
-    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation"]))
-    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["type", "explanation"]));
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation", "problem", "rule", "whyCorrected", "bandImpact"]));
+
+  normalizedGrammarErrors.forEach((item) => {
+    if (isSpellingOnlyGrammarError(item)) cleaned.spellingCorrections = addSpellingCorrectionIfMissing(cleaned.spellingCorrections, item);
+  });
+
+  cleaned.grammarErrors = normalizedGrammarErrors
+    .filter((item) => !isSpellingOnlyGrammarError(item))
+    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["type", "explanation", "problem", "rule", "whyCorrected", "bandImpact"]));
 
   cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
     .map((item) => normalizeSentenceCorrectionItem(item))
@@ -2643,7 +2711,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
       { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
     ],
     grammarErrors: [
-      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+      { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
     ],
     sentenceCorrections: [
       { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -2681,7 +2749,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
     "For each corrected sentence, include correctedSentence as the direct fix. Include betterExpression when it gives a useful next-step rewrite at the target band range. Do not include it for identical wording, meaningless synonym swaps, incomplete/truncated sentences, or rewrites that delete reasons, purpose, conditions, results, or task content.",
     "Include spelling errors if any misspelled words appear.",
-    "Include grammar and sentence-control problems if any are visible.",
+    "Include grammar and sentence-control problems if any are visible. Do not put spelling-only or typo-only errors in grammarErrors; those belong only in spellingCorrections.",
     task === "Task 1"
       ? "Also mention tone, purpose, and bullet-point problems in advice arrays if relevant."
       : "Also mention position, idea development, examples, paragraphing, and conclusion problems in advice arrays if relevant.",
@@ -3879,7 +3947,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       "Return JSON with this exact shape:",
       JSON.stringify({
         grammarErrors: [
-          { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+          { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
         ],
         sentenceCorrections: [
           { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -3890,7 +3958,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       `Find all clear grammar, word-form, article, tense, plural, agreement, preposition, punctuation, and sentence-structure errors. Return up to ${limit} items.`,
-      "Each item must include original text from the essay, corrected text, a specific rule/explanation, and why it affects Grammatical Range and Accuracy.",
+      "Do NOT include spelling-only, typo-only, or misspelling-only errors in grammarErrors. Put pure misspellings only in spellingCorrections.",
+      "Each grammarErrors item must include original text from the essay, corrected text, problem, rule, whyCorrected, bandImpact, and a specific explanation of why it affects Grammatical Range and Accuracy.",
       "For high-band essays, return only real accuracy or naturalness issues that could affect the score; do not mark correct sentences.",
       "Do not return errorType None, No significant improvement needed, No impact on band score, or unchanged corrections.",
       ...common
@@ -4071,7 +4140,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "task" ? "Return task-specific correction content: Task 1 bullet/tone/purpose advice or Task 2 position/development/conclusion advice, plus taskAchievementAdvice and coherenceAdvice." : "",
     section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
-    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
+    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text plus problem, rule, whyCorrected, and bandImpact. Do not include spelling-only or typo-only errors in grammarErrors; put pure misspellings only in spellingCorrections. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
     section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence as the direct fix. Provide betterExpression when it gives a realistic next-step rewrite at the target band range. Do not include it for identical wording, meaningless one-word synonym changes, incomplete/truncated sentences, or rewrites that delete important meaning." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
@@ -5390,6 +5459,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     "criterion-outlier-review": "AI-only single-criterion outlier review only",
     "low-score-outlier-review": "AI-only low-score outlier review only",
     "high-band-boundary-review": "AI-only high-band boundary review only",
+    "final-score-sanity-repair": "AI-only final score sanity repair only",
     "final-plan": "correction priority and final study plan only",
     "better-expression-plan": "single-sentence better expressions and final study plan only"
   };
@@ -5619,7 +5689,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 8/13. Produce upgraded single-sentence better expressions or high-band polish only. Do not rescore, do not repeat direct corrections, and do not write the final study plan.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
+        betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
       }),
       "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. It must be ONE usable IELTS sentence only, based on the corrected sentence, not a paragraph or explanation. Do not include meta-commentary such as 'which makes the idea clearer' or keep errors such as 'discuss about'. Every English explanation must have the matching Chinese field.",
       task === "Task 2" ? "PROMPT-QUESTION LOCK: upgraded introduction/topic sentences must answer the actual Task 2 question type. If the prompt asks good/bad, positive/negative, agree/disagree, causes/solutions, or advantages/disadvantages, the betterExpression must reflect that question focus." : "TASK 1 LETTER LOCK: upgraded sentences must stay in letter mode and improve purpose, tone, bullet detail, request/apology/thanks/invitation clarity, or practical communication.",
@@ -5679,6 +5749,7 @@ function tenStepStageMaxTokens(stage) {
     "criterion-outlier-review": envInt("AI_STAGE_CRITERION_OUTLIER_TOKENS", 5500, 2500, 10000),
     "low-score-outlier-review": envInt("AI_STAGE_LOW_SCORE_OUTLIER_TOKENS", 5500, 2500, 10000),
     "high-band-boundary-review": envInt("AI_STAGE_HIGH_BAND_BOUNDARY_TOKENS", 6500, 3500, 12000),
+    "final-score-sanity-repair": envInt("AI_STAGE_FINAL_SCORE_SANITY_TOKENS", 5500, 2500, 10000),
     "better-expression-plan": envInt("AI_STAGE_BETTER_EXPRESSION_PLAN_TOKENS", 8000, 3500, 14000),
     "final-plan": envInt("AI_STAGE_FINAL_RECONCILIATION_TOKENS", 9500, 4500, 16000)
   })[stage] || envInt("AI_STAGE_DEFAULT_TOKENS", 6000, 3000, 12000);
@@ -5702,6 +5773,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "criterion-outlier-review") return hasUsefulText(output.criterionOutlierReview);
   if (stage === "low-score-outlier-review") return hasUsefulText(output.lowScoreOutlierReview);
   if (stage === "high-band-boundary-review") return hasUsefulText(output.highBandBoundaryReview) || hasUsefulText(output.highBandDiagnostics);
+  if (stage === "final-score-sanity-repair") return hasUsefulText(output.finalScoreSanityGate) || hasUsefulText(output.repairedCriteria) || hasUsefulText(output.finalCriteria) || hasUsefulText(output.criteria);
   if (stage === "final-plan") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
   return hasUsefulText(output);
@@ -5891,13 +5963,31 @@ function sanitizeBetterExpressionCandidate(candidate, correctedSentence = "", or
   return text;
 }
 
-function betterExpressionIdentityKey(item = {}, index = 0) {
+
+function correctionIdForItem(item = {}, index = 0) {
+  const existing = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
+  if (existing) return String(existing).trim();
+  const sentenceNumber = Number(item.sentenceNumber) || index + 1;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
-  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.correction, item.revisedSentence);
+  const base = normalizeCorrectionKeyText([original, corrected].filter(Boolean).join(" || "));
+  if (base) return `c:${sentenceNumber}:${base.slice(0, 160)}`;
+  return `idx:${index}`;
+}
+
+function itemTextIdentityKey(item = {}, index = 0) {
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.correction);
   const base = normalizeCorrectionKeyText(original || corrected);
   if (base) return `o:${base}`;
   const sentenceNumber = Number(item.sentenceNumber) || 0;
   return sentenceNumber > 0 ? `n:${sentenceNumber}` : `idx:${index}`;
+}
+
+function betterExpressionIdentityKey(item = {}, index = 0) {
+  const correctionId = correctionIdForItem(item, index);
+  if (correctionId) return `id:${correctionId}`;
+  return itemTextIdentityKey(item, index);
 }
 
 function normalizeBetterExpressionItems(items = []) {
@@ -5915,6 +6005,7 @@ function normalizeBetterExpressionItems(items = []) {
     const key = betterExpressionIdentityKey(item, index);
     const normalized = {
       ...item,
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: Number(item.sentenceNumber) || index + 1,
       originalSentence,
       correctedSentence,
@@ -5953,6 +6044,7 @@ function collectUnsafeBetterExpressionCandidates(items = []) {
     if (!originalSentence || !correctedSentence || !betterExpression) return;
     if (!hasDisallowedBetterExpressionText(betterExpression) && shouldShowBetterExpression(correctedSentence, betterExpression)) return;
     candidates.push({
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: Number(item.sentenceNumber) || index + 1,
       originalSentence,
       correctedSentence,
@@ -5968,14 +6060,14 @@ function normalizeBatchWarning(stage, batchNumber, error) {
   return `${stage} batch ${batchNumber} failed: ${error?.message || error?.name || String(error)}`;
 }
 
-async function callTenStepBatchJson({ apiKey, model, stage, locale, userPrompt, maxTokens, deadline, timeoutMs }) {
+async function callTenStepBatchJson({ apiKey, model, stage, locale, userPrompt, maxTokens, deadline, timeoutMs, temperature }) {
   const rawText = await callDeepSeek({
     apiKey,
     model,
     systemPrompt: buildTenStepSystemPrompt(stage, locale),
     userPrompt,
     maxTokens,
-    temperature: 0.06,
+    temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : 0.06,
     jsonMode: true,
     deadline,
     timeoutMs: safePassTimeout(deadline, timeoutMs || (Number(process.env.AI_TEN_STEP_BATCH_TIMEOUT_MS) || 150000), 70000)
@@ -6034,6 +6126,7 @@ function dedupeCorrections(items = []) {
 
     const normalized = {
       ...item,
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: sentenceNumber || index + 1,
       originalSentence: original,
       original: firstNonEmpty(item.original, original),
@@ -6141,6 +6234,7 @@ function collectUnsafeCorrectedSentenceCandidates(items = []) {
 function buildDirectCorrectionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const items = candidates.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Rejected direct correction: ${item.correctedSentence}`,
@@ -6251,13 +6345,21 @@ function correctionSourcesForBetterExpression(body = {}) {
   const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
   const detailed = dedupeCorrections(ensureArray(current.detailedSentenceCorrections));
   if (detailed.length) return detailed.map((item, index) => ({
+    correctionId: correctionIdForItem(item, index),
     sentenceNumber: item.sentenceNumber || index + 1,
     originalSentence: firstNonEmpty(item.originalSentence, item.original),
     correctedSentence: firstNonEmpty(item.correctedSentence, item.corrected, item.originalSentence, item.original),
     problem: firstNonEmpty(item.problem, item.reason, item.explanation),
     errorType: firstNonEmpty(item.errorType, item.type)
   }));
-  return splitEssayIntoSentenceUnits(body.essay).map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text, problem: "", errorType: "" }));
+  return splitEssayIntoSentenceUnits(body.essay).map((item, index) => ({
+    correctionId: correctionIdForItem({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text }, index),
+    sentenceNumber: item.sentenceNumber,
+    originalSentence: item.text,
+    correctedSentence: item.text,
+    problem: "",
+    errorType: ""
+  }));
 }
 
 function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount, highBandPolish = false }) {
@@ -6265,6 +6367,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
   const targetRange = betterExpressionTargetRangeForBody(body);
   const feedbackTrackInstruction = buildFeedbackTrackInstruction(body);
   const items = batch.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Direct corrected sentence: ${item.correctedSentence || item.originalSentence}`,
@@ -6306,7 +6409,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       betterExpressionMode: highBandPolish ? "high_band_polish" : "correction_based",
-      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "" }]
+      betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "" }]
     }),
     "Chinese requirement: every betterExpression item must include betterExpressionZh and whyBetterZh. Do not translate the full essay.",
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -6317,6 +6420,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
 
 function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
   const items = candidates.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Direct corrected sentence: ${item.correctedSentence}`,
@@ -6331,7 +6435,7 @@ function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batch
     "Do not use phrases such as 'which makes the idea clearer', 'clearer and more specific', 'this improves the sentence', 'discuss about', or 'should not avoid'.",
     "Do not omit any listed item. Return one clearly improved but still realistic betterExpression for every rejected item.",
     "Return exactly one valid JSON object with this shape:",
-    JSON.stringify({ betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
+    JSON.stringify({ betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
     "Rejected items:",
     items
@@ -6365,11 +6469,9 @@ async function repairUnsafeBetterExpressionCandidates({ apiKey, model, body, eff
 
 
 function betterExpressionKeyForMatch(item = {}, index = 0) {
-  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
-  const originalKey = normalizeCorrectionKeyText(original);
-  if (originalKey) return `o:${originalKey}`;
-  const number = Number(item.sentenceNumber) || 0;
-  return number > 0 ? `n:${number}` : `idx:${index}`;
+  const correctionId = correctionIdForItem(item, index);
+  if (correctionId) return `id:${correctionId}`;
+  return itemTextIdentityKey(item, index);
 }
 
 function collectMissingBetterExpressionSources(sources = [], items = []) {
@@ -6404,6 +6506,104 @@ async function repairMissingBetterExpressionCandidates({ apiKey, model, body, ef
     })
   });
   return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
+}
+
+function normalizeDisplaySentenceCorrectionSource(item = {}, index = 0) {
+  if (!item || typeof item !== "object") return null;
+  const originalSentence = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  const correctedSentence = firstNonEmpty(item.correctedSentence, item.corrected, item.correction, item.revisedSentence, originalSentence);
+  if (!originalSentence && !correctedSentence) return null;
+  return {
+    ...item,
+    correctionId: correctionIdForItem(item, index),
+    sentenceNumber: Number(item.sentenceNumber) || index + 1,
+    originalSentence,
+    correctedSentence,
+    corrected: firstNonEmpty(item.corrected, correctedSentence),
+    problem: firstNonEmpty(item.problem, item.reason, item.explanation, item.issue),
+    errorType: firstNonEmpty(item.errorType, item.type, item.category)
+  };
+}
+
+function mergeBetterExpressionIntoCorrection(source = {}, betterItem = {}) {
+  const correctedSentence = firstNonEmpty(source.correctedSentence, source.corrected, betterItem.correctedSentence, betterItem.corrected, source.originalSentence);
+  const originalSentence = firstNonEmpty(source.originalSentence, source.original, betterItem.originalSentence, betterItem.original);
+  const betterExpression = sanitizeBetterExpressionCandidate(
+    firstNonEmpty(betterItem.betterExpression, betterItem.targetBandExpression, betterItem.upgradedSentence, betterItem.polishedSentence),
+    correctedSentence,
+    originalSentence
+  );
+  if (!betterExpression) return null;
+  return {
+    ...source,
+    correctionId: correctionIdForItem(source, Number(source.sentenceNumber) || 0),
+    originalSentence,
+    correctedSentence,
+    corrected: firstNonEmpty(source.corrected, correctedSentence),
+    betterExpression,
+    betterExpressionZh: firstNonEmpty(betterItem.betterExpressionZh, betterItem.whyBetterZh, source.betterExpressionZh),
+    betterExpressionTargetBand: firstNonEmpty(betterItem.targetBand, betterItem.betterExpressionTargetBand, source.betterExpressionTargetBand),
+    whyBetter: firstNonEmpty(betterItem.whyBetter, source.whyBetter),
+    whyBetterZh: firstNonEmpty(betterItem.whyBetterZh, source.whyBetterZh),
+    targetBandExpression: betterExpression,
+    displayReady: true,
+    scoreImpacting: source.scoreImpacting !== false
+  };
+}
+
+function buildDisplaySentenceCorrectionsForOutput(result = {}, body = {}) {
+  const current = body && body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const directSources = dedupeCorrections([
+    ...ensureArray(current.detailedSentenceCorrections),
+    ...ensureArray(result.detailedSentenceCorrections)
+  ]).map(normalizeDisplaySentenceCorrectionSource).filter(Boolean);
+
+  const betterItems = normalizeBetterExpressionItems([
+    ...ensureArray(current.betterExpressionItems),
+    ...ensureArray(result.betterExpressionItems)
+  ]);
+  const byId = new Map();
+  const byText = new Map();
+  betterItems.forEach((item, index) => {
+    const idKey = betterExpressionKeyForMatch(item, index);
+    if (idKey) byId.set(idKey, item);
+    const textKey = itemTextIdentityKey(item, index);
+    if (textKey) byText.set(textKey, item);
+  });
+
+  const display = [];
+  const missing = [];
+  directSources.forEach((source, index) => {
+    const idKey = betterExpressionKeyForMatch(source, index);
+    const textKey = itemTextIdentityKey(source, index);
+    const matched = byId.get(idKey) || byText.get(textKey) || null;
+    const merged = matched ? mergeBetterExpressionIntoCorrection(source, matched) : null;
+    if (merged && isScoreImpactingDetailedCorrection(merged)) {
+      display.push(merged);
+    } else {
+      missing.push({
+        correctionId: correctionIdForItem(source, index),
+        sentenceNumber: source.sentenceNumber,
+        originalSentence: source.originalSentence,
+        correctedSentence: source.correctedSentence,
+        reason: matched ? "betterExpression failed quality gate" : "missing betterExpression item"
+      });
+    }
+  });
+
+  return {
+    displaySentenceCorrections: dedupeCorrections(display),
+    sentenceCorrectionDisplayMeta: {
+      sourceItems: directSources.length,
+      betterExpressionItems: betterItems.length,
+      displayItems: display.length,
+      missingItems: missing.length,
+      missingCorrectionIds: missing.map((item) => item.correctionId).filter(Boolean).slice(0, 30),
+      missingSamples: missing.slice(0, 8),
+      ready: directSources.length > 0 && display.length === directSources.length,
+      rule: "Only sentence corrections with a usable betterExpression are exposed in displaySentenceCorrections. Local code does not generate sentences."
+    }
+  };
 }
 
 
@@ -6606,6 +6806,276 @@ function applyStrictLowBandBoundaryGuard(result = {}, body = {}) {
   return result;
 }
 
+
+
+function criterionBandMapFromCriteriaObject(criteria = {}, task = "Task 2") {
+  const names = getWritingCriterionNames(task === "Task 1" ? "Task 1" : "Task 2");
+  const out = {};
+  names.forEach((name) => {
+    const item = criteria && typeof criteria === "object" ? criteria[name] : null;
+    const raw = item && typeof item === "object" ? (item.finalBand ?? item.band) : item;
+    const n = Number(String(raw ?? "").replace(/band\s*/i, ""));
+    if (Number.isFinite(n) && n >= 1 && n <= 9) out[name] = clampAiBand(n, 1);
+  });
+  return out;
+}
+
+function finalScoreCriteriaBands(result = {}, body = {}) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const fromCriteria = criterionBandMapFromCriteriaObject(result.criteria, task);
+  if (Object.keys(fromCriteria).length === 4) return fromCriteria;
+  const fromFinal = criterionBandMapFromCriteriaObject(result.finalCriteria, task);
+  if (Object.keys(fromFinal).length === 4) return fromFinal;
+  return criterionBandsMapFromResult(result, task);
+}
+
+function criteriaBandsAverage(bands = {}) {
+  const values = Object.values(bands).map(Number).filter(Number.isFinite);
+  return values.length === 4 ? values.reduce((sum, value) => sum + value, 0) / 4 : null;
+}
+
+function buildFinalScoreSanitySignals(result = {}, body = {}) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const rateability = result.rateabilityProfile || buildRateabilityProfile(body);
+  const bands = finalScoreCriteriaBands(result, body);
+  const entries = Object.entries(bands);
+  const reasons = [];
+  const reasonsZh = [];
+  const outlierCriteria = [];
+  const veryLowCriteria = [];
+  const identicalBands = entries.length === 4 && new Set(entries.map(([, band]) => formatBand(Number(band)))).size === 1;
+  const avg = criteriaBandsAverage(bands);
+  const roundedAverage = avg === null ? null : roundHalf(avg);
+  const displayedOverall = Number(result.overallBand ?? result.finalOverallBand ?? result.scoreCalculation?.finalBand);
+  const isRateable = ["weak_but_rateable", "clearly_rateable"].includes(rateability.status);
+
+  entries.forEach(([name, band]) => {
+    const numeric = Number(band);
+    const otherAvg = averageNumbers(entries.filter(([other]) => other !== name).map(([, value]) => value));
+    if (isRateable && numeric <= 2) {
+      veryLowCriteria.push(name);
+      reasons.push(`${name} Band ${formatBand(numeric)} conflicts with rateability status ${rateability.status}; a rateable essay needs explicit evidence before Band 1/2 can be kept.`);
+      reasonsZh.push(`${name} 为 Band ${formatBand(numeric)}，但文本可评分性为 ${rateability.status}；可评分作文保留 1/2 分前必须有非常具体证据。`);
+    }
+    if (otherAvg !== null && Math.abs(otherAvg - numeric) >= 2) {
+      outlierCriteria.push(name);
+      reasons.push(`${name} Band ${formatBand(numeric)} is ${Math.abs(otherAvg - numeric).toFixed(1)} bands away from the average of the other three criteria.`);
+      reasonsZh.push(`${name} 与其他三项平均分相差 ${Math.abs(otherAvg - numeric).toFixed(1)} 分，属于最终单项离群风险。`);
+    }
+  });
+
+  if (identicalBands) {
+    const band = Number(entries[0]?.[1]);
+    if (Number.isFinite(band) && band >= 4 && band <= 6) {
+      reasons.push(`All four final criteria are identical at Band ${formatBand(band)}; this may be a safe-default score and should be re-checked against criterion-specific evidence.`);
+      reasonsZh.push(`最终四项分完全相同，均为 Band ${formatBand(band)}；这可能是安全默认分，需要按四项证据重新核验。`);
+    }
+  }
+
+  if (Number.isFinite(displayedOverall) && roundedAverage !== null && Math.abs(displayedOverall - roundedAverage) >= 0.5) {
+    reasons.push(`Displayed overall Band ${formatBand(displayedOverall)} does not match the rounded four-criterion average Band ${formatBand(roundedAverage)}.`);
+    reasonsZh.push(`展示总分 Band ${formatBand(displayedOverall)} 与四项平均后四舍五入 Band ${formatBand(roundedAverage)} 不一致。`);
+  }
+
+  const hardInvalid = veryLowCriteria.length > 0 || outlierCriteria.length > 0 || (Number.isFinite(displayedOverall) && roundedAverage !== null && Math.abs(displayedOverall - roundedAverage) >= 0.5);
+  const triggered = reasons.length > 0;
+  return {
+    aiStage: "final-score-sanity-gate",
+    triggered,
+    status: triggered ? "triggered" : "not_triggered",
+    hardInvalid,
+    rateabilityStatus: rateability.status || "unknown",
+    originalCriteria: bands,
+    originalOverallBand: Number.isFinite(displayedOverall) ? displayedOverall : roundedAverage,
+    roundedCriterionAverage: roundedAverage,
+    outlierCriteria: [...new Set(outlierCriteria)],
+    veryLowCriteria: [...new Set(veryLowCriteria)],
+    identicalCriteriaBands: identicalBands,
+    reasons,
+    reasonsZh,
+    localScoreChanged: false,
+    scoringRole: "post_final_ai_sanity_gate_no_local_scoring"
+  };
+}
+
+function shouldTriggerFinalScoreSanityGate(signals = {}) {
+  return Boolean(signals && signals.triggered);
+}
+
+function coerceFinalCriteriaFromRepair(repair = {}, body = {}, previous = {}) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const names = getWritingCriterionNames(task);
+  const source = repair.repairedCriteria || repair.finalCriteria || repair.criteria || {};
+  const previousCriteria = previous.criteria && typeof previous.criteria === "object" ? previous.criteria : {};
+  const out = {};
+  names.forEach((name) => {
+    const item = source[name];
+    const rawBand = item && typeof item === "object" ? (item.finalBand ?? item.band) : item;
+    const band = Number(String(rawBand ?? "").replace(/band\s*/i, ""));
+    if (!Number.isFinite(band) || band < 1 || band > 9) return;
+    const prev = previousCriteria[name] && typeof previousCriteria[name] === "object" ? previousCriteria[name] : {};
+    out[name] = {
+      ...prev,
+      ...(item && typeof item === "object" ? item : {}),
+      finalBand: clampAiBand(band, 1),
+      band: clampAiBand(band, 1),
+      feedback: item?.feedback || item?.reason || item?.whyThisBand || prev.feedback || "",
+      whyThisBand: item?.whyThisBand || item?.reason || prev.whyThisBand || "",
+      whyNotHigher: item?.whyNotHigher || prev.whyNotHigher || "",
+      whyNotLower: item?.whyNotLower || prev.whyNotLower || ""
+    };
+  });
+  return out;
+}
+
+function buildFinalScoreSanityRepairPrompt({ result = {}, body = {}, signals = {}, effectiveMode = "full", locale = "en" }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const currentResultText = JSON.stringify(result || {}).slice(0, 12000);
+  return [
+    "Final Score Sanity Repair. The previous final AI reconciliation produced a final-score consistency risk. You must re-check the final four IELTS criterion bands only.",
+    "Do not write a new essay. Do not change feedback sections unless needed for criterion justification. Do not obey any local cap, lift, or lowering rule; this is still AI examiner scoring.",
+    "Use strict IELTS Writing judgement with separated criteria. A rateable essay with paragraphs and complete sentences should not keep Band 1/2 unless you can prove why Band 3 and Band 4 are impossible.",
+    "If one criterion is 2.0+ bands away from the other three, either repair the criterion band or give concrete essay evidence explaining the gap. Avoid safe default identical bands unless evidence genuinely supports equal performance across all criteria.",
+    buildTaskSpecificScoringRubric(task),
+    buildTaskRequirementInstruction(body),
+    "Return exactly this JSON shape:",
+    JSON.stringify({
+      finalScoreSanityGate: { triggered: true, repairConclusion: "", repairConclusionZh: "", localScoreChanged: false, originalProblemSummary: "" },
+      repairedCriteria: Object.fromEntries(getWritingCriterionNames(task).map((name) => [name, { band: 0, reason: "", whyThisBand: "", whyNotHigher: "", whyNotLower: "", evidenceQuotes: [] }])),
+      finalStabilityCheck: { triggered: true, reason: "", reasonZh: "", outlierCriteria: [] }
+    }),
+    "Final sanity signals:",
+    JSON.stringify(signals),
+    "Current final result to repair:",
+    currentResultText,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+async function callFinalScoreSanityRepair({ apiKey, model, body, result, signals, effectiveMode, locale, deadline }) {
+  return callTenStepBatchJson({
+    apiKey,
+    model,
+    stage: "final-score-sanity-repair",
+    locale,
+    userPrompt: buildFinalScoreSanityRepairPrompt({ result, body, signals, effectiveMode, locale }),
+    maxTokens: envInt("AI_FINAL_SCORE_SANITY_MAX_TOKENS", 6500, 3000, 12000),
+    deadline,
+    timeoutMs: Number(process.env.AI_FINAL_SCORE_SANITY_TIMEOUT_MS) || 120000,
+    temperature: 0
+  });
+}
+
+async function applyFinalScoreSanityGate({ apiKey, model, body, result, effectiveMode, stage, locale, deadline }) {
+  const initialSignals = buildFinalScoreSanitySignals(result, body);
+  if (!shouldTriggerFinalScoreSanityGate(initialSignals)) {
+    result.finalScoreSanityGate = {
+      ...initialSignals,
+      triggered: false,
+      status: "not_triggered",
+      repairApplied: false,
+      reason: "No final score sanity issue was detected after final AI reconciliation.",
+      reasonZh: "最终AI复核后未发现分数合理性异常。"
+    };
+    return result;
+  }
+
+  if (!hasEnoughAiTime(deadline, 25000)) {
+    if (initialSignals.hardInvalid) {
+      const error = new Error("Final score sanity gate detected an inconsistent final score, but there was not enough AI time left to repair it. Please retry grading.");
+      error.provider = DEFAULT_PROVIDER;
+      error.aiStage = "final-score-sanity-gate";
+      error.status = 502;
+      throw error;
+    }
+    result.finalScoreSanityGate = {
+      ...initialSignals,
+      repairApplied: false,
+      stageStatus: "warning",
+      repairConclusion: "Sanity gate triggered, but repair was deferred because the remaining AI time was too low.",
+      repairConclusionZh: "最终分数合理性闸门已触发，但剩余AI时间不足，未执行修复。"
+    };
+    result.stageWarnings = ensureArray(result.stageWarnings).concat(["Final score sanity repair deferred because remaining AI time was too low."]);
+    return result;
+  }
+
+  let repair;
+  try {
+    repair = await callFinalScoreSanityRepair({ apiKey, model, body, result, signals: initialSignals, effectiveMode, locale, deadline });
+  } catch (error) {
+    if (initialSignals.hardInvalid) {
+      error.aiStage = error.aiStage || "final-score-sanity-repair";
+      throw error;
+    }
+    result.finalScoreSanityGate = {
+      ...initialSignals,
+      repairApplied: false,
+      stageStatus: "warning",
+      repairConclusion: `Final score sanity repair failed: ${error?.message || error}`,
+      repairConclusionZh: "最终分数合理性修复失败；本次保留AI原始最终分。"
+    };
+    result.stageWarnings = ensureArray(result.stageWarnings).concat([`Final score sanity repair failed: ${error?.message || error}`]);
+    return result;
+  }
+
+  const repairedFinalCriteria = coerceFinalCriteriaFromRepair(repair, body, result);
+  if (Object.keys(repairedFinalCriteria).length !== 4) {
+    if (initialSignals.hardInvalid) {
+      const error = new Error("Final score sanity repair did not return all four valid repaired criterion bands. Please retry grading.");
+      error.provider = DEFAULT_PROVIDER;
+      error.aiStage = "final-score-sanity-repair";
+      error.status = 502;
+      throw error;
+    }
+    result.finalScoreSanityGate = { ...initialSignals, repairApplied: false, repairReturnedIncompleteCriteria: true };
+    return result;
+  }
+
+  const repaired = applyFinalScoringReconciliation({
+    ...result,
+    ...repair,
+    aiStage: stage || "final-plan",
+    disclaimer: DISCLAIMER,
+    finalCriteria: repairedFinalCriteria,
+    criteria: repairedFinalCriteria
+  }, body);
+  const afterSignals = buildFinalScoreSanitySignals(repaired, body);
+  repaired.finalScoreSanityGate = {
+    ...initialSignals,
+    triggered: true,
+    status: "triggered",
+    repairApplied: true,
+    repairStage: "final-score-sanity-repair",
+    originalCriteria: initialSignals.originalCriteria,
+    repairedCriteria: finalScoreCriteriaBands(repaired, body),
+    repairedOverallBand: repaired.overallBand,
+    postRepairSignals: afterSignals,
+    repairConclusion: repair?.finalScoreSanityGate?.repairConclusion || repair?.repairConclusion || "Final AI sanity repair rechecked the four criteria and returned repaired final bands.",
+    repairConclusionZh: repair?.finalScoreSanityGate?.repairConclusionZh || repair?.repairConclusionZh || "最终AI合理性修复已重新核验四项分并返回修复后的最终分。",
+    localScoreChanged: false,
+    scoringRole: "ai_repair_only_no_local_band_edit"
+  };
+  repaired.finalStabilityCheck = repair.finalStabilityCheck || repaired.finalStabilityCheck || {
+    triggered: afterSignals.triggered,
+    reason: afterSignals.reasons.join(" "),
+    reasonZh: afterSignals.reasonsZh.join(" "),
+    outlierCriteria: afterSignals.outlierCriteria
+  };
+  repaired.scoreSource = "final_ai_reconciliation_sanity_repair";
+  repaired.finalScoreSource = "final_ai_reconciliation_sanity_repair";
+
+  if (afterSignals.hardInvalid) {
+    const error = new Error("Final score remained inconsistent after sanity repair. Please retry grading.");
+    error.provider = DEFAULT_PROVIDER;
+    error.aiStage = "final-score-sanity-repair";
+    error.status = 502;
+    throw error;
+  }
+  return repaired;
+}
 
 function applyFinalScoringReconciliation(result = {}, body = {}) {
   if (!result || typeof result !== "object") return result;
@@ -7434,10 +7904,12 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
     userPrompt: buildFinalPlanPrompt({ body, effectiveMode, locale }),
     maxTokens: envInt("AI_FINAL_RECONCILIATION_MAX_TOKENS", Number(process.env.AI_FINAL_PLAN_MAX_TOKENS) || 9500, 4500, 16000),
     deadline,
-    timeoutMs: Number(process.env.AI_FINAL_RECONCILIATION_TIMEOUT_MS || process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 165000
+    timeoutMs: Number(process.env.AI_FINAL_RECONCILIATION_TIMEOUT_MS || process.env.AI_FINAL_PLAN_TIMEOUT_MS) || 165000,
+    temperature: 0
   });
   const reconciled = applyFinalScoringReconciliation({ aiStage: stage, disclaimer: DISCLAIMER, ...plan }, body);
-  return applyNextBandTargetPlan(reconciled, body);
+  const sanityChecked = await applyFinalScoreSanityGate({ apiKey, model, body, effectiveMode, stage, locale, deadline, result: reconciled });
+  return applyNextBandTargetPlan(sanityChecked, body);
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
@@ -7711,8 +8183,15 @@ async function handleRequest(req, res) {
     result = applyNextBandTargetPlan(result, body);
     result = applyFinalBetterExpressionTargetSync(result, body);
     if (result && typeof result === "object") {
+      const sanitizedCorrections = sanitizeAiCorrectionPayload(result);
+      ["spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections"].forEach((field) => {
+        if (Array.isArray(sanitizedCorrections[field])) result[field] = sanitizedCorrections[field];
+      });
       result.detailedSentenceCorrections = dedupeCorrections(result.detailedSentenceCorrections || []);
       result.betterExpressionItems = applyFinalBetterExpressionTargetSync({ betterExpressionItems: normalizeBetterExpressionItems(result.betterExpressionItems || []) }, body).betterExpressionItems || [];
+      const displaySentenceOutput = buildDisplaySentenceCorrectionsForOutput(result, body);
+      result.displaySentenceCorrections = displaySentenceOutput.displaySentenceCorrections;
+      result.sentenceCorrectionDisplayMeta = displaySentenceOutput.sentenceCorrectionDisplayMeta;
     }
     sendJson(req, res, 200, result);
   } catch (error) {

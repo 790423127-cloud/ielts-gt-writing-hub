@@ -825,20 +825,20 @@ function mergeAiStageResult(base, incoming) {
     "lexicalAdvice", "lexicalAdviceZh", "grammarAdvice", "grammarAdviceZh",
     "band5FixPlan", "band5FixPlanZh", "band6UpgradePlan", "band6UpgradePlanZh",
     "band7UpgradePlan", "band7UpgradePlanZh", "revisionNotes", "revisionNotesZh",
-    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "strengthItems", "mainProblemItems", "betterExpressionItems", "stageWarnings", "stageProgress"
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "strengthItems", "mainProblemItems", "betterExpressionItems", "displaySentenceCorrections", "stageWarnings", "stageProgress"
   ];
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "rateabilityProfile", "criterionOutlierReview", "lowScoreOutlierReview", "finalStabilityCheck", "taskMatchCheck", "wordCountWarning",
-    "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta",
+    "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta", "sentenceCorrectionDisplayMeta",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
       const limit = /detailedSentenceCorrections/i.test(field) ? 80
-        : /betterExpressionItems/i.test(field) ? 80
+        : /(betterExpressionItems|displaySentenceCorrections)/i.test(field) ? 80
         : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 80
         : /(Advice|Plan|Problems|strengths)/i.test(field) ? 18
         : 16;
@@ -1454,7 +1454,7 @@ function renderStageProgress(result = {}) {
   return collapsibleSection("AI 批改进度与错误日志", `
     ${progress.length ? `<ul class="stage-log-list">${progress.map((item) => {
       const recovered = isNonBlockingStageWarning(item.message);
-      const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "warning" ? (recovered ? "已补全/有记录" : "需注意") : "失败";
+      const stateText = item.state === "done" ? "完成" : item.state === "running" ? "进行中" : item.state === "skipped" ? "未触发" : item.state === "warning" ? (recovered ? "已补全/有记录" : "需注意") : "失败";
       const detail = item.detail ? `<pre class="stage-log-detail">${escapeHtml(item.detail)}</pre>` : "";
       return `<li class="${recovered ? "stage-recovered" : item.state === "error" ? "stage-error" : ""}"><strong>${escapeHtml(item.label || "阶段")}</strong>：${escapeHtml(stateText)} — ${escapeHtml(item.message || "")}${detail}</li>`;
     }).join("")}</ul>` : ""}
@@ -1599,26 +1599,73 @@ function renderSafetyBadge(label, value, cls = "is-neutral") {
   return `<span class="task-check-badge ${cls}"><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</span>`;
 }
 
+function compactErrorText(value) {
+  return String(value || "").toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9]+/g, "").trim();
+}
+
+function isSingleTokenText(value) {
+  const text = String(value || "").trim();
+  return Boolean(text && /^[A-Za-z][A-Za-z'’-]*$/.test(text));
+}
+
+function isSpellingOnlyGrammarError(item) {
+  if (!item || typeof item !== "object") return false;
+  const type = String(item.type || item.errorType || item.category || "").toLowerCase();
+  const explanation = String(item.explanation || item.problem || item.reason || item.comment || "").toLowerCase();
+  const original = String(item.original || item.originalSentence || item.sentence || item.wrong || "").trim();
+  const corrected = String(item.corrected || item.correctedSentence || item.correction || item.fixed || item.right || "").trim();
+  if (/\b(spelling|misspelling|typo)\b/.test(type)) return true;
+  const explanationOnlySpelling = /incorrect spelling|misspell|misspelling|spelling error|typo/.test(explanation) &&
+    !/verb|tense|article|plural|agreement|preposition|clause|fragment|run[- ]on|punctuation|word order|sentence structure|grammar/.test(explanation);
+  return isSingleTokenText(original) && isSingleTokenText(corrected) && compactErrorText(original) !== compactErrorText(corrected) && explanationOnlySpelling;
+}
+
+function validBandValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
+}
+
+function reviewedBandRowsHtml(entries) {
+  const validRows = ensureArray(entries)
+    .map(([name, band]) => [name, validBandValue(band)])
+    .filter(([, band]) => band !== null);
+  if (!validRows.length) {
+    return `<p class="muted">AI did not return separate reviewed criterion bands; final AI reconciliation bands below are used.</p>`;
+  }
+  return `<div class="score-calculation-grid">${validRows.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>AI reviewed Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>`;
+}
+
+function renderAuditDetails(title, summaryHtml, bodyHtml, className = "") {
+  return `<details class="feedback-collapse low-score-safety-card ${className}">
+    <summary>${title}</summary>
+    <div class="feedback-collapse-body compact-body">
+      ${summaryHtml || ""}
+      ${bodyHtml || ""}
+    </div>
+  </details>`;
+}
+
 function renderRateabilityProfile(profile = {}) {
   if (!profile || typeof profile !== "object" || !hasAnyText(profile)) return "";
   const status = String(profile.status || "").trim() || "not returned";
   const cls = /clearly/i.test(status) ? "is-ok" : /weak/i.test(status) ? "is-neutral" : "is-warning";
   const flags = ensureArray(profile.severeIssueFlags).filter(Boolean);
-  const badgeHtml = [
-    renderSafetyBadge("Status", status, cls),
-    renderSafetyBadge("Words", profile.wordCount ?? "-"),
-    renderSafetyBadge("Paragraphs", profile.paragraphCount ?? "-"),
-    renderSafetyBadge("Sentences", profile.sentenceCount ?? "-"),
-    renderSafetyBadge("Complete sentences", boolText(profile.hasCompleteSentences)),
-    renderSafetyBadge("Prompt-related", boolText(profile.relatedToPrompt))
-  ].join("");
-  return `<section class="grading-section low-score-safety-card">
-    <h4>可评分性检查 / Rateability Check</h4>
-    <div class="task-check-badges">${badgeHtml}</div>
+  const summaryHtml = `<div class="task-check-badges audit-summary-badges">
+    ${renderSafetyBadge("Status", status, cls)}
+    ${renderSafetyBadge("Words", profile.wordCount ?? "-")}
+    ${renderSafetyBadge("Paragraphs", profile.paragraphCount ?? "-")}
+    ${renderSafetyBadge("Sentences", profile.sentenceCount ?? "-")}
+  </div>`;
+  const bodyHtml = `
+    <div class="task-check-badges">
+      ${renderSafetyBadge("Complete sentences", boolText(profile.hasCompleteSentences))}
+      ${renderSafetyBadge("Prompt-related", boolText(profile.relatedToPrompt))}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>
     ${profile.reason ? renderTextWithTranslation(profile.reason, profile.reasonZh, { tag: "p" }) : ""}
     ${flags.length ? collapsibleSection("Severe issue flags", listHtml(flags), { className: "high-band-compact-details" }) : ""}
-    <p class="muted">本地是否改分：否。这里仅显示可评分性信号，最终分数仍由 AI 最终复核决定。</p>
-  </section>`;
+    <p class="muted">本地是否改分：否。这里仅显示可评分性信号，最终分数仍由 AI 最终复核决定。</p>`;
+  return renderAuditDetails("可评分性检查 / Rateability Check", summaryHtml, bodyHtml, "rateability-card");
 }
 
 function renderCriterionOutlierReview(review = {}) {
@@ -1628,21 +1675,20 @@ function renderCriterionOutlierReview(review = {}) {
   const reasons = ensureArray(review.triggerReasons).filter(Boolean);
   const reasonsZh = ensureArray(review.triggerReasonsZh).filter(Boolean);
   const reviewed = review.reviewedCriteria && typeof review.reviewedCriteria === "object" ? Object.entries(review.reviewedCriteria) : [];
-  const reviewedRows = reviewed.length ? `<div class="score-calculation-grid">${reviewed.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>AI reviewed Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>` : "";
-  return `<section class="grading-section low-score-safety-card criterion-outlier-card">
-    <div class="high-band-review-head">
-      <div><h4>单项异常分复核 / Criterion Outlier Review</h4><p class="muted">AI-only review evidence. Local code does not change the score.</p></div>
+  const summaryHtml = `<div class="high-band-review-head audit-review-head">
+      <p class="muted">AI-only review evidence. Local code does not change the score.</p>
       <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
     </div>
-    <div class="task-check-badges">
+    <div class="task-check-badges audit-summary-badges">
       ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
       ${suspicious.length ? renderSafetyBadge("Suspicious", suspicious.join(", "), "is-warning") : ""}
       ${renderSafetyBadge("Local score change", "No")}
-    </div>
-    ${reviewedRows}
+    </div>`;
+  const bodyHtml = `
+    ${reviewed.length ? reviewedBandRowsHtml(reviewed) : ""}
     ${reasons.length ? collapsibleSection("Trigger reasons", `<ul>${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonsZh.length ? renderZhToggle(reasonsZh.join("\n")) : ""}`, { className: "high-band-compact-details" }) : ""}
-    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
-  </section>`;
+    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}`;
+  return renderAuditDetails("单项异常分复核 / Criterion Outlier Review", summaryHtml, bodyHtml, `criterion-outlier-card ${triggered ? "is-triggered-card" : ""}`);
 }
 
 function renderLowScoreOutlierReview(review = {}) {
@@ -1651,39 +1697,67 @@ function renderLowScoreOutlierReview(review = {}) {
   const reasons = ensureArray(review.triggerReasons).filter(Boolean);
   const reasonsZh = ensureArray(review.triggerReasonsZh).filter(Boolean);
   const reviewed = review.aiReviewedCriteria && typeof review.aiReviewedCriteria === "object" ? Object.entries(review.aiReviewedCriteria) : [];
-  const reviewedRows = reviewed.length ? `<div class="score-calculation-grid">${reviewed.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>AI reviewed Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>` : "";
-  return `<section class="grading-section low-score-safety-card low-score-outlier-card">
-    <div class="high-band-review-head">
-      <div><h4>低分异常复核 / Low-score Outlier Review</h4><p class="muted">AI-only review evidence. Local code does not raise, lower, or cap the score.</p></div>
+  const summaryHtml = `<div class="high-band-review-head audit-review-head">
+      <p class="muted">AI-only review evidence. Local code does not raise, lower, or cap the score.</p>
       <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
     </div>
-    <div class="task-check-badges">
+    <div class="task-check-badges audit-summary-badges">
       ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
       ${review.originalOverallBand ? renderSafetyBadge("Original overall", `Band ${formatMockBand(review.originalOverallBand)}`) : ""}
       ${review.reviewedRange ? renderSafetyBadge("Reviewed range", review.reviewedRange) : ""}
       ${renderSafetyBadge("Local score change", "No")}
-    </div>
-    ${reviewedRows}
+    </div>`;
+  const bodyHtml = `
+    ${reviewed.length ? reviewedBandRowsHtml(reviewed) : `<p class="muted">AI did not return separate reviewed criterion bands; final AI reconciliation bands below are used.</p>`}
     ${reasons.length ? collapsibleSection("Trigger reasons", `<ul>${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonsZh.length ? renderZhToggle(reasonsZh.join("\n")) : ""}`, { className: "high-band-compact-details" }) : ""}
     ${review.whyLowBandMayBeImplausible ? collapsibleSection("Why the low band may be too low", renderTextWithTranslation(review.whyLowBandMayBeImplausible, review.whyLowBandMayBeImplausibleZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
     ${review.whyLowBandMayStillBeJustified ? collapsibleSection("Why the low band may still be justified", renderTextWithTranslation(review.whyLowBandMayStillBeJustified, review.whyLowBandMayStillBeJustifiedZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
-    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
-  </section>`;
+    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}`;
+  return renderAuditDetails("低分异常复核 / Low-score Outlier Review", summaryHtml, bodyHtml, `low-score-outlier-card ${triggered ? "is-triggered-card" : ""}`);
 }
 
 function renderFinalStabilityCheck(check = {}) {
   if (!check || typeof check !== "object" || !hasAnyText(check)) return "";
   const triggered = check.triggered === true || String(check.triggered).toLowerCase() === "true";
   const outliers = ensureArray(check.outlierCriteria).filter(Boolean);
-  return `<section class="grading-section low-score-safety-card final-stability-card">
-    <h4>最终稳定性检查 / Final Stability Check</h4>
-    <div class="task-check-badges">
+  const summaryHtml = `<div class="task-check-badges audit-summary-badges">
       ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
       ${outliers.length ? renderSafetyBadge("Outlier criteria", outliers.join(", "), "is-warning") : ""}
       ${renderSafetyBadge("Local score change", "No")}
+    </div>`;
+  const bodyHtml = `${check.reason ? renderTextWithTranslation(check.reason, check.reasonZh, { tag: "p" }) : ""}`;
+  return renderAuditDetails("最终稳定性检查 / Final Stability Check", summaryHtml, bodyHtml, "final-stability-card");
+}
+
+
+function renderFinalScoreSanityGate(gate = {}) {
+  if (!gate || typeof gate !== "object" || !hasAnyText(gate)) return "";
+  const triggered = gate.triggered === true || String(gate.triggered).toLowerCase() === "true";
+  const repaired = gate.repairApplied === true || String(gate.repairApplied).toLowerCase() === "true";
+  const reasons = ensureArray(gate.reasons).filter(Boolean);
+  const reasonsZh = ensureArray(gate.reasonsZh).filter(Boolean);
+  const originalRows = gate.originalCriteria && typeof gate.originalCriteria === "object" ? Object.entries(gate.originalCriteria) : [];
+  const repairedRows = gate.repairedCriteria && typeof gate.repairedCriteria === "object" ? Object.entries(gate.repairedCriteria) : [];
+  const outliers = ensureArray(gate.outlierCriteria || gate.veryLowCriteria).filter(Boolean);
+  const summaryHtml = `<div class="high-band-review-head audit-review-head">
+      <p class="muted">Post-final AI-only sanity gate. Local code does not assign IELTS bands; it only forces AI repair when final bands are internally inconsistent.</p>
+      <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
     </div>
-    ${check.reason ? renderTextWithTranslation(check.reason, check.reasonZh, { tag: "p" }) : ""}
-  </section>`;
+    <div class="task-check-badges audit-summary-badges">
+      ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
+      ${gate.rateabilityStatus ? renderSafetyBadge("Rateability", gate.rateabilityStatus) : ""}
+      ${gate.originalOverallBand ? renderSafetyBadge("Original overall", `Band ${formatMockBand(gate.originalOverallBand)}`) : ""}
+      ${repaired && gate.repairedOverallBand ? renderSafetyBadge("Repaired overall", `Band ${formatMockBand(gate.repairedOverallBand)}`, "is-ok") : ""}
+      ${outliers.length ? renderSafetyBadge("Outlier", outliers.join(", "), "is-warning") : ""}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>`;
+  const bodyHtml = `
+    ${reasons.length ? collapsibleSection("Trigger reasons", `<ul>${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonsZh.length ? renderZhToggle(reasonsZh.join("\n")) : ""}`, { className: "high-band-compact-details" }) : ""}
+    ${originalRows.length ? collapsibleSection("Original final criteria", reviewedBandRowsHtml(originalRows), { className: "high-band-compact-details" }) : ""}
+    ${repairedRows.length ? collapsibleSection("AI repaired criteria", reviewedBandRowsHtml(repairedRows), { className: "high-band-compact-details" }) : ""}
+    ${gate.repairConclusion ? collapsibleSection("AI repair conclusion", renderTextWithTranslation(gate.repairConclusion, gate.repairConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    <p class="muted">本地是否改分：否。这里是最终AI分数后的合理性闸门；发现异常时强制AI重新复核，不由本地直接改分。</p>`;
+  return renderAuditDetails("最终分数合理性闸门 / Final Score Sanity Gate", summaryHtml, bodyHtml, `final-score-sanity-card ${triggered ? "is-triggered-card" : ""}`);
 }
 
 function renderLowScoreSafetyAudit(result = {}) {
@@ -1691,6 +1765,7 @@ function renderLowScoreSafetyAudit(result = {}) {
     renderRateabilityProfile(result.rateabilityProfile),
     renderCriterionOutlierReview(result.criterionOutlierReview),
     renderLowScoreOutlierReview(result.lowScoreOutlierReview),
+    renderFinalScoreSanityGate(result.finalScoreSanityGate),
     renderFinalStabilityCheck(result.finalStabilityCheck)
   ].filter(Boolean);
   return parts.join("");
@@ -2530,6 +2605,7 @@ function normalizeSentenceCorrectionItem(item, index = 0) {
 
   const normalized = sourceLockSentenceItem({
     ...item,
+    correctionId: firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId),
     sentenceNumber: item.sentenceNumber || index + 1,
     originalSentence: original,
     correctedSentence: corrected,
@@ -2556,6 +2632,8 @@ function normalizeCorrectionIdentityText(value) {
 }
 
 function correctionIdentityKey(item = {}) {
+  const correctionId = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
+  if (correctionId) return `id:${correctionId}`;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
   const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
   const base = normalizeCorrectionIdentityText(original || corrected);
@@ -2583,6 +2661,11 @@ function sentenceIdentitySimilarity(a, b) {
 }
 
 function findMatchingCorrectionIndex(corrections = [], item = {}) {
+  const itemCorrectionId = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
+  if (itemCorrectionId) {
+    const idIndex = corrections.findIndex((entry) => firstNonEmpty(entry.correctionId, entry.sourceId, entry.displayCorrectionId) === itemCorrectionId);
+    if (idIndex >= 0) return idIndex;
+  }
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence);
   const normalized = normalizeCorrectionIdentityText(original);
   let bestIndex = -1;
@@ -2666,6 +2749,7 @@ function attachBetterExpressionItems(corrections = [], betterItems = [], options
   ensureArray(betterItems).forEach((raw, rawIndex) => {
     if (!raw || typeof raw !== "object") return;
     const item = normalizeSentenceCorrectionItem({
+      correctionId: firstNonEmpty(raw.correctionId, raw.sourceId, raw.displayCorrectionId),
       sentenceNumber: raw.sentenceNumber,
       originalSentence: firstNonEmpty(raw.originalSentence, raw.original, raw.sourceSentence),
       correctedSentence: firstNonEmpty(raw.correctedSentence, raw.corrected, raw.revisedSentence, raw.originalSentence, raw.original, raw.sourceSentence),
@@ -2695,6 +2779,16 @@ function attachBetterExpressionItems(corrections = [], betterItems = [], options
 }
 
 function getSentenceCorrectionItems(result = {}) {
+  const displayReady = ensureArray(result.displaySentenceCorrections)
+    .map((item, index) => normalizeSentenceCorrectionItem(item, index))
+    .filter(Boolean)
+    .filter((item) => hasAnyText(resolveBetterExpressionForDisplay(item, item.correctedSentence, item.originalSentence)));
+  if (displayReady.length) {
+    return displayReady
+      .filter(isScoreImpactingDetailedCorrection)
+      .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
+  }
+
   const rawItems = [
     ...ensureArray(result.detailedSentenceCorrections),
     ...ensureArray(result.sentenceCorrections),
@@ -2717,8 +2811,10 @@ function getSentenceCorrectionItems(result = {}) {
     });
 
   attachBetterExpressionItems(merged, result.betterExpressionItems, { allowStandalone: isHighBandPolishResult(result) || !merged.length });
+  const highBand = isHighBandPolishResult(result);
   return merged
     .filter(isScoreImpactingDetailedCorrection)
+    .filter((item) => highBand || hasAnyText(resolveBetterExpressionForDisplay(item, item.correctedSentence, item.originalSentence)))
     .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
 }
 
@@ -2738,9 +2834,13 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
     return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
   }
   if (!filtered.length) {
+    const meta = result.sentenceCorrectionDisplayMeta || {};
+    const rawSentenceItems = ensureArray(result.detailedSentenceCorrections).length + ensureArray(result.sentenceCorrections).length;
     const msg = highBandPolish
       ? "高分表达优化暂未生成可展示内容。请重试“更好表达/高分表达优化”阶段。"
-      : "暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。";
+      : rawSentenceItems || Number(meta.sourceItems) > 0
+        ? "逐句批改已生成，但还没有拿到可安全展示的强制更好表达。请重试“更好表达/高分表达优化”阶段；页面不会展示缺少更好表达的半成品句子卡。"
+        : "暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。";
     return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
   }
 
@@ -2751,7 +2851,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
       const corrected = firstNonEmpty(item.correctedSentence, item.corrected, original);
       const better = resolveBetterExpressionForDisplay(item, corrected, original);
       const betterTarget = calibratedSentenceTargetRange || firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
-      const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
+      const betterZh = better ? (item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。") : "";
       const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
       const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
       const lockedDisplayItem = sourceLockSentenceItem(item);
@@ -3140,17 +3240,29 @@ function renderSpellingCorrections(items = []) {
 
 function renderGrammarErrors(items = []) {
   const list = Array.isArray(items)
-    ? items.filter((item) => item && (String(item.original || "").trim() || String(item.corrected || "").trim() || String(item.explanation || "").trim()))
+    ? items
+        .filter((item) => item && !isSpellingOnlyGrammarError(item))
+        .filter((item) => String(item.original || item.corrected || item.explanation || item.problem || item.rule || item.whyCorrected || item.bandImpact || "").trim())
     : [];
-  if (!list.length) return `<p class="muted">暂无语法错误列表。</p>`;
-  return `<div class="correction-list">${list.map((item) => `
-    <div class="correction-item">
-      <p><strong>Type:</strong> ${escapeHtml(item.type || "other")}</p>
+  if (!list.length) return `<p class="muted">暂无需要单独展示的语法错误；拼写问题请查看 Spelling Corrections。</p>`;
+  return `<div class="correction-list grammar-error-list">${list.map((item) => {
+    const problem = item.problem || item.explanation || "";
+    const rule = item.rule || "";
+    const whyCorrected = item.whyCorrected || item.whyThisCorrection || "";
+    const bandImpact = item.bandImpact || item.impactOnBand || item.scoreImpact || "";
+    const zhParts = [item.problemZh, item.ruleZh, item.whyCorrectedZh, item.bandImpactZh, item.explanationZh].filter(Boolean);
+    return `<div class="correction-item grammar-error-card">
+      <p><strong>Type:</strong> ${escapeHtml(item.type || "grammar")}</p>
       <p><strong>Original:</strong> ${escapeHtml(item.original || "")}</p>
       <p><strong>Corrected:</strong> ${escapeHtml(item.corrected || "")}</p>
-      <p><strong>Explanation:</strong> ${escapeHtml(item.explanation || "")}</p>
-      ${renderZhToggle(item.explanationZh)}
-    </div>`).join("")}</div>`;
+      ${problem ? `<p><strong>Problem:</strong> ${escapeHtml(problem)}</p>` : ""}
+      ${rule ? `<p><strong>Rule:</strong> ${escapeHtml(rule)}</p>` : ""}
+      ${whyCorrected ? `<p><strong>Why this correction:</strong> ${escapeHtml(whyCorrected)}</p>` : ""}
+      ${bandImpact ? `<p><strong>Band impact:</strong> ${escapeHtml(bandImpact)}</p>` : ""}
+      ${!problem && !rule && !whyCorrected && !bandImpact && item.explanation ? `<p><strong>Explanation:</strong> ${escapeHtml(item.explanation || "")}</p>` : ""}
+      ${renderZhToggle(zhParts.length ? zhParts.join("\n") : item.explanationZh)}
+    </div>`;
+  }).join("")}</div>`;
 }
 
 function renderSentenceCorrections(items = []) {
