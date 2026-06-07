@@ -5380,6 +5380,7 @@ const TEN_STEP_AI_STAGES = new Set([
   "half-band-summary",
   "criterion-boundary",
   "evidence-map",
+  "criterion-calibration",
   "task-diagnosis",
   "coherence-diagnosis",
   "spelling-wordform",
@@ -5406,6 +5407,7 @@ function normalizeAiStage(value) {
   if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary"].includes(raw)) return "half-band-summary";
   if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage12", "step12"].includes(raw)) return "criterion-boundary";
   if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage11", "step11"].includes(raw)) return "evidence-map";
+  if (["criterioncalibration", "criteriacalibration", "bandcalibration", "adjacentbandchallenge", "scoringcalibration", "calibrationmatrix", "stage11b", "step11b"].includes(raw)) return "criterion-calibration";
   if (["taskdiagnosis", "taskresponse", "taskachievement", "taskstructure", "taskcoverage", "promptcoverage", "stage9", "step9"].includes(raw)) return "task-diagnosis";
   if (["coherencediagnosis", "coherence", "cohesion", "coherenceandcohesion", "ccdiagnosis", "stage10", "step10"].includes(raw)) return "coherence-diagnosis";
   if (["spellingwordform", "spellingandwordform", "spelling", "wordform", "wordformation", "stage4", "step4"].includes(raw)) return "spelling-wordform";
@@ -5448,6 +5450,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     "criterion-boundary": "one-criterion-at-a-time half-band boundary explanation only",
     "score-boundary": "IELTS half-band boundary explanation only",
     "evidence-map": "criterion evidence mapping only",
+    "criterion-calibration": "criterion band calibration and adjacent-band challenge only",
     "task-diagnosis": "Task Response/Task Achievement diagnosis only",
     "coherence-diagnosis": "Coherence and Cohesion diagnosis only",
     "spelling-wordform": "spelling and word-formation diagnosis only",
@@ -5576,6 +5579,47 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Return JSON with this exact shape:",
       JSON.stringify({ criteria: tenStepCriterionShape(task), strengthItems: [{ text: "", zh: "" }], mainProblemItems: [{ text: "", zh: "" }], strengths: [], strengthsZh: [], mainProblems: [], mainProblemsZh: [] }),
       "For each criterion, provide 2-3 short evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower. Also return strengthItems and mainProblemItems as paired objects where every English text has a non-empty zh Chinese helper note. If you also use strengths/strengthsZh or mainProblems/mainProblemsZh, their item counts must match exactly.",
+      ...common
+    ].join("\n");
+  }
+
+  if (stage === "criterion-calibration") {
+    return [
+      "Stage 11B/13. Criterion Band Calibration Matrix. Calibrate the four IELTS criteria against adjacent bands before final scoring. Do not finalise the displayed score and do not correct sentences.",
+      "This pass must behave like a strict examiner cross-check: for each criterion, identify a plausible candidate range, compare the selected band against the adjacent lower and higher bands, and give concrete essay evidence.",
+      "Do not use safe default equal bands. Do not inflate weak writing. Do not assign Band 1/2 to a rateable response with paragraphs and complete sentence attempts unless you prove why Band 3/4 are impossible.",
+      "Return JSON with this exact shape:",
+      JSON.stringify({
+        criterionCalibration: {
+          taskType: task,
+          localScoreChanged: false,
+          calibrationRole: "pre_final_evidence_only",
+          criteria: Object.fromEntries(getWritingCriterionNames(task).map((name) => [name, {
+            candidateBandRange: "",
+            candidateBandsConsidered: [],
+            selectedBand: "",
+            positiveEvidence: [],
+            positiveEvidenceZh: [],
+            limitingEvidence: [],
+            limitingEvidenceZh: [],
+            whyNotLower: "",
+            whyNotLowerZh: "",
+            whyNotHigher: "",
+            whyNotHigherZh: "",
+            adjacentBandChallenge: { lowerBand: "", whyNotLowerBand: "", higherBand: "", whyNotHigherBand: "" },
+            evidenceQuotes: []
+          }])) ,
+          scoreProfilePatternCheck: { status: "", reason: "", reasonZh: "", suspiciousPattern: false, suggestedFinalBands: {} },
+          calibrationConclusion: "",
+          calibrationConclusionZh: "",
+          finalReconciliationInstruction: "Use this matrix as evidence in final-plan; final bands must still be decided by final AI reconciliation."
+        },
+        criteria: tenStepCriterionShape(task)
+      }),
+      "For Task 1, calibrate Task Achievement using letter purpose, all bullet points, tone/register, and letter format. For Task 2, calibrate Task Response using question type, all required parts, position, idea development, examples and conclusion.",
+      "For LR, spelling and word-formation error density must be considered under Lexical Resource. For GRA, sentence-level structure range, accuracy, grammatical error density, and punctuation must be considered.",
+      "For each criterion, candidateBandRange should normally span no more than 1.5 bands unless the writing is highly uneven. selectedBand must be on the IELTS 0.5 scale from 1 to 9.",
+      "scoreProfilePatternCheck must flag suspicious profiles such as all four criteria equal by default, one criterion 2.0+ bands away from the other three, or language criteria inconsistent with visible error density.",
       ...common
     ].join("\n");
   }
@@ -5738,6 +5782,7 @@ function tenStepStageMaxTokens(stage) {
     "criterion-boundary": envInt("AI_STAGE_CRITERION_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "score-boundary": envInt("AI_STAGE_SCORE_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "evidence-map": envInt("AI_STAGE_EVIDENCE_MAP_TOKENS", 6500, 3500, 12000),
+    "criterion-calibration": envInt("AI_STAGE_CRITERION_CALIBRATION_TOKENS", 8500, 4500, 15000),
     "task-diagnosis": envInt("AI_STAGE_TASK_DIAGNOSIS_TOKENS", 7000, 3500, 12000),
     "coherence-diagnosis": envInt("AI_STAGE_COHERENCE_DIAGNOSIS_TOKENS", 6500, 3500, 12000),
     "spelling-wordform": envInt("AI_STAGE_SPELLING_WORDFORM_TOKENS", 6000, 3000, 12000),
@@ -5763,6 +5808,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "half-band-summary") return hasUsefulText(output.scoreCalibration) || hasUsefulText(output.halfBandBoundary) || ensureArray(output.strengthItems).length || ensureArray(output.mainProblemItems).length;
   if (stage === "criterion-boundary" || stage === "score-boundary") return hasUsefulText(output.halfBandBoundary) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher) || hasUsefulText(item?.whyNotLower));
   if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
+  if (stage === "criterion-calibration") return hasUsefulText(output.criterionCalibration) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.selectedBand) || hasUsefulText(item?.candidateBandRange) || hasUsefulText(item?.adjacentBandChallenge));
   if (stage === "task-diagnosis") return ensureArray(output.taskAchievementAdvice).length || hasUsefulText(output.task1LetterCorrections) || hasUsefulText(output.task2EssayCorrections) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "coherence-diagnosis") return ensureArray(output.coherenceAdvice).length || hasUsefulText(output.criteria?.["Coherence and Cohesion"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "spelling-wordform") return output.stageStatus === "no_issues" || ensureArray(output.spellingCorrections).length || ensureArray(output.spellingWordformSentenceIssues).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.errorAnalysis?.summary);
@@ -6843,6 +6889,7 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
   const reasonsZh = [];
   const outlierCriteria = [];
   const veryLowCriteria = [];
+  const calibrationDisagreements = [];
   const identicalBands = entries.length === 4 && new Set(entries.map(([, band]) => formatBand(Number(band)))).size === 1;
   const avg = criteriaBandsAverage(bands);
   const roundedAverage = avg === null ? null : roundHalf(avg);
@@ -6864,6 +6911,21 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     }
   });
 
+  const calibrationCriteria = result.criterionCalibration && typeof result.criterionCalibration === "object" && result.criterionCalibration.criteria && typeof result.criterionCalibration.criteria === "object"
+    ? result.criterionCalibration.criteria
+    : {};
+  entries.forEach(([name, band]) => {
+    const calibratedRaw = calibrationCriteria[name]?.selectedBand ?? calibrationCriteria[name]?.band ?? calibrationCriteria[name]?.recommendedBand;
+    const calibratedBand = Number(String(calibratedRaw ?? "").replace(/band\s*/i, ""));
+    if (!Number.isFinite(calibratedBand)) return;
+    const delta = Math.abs(Number(band) - calibratedBand);
+    if (delta >= 1) {
+      calibrationDisagreements.push(name);
+      reasons.push(`${name} final Band ${formatBand(Number(band))} is ${delta.toFixed(1)} band(s) away from the criterion-calibration selected Band ${formatBand(calibratedBand)}.`);
+      reasonsZh.push(`${name} 最终 Band ${formatBand(Number(band))} 与四项校准建议 Band ${formatBand(calibratedBand)} 相差 ${delta.toFixed(1)} 分，需要复核。`);
+    }
+  });
+
   if (identicalBands) {
     const band = Number(entries[0]?.[1]);
     if (Number.isFinite(band) && band >= 4 && band <= 6) {
@@ -6877,7 +6939,12 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     reasonsZh.push(`展示总分 Band ${formatBand(displayedOverall)} 与四项平均后四舍五入 Band ${formatBand(roundedAverage)} 不一致。`);
   }
 
-  const hardInvalid = veryLowCriteria.length > 0 || outlierCriteria.length > 0 || (Number.isFinite(displayedOverall) && roundedAverage !== null && Math.abs(displayedOverall - roundedAverage) >= 0.5);
+  const hardInvalid = veryLowCriteria.length > 0 || outlierCriteria.length > 0 || calibrationDisagreements.some((name) => {
+    const finalBand = Number(bands[name]);
+    const calibratedRaw = calibrationCriteria[name]?.selectedBand ?? calibrationCriteria[name]?.band ?? calibrationCriteria[name]?.recommendedBand;
+    const calibratedBand = Number(String(calibratedRaw ?? "").replace(/band\s*/i, ""));
+    return Number.isFinite(finalBand) && Number.isFinite(calibratedBand) && Math.abs(finalBand - calibratedBand) >= 1.5;
+  }) || (Number.isFinite(displayedOverall) && roundedAverage !== null && Math.abs(displayedOverall - roundedAverage) >= 0.5);
   const triggered = reasons.length > 0;
   return {
     aiStage: "final-score-sanity-gate",
@@ -6890,6 +6957,7 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     roundedCriterionAverage: roundedAverage,
     outlierCriteria: [...new Set(outlierCriteria)],
     veryLowCriteria: [...new Set(veryLowCriteria)],
+    calibrationDisagreements: [...new Set(calibrationDisagreements)],
     identicalCriteriaBands: identicalBands,
     reasons,
     reasonsZh,
@@ -6936,8 +7004,10 @@ function buildFinalScoreSanityRepairPrompt({ result = {}, body = {}, signals = {
     "Do not write a new essay. Do not change feedback sections unless needed for criterion justification. Do not obey any local cap, lift, or lowering rule; this is still AI examiner scoring.",
     "Use strict IELTS Writing judgement with separated criteria. A rateable essay with paragraphs and complete sentences should not keep Band 1/2 unless you can prove why Band 3 and Band 4 are impossible.",
     "If one criterion is 2.0+ bands away from the other three, either repair the criterion band or give concrete essay evidence explaining the gap. Avoid safe default identical bands unless evidence genuinely supports equal performance across all criteria.",
+    "If final bands conflict with criterionCalibration by 1.0+ band, re-check the final band against that criterion's adjacent-band evidence. You may disagree with calibration only with concrete essay evidence.",
     buildTaskSpecificScoringRubric(task),
     buildTaskRequirementInstruction(body),
+    "Before choosing final bands, use criterionCalibration if present: compare each selected band with adjacent lower/higher bands, and do not ignore the calibration matrix unless you give concrete evidence. The calibration matrix is evidence-only, not local scoring.",
     "Return exactly this JSON shape:",
     JSON.stringify({
       finalScoreSanityGate: { triggered: true, repairConclusion: "", repairConclusionZh: "", localScoreChanged: false, originalProblemSummary: "" },

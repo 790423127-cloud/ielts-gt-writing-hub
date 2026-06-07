@@ -938,6 +938,10 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
     return Boolean(hasAnyText(data.halfBandBoundary) || Object.values(criteria).some((item) => hasAnyText(item?.whyThisBand) || hasAnyText(item?.whyNotHigher) || hasAnyText(item?.whyNotLower)));
   }
+  if (aiStage === "criterion-calibration") {
+    const calibrationCriteria = data.criterionCalibration?.criteria && typeof data.criterionCalibration.criteria === "object" ? data.criterionCalibration.criteria : {};
+    return Boolean(hasAnyText(data.criterionCalibration) || Object.values(calibrationCriteria).some((item) => hasAnyText(item?.selectedBand) || hasAnyText(item?.candidateBandRange) || hasAnyText(item?.adjacentBandChallenge)));
+  }
   if (aiStage === "task-diagnosis") {
     return Boolean(hasUsefulItemArray(data.taskAchievementAdvice) || hasAnyText(data.task1LetterCorrections) || hasAnyText(data.task2EssayCorrections) || hasAnyText(data.errorAnalysis?.summary));
   }
@@ -1306,7 +1310,7 @@ async function startGrading() {
 
   const payload = gradingPayload();
   // Full grading runs staged AI passes plus low/high boundary safety reviews. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 18 : 17;
+  const totalSteps = payload.mode === "revision" ? 19 : 18;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1376,9 +1380,10 @@ async function startGrading() {
     await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
     await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
     await runMergeStage("evidence-map", `第 12 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
-    await runMergeStage("criterion-boundary", `第 13 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
+    await runMergeStage("criterion-calibration", `第 13 步/${totalSteps}：AI 正在进行四项分档校准`, "四项分档校准", { required: true });
+    await runMergeStage("criterion-boundary", `第 14 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
     if (shouldRunCriterionOutlierReview(result, payload)) {
-      await runMergeStage("criterion-outlier-review", `第 14 步/${totalSteps}：AI 正在复核单项异常分`, "单项异常分复核");
+      await runMergeStage("criterion-outlier-review", `第 15 步/${totalSteps}：AI 正在复核单项异常分`, "单项异常分复核");
     } else {
       const skipReason = criterionOutlierSkipReason(result || {});
       markStage("单项异常分复核", "skipped", skipReason);
@@ -1386,7 +1391,7 @@ async function startGrading() {
       if (result) renderGradingResult(result);
     }
     if (shouldRunLowScoreOutlierReview(result, payload)) {
-      await runMergeStage("low-score-outlier-review", `第 15 步/${totalSteps}：AI 正在复核低分异常`, "低分异常复核");
+      await runMergeStage("low-score-outlier-review", `第 16 步/${totalSteps}：AI 正在复核低分异常`, "低分异常复核");
     } else {
       const skipReason = lowScoreOutlierSkipReason(result || {});
       markStage("低分异常复核", "skipped", skipReason);
@@ -1394,17 +1399,17 @@ async function startGrading() {
       if (result) renderGradingResult(result);
     }
     if (shouldRunHighBandBoundaryReview(result, payload)) {
-      await runMergeStage("high-band-boundary-review", `第 16 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
+      await runMergeStage("high-band-boundary-review", `第 17 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
     } else {
       const skipReason = highBandReviewSkipReason(result || {});
       markStage("高分边界复核", "skipped", skipReason);
       syncStageMeta();
       if (result) renderGradingResult(result);
     }
-    await runMergeStage("final-plan", `第 17 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
+    await runMergeStage("final-plan", `第 18 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 18 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 19 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
@@ -1730,6 +1735,53 @@ function renderFinalStabilityCheck(check = {}) {
 }
 
 
+function renderCriterionCalibration(calibration = {}) {
+  if (!calibration || typeof calibration !== "object" || !hasAnyText(calibration)) return "";
+  const criteria = calibration.criteria && typeof calibration.criteria === "object" ? calibration.criteria : {};
+  const rows = Object.entries(criteria).filter(([, item]) => item && typeof item === "object");
+  const pattern = calibration.scoreProfilePatternCheck && typeof calibration.scoreProfilePatternCheck === "object" ? calibration.scoreProfilePatternCheck : {};
+  const suspicious = pattern.suspiciousPattern === true || String(pattern.suspiciousPattern).toLowerCase() === "true";
+  const summaryHtml = `<div class="high-band-review-head audit-review-head">
+      <p class="muted">Pre-final AI calibration matrix. Local code does not assign IELTS bands; this gives final-plan criterion-specific evidence.</p>
+      <span class="high-band-status ${suspicious ? "is-triggered" : "is-skipped"}">${suspicious ? "Pattern flagged" : "Calibrated"}</span>
+    </div>
+    <div class="task-check-badges audit-summary-badges">
+      ${renderSafetyBadge("Status", suspicious ? "Pattern flagged" : "Calibrated", suspicious ? "is-warning" : "is-ok")}
+      ${renderSafetyBadge("Local score change", "No")}
+      ${pattern.status ? renderSafetyBadge("Profile", pattern.status, suspicious ? "is-warning" : "is-neutral") : ""}
+    </div>`;
+  const criteriaHtml = rows.length ? rows.map(([name, item]) => {
+    const positive = ensureArray(item.positiveEvidence).filter(Boolean);
+    const positiveZh = ensureArray(item.positiveEvidenceZh).filter(Boolean);
+    const limiting = ensureArray(item.limitingEvidence).filter(Boolean);
+    const limitingZh = ensureArray(item.limitingEvidenceZh).filter(Boolean);
+    const challenge = item.adjacentBandChallenge && typeof item.adjacentBandChallenge === "object" ? item.adjacentBandChallenge : {};
+    return `<div class="criterion-calibration-item">
+      <h4>${escapeHtml(name)}${item.selectedBand ? ` · Band ${escapeHtml(formatMockBand(item.selectedBand))}` : ""}</h4>
+      <div class="task-check-badges audit-summary-badges">
+        ${item.candidateBandRange ? renderSafetyBadge("Range", item.candidateBandRange) : ""}
+        ${item.selectedBand ? renderSafetyBadge("Selected", `Band ${formatMockBand(item.selectedBand)}`, "is-ok") : ""}
+      </div>
+      ${positive.length ? `<strong>Positive evidence</strong>${translatedListHtml(positive, positiveZh, "positive evidence")}` : ""}
+      ${limiting.length ? `<strong>Limiting evidence</strong>${translatedListHtml(limiting, limitingZh, "limiting evidence")}` : ""}
+      ${item.whyNotLower ? renderTextWithTranslation(`Why not lower: ${item.whyNotLower}`, item.whyNotLowerZh, { tag: "p" }) : ""}
+      ${item.whyNotHigher ? renderTextWithTranslation(`Why not higher: ${item.whyNotHigher}`, item.whyNotHigherZh, { tag: "p" }) : ""}
+      ${(challenge.whyNotLowerBand || challenge.whyNotHigherBand) ? collapsibleSection("Adjacent band challenge", `
+        ${challenge.lowerBand ? `<p><strong>Lower band:</strong> ${escapeHtml(challenge.lowerBand)}</p>` : ""}
+        ${challenge.whyNotLowerBand ? `<p>${escapeHtml(challenge.whyNotLowerBand)}</p>` : ""}
+        ${challenge.higherBand ? `<p><strong>Higher band:</strong> ${escapeHtml(challenge.higherBand)}</p>` : ""}
+        ${challenge.whyNotHigherBand ? `<p>${escapeHtml(challenge.whyNotHigherBand)}</p>` : ""}
+      `, { className: "high-band-compact-details" }) : ""}
+    </div>`;
+  }).join("") : `<p class="muted">No criterion calibration rows were returned.</p>`;
+  const bodyHtml = `
+    ${criteriaHtml}
+    ${pattern.reason ? collapsibleSection("Score profile pattern check", renderTextWithTranslation(pattern.reason, pattern.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${calibration.calibrationConclusion ? collapsibleSection("Calibration conclusion", renderTextWithTranslation(calibration.calibrationConclusion, calibration.calibrationConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    <p class="muted">本地是否改分：否。这里是最终评分前的四项分档校准，最终四项分仍由 final-plan AI 决定。</p>`;
+  return renderAuditDetails("四项分档校准 / Criterion Calibration Matrix", summaryHtml, bodyHtml, `criterion-calibration-card ${suspicious ? "is-triggered-card" : ""}`);
+}
+
 function renderFinalScoreSanityGate(gate = {}) {
   if (!gate || typeof gate !== "object" || !hasAnyText(gate)) return "";
   const triggered = gate.triggered === true || String(gate.triggered).toLowerCase() === "true";
@@ -1738,7 +1790,11 @@ function renderFinalScoreSanityGate(gate = {}) {
   const reasonsZh = ensureArray(gate.reasonsZh).filter(Boolean);
   const originalRows = gate.originalCriteria && typeof gate.originalCriteria === "object" ? Object.entries(gate.originalCriteria) : [];
   const repairedRows = gate.repairedCriteria && typeof gate.repairedCriteria === "object" ? Object.entries(gate.repairedCriteria) : [];
-  const outliers = ensureArray(gate.outlierCriteria || gate.veryLowCriteria).filter(Boolean);
+  const outliers = [
+    ...ensureArray(gate.outlierCriteria),
+    ...ensureArray(gate.veryLowCriteria),
+    ...ensureArray(gate.calibrationDisagreements)
+  ].filter(Boolean);
   const summaryHtml = `<div class="high-band-review-head audit-review-head">
       <p class="muted">Post-final AI-only sanity gate. Local code does not assign IELTS bands; it only forces AI repair when final bands are internally inconsistent.</p>
       <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
@@ -1763,6 +1819,7 @@ function renderFinalScoreSanityGate(gate = {}) {
 function renderLowScoreSafetyAudit(result = {}) {
   const parts = [
     renderRateabilityProfile(result.rateabilityProfile),
+    renderCriterionCalibration(result.criterionCalibration),
     renderCriterionOutlierReview(result.criterionOutlierReview),
     renderLowScoreOutlierReview(result.lowScoreOutlierReview),
     renderFinalScoreSanityGate(result.finalScoreSanityGate),
@@ -3736,6 +3793,7 @@ const MOCK_FINAL_SCORING_STAGES = [
   ["task-diagnosis", "任务完成/回应诊断"],
   ["coherence-diagnosis", "结构与衔接诊断"],
   ["evidence-map", "评分证据地图"],
+  ["criterion-calibration", "四项分档校准"],
   ["criterion-boundary", "半分边界判断"],
   ["criterion-outlier-review", "单项异常分复核"],
   ["low-score-outlier-review", "低分异常复核"],
