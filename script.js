@@ -1518,6 +1518,107 @@ function renderLocalScoreAudit(result = {}) {
 }
 
 
+
+function highBandShortCriterionName(name) {
+  const text = String(name || "").toLowerCase();
+  if (text.includes("task response")) return "TR";
+  if (text.includes("task achievement")) return "TA";
+  if (text.includes("coherence")) return "CC";
+  if (text.includes("lexical")) return "LR";
+  if (text.includes("grammatical") || text.includes("grammar")) return "GRA";
+  return String(name || "Criterion").split(/\s+/).map((word) => word[0]).join("").slice(0, 4).toUpperCase();
+}
+
+function highBandTaskCheckLabel(key) {
+  const normalized = String(key || "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").trim().toLowerCase();
+  const map = {
+    allrequiredpartsanswered: "All required parts answered",
+    clearposition: "Clear position",
+    developedideas: "Developed ideas",
+    relevantexamples: "Relevant examples",
+    clearprogression: "Clear progression",
+    fewerrors: "Few errors",
+    bulletpointscovered: "Bullet points covered",
+    clearletterpurpose: "Clear letter purpose",
+    appropriatetone: "Appropriate tone",
+    recipientrelationshipclear: "Recipient relationship clear",
+    naturalopeningclosing: "Natural opening/closing"
+  };
+  const compact = normalized.replace(/\s+/g, "");
+  return map[compact] || normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function highBandTaskCheckBadge(key, value) {
+  const label = highBandTaskCheckLabel(key);
+  const normalized = String(value ?? "").toLowerCase();
+  const passed = value === true || ["true", "yes", "covered", "fully covered", "mostly covered"].includes(normalized);
+  const failed = value === false || ["false", "no", "missing", "not covered", "uncovered"].includes(normalized);
+  const cls = passed ? "is-ok" : failed ? "is-warning" : "is-neutral";
+  const suffix = (!passed && !failed && value !== undefined && value !== null && typeof value !== "object") ? `: ${String(value)}` : "";
+  return `<span class="task-check-badge ${cls}">${escapeHtml(label + suffix)}</span>`;
+}
+
+
+function highBandDisplayBand(value) {
+  const text = String(value ?? "").trim();
+  const numeric = Number(text.replace(/band\s*/i, ""));
+  if (Number.isFinite(numeric) && numeric > 0) return formatMockBand(numeric);
+  return text || "-";
+}
+
+function highBandAverageBand(entries = []) {
+  const nums = entries.map(([, value]) => Number(value)).filter(Number.isFinite);
+  if (!nums.length) return "";
+  const avg = nums.reduce((sum, value) => sum + value, 0) / nums.length;
+  return formatMockBand(Math.round(avg * 2) / 2);
+}
+
+function renderHighBandEvidenceList(title, items, zhItems, label, options = {}) {
+  const list = ensureArray(items).filter(Boolean).slice(0, options.limit || 4);
+  const hiddenCount = Math.max(0, ensureArray(items).filter(Boolean).length - list.length);
+  const zhList = ensureArray(zhItems).filter(Boolean);
+  if (!list.length) return "";
+  const zhText = zhList.length ? zhList.slice(0, list.length).map((item, index) => `${index + 1}. ${item}`).join("\n") : "";
+  const body = `<ul class="high-band-evidence-list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${hiddenCount ? `<p class="muted high-band-hidden-note">另有 ${hiddenCount} 条证据已收起在 AI 原始结果中。</p>` : ""}${zhText ? renderZhToggle(zhText) : ""}`;
+  return `<details class="high-band-evidence-subsection"${options.defaultOpen ? " open" : ""}>
+    <summary>${escapeHtml(title)}</summary>
+    <div class="high-band-evidence-subsection-body">${body}</div>
+  </details>`;
+}
+
+function renderHighBandBoundaryTextBlock(title, firstLabel, firstText, firstZh, secondLabel, secondText, secondZh) {
+  const blocks = [];
+  if (String(firstText || "").trim()) blocks.push(`<p><strong>${escapeHtml(firstLabel)}:</strong> ${escapeHtml(firstText)}</p>`);
+  if (String(secondText || "").trim()) blocks.push(`<p><strong>${escapeHtml(secondLabel)}:</strong> ${escapeHtml(secondText)}</p>`);
+  if (!blocks.length) return "";
+  const zhParts = [firstZh, secondZh].filter((item) => String(item || "").trim());
+  return `<details class="high-band-evidence-subsection">
+    <summary>${escapeHtml(title)}</summary>
+    <div class="high-band-evidence-subsection-body">${blocks.join("")}${zhParts.length ? renderZhToggle(zhParts.join("\n")) : ""}</div>
+  </details>`;
+}
+
+function renderHighBandCriterionCard(name, item = {}, index = 0) {
+  const positive = ensureArray(item?.positiveEvidence).filter(Boolean);
+  const positiveZh = ensureArray(item?.positiveEvidenceZh).filter(Boolean);
+  const limiting = ensureArray(item?.limitingEvidence).filter(Boolean);
+  const limitingZh = ensureArray(item?.limitingEvidenceZh).filter(Boolean);
+  const band = item?.recommendedBand ? highBandDisplayBand(item.recommendedBand) : "-";
+  const summaryText = firstNonEmpty(item?.summary, item?.criterionSummary, item?.whyThisBand, item?.whyNotLower, "Open to view supporting and limiting evidence.");
+  return `<details class="high-band-criterion-card"${index === 0 ? " open" : ""}>
+    <summary>
+      <span>${escapeHtml(name)}</span>
+      <strong>Band ${escapeHtml(band)}</strong>
+    </summary>
+    <div class="high-band-criterion-body">
+      <p class="high-band-mini-summary">${escapeHtml(summaryText)}</p>
+      ${renderHighBandEvidenceList("Supporting evidence", positive, positiveZh, "Positive high-band evidence", { defaultOpen: index === 0, limit: 4 })}
+      ${renderHighBandEvidenceList("Limiting evidence", limiting, limitingZh, "Limiting high-band evidence", { defaultOpen: index === 0, limit: 3 })}
+      ${renderHighBandBoundaryTextBlock("Score boundary", "Why this is not lower", item?.whyNotLower, item?.whyNotLowerZh, "Why this is not higher", item?.whyNotHigher, item?.whyNotHigherZh)}
+    </div>
+  </details>`;
+}
+
 function renderHighBandBoundaryReview(review = {}) {
   if (!review || typeof review !== "object" || !hasAnyText(review)) return "";
   const triggered = review.triggered === true || String(review.triggered).toLowerCase() === "true";
@@ -1526,29 +1627,34 @@ function renderHighBandBoundaryReview(review = {}) {
   const recBands = review.recommendedFinalBands && typeof review.recommendedFinalBands === "object" ? Object.entries(review.recommendedFinalBands).filter(([, value]) => String(value ?? "").trim()) : [];
   const criteria = review.criteriaReview && typeof review.criteriaReview === "object" ? Object.entries(review.criteriaReview) : [];
   const checklist = review.taskSpecificChecklist && typeof review.taskSpecificChecklist === "object" ? Object.entries(review.taskSpecificChecklist) : [];
-  return `<section class="grading-section high-band-boundary-review">
-    <h4>高分边界复核 / High-band Boundary Review</h4>
-    <p><strong>是否触发复核：</strong>${triggered ? "是" : "否"}</p>
-    <p><strong>本地是否改分：</strong>否。这里只显示 AI 高分边界复核证据，最终分数仍由 AI 最终复核决定。</p>
-    ${review.candidateRange ? `<p><strong>复核区间：</strong>${escapeHtml(review.candidateRange)}</p>` : ""}
-    ${reasons.length ? `<div><strong>触发原因：</strong>${translatedListHtml(reasons, reasonsZh, "High-band review trigger")}</div>` : ""}
-    ${checklist.length ? `<div><strong>任务专项检查：</strong><ul>${checklist.map(([key, value]) => `<li>${escapeHtml(key)}：${escapeHtml(typeof value === "object" ? JSON.stringify(value) : String(value))}</li>`).join("")}</ul></div>` : ""}
-    ${recBands.length ? `<div><strong>AI 建议复核四项分：</strong><div class="score-calculation-grid">${recBands.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div></div>` : ""}
-    ${review.overallRecommendation ? renderTextWithTranslation(review.overallRecommendation, review.overallRecommendationZh, { tag: "p" }) : ""}
-    ${review.whyNot7 ? renderTextWithTranslation(`Why not Band 7.0: ${review.whyNot7}`, review.whyNot7Zh, { tag: "p" }) : ""}
-    ${review.whyNotHigher ? renderTextWithTranslation(`Why not higher: ${review.whyNotHigher}`, review.whyNotHigherZh, { tag: "p" }) : ""}
-    ${criteria.length ? collapsibleSection("四项高分边界证据", criteria.map(([name, item]) => {
-      const positive = ensureArray(item?.positiveEvidence).filter(Boolean);
-      const positiveZh = ensureArray(item?.positiveEvidenceZh).filter(Boolean);
-      const limiting = ensureArray(item?.limitingEvidence).filter(Boolean);
-      const limitingZh = ensureArray(item?.limitingEvidenceZh).filter(Boolean);
-      return `<div class="criterion-evidence-body"><h4>${escapeHtml(name)} ${item?.recommendedBand ? `Band ${escapeHtml(formatMockBand(item.recommendedBand))}` : ""}</h4>
-        ${positive.length ? `<div><strong>支持更高分证据：</strong>${translatedListHtml(positive, positiveZh, "Positive high-band evidence")}</div>` : ""}
-        ${limiting.length ? `<div><strong>限制更高分证据：</strong>${translatedListHtml(limiting, limitingZh, "Limiting high-band evidence")}</div>` : ""}
-        ${item?.whyNotLower ? renderTextWithTranslation(`Why not lower: ${item.whyNotLower}`, item.whyNotLowerZh, { tag: "p" }) : ""}
-        ${item?.whyNotHigher ? renderTextWithTranslation(`Why not higher: ${item.whyNotHigher}`, item.whyNotHigherZh, { tag: "p" }) : ""}
-      </div>`;
-    }).join(""), { bodyClass: "compact-body" }) : ""}
+  const suggestedBand = firstNonEmpty(review.overallRecommendedBand, review.suggestedOverallBand, highBandAverageBand(recBands));
+  const reasonZhText = reasonsZh.length ? reasonsZh.map((item, index) => `${index + 1}. ${item}`).join("\n") : "";
+  const reasonBlock = reasons.length ? `<ul class="high-band-evidence-list">${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonZhText ? renderZhToggle(reasonZhText) : ""}` : `<p class="muted">No trigger reason was returned.</p>`;
+  return `<section class="grading-section high-band-boundary-review high-band-review-panel">
+    <div class="high-band-review-head">
+      <div>
+        <h4>高分边界复核 / High-band Boundary Review</h4>
+        <p class="muted">AI-only review evidence. Local code does not raise, lower, or cap the score.</p>
+      </div>
+      <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
+    </div>
+    <div class="high-band-summary-grid">
+      <div class="high-band-summary-item"><span>Status</span><strong>${triggered ? "Triggered" : "Not triggered"}</strong></div>
+      ${review.candidateRange ? `<div class="high-band-summary-item"><span>Review range</span><strong>${escapeHtml(review.candidateRange)}</strong></div>` : ""}
+      ${suggestedBand ? `<div class="high-band-summary-item"><span>AI suggested band</span><strong>Band ${escapeHtml(highBandDisplayBand(suggestedBand))}</strong></div>` : ""}
+      <div class="high-band-summary-item"><span>Local score change</span><strong>No</strong></div>
+    </div>
+    ${recBands.length ? `<div class="high-band-score-pills">${recBands.map(([name, band]) => `<span class="score-pill"><b>${escapeHtml(highBandShortCriterionName(name))}</b> ${escapeHtml(highBandDisplayBand(band))}</span>`).join("")}</div>` : ""}
+    ${checklist.length ? `<div class="task-check-badges" aria-label="Task-specific high-band checks">${checklist.map(([key, value]) => highBandTaskCheckBadge(key, value)).join("")}</div>` : ""}
+    <div class="high-band-detail-actions">
+      ${reasons.length ? collapsibleSection("Trigger reasons", reasonBlock, { className: "high-band-compact-details" }) : ""}
+      ${review.overallRecommendation ? collapsibleSection("Overall recommendation", renderTextWithTranslation(review.overallRecommendation, review.overallRecommendationZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+      ${(review.whyNot7 || review.whyNotHigher) ? collapsibleSection("Score boundary summary", `
+        ${review.whyNot7 ? renderTextWithTranslation(`Why this is not Band 7.0: ${review.whyNot7}`, review.whyNot7Zh, { tag: "p" }) : ""}
+        ${review.whyNotHigher ? renderTextWithTranslation(`Why this is not higher: ${review.whyNotHigher}`, review.whyNotHigherZh, { tag: "p" }) : ""}
+      `, { className: "high-band-compact-details" }) : ""}
+    </div>
+    ${criteria.length ? collapsibleSection("四项高分边界证据 / Criterion high-band evidence", `<div class="high-band-criterion-list">${criteria.map(([name, item], index) => renderHighBandCriterionCard(name, item, index)).join("")}</div>`, { bodyClass: "compact-body high-band-criterion-wrap" }) : ""}
   </section>`;
 }
 
