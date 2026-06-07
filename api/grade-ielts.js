@@ -1190,7 +1190,11 @@ function buildExpectedJsonShape(task, locale = "en") {
         type: "tense / article / subject-verb agreement / word form / sentence structure / punctuation / other",
         original: "...",
         corrected: "...",
-        explanation: "...",
+        problem: "What is grammatically wrong in this exact text.",
+        rule: "The grammar rule or sentence-control principle.",
+        whyCorrected: "Why the corrected wording fixes the grammar problem.",
+        bandImpact: "How this affects Grammatical Range and Accuracy.",
+        explanation: "A concise combined explanation.",
         explanationZh: emptyForLocaleZh("Brief Chinese explanation", locale)
       }
     ],
@@ -1852,7 +1856,7 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
       { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
     ],
     grammarErrors: [
-      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+      { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
     ],
     sentenceCorrections: [
       { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -1920,7 +1924,9 @@ function buildAiCorrectionPrompt(body, mode, locale = "en") {
     "If the essay has more than 30 words, quote and correct at least 8 clear original errors unless there are genuinely fewer visible errors. For essays above 150 words, aim for 12+ concrete corrections across spellingCorrections, grammarErrors, sentenceCorrections, and detailedSentenceCorrections when errors exist.",
     "For high-band writing with few errors, do not invent errors; instead give precise polishing advice with evidence, but do not display harmless salutation/closing items as errors.",
     "For spellingCorrections, include obvious misspellings and typo-like errors. Do not include correct words.",
-    "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, and sentence-structure errors.",
+    "For grammarErrors, include tense, agreement, article, plural, word-form, punctuation, preposition, clause, and sentence-structure errors.",
+    "Grammar Errors must NOT include spelling-only, typo-only, or misspelling-only errors. If the only issue is incorrect spelling, return it only in spellingCorrections, not grammarErrors.",
+    "For each grammarErrors item, fill problem, rule, whyCorrected, and bandImpact. Explain what is wrong, what it changes to, why the correction is grammatically necessary, and how it affects Grammatical Range and Accuracy.",
     "For detailedSentenceCorrections, include only score-impacting issues. Include originalSentence, correctedSentence, betterExpression, problem, rule, bandImpact, scoreImpacting=true, whyThisAffectsBand, targetBandExpression, and betterExpressionTargetBand when a useful next-band expression exists.",
     "betterExpression must be a realistic next-step expression: Band 0-4.5 -> Band 5.0; Band 5.0 -> Band 5.5-6.0; Band 5.5 -> Band 6.0-6.5; Band 6.0 -> Band 6.5-7.0; Band 6.5 -> Band 7.0-7.5; Band 7.0 -> Band 7.5-8.0; Band 7.5 -> Band 8.0-8.5; Band 8.0 -> Band 8.5-9.0; Band 8.5 -> Band 9.0.",
     "Do not omit betterExpression just because the upgrade is modest. Show it when it is complete, preserves meaning, and is more natural or clearer at the target band.",
@@ -2183,13 +2189,68 @@ function normalizeSpellingCorrectionItem(item) {
   };
 }
 
+function compactErrorText(value) {
+  return String(value || "").toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9]+/g, "").trim();
+}
+
+function isSingleTokenText(value) {
+  const text = String(value || "").trim();
+  return Boolean(text && /^[A-Za-z][A-Za-z'’-]*$/.test(text));
+}
+
+function isSpellingOnlyGrammarError(item) {
+  if (!item || typeof item !== "object") return false;
+  const type = String(item.type || item.errorType || item.category || "").toLowerCase();
+  const explanation = String(item.explanation || item.problem || item.reason || item.comment || "").toLowerCase();
+  const original = String(item.original || item.originalSentence || item.sentence || item.wrong || "").trim();
+  const corrected = String(item.corrected || item.correctedSentence || item.correction || item.fixed || item.right || "").trim();
+  const typeSaysSpelling = /\b(spelling|misspelling|typo)\b/.test(type);
+  const explanationOnlySpelling = /incorrect spelling|misspell|misspelling|spelling error|typo/.test(explanation) &&
+    !/verb|tense|article|plural|agreement|preposition|clause|fragment|run[- ]on|punctuation|word order|sentence structure|grammar/.test(explanation);
+  if (typeSaysSpelling) return true;
+  if (isSingleTokenText(original) && isSingleTokenText(corrected) && compactErrorText(original) !== compactErrorText(corrected) && explanationOnlySpelling) return true;
+  return false;
+}
+
+function spellingKeyFromWords(originalWord, correctedWord) {
+  return `${compactErrorText(originalWord)}→${compactErrorText(correctedWord)}`;
+}
+
+function addSpellingCorrectionIfMissing(list, item) {
+  const originalWord = pickFirstUsefulValue(item, ["originalWord", "misspelledWord", "incorrectWord", "word", "original", "wrongWord"]);
+  const correctedWord = pickFirstUsefulValue(item, ["correctedWord", "correctWord", "correction", "corrected", "correctSpelling", "rightWord"]);
+  if (!isSingleTokenText(originalWord) || !isSingleTokenText(correctedWord) || compactErrorText(originalWord) === compactErrorText(correctedWord)) return list;
+  const key = spellingKeyFromWords(originalWord, correctedWord);
+  const exists = ensureArray(list).some((entry) => spellingKeyFromWords(entry.originalWord, entry.correctedWord) === key);
+  if (exists) return list;
+  return ensureArray(list).concat([{
+    originalWord,
+    correctedWord,
+    sentence: pickFirstUsefulValue(item, ["sentence", "context", "originalSentence", "sourceSentence", "where", "original"]),
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "comment"]) || `Incorrect spelling of '${correctedWord}'.`,
+    explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "commentZh"]) || "这是单词拼写错误，已移到拼写错误栏。"
+  }]);
+}
+
 function normalizeGrammarErrorItem(item) {
   if (!item || typeof item !== "object") return null;
+  const problem = pickFirstUsefulValue(item, ["problem", "issue", "whatIsWrong", "explanation", "reason", "comment"]);
+  const rule = pickFirstUsefulValue(item, ["rule", "grammarRule", "howToFix", "grammarPoint"]);
+  const whyCorrected = pickFirstUsefulValue(item, ["whyCorrected", "whyThisCorrection", "whyChange", "whyThisIsCorrect", "correctionReason"]);
+  const bandImpact = pickFirstUsefulValue(item, ["bandImpact", "impactOnBand", "scoreImpact", "whyThisAffectsBand", "whyAffectsBand"]);
   return {
     type: pickFirstUsefulValue(item, ["type", "errorType", "category", "ruleType"]) || "grammar",
     original: pickFirstUsefulValue(item, ["original", "originalSentence", "sentence", "sourceSentence", "wrong"]),
     corrected: pickFirstUsefulValue(item, ["corrected", "correctedSentence", "correction", "fixed", "right"]),
-    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "problem", "rule", "comment"]),
+    problem,
+    rule,
+    whyCorrected,
+    bandImpact,
+    explanation: pickFirstUsefulValue(item, ["explanation", "reason", "comment"]) || [problem, rule, whyCorrected].filter(Boolean).join(" "),
+    problemZh: pickFirstUsefulValue(item, ["problemZh", "issueZh", "whatIsWrongZh"]),
+    ruleZh: pickFirstUsefulValue(item, ["ruleZh", "grammarRuleZh", "howToFixZh", "grammarPointZh"]),
+    whyCorrectedZh: pickFirstUsefulValue(item, ["whyCorrectedZh", "whyThisCorrectionZh", "whyChangeZh", "whyThisIsCorrectZh", "correctionReasonZh"]),
+    bandImpactZh: pickFirstUsefulValue(item, ["bandImpactZh", "impactOnBandZh", "scoreImpactZh", "whyThisAffectsBandZh", "whyAffectsBandZh"]),
     explanationZh: pickFirstUsefulValue(item, ["explanationZh", "reasonZh", "problemZh", "ruleZh", "commentZh"])
   };
 }
@@ -2448,10 +2509,17 @@ function sanitizeAiCorrectionPayload(correction) {
     .map((item) => normalizeSpellingCorrectionItem(item))
     .filter((item) => correctionObjectHasText(item, ["originalWord", "correctedWord", "sentence", "explanation"]));
 
-  cleaned.grammarErrors = ensureArray(cleaned.grammarErrors)
+  const normalizedGrammarErrors = ensureArray(cleaned.grammarErrors)
     .map((item) => normalizeGrammarErrorItem(item))
-    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation"]))
-    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["type", "explanation"]));
+    .filter((item) => correctionObjectHasText(item, ["original", "corrected", "explanation", "problem", "rule", "whyCorrected", "bandImpact"]));
+
+  normalizedGrammarErrors.forEach((item) => {
+    if (isSpellingOnlyGrammarError(item)) cleaned.spellingCorrections = addSpellingCorrectionIfMissing(cleaned.spellingCorrections, item);
+  });
+
+  cleaned.grammarErrors = normalizedGrammarErrors
+    .filter((item) => !isSpellingOnlyGrammarError(item))
+    .filter((item) => isScoreImpactingSimpleCorrection(item, "original", "corrected", ["type", "explanation", "problem", "rule", "whyCorrected", "bandImpact"]));
 
   cleaned.sentenceCorrections = ensureArray(cleaned.sentenceCorrections)
     .map((item) => normalizeSentenceCorrectionItem(item))
@@ -2643,7 +2711,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
       { originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }
     ],
     grammarErrors: [
-      { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+      { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
     ],
     sentenceCorrections: [
       { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -2681,7 +2749,7 @@ function buildFocusedAiCorrectionPrompt(body, mode, locale = "en") {
     "Use exact text from the essay for original/originalSentence/sentence/originalWord.",
     "For each corrected sentence, include correctedSentence as the direct fix. Include betterExpression when it gives a useful next-step rewrite at the target band range. Do not include it for identical wording, meaningless synonym swaps, incomplete/truncated sentences, or rewrites that delete reasons, purpose, conditions, results, or task content.",
     "Include spelling errors if any misspelled words appear.",
-    "Include grammar and sentence-control problems if any are visible.",
+    "Include grammar and sentence-control problems if any are visible. Do not put spelling-only or typo-only errors in grammarErrors; those belong only in spellingCorrections.",
     task === "Task 1"
       ? "Also mention tone, purpose, and bullet-point problems in advice arrays if relevant."
       : "Also mention position, idea development, examples, paragraphing, and conclusion problems in advice arrays if relevant.",
@@ -3879,7 +3947,7 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
       "Return JSON with this exact shape:",
       JSON.stringify({
         grammarErrors: [
-          { type: "", original: "", corrected: "", explanation: "", explanationZh: "" }
+          { type: "", original: "", corrected: "", problem: "", rule: "", whyCorrected: "", bandImpact: "", explanation: "", explanationZh: "" }
         ],
         sentenceCorrections: [
           { original: "", corrected: "", reason: "", reasonZh: "" }
@@ -3890,7 +3958,8 @@ function buildFocusedSectionPrompt(body, mode, section, locale = "en") {
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
       `Find all clear grammar, word-form, article, tense, plural, agreement, preposition, punctuation, and sentence-structure errors. Return up to ${limit} items.`,
-      "Each item must include original text from the essay, corrected text, a specific rule/explanation, and why it affects Grammatical Range and Accuracy.",
+      "Do NOT include spelling-only, typo-only, or misspelling-only errors in grammarErrors. Put pure misspellings only in spellingCorrections.",
+      "Each grammarErrors item must include original text from the essay, corrected text, problem, rule, whyCorrected, bandImpact, and a specific explanation of why it affects Grammatical Range and Accuracy.",
       "For high-band essays, return only real accuracy or naturalness issues that could affect the score; do not mark correct sentences.",
       "Do not return errorType None, No significant improvement needed, No impact on band score, or unchanged corrections.",
       ...common
@@ -4071,7 +4140,7 @@ function buildFocusedSectionRetryPrompt(body, mode, section, locale = "en", prev
     section === "task" ? "Return task-specific correction content: Task 1 bullet/tone/purpose advice or Task 2 position/development/conclusion advice, plus taskAchievementAdvice and coherenceAdvice." : "",
     section === "language" ? "Return only score-impacting grammar, sentence structure, word-form, tense, article, punctuation, or meaning-control problems. Do not return None/No impact items." : "",
     section === "vocabulary" ? "Return only score-impacting spelling, word choice, collocation, repetition, register, or lexical precision problems. If no spelling errors exist, still return lexical advice or a short errorAnalysis.summary." : "",
-    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
+    section === "grammar" ? "If the essay has any grammar, word-form, article, tense, plural, preposition, punctuation, or sentence-control problem, return concrete grammarErrors with original and corrected text plus problem, rule, whyCorrected, and bandImpact. Do not include spelling-only or typo-only errors in grammarErrors; put pure misspellings only in spellingCorrections. If the essay genuinely has no major grammar errors, return a specific errorAnalysis.summary and grammarAdvice instead of an empty object." : "",
     section === "sentence" ? "Return concrete sentenceCorrections and detailedSentenceCorrections. Quote original sentences from the essay and provide correctedSentence as the direct fix. Provide betterExpression when it gives a realistic next-step rewrite at the target band range. Do not include it for identical wording, meaningless one-word synonym changes, incomplete/truncated sentences, or rewrites that delete important meaning." : "",
     section === "advice" ? "Return non-empty targetImprovementPlan, correctionPriority, taskAchievementAdvice, coherenceAdvice, lexicalAdvice, grammarAdvice, and the relevant Task 1/Task 2 correction object. For every English advice array, return a matching Chinese array with the same number of items: taskAchievementAdviceZh, coherenceAdviceZh, lexicalAdviceZh, grammarAdviceZh, band5FixPlanZh, band6UpgradePlanZh, band7UpgradePlanZh. Each Chinese item must specifically explain its English item, not a generic template." : "",
     section === "spelling" ? "If there are no spelling mistakes, return spellingCorrections as [] and write a short errorAnalysis.summary confirming no obvious spelling mistakes were found." : ""
@@ -7711,6 +7780,10 @@ async function handleRequest(req, res) {
     result = applyNextBandTargetPlan(result, body);
     result = applyFinalBetterExpressionTargetSync(result, body);
     if (result && typeof result === "object") {
+      const sanitizedCorrections = sanitizeAiCorrectionPayload(result);
+      ["spellingCorrections", "grammarErrors", "sentenceCorrections", "detailedSentenceCorrections"].forEach((field) => {
+        if (Array.isArray(sanitizedCorrections[field])) result[field] = sanitizedCorrections[field];
+      });
       result.detailedSentenceCorrections = dedupeCorrections(result.detailedSentenceCorrections || []);
       result.betterExpressionItems = applyFinalBetterExpressionTargetSync({ betterExpressionItems: normalizeBetterExpressionItems(result.betterExpressionItems || []) }, body).betterExpressionItems || [];
     }

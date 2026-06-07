@@ -586,3 +586,21 @@
 .low-score-safety-card .task-check-badges{margin:10px 0}
 .criterion-outlier-card,.low-score-outlier-card{border-left:4px solid var(--amber)}
 .final-stability-card{border-left:4px solid var(--blue)}
+
+/* Grammar column separation + richer grammar explanations */
+.grammar-error-list{display:grid;gap:12px}
+.grammar-error-card{border-left:4px solid var(--blue);background:var(--card)}
+.grammar-error-card p{margin:0 0 8px;line-height:1.55}
+.grammar-error-card p:last-child{margin-bottom:0}
+.grammar-error-card strong{color:var(--ink)}
+
+/* Low-score audit sections should be compact/collapsed by default */
+details.low-score-safety-card{padding:0;margin:12px 0;background:var(--soft)}
+details.low-score-safety-card>summary{min-height:54px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:850;cursor:pointer;list-style:none}
+details.low-score-safety-card>summary::-webkit-details-marker{display:none}
+details.low-score-safety-card>summary::after{content:"+";display:grid;place-items:center;flex:0 0 auto;width:30px;height:30px;border:1px solid var(--line2);border-radius:999px;color:var(--teal);font-weight:900}
+details.low-score-safety-card[open]>summary::after{content:"-"}
+details.low-score-safety-card .feedback-collapse-body{padding:14px;border-top:1px solid var(--line)}
+.audit-summary-badges{margin:8px 0 10px}.audit-review-head{margin-bottom:8px}
+.low-score-safety-card.criterion-outlier-card,.low-score-safety-card.low-score-outlier-card{border-left:4px solid var(--amber)}
+.low-score-safety-card.final-stability-card{border-left:4px solid var(--blue)}
