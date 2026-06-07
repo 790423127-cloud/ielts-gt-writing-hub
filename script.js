@@ -831,7 +831,7 @@ function mergeAiStageResult(base, incoming) {
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
-    "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
+    "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "taskMatchCheck", "wordCountWarning",
     "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
@@ -963,6 +963,9 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "better-expression-plan") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
     return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) || hasAnyText(data.correctionPriority));
+  }
+  if (aiStage === "high-band-boundary-review") {
+    return Boolean(hasAnyText(data.highBandBoundaryReview) || hasAnyText(data.highBandDiagnostics));
   }
   if (aiStage === "final-plan") {
     return Boolean(data.scoreFinalized || (data.criteria && Object.values(data.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
@@ -1184,6 +1187,38 @@ async function generateRevisionOnly() {
 }
 
 
+
+function numericBandValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shouldRunHighBandBoundaryReview(result = {}, payload = {}) {
+  if (!result || typeof result !== "object") return false;
+  const overall = numericBandValue(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand);
+  const bands = criterionBandsFromResult(result).map((item) => numericBandValue(item.band)).filter((n) => n !== null);
+  const allSame = bands.length >= 4 && new Set(bands.map((n) => formatMockBand(n))).size === 1;
+  const nearHighBand = (overall !== null && overall >= 6.5 && overall <= 8.5) || bands.some((n) => n >= 6.5 && n <= 8.5);
+  const allSevenish = allSame && bands.some((n) => n >= 7 && n <= 7.5);
+  const diagnostics = result.highBandDiagnostics && typeof result.highBandDiagnostics === "object" ? result.highBandDiagnostics : {};
+  const highDiagSignal = [diagnostics.fullyAddressesTask, diagnostics.clearProgression, diagnostics.wellDevelopedIdeas, diagnostics.wideAccurateVocabulary, diagnostics.flexibleGrammar, diagnostics.fewErrors, diagnostics.appropriateToneTask1]
+    .filter((value) => value === true || String(value).toLowerCase() === "true").length >= 3 || /7\.5|8|9|high/i.test(String(diagnostics.recommendedHighBandRange || diagnostics.reason || ""));
+  const fewCorrections = (ensureArray(result.detailedSentenceCorrections).length + ensureArray(result.sentenceCorrections).length + ensureArray(result.grammarErrors).length) <= 3;
+  const vagueWhyNotHigher = /could be more nuanced|more developed|smoother|more precise|not outstanding|minor refinement/i.test([
+    result.scoreCalibration?.whyNotHigher,
+    ...Object.values(result.criteria || {}).map((item) => item?.whyNotHigher || item?.halfBandDecision || "")
+  ].join(" "));
+  return Boolean(nearHighBand && (allSevenish || highDiagSignal || fewCorrections || vagueWhyNotHigher));
+}
+
+function highBandReviewSkipReason(result = {}) {
+  const overall = numericBandValue(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand);
+  if (overall === null) return "当前阶段还没有可用分数，跳过高分边界复核。";
+  if (overall < 6.5) return "当前分数未进入高分边界区间，优先使用低/中分段评分与修改建议。";
+  if (overall > 8.5) return "当前已处于很高分段，最终复核会直接处理 8.5/9.0 边界。";
+  return "未发现明显高分作文被低估信号，跳过额外高分边界复核。";
+}
+
 async function startGrading() {
   if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
   if (els.gradeBtn.disabled) return;
@@ -1213,7 +1248,7 @@ async function startGrading() {
 
   const payload = gradingPayload();
   // Full grading now runs 13 smaller AI stages. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 14 : 13;
+  const totalSteps = payload.mode === "revision" ? 15 : 14;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1283,10 +1318,18 @@ async function startGrading() {
     await runMergeStage("coherence-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
     await runMergeStage("evidence-map", `第 11 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
     await runMergeStage("criterion-boundary", `第 12 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
-    await runMergeStage("final-plan", `第 13 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
+    if (shouldRunHighBandBoundaryReview(result, payload)) {
+      await runMergeStage("high-band-boundary-review", `第 13 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
+    } else {
+      const skipReason = highBandReviewSkipReason(result || {});
+      markStage("高分边界复核", "skipped", skipReason);
+      syncStageMeta();
+      if (result) renderGradingResult(result);
+    }
+    await runMergeStage("final-plan", `第 14 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 14 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 15 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
@@ -1472,6 +1515,41 @@ function renderLocalScoreAudit(result = {}) {
     ${checks.wordCount !== undefined ? `<p><strong>客观检查：</strong>${escapeHtml(checks.task || "Task")}；字数 ${escapeHtml(checks.wordCount)} / ${escapeHtml(checks.recommendedMinimum || "-")}；段落 ${escapeHtml(checks.paragraphCount ?? "-")}；句子 ${escapeHtml(checks.sentenceUnitCount ?? "-")}</p>` : ""}
     ${warnings.length ? `<div><strong>本地客观提醒（warning-only，不改分）：</strong>${translatedListHtml(warnings, warningsZh, "Objective warning")}</div>` : ""}
   </div>`;
+}
+
+
+function renderHighBandBoundaryReview(review = {}) {
+  if (!review || typeof review !== "object" || !hasAnyText(review)) return "";
+  const triggered = review.triggered === true || String(review.triggered).toLowerCase() === "true";
+  const reasons = ensureArray(review.triggerReasons).filter(Boolean);
+  const reasonsZh = ensureArray(review.triggerReasonsZh).filter(Boolean);
+  const recBands = review.recommendedFinalBands && typeof review.recommendedFinalBands === "object" ? Object.entries(review.recommendedFinalBands).filter(([, value]) => String(value ?? "").trim()) : [];
+  const criteria = review.criteriaReview && typeof review.criteriaReview === "object" ? Object.entries(review.criteriaReview) : [];
+  const checklist = review.taskSpecificChecklist && typeof review.taskSpecificChecklist === "object" ? Object.entries(review.taskSpecificChecklist) : [];
+  return `<section class="grading-section high-band-boundary-review">
+    <h4>高分边界复核 / High-band Boundary Review</h4>
+    <p><strong>是否触发复核：</strong>${triggered ? "是" : "否"}</p>
+    <p><strong>本地是否改分：</strong>否。这里只显示 AI 高分边界复核证据，最终分数仍由 AI 最终复核决定。</p>
+    ${review.candidateRange ? `<p><strong>复核区间：</strong>${escapeHtml(review.candidateRange)}</p>` : ""}
+    ${reasons.length ? `<div><strong>触发原因：</strong>${translatedListHtml(reasons, reasonsZh, "High-band review trigger")}</div>` : ""}
+    ${checklist.length ? `<div><strong>任务专项检查：</strong><ul>${checklist.map(([key, value]) => `<li>${escapeHtml(key)}：${escapeHtml(typeof value === "object" ? JSON.stringify(value) : String(value))}</li>`).join("")}</ul></div>` : ""}
+    ${recBands.length ? `<div><strong>AI 建议复核四项分：</strong><div class="score-calculation-grid">${recBands.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div></div>` : ""}
+    ${review.overallRecommendation ? renderTextWithTranslation(review.overallRecommendation, review.overallRecommendationZh, { tag: "p" }) : ""}
+    ${review.whyNot7 ? renderTextWithTranslation(`Why not Band 7.0: ${review.whyNot7}`, review.whyNot7Zh, { tag: "p" }) : ""}
+    ${review.whyNotHigher ? renderTextWithTranslation(`Why not higher: ${review.whyNotHigher}`, review.whyNotHigherZh, { tag: "p" }) : ""}
+    ${criteria.length ? collapsibleSection("四项高分边界证据", criteria.map(([name, item]) => {
+      const positive = ensureArray(item?.positiveEvidence).filter(Boolean);
+      const positiveZh = ensureArray(item?.positiveEvidenceZh).filter(Boolean);
+      const limiting = ensureArray(item?.limitingEvidence).filter(Boolean);
+      const limitingZh = ensureArray(item?.limitingEvidenceZh).filter(Boolean);
+      return `<div class="criterion-evidence-body"><h4>${escapeHtml(name)} ${item?.recommendedBand ? `Band ${escapeHtml(formatMockBand(item.recommendedBand))}` : ""}</h4>
+        ${positive.length ? `<div><strong>支持更高分证据：</strong>${translatedListHtml(positive, positiveZh, "Positive high-band evidence")}</div>` : ""}
+        ${limiting.length ? `<div><strong>限制更高分证据：</strong>${translatedListHtml(limiting, limitingZh, "Limiting high-band evidence")}</div>` : ""}
+        ${item?.whyNotLower ? renderTextWithTranslation(`Why not lower: ${item.whyNotLower}`, item.whyNotLowerZh, { tag: "p" }) : ""}
+        ${item?.whyNotHigher ? renderTextWithTranslation(`Why not higher: ${item.whyNotHigher}`, item.whyNotHigherZh, { tag: "p" }) : ""}
+      </div>`;
+    }).join(""), { bodyClass: "compact-body" }) : ""}
+  </section>`;
 }
 
 function renderScoreCalculation(result = {}) {
@@ -3066,6 +3144,7 @@ function renderGradingResult(result = {}) {
     ${result.scoreFinalized ? renderScoreCalibration(result.scoreCalibration, result.scoreCalibrationZh) : ""}
     ${renderLowBandDiagnostics(result.lowBandDiagnostics, result.lowBandDiagnosticsZh)}
     ${renderHighBandDiagnostics(result.highBandDiagnostics, result.highBandDiagnosticsZh)}
+    ${renderHighBandBoundaryReview(result.highBandBoundaryReview)}
     ${renderFinalScoreArea(result)}
     ${collapsibleSection("Strengths", renderListWithTranslations(result.strengthItems && result.strengthItems.length ? result.strengthItems : result.strengths, result.strengthItems && result.strengthItems.length ? [] : result.strengthsZh, "No strengths were returned for this response."))}
     ${collapsibleSection("Main Problems", renderListWithTranslations(result.mainProblemItems && result.mainProblemItems.length ? result.mainProblemItems : mainProblems.items, result.mainProblemItems && result.mainProblemItems.length ? [] : mainProblems.translations, "No major problems were identified at this band; focus on refinement."))}
@@ -3231,6 +3310,7 @@ const MOCK_FINAL_SCORING_STAGES = [
   ["coherence-diagnosis", "结构与衔接诊断"],
   ["evidence-map", "评分证据地图"],
   ["criterion-boundary", "半分边界判断"],
+  ["high-band-boundary-review", "高分边界复核"],
   ["final-plan", "最终评分复核"]
 ];
 
@@ -3259,6 +3339,10 @@ async function postMockScore(endpoint, prompt, essay, label) {
   let result = null;
   for (let i = 0; i < MOCK_FINAL_SCORING_STAGES.length; i += 1) {
     const [aiStage, stageLabel] = MOCK_FINAL_SCORING_STAGES[i];
+    if (aiStage === "high-band-boundary-review" && !shouldRunHighBandBoundaryReview(result || {}, basePayload)) {
+      setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}已跳过（未发现明显高分边界疑点）...`, "loading");
+      continue;
+    }
     setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}...`, "loading");
     const stageResult = await postMockStage(endpoint, {
       ...basePayload,

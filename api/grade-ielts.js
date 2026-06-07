@@ -841,7 +841,7 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Your score must be evidence-based, conservative, and aligned with IELTS Writing public band descriptor logic.",
     "Do not give encouragement-based scores.",
     "Do not over-score weak writing.",
-    "If uncertain between two bands, choose the lower band.",
+    "If two adjacent bands are genuinely balanced, choose the lower band only when concrete limiting evidence is present. For Band 7+ writing, do not choose the lower band merely because the response is not perfect; compare positive and limiting evidence for 7.0, 7.5, 8.0, and 8.5.",
     "Penalise missing task requirements strictly.",
     "Penalise very short responses strictly.",
     "Penalise unclear meaning strictly.",
@@ -5146,7 +5146,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 
 
 
-// --- AI-only 10-step grading stages (maximum-detail, no local scoring) ---
+// --- AI-only staged grading pipeline (maximum-detail, no local scoring) ---
 const TEN_STEP_AI_STAGES = new Set([
   "prompt-analysis",
   "text-stats-completion",
@@ -5160,6 +5160,7 @@ const TEN_STEP_AI_STAGES = new Set([
   "grammar-diagnosis",
   "sentence-corrections",
   "better-expressions",
+  "high-band-boundary-review",
   "final-plan",
   // Backward-compatible stage names still accepted.
   "score-boundary",
@@ -5182,6 +5183,7 @@ function normalizeAiStage(value) {
   if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage6", "step6"].includes(raw)) return "grammar-diagnosis";
   if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage7", "step7"].includes(raw)) return "sentence-corrections";
   if (["betterexpressions", "betterexpression", "betterexpressionitems", "targetexpression", "stage8", "step8"].includes(raw)) return "better-expressions";
+  if (["highbandboundaryreview", "highbandreview", "highbandboundary", "highbandaudit", "highbandunderestimate", "stage125", "step125"].includes(raw)) return "high-band-boundary-review";
   if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "betterexpressionplan", "stage13", "step13"].includes(raw)) return "final-plan";
   if (["revision", "model", "modelanswer", "revisedessay", "stage14", "step14"].includes(raw)) return "revision";
   if (["languagecorrection", "language", "languagestage", "correctionlanguage", "grammarvocabularysentence", "grammarandsentence"].includes(raw)) return "language-correction";
@@ -5221,6 +5223,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     "grammar-diagnosis": "Grammatical Range and Accuracy diagnosis only",
     "sentence-corrections": "sentence-level direct corrections only",
     "better-expressions": "single-sentence upgraded better expressions only",
+    "high-band-boundary-review": "AI-only high-band boundary review only",
     "final-plan": "correction priority and final study plan only",
     "better-expression-plan": "single-sentence better expressions and final study plan only"
   };
@@ -5459,6 +5462,10 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     ].join("\n");
   }
 
+  if (stage === "high-band-boundary-review") {
+    return buildHighBandBoundaryReviewPrompt({ body, effectiveMode: mode, locale });
+  }
+
   if (stage === "final-plan") {
     return buildFinalPlanPrompt({ body, effectiveMode: mode, locale });
   }
@@ -5494,6 +5501,7 @@ function tenStepStageMaxTokens(stage) {
     "grammar-diagnosis": envInt("AI_STAGE_GRAMMAR_DIAGNOSIS_TOKENS", 7000, 3500, 12000),
     "sentence-corrections": envInt("AI_STAGE_SENTENCE_CORRECTIONS_TOKENS", 8000, 3500, 14000),
     "better-expressions": envInt("AI_STAGE_BETTER_EXPRESSIONS_TOKENS", 8000, 3500, 14000),
+    "high-band-boundary-review": envInt("AI_STAGE_HIGH_BAND_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "better-expression-plan": envInt("AI_STAGE_BETTER_EXPRESSION_PLAN_TOKENS", 8000, 3500, 14000),
     "final-plan": envInt("AI_STAGE_FINAL_RECONCILIATION_TOKENS", 9500, 4500, 16000)
   })[stage] || envInt("AI_STAGE_DEFAULT_TOKENS", 6000, 3000, 12000);
@@ -5513,6 +5521,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
   if (stage === "better-expressions") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length;
+  if (stage === "high-band-boundary-review") return hasUsefulText(output.highBandBoundaryReview) || hasUsefulText(output.highBandDiagnostics);
   if (stage === "final-plan") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
   return hasUsefulText(output);
@@ -6484,13 +6493,88 @@ function applyFinalScoringReconciliation(result = {}, body = {}) {
   return result;
 }
 
+
+function highBandReviewCriterionShape(task) {
+  const first = firstCriterionName(task);
+  return {
+    [first]: { currentBand: "", recommendedBand: "", positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyNotLower: "", whyNotLowerZh: "", whyNotHigher: "", whyNotHigherZh: "" },
+    "Coherence and Cohesion": { currentBand: "", recommendedBand: "", positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyNotLower: "", whyNotLowerZh: "", whyNotHigher: "", whyNotHigherZh: "" },
+    "Lexical Resource": { currentBand: "", recommendedBand: "", positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyNotLower: "", whyNotLowerZh: "", whyNotHigher: "", whyNotHigherZh: "" },
+    "Grammatical Range and Accuracy": { currentBand: "", recommendedBand: "", positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyNotLower: "", whyNotLowerZh: "", whyNotHigher: "", whyNotHigherZh: "" }
+  };
+}
+
+function buildHighBandBoundaryReviewPrompt({ body, effectiveMode, locale }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const firstCriterion = firstCriterionName(task);
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const snapshot = JSON.stringify(current || {}).slice(0, 11000);
+  const taskSpecificRules = task === "Task 1"
+    ? [
+        "Task 1 high-band review must use LETTER logic, not essay logic.",
+        "Check purpose clarity, recipient relationship, register/tone, complete coverage of every bullet point, sufficient details for each bullet, natural opening/closing, and practical communicative effectiveness.",
+        "A Task 1 letter cannot be high-band in Task Achievement if a major bullet point is missing, even if language is strong.",
+        "If all bullets are covered, purpose and tone are appropriate, paragraphs are natural, and errors are few, do not keep Task Achievement/CC/LR/GRA at Band 7.0 unless you identify exact text-level limitations preventing 7.5."
+      ]
+    : [
+        "Task 2 high-band review must use ESSAY logic, not letter logic.",
+        "Check question type, every required part, position when required, relevance, idea development, examples/reasoning, paragraph progression, conclusion, lexical precision, and flexible grammar.",
+        "Band 8 does not require a perfect or literary essay. Minor non-systematic errors and minor limits in depth can still be compatible with Band 8 if the response is complete, fluent, and precise.",
+        "If the essay answers all parts, has a clear position, developed paragraphs, relevant examples, natural cohesion, precise topic vocabulary, and few errors, do not keep all criteria at Band 7.0 unless you identify exact text-level limitations preventing 7.5."
+      ];
+  return [
+    "AI-only high-band boundary review pass.",
+    "This stage does NOT locally change scores. It supplies examiner evidence for the final AI reconciliation stage.",
+    "Review only whether a potentially strong IELTS response has been underestimated around Band 7.0/7.5/8.0.",
+    "Do not inflate weak or incomplete writing. If the response is not a high-band candidate, return triggered:false and explain briefly.",
+    "Trigger the review when any of these are visible in the accumulated evidence: overall/criteria near Band 7.0 or 7.5; four identical 7.0 bands; few score-impacting sentence errors; clear task completion; well-organised writing; highBandDiagnostics suggests 7.5+; or whyNotHigher reasons are vague.",
+    "Do not use 'if uncertain choose lower' as a shortcut at high bands. For Band 7+ writing, compare concrete evidence for 7.0 vs 7.5 vs 8.0 vs 8.5. Prevent both over-scoring and under-scoring.",
+    "If you still recommend Band 7.0, every criterion must include exact text-level limiting evidence explaining why 7.5 is not met. Vague phrases such as 'could be more nuanced' are not enough.",
+    "If you recommend 7.5 or 8.0, include both positive evidence and remaining limits. Do not claim Band 9 unless the response is virtually fully controlled across task, cohesion, vocabulary, and grammar.",
+    ...taskSpecificRules,
+    buildTaskRequirementInstruction(body),
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      highBandBoundaryReview: {
+        triggered: false,
+        taskType: task,
+        currentOverallBand: "",
+        candidateRange: "7.0-8.5",
+        triggerReasons: [],
+        triggerReasonsZh: [],
+        taskSpecificChecklist: task === "Task 1"
+          ? { purposeClear: false, bulletsCovered: "", detailSufficient: "", toneAppropriate: false, naturalLetterFormat: false, fewErrors: false }
+          : { allRequiredPartsAnswered: false, clearPosition: false, developedIdeas: false, relevantExamples: false, clearProgression: false, fewErrors: false },
+        criteriaReview: highBandReviewCriterionShape(task),
+        recommendedFinalBands: { [firstCriterion]: "", "Coherence and Cohesion": "", "Lexical Resource": "", "Grammatical Range and Accuracy": "" },
+        overallRecommendation: "",
+        overallRecommendationZh: "",
+        whyNot7: "",
+        whyNot7Zh: "",
+        whyNotHigher: "",
+        whyNotHigherZh: "",
+        finalAiReconciliationInstruction: "Final AI reconciliation must decide the actual final criterion bands from this review and all earlier evidence. No local score change is made."
+      }
+    }),
+    "Chinese requirement: every English explanation/list must have a concise matching Chinese helper in the paired Zh field.",
+    `Mode: ${effectiveMode}`,
+    `Task: ${task}`,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || ""),
+    "Accumulated earlier AI evidence and diagnostics:",
+    snapshot
+  ].join("\n");
+}
+
 function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const firstCriterion = firstCriterionName(task);
   const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
   const diagnosticSnapshot = JSON.stringify(current || {}).slice(0, 9000);
   return [
-    "Stage 13/13 final AI score reconciliation and target plan pass.",
+    "Final AI score reconciliation and target plan pass.",
     "This is the ONLY stage that may output the final displayed score.",
     "Do not rubber-stamp earlier bands. Review all accumulated AI evidence, task diagnosis, coherence diagnosis, lexical diagnosis, grammar diagnosis, sentence corrections, and better-expression evidence before finalising the score.",
     "Return final IELTS criterion bands using half bands from 1.0 to 9.0. If the evidence is between two bands, choose the stricter/lower half band unless the evidence clearly supports the higher one.",
@@ -6510,10 +6594,13 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "If all four criteria would be Band 5.0 for a short low-level Task 2, re-check whether Task Response, Lexical Resource, and Grammatical Range and Accuracy should instead be Band 4.0 or 4.5. Do not give four identical Band 5.0 bands as a safe default.",
     "If Task 2 content is mostly about another topic, finalCriteria for Task Response must explicitly say why it is Band 3.0, 3.5, 4.0, or 4.5 rather than a normal developed Task 2 score.",
     "If Task 1 content is not a functional letter or fails major bullet/purpose/tone requirements, finalCriteria for Task Achievement must explicitly say why it is capped and must not borrow Task 2 essay logic.",
-    "The server normally averages the four AI-returned final criterion bands. For clear objective low-band boundary conflicts, task-relevance conflicts, or Task 1 achievement conflicts, a strict IELTS boundary audit may flag or cap the displayed criterion bands; therefore your AI bands must already reflect strict IELTS boundaries.",
+    "The server averages the four AI-returned final criterion bands and does not locally cap, raise, or lower them. Objective checks and the high-band boundary review are warning/evidence inputs only; your final AI bands must already reflect strict IELTS boundaries without relying on local score changes.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
     "High-band anti-underestimate audit: if the accumulated evidence shows a complete, fluent, well-organised essay with few errors and only minor refinement needs, do not keep all four final bands at 7.0. Compare 7.0 vs 7.5 vs 8.0, and assign the higher band when the concrete evidence supports it.",
+    "If currentResult.highBandBoundaryReview exists, use it as a required evidence input. If you reject its recommendation, explain exact limiting evidence in scoreCalibration and criterion whyNotHigher fields.",
+    "Task 1 high-band reconciliation must follow letter standards: purpose, bullet coverage/detail, tone/register, recipient fit, opening/closing, functional organisation, and language control. Do not use essay criteria to hold back or inflate Task 1.",
+    "Task 2 high-band reconciliation must follow essay standards: question type, required parts, position, development, examples/reasoning, progression, conclusion, lexical precision, and grammatical flexibility. Do not use Task 1 bullet/recipient logic.",
     "If the final displayed score remains Band 7.0 for a high-quality essay, every final criterion must name a specific limitation from the essay that prevents 7.5. Do not use vague phrases such as 'could be more nuanced' unless you identify where and how.",
     buildFeedbackTrackInstruction(body),
     "Final priority plan must follow the track: low band = fixFirst/fixNext/polishLater; mid band = improveFirst/stabiliseNext/polishLater using the same JSON arrays fixFirst/fixNext/polishLater; high band = high-band polish priorities only.",
@@ -6551,6 +6638,7 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
       scoreChangeReasonZh: "",
       scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [], criteriaIdentical: false, criteriaIdenticalReviewNeeded: false },
       scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+      highBandBoundaryReview: { triggered: false, taskType: task, triggerReasons: [], triggerReasonsZh: [], recommendedFinalBands: {}, overallRecommendation: "", overallRecommendationZh: "", whyNot7: "", whyNot7Zh: "", whyNotHigher: "", whyNotHigherZh: "" },
       halfBandBoundary: { summary: "", summaryZh: "", criterionBoundaries: [{ criterion: "", currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] },
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
       targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: firstCriterion, currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] }
