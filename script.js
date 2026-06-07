@@ -1952,6 +1952,34 @@ function losesImportantMeaning(correctedSentence, betterExpression) {
   });
 }
 
+const BETTER_EXPRESSION_LOW_VALUE_TOKENS = new Set([
+  "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "at", "for", "with", "from", "by", "it", "this", "that", "these", "those",
+  "is", "are", "was", "were", "be", "been", "being", "can", "could", "should", "would", "will", "may", "might", "do", "does", "did",
+  "i", "my", "me", "we", "our", "you", "your", "they", "their", "them", "people", "person", "thing", "things", "good", "bad", "much", "many", "very"
+]);
+
+function meaningfulBetterExpressionTokens(text) {
+  return tokenizeExpressionForComparison(text).filter((token) => token.length > 2 && !BETTER_EXPRESSION_LOW_VALUE_TOKENS.has(token));
+}
+
+function meaningfulBetterExpressionChangeCount(correctedSentence, betterExpression) {
+  const correctedSet = new Set(meaningfulBetterExpressionTokens(correctedSentence));
+  return meaningfulBetterExpressionTokens(betterExpression).filter((token) => !correctedSet.has(token)).length;
+}
+
+function retainsWeakGenericBetterExpression(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").toLowerCase();
+  const better = String(betterExpression || "").toLowerCase();
+  const weakPairs = [
+    ["good thing", "good thing"],
+    ["bad thing", "bad thing"],
+    ["on it", "on it"],
+    ["spend too much time and too much money", "spend too much time or money"],
+    ["in this essay i will discuss", "in this essay i will discuss"]
+  ];
+  return weakPairs.some(([source, retained]) => corrected.includes(source) && better.includes(retained));
+}
+
 function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const corrected = String(correctedSentence || "").toLowerCase();
   const better = String(betterExpression || "").toLowerCase();
@@ -1964,12 +1992,14 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const similarity = expressionSimilarity(corrected, better);
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
+  const meaningfulChangeCount = meaningfulBetterExpressionChangeCount(corrected, better);
 
-  // 只拦截假升级：完全重复、机械小替换、截断或丢信息。
-  // 不再要求大幅重写；Band 0-5 的适度升级表达也应该显示。
-  if (similarity >= 0.97) return false;
-  if (editDistance <= 1 && lengthGap <= 1) return false;
-  if (editDistance <= 2 && lengthGap === 0 && similarity >= 0.9) return false;
+  // 质量门槛：更好表达必须是真正的下一档表达，不能只是复制修改句或轻微换词。
+  if (similarity >= 0.92) return false;
+  if (editDistance <= 2 && lengthGap <= 2) return false;
+  if (editDistance <= 4 && lengthGap <= 1 && similarity >= 0.82) return false;
+  if (meaningfulChangeCount < 2 && similarity >= 0.72) return false;
+  if (retainsWeakGenericBetterExpression(correctedSentence, betterExpression) && similarity >= 0.70) return false;
   if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
   return true;
@@ -2089,8 +2119,8 @@ function isInvalidBetterExpression(value) {
 }
 
 function genericDisplayBetterExpression() {
-  // AI-only display rule: the front end must not invent a better expression.
-  // If AI does not return a safe betterExpression, the field stays hidden.
+  // Front-end safety rule: never invent or display a low-quality betterExpression.
+  // The backend must force-generate usable Stage 8 betterExpressionItems.
   return "";
 }
 
@@ -2566,7 +2596,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
         <p><strong>句子 ${escapeHtml(item.sentenceNumber || index + 1)}</strong></p>
         ${original ? `<p><strong>原句：</strong>${escapeHtml(original)}</p>` : ""}
         ${corrected ? `<p><strong>修改句：</strong>${escapeHtml(corrected)} ${renderCopyButton(corrected)}</p>` : ""}
-        ${better ? `<p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : (polishItem ? "" : `<p class="muted better-expression-missing">${escapeHtml(missingBetterExpressionNotice(feedbackTrackFromResult(result, result.targetImprovementPlan || {})))}</p>`)}
+        ${better ? `<p class="better-expression-line"><strong>更好表达（目标 ${escapeHtml(betterTarget)}）：</strong>${escapeHtml(better)} ${renderCopyButton(better)}</p>` : ""}
         ${errorType || errorTypeZh ? `<p><strong>错误类型：</strong>${escapeHtml(errorType)}${errorTypeZh ? ` / ${escapeHtml(errorTypeZh)}` : ""}</p>` : ""}
         ${problem ? `<p><strong>问题：</strong>${escapeHtml(problem)}</p>` : ""}
         ${rule ? `<p><strong>规则：</strong>${escapeHtml(rule)}</p>` : ""}

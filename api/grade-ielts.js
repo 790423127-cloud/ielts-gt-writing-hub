@@ -2207,6 +2207,34 @@ function losesImportantMeaning(correctedSentence, betterExpression) {
   });
 }
 
+const BETTER_EXPRESSION_LOW_VALUE_TOKENS = new Set([
+  "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "at", "for", "with", "from", "by", "it", "this", "that", "these", "those",
+  "is", "are", "was", "were", "be", "been", "being", "can", "could", "should", "would", "will", "may", "might", "do", "does", "did",
+  "i", "my", "me", "we", "our", "you", "your", "they", "their", "them", "people", "person", "thing", "things", "good", "bad", "much", "many", "very"
+]);
+
+function meaningfulBetterExpressionTokens(text) {
+  return tokenizeExpressionForComparison(text).filter((token) => token.length > 2 && !BETTER_EXPRESSION_LOW_VALUE_TOKENS.has(token));
+}
+
+function meaningfulBetterExpressionChangeCount(correctedSentence, betterExpression) {
+  const correctedSet = new Set(meaningfulBetterExpressionTokens(correctedSentence));
+  return meaningfulBetterExpressionTokens(betterExpression).filter((token) => !correctedSet.has(token)).length;
+}
+
+function retainsWeakGenericBetterExpression(correctedSentence, betterExpression) {
+  const corrected = String(correctedSentence || "").toLowerCase();
+  const better = String(betterExpression || "").toLowerCase();
+  const weakPairs = [
+    ["good thing", "good thing"],
+    ["bad thing", "bad thing"],
+    ["on it", "on it"],
+    ["spend too much time and too much money", "spend too much time or money"],
+    ["in this essay i will discuss", "in this essay i will discuss"]
+  ];
+  return weakPairs.some(([source, retained]) => corrected.includes(source) && better.includes(retained));
+}
+
 function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const corrected = String(correctedSentence || "").toLowerCase();
   const better = String(betterExpression || "").toLowerCase();
@@ -2219,12 +2247,14 @@ function hasBetterExpressionUpgradeSignal(correctedSentence, betterExpression) {
   const similarity = expressionSimilarity(corrected, better);
   const editDistance = expressionTokenEditDistance(corrected, better);
   const lengthGap = Math.abs(correctedTokens.length - betterTokens.length);
+  const meaningfulChangeCount = meaningfulBetterExpressionChangeCount(corrected, better);
 
-  // Hide only genuinely bad upgrades: identical wording, tiny mechanical swaps, or obvious truncation.
-  // Modest next-band upgrades are valid, especially for Band 0-5 learners.
-  if (similarity >= 0.97) return false;
-  if (editDistance <= 1 && lengthGap <= 1) return false;
-  if (editDistance <= 2 && lengthGap === 0 && similarity >= 0.9) return false;
+  // Quality gate: a better expression must be a real next-band rewrite, not a copied direct correction.
+  if (similarity >= 0.92) return false;
+  if (editDistance <= 2 && lengthGap <= 2) return false;
+  if (editDistance <= 4 && lengthGap <= 1 && similarity >= 0.82) return false;
+  if (meaningfulChangeCount < 2 && similarity >= 0.72) return false;
+  if (retainsWeakGenericBetterExpression(correctedSentence, betterExpression) && similarity >= 0.70) return false;
   if (losesImportantMeaning(correctedSentence, betterExpression)) return false;
 
   return true;
@@ -2237,6 +2267,11 @@ function shouldShowBetterExpression(correctedSentence, betterExpression) {
   if (!corrected) return true;
   if (sameCorrectionText(corrected, better)) return false;
   return hasBetterExpressionUpgradeSignal(corrected, better);
+}
+
+function isUsableBetterExpression(originalSentence, correctedSentence, betterExpression) {
+  const base = correctedSentence || originalSentence || "";
+  return shouldShowBetterExpression(base, betterExpression);
 }
 
 
@@ -6100,10 +6135,10 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     ]
     : [
       `Stage 8/13 internal better-expression batch ${batchIndex + 1}/${batchCount}. Produce upgraded single-sentence better expressions for every listed item where a safe upgrade is possible.`,
-      "For every score-impacting sentence, include a betterExpression when a safe next-band upgrade is possible. For any essay below Band 9, this is required for each correction source unless the direct corrected sentence is already the best safe next-band version.",
+      "For every score-impacting sentence, return a betterExpression. This is mandatory for every listed correction source below Band 9; do not omit it and do not copy the direct corrected sentence.",
       "Low-band betterExpression must stay at Band 5.0-5.5 or 5.5-6.0 style: clear, correct, simple, and easy to imitate.",
       "Mid-band betterExpression must improve clarity, development, cohesion, collocation, or sentence control without turning the sentence into Band 8-9 language.",
-      "Do not skip a listed score-impacting item simply because the direct corrected sentence is understandable; if a modest +0.5-1.0 upgrade is safe, return it."
+      "Do not skip any listed score-impacting item. Even if the direct corrected sentence is understandable, produce a visibly improved +0.5-1.0 band expression that remains easy to imitate."
     ];
   return [
     ...modeLines,
@@ -6122,7 +6157,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     "Do not add new ideas that were not in the original meaning. Do not delete reasons, purposes, conditions, contrast, or result relationships from the original meaning.",
     "Do not use rare vocabulary, forced inversion, or artificial complexity. The upgraded sentence must sound natural and usable in IELTS writing.",
     highBandPolish ? "For high-band polish, do not invent a mistake. Use upgradeFocus to explain the improvement area, such as precision, cohesion, concision, nuance, register, or argument depth." : "The upgrade should be realistic for the next 0.5-1.0 band, not a Band 8-9 rewrite for a weak sentence.",
-    "If no safe useful upgrade exists for a listed item, omit that item rather than returning a weak or meta betterExpression, but this should be rare for essays below Band 9 because the user needs one direct fix plus one next-band expression for each error sentence.",
+    "For non-high-band correction mode, never omit a listed item: if the first idea is too hard to upgrade, create a simpler but clearly better version that improves clarity, collocation, task focus, cohesion, or sentence control. Do not return a weak copy of the corrected sentence.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       betterExpressionMode: highBandPolish ? "high_band_polish" : "correction_based",
@@ -6146,10 +6181,10 @@ function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batch
   ].filter(Boolean).join("\n")).join("\n\n");
   return [
     `AI-only quality repair pass ${batchIndex + 1}/${batchCount}: rewrite only the rejected betterExpression items below.`,
-    "The previous betterExpression was rejected because it contained an error, changed meaning, or used meta-commentary.",
+    "The previous betterExpression was rejected because it was missing, contained an error, changed meaning, used meta-commentary, or was too similar to the direct corrected sentence.",
     "Return a safe ONE-SENTENCE upgrade based on the direct corrected sentence. Do not explain inside the sentence.",
     "Do not use phrases such as 'which makes the idea clearer', 'clearer and more specific', 'this improves the sentence', 'discuss about', or 'should not avoid'.",
-    "If no safe useful upgrade is possible, omit that item.",
+    "Do not omit any listed item. Return one clearly improved but still realistic betterExpression for every rejected item.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({ betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -6217,7 +6252,7 @@ async function repairMissingBetterExpressionCandidates({ apiKey, model, body, ef
       model,
       stage,
       locale,
-      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount, highBandPolish: false }) + "\n\nMISSING-ITEM REPAIR: Return a safe betterExpression for every listed score-impacting item if possible. Do not leave the item out unless the corrected sentence is already the best safe next-band expression.",
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount, highBandPolish: false }) + "\n\nMISSING-ITEM REPAIR: Return exactly one safe betterExpression for every listed score-impacting item. Do not leave any item out. Do not copy the corrected sentence. If the first upgrade is too advanced, write a simpler but clearly better next-band version.",
       maxTokens: envInt("AI_MISSING_BETTER_MAX_TOKENS", 6200, 3000, 12000),
       deadline,
       timeoutMs: Number(process.env.AI_MISSING_BETTER_TIMEOUT_MS) || 110000
@@ -7066,15 +7101,30 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
   });
   if (!results.length) {
     const safeWarnings = warnings.length ? warnings : ["AI better-expressions batching returned no usable results."];
+    const forcedRepairItems = await repairMissingBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, sources, currentItems: [] });
+    const finalForcedRepairItems = applyFinalBetterExpressionTargetSync({ betterExpressionItems: normalizeBetterExpressionItems(forcedRepairItems) }, body).betterExpressionItems || [];
+    if (finalForcedRepairItems.length) {
+      const missingAfterForcedRepair = collectMissingBetterExpressionSources(sources, finalForcedRepairItems);
+      return {
+        aiStage: stage,
+        disclaimer: DISCLAIMER,
+        stageStatus: missingAfterForcedRepair.length ? "warning" : "complete",
+        noIssueReason: missingAfterForcedRepair.length ? "AI better-expression primary batches failed, but forced repair recovered some next-band expressions." : "AI better-expression primary batches failed, but forced repair recovered all next-band expressions.",
+        noIssueReasonZh: missingAfterForcedRepair.length ? "更好表达主批次失败，但强制修复已补回部分下一档表达。" : "更好表达主批次失败，但强制修复已补齐全部下一档表达。",
+        betterExpressionItems: finalForcedRepairItems,
+        betterExpressionBatchMeta: { sourceItems: sources.length, returnedItems: finalForcedRepairItems.length, missingItems: missingAfterForcedRepair.length, attemptedBatches: attempted, successfulBatches: 0, forcedRepair: true, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
+        stageWarnings: missingAfterForcedRepair.length ? safeWarnings.concat([`Forced better-expression repair still missing: ${missingAfterForcedRepair.length}/${sources.length} source sentence(s).`]) : safeWarnings
+      };
+    }
     return {
       aiStage: stage,
       disclaimer: DISCLAIMER,
       stageStatus: "warning",
-      noIssueReason: "Better-expression generation did not return usable sentence upgrades, but grading can continue with direct corrections and final scoring.",
-      noIssueReasonZh: "更好表达阶段暂时没有返回可用的升级句；评分、逐句基础批改和最终复核仍可继续。",
+      noIssueReason: "Better-expression generation did not return usable sentence upgrades after forced repair.",
+      noIssueReasonZh: "更好表达阶段在强制修复后仍未返回可用升级句。",
       betterExpressionItems: [],
-      betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: 0, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
-      stageWarnings: safeWarnings
+      betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: 0, forcedRepair: true, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
+      stageWarnings: safeWarnings.concat(["Forced better-expression repair returned no usable items."])
     };
   }
   const rawBetterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems));
@@ -7088,8 +7138,8 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
     aiStage: stage,
     disclaimer: DISCLAIMER,
     stageStatus: missingAfterRepair.length ? "warning" : "complete",
-    noIssueReason: missingAfterRepair.length ? "AI returned direct corrections, but some correction sources still did not receive a safe next-band betterExpression after repair." : "",
-    noIssueReasonZh: missingAfterRepair.length ? "AI已返回基础逐句批改，但部分错误句在修复后仍缺少安全的下一档表达。" : "",
+    noIssueReason: missingAfterRepair.length ? "AI returned direct corrections, but some correction sources still did not receive a usable mandatory next-band betterExpression after forced repair." : "",
+    noIssueReasonZh: missingAfterRepair.length ? "AI已返回基础逐句批改，但部分错误句在强制修复后仍缺少可用的下一档表达。" : "",
     betterExpressionItems: finalSyncedBetterExpressionItems,
     betterExpressionBatchMeta: { sourceItems: sources.length, returnedItems: finalSyncedBetterExpressionItems.length, missingItems: missingAfterRepair.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
     stageWarnings: missingAfterRepair.length ? warnings.concat([`Better-expression coverage incomplete: ${missingAfterRepair.length}/${sources.length} source sentence(s) still missing.`]) : warnings

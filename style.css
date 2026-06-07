@@ -563,3 +563,12 @@
 .high-band-hidden-note{margin:8px 0 0;font-size:13px}
 @media(max-width:900px){.high-band-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.high-band-summary-grid{grid-template-columns:1fr}.high-band-criterion-card>summary{align-items:flex-start;flex-direction:column;padding:10px 12px}.score-pill,.task-check-badge{width:100%;justify-content:center}}
+
+/* Better expression quality gate UI */
+.better-expression-line{
+  border-left:4px solid var(--teal);
+  background:rgba(15,118,110,.08);
+  border-radius:6px;
+  padding:10px 12px;
+}
+.better-expression-line strong{color:var(--teal)}
