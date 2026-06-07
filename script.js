@@ -831,7 +831,7 @@ function mergeAiStageResult(base, incoming) {
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
-    "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "taskMatchCheck", "wordCountWarning",
+    "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "rateabilityProfile", "criterionOutlierReview", "lowScoreOutlierReview", "finalStabilityCheck", "taskMatchCheck", "wordCountWarning",
     "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
@@ -963,6 +963,12 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
   if (aiStage === "better-expression-plan") {
     const detailed = Array.isArray(data.detailedSentenceCorrections) ? data.detailedSentenceCorrections : [];
     return Boolean(detailed.some((item) => hasAnyText(item?.betterExpression)) || targetImprovementPlanHasUsefulContent(data.targetImprovementPlan) || hasAnyText(data.correctionPriority));
+  }
+  if (aiStage === "criterion-outlier-review") {
+    return Boolean(hasAnyText(data.criterionOutlierReview));
+  }
+  if (aiStage === "low-score-outlier-review") {
+    return Boolean(hasAnyText(data.lowScoreOutlierReview));
   }
   if (aiStage === "high-band-boundary-review") {
     return Boolean(hasAnyText(data.highBandBoundaryReview) || hasAnyText(data.highBandDiagnostics));
@@ -1211,6 +1217,58 @@ function shouldRunHighBandBoundaryReview(result = {}, payload = {}) {
   return Boolean(nearHighBand && (allSevenish || highDiagSignal || fewCorrections || vagueWhyNotHigher));
 }
 
+
+function rateabilityStatus(result = {}) {
+  const profile = result.rateabilityProfile && typeof result.rateabilityProfile === "object" ? result.rateabilityProfile : {};
+  return String(profile.status || "");
+}
+
+function criterionOutlierSignals(result = {}) {
+  const bands = criterionBandsFromResult(result).map((item) => ({ ...item, numeric: numericBandValue(item.band) })).filter((item) => item.numeric !== null);
+  const rateability = rateabilityStatus(result);
+  const suspicious = [];
+  const reasons = [];
+  bands.forEach((item) => {
+    const others = bands.filter((other) => other.criterion !== item.criterion).map((other) => other.numeric).filter((n) => n !== null);
+    const otherAvg = others.length ? others.reduce((sum, n) => sum + n, 0) / others.length : null;
+    if (otherAvg !== null && otherAvg - item.numeric >= 2) {
+      suspicious.push(item.criterion);
+      reasons.push(`${item.criterion} is more than 2 bands below the other criteria.`);
+    }
+    if (item.numeric <= 2 && /weak_but_rateable|clearly_rateable/i.test(rateability)) {
+      suspicious.push(item.criterion);
+      reasons.push(`${item.criterion} is Band ${formatMockBand(item.numeric)} while the response is ${rateability}.`);
+    }
+  });
+  return { triggered: [...new Set(suspicious)].length > 0, suspiciousCriteria: [...new Set(suspicious)], reasons };
+}
+
+function shouldRunCriterionOutlierReview(result = {}, payload = {}) {
+  if (!result || typeof result !== "object") return false;
+  return criterionOutlierSignals(result).triggered;
+}
+
+function criterionOutlierSkipReason(result = {}) {
+  const bands = criterionBandsFromResult(result);
+  if (bands.length < 4) return "当前阶段还没有完整四项分，跳过单项异常分复核。";
+  return "未发现某一单项与其他三项存在明显异常差距，跳过单项异常分复核。";
+}
+
+function shouldRunLowScoreOutlierReview(result = {}, payload = {}) {
+  if (!result || typeof result !== "object") return false;
+  const overall = numericBandValue(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand);
+  const rateability = rateabilityStatus(result);
+  return overall !== null && overall <= 4.5 && /weak_but_rateable|clearly_rateable/i.test(rateability);
+}
+
+function lowScoreOutlierSkipReason(result = {}) {
+  const overall = numericBandValue(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand);
+  if (overall === null) return "当前阶段还没有可用总分，跳过低分异常复核。";
+  if (overall > 4.5) return "当前总分未进入异常低分区间，跳过低分异常复核。";
+  if (!/weak_but_rateable|clearly_rateable/i.test(rateabilityStatus(result))) return "文本可评分性信号不足，低分异常复核不触发。";
+  return "未发现整体低分与文本可评分性明显冲突。";
+}
+
 function highBandReviewSkipReason(result = {}) {
   const overall = numericBandValue(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand);
   if (overall === null) return "当前阶段还没有可用分数，跳过高分边界复核。";
@@ -1247,8 +1305,8 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Full grading now runs 13 smaller AI stages. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 15 : 14;
+  // Full grading runs staged AI passes plus low/high boundary safety reviews. Revision mode adds one optional AI stage for model/revised essays.
+  const totalSteps = payload.mode === "revision" ? 18 : 17;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1308,28 +1366,45 @@ async function startGrading() {
   try {
     await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
     await runMergeStage("text-stats-completion", `第 2 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
-    await runMergeStage("score", `第 3 步/${totalSteps}：AI 正在进行内部评分信号初筛（暂不展示分数）`, "评分信号初筛", { required: true });
-    await runMergeStage("spelling-wordform", `第 4 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
-    await runMergeStage("lexical-choice-collocation", `第 5 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
-    await runMergeStage("grammar-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
-    await runMergeStage("sentence-corrections", `第 7 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
-    await runMergeStage("better-expressions", `第 8 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
-    await runMergeStage("task-diagnosis", `第 9 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
-    await runMergeStage("coherence-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
-    await runMergeStage("evidence-map", `第 11 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
-    await runMergeStage("criterion-boundary", `第 12 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
+    await runMergeStage("rateability-profile", `第 3 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
+    await runMergeStage("score", `第 4 步/${totalSteps}：AI 正在进行内部评分信号初筛（暂不展示分数）`, "评分信号初筛", { required: true });
+    await runMergeStage("spelling-wordform", `第 5 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
+    await runMergeStage("lexical-choice-collocation", `第 6 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
+    await runMergeStage("grammar-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("sentence-corrections", `第 8 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
+    await runMergeStage("better-expressions", `第 9 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
+    await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
+    await runMergeStage("evidence-map", `第 12 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
+    await runMergeStage("criterion-boundary", `第 13 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
+    if (shouldRunCriterionOutlierReview(result, payload)) {
+      await runMergeStage("criterion-outlier-review", `第 14 步/${totalSteps}：AI 正在复核单项异常分`, "单项异常分复核");
+    } else {
+      const skipReason = criterionOutlierSkipReason(result || {});
+      markStage("单项异常分复核", "skipped", skipReason);
+      syncStageMeta();
+      if (result) renderGradingResult(result);
+    }
+    if (shouldRunLowScoreOutlierReview(result, payload)) {
+      await runMergeStage("low-score-outlier-review", `第 15 步/${totalSteps}：AI 正在复核低分异常`, "低分异常复核");
+    } else {
+      const skipReason = lowScoreOutlierSkipReason(result || {});
+      markStage("低分异常复核", "skipped", skipReason);
+      syncStageMeta();
+      if (result) renderGradingResult(result);
+    }
     if (shouldRunHighBandBoundaryReview(result, payload)) {
-      await runMergeStage("high-band-boundary-review", `第 13 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
+      await runMergeStage("high-band-boundary-review", `第 16 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
     } else {
       const skipReason = highBandReviewSkipReason(result || {});
       markStage("高分边界复核", "skipped", skipReason);
       syncStageMeta();
       if (result) renderGradingResult(result);
     }
-    await runMergeStage("final-plan", `第 14 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
+    await runMergeStage("final-plan", `第 17 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 15 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 18 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
       markStage("最终整理", "done", "结果已整理。");
       syncStageMeta();
@@ -1519,6 +1594,108 @@ function renderLocalScoreAudit(result = {}) {
 
 
 
+
+function renderSafetyBadge(label, value, cls = "is-neutral") {
+  return `<span class="task-check-badge ${cls}"><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</span>`;
+}
+
+function renderRateabilityProfile(profile = {}) {
+  if (!profile || typeof profile !== "object" || !hasAnyText(profile)) return "";
+  const status = String(profile.status || "").trim() || "not returned";
+  const cls = /clearly/i.test(status) ? "is-ok" : /weak/i.test(status) ? "is-neutral" : "is-warning";
+  const flags = ensureArray(profile.severeIssueFlags).filter(Boolean);
+  const badgeHtml = [
+    renderSafetyBadge("Status", status, cls),
+    renderSafetyBadge("Words", profile.wordCount ?? "-"),
+    renderSafetyBadge("Paragraphs", profile.paragraphCount ?? "-"),
+    renderSafetyBadge("Sentences", profile.sentenceCount ?? "-"),
+    renderSafetyBadge("Complete sentences", boolText(profile.hasCompleteSentences)),
+    renderSafetyBadge("Prompt-related", boolText(profile.relatedToPrompt))
+  ].join("");
+  return `<section class="grading-section low-score-safety-card">
+    <h4>可评分性检查 / Rateability Check</h4>
+    <div class="task-check-badges">${badgeHtml}</div>
+    ${profile.reason ? renderTextWithTranslation(profile.reason, profile.reasonZh, { tag: "p" }) : ""}
+    ${flags.length ? collapsibleSection("Severe issue flags", listHtml(flags), { className: "high-band-compact-details" }) : ""}
+    <p class="muted">本地是否改分：否。这里仅显示可评分性信号，最终分数仍由 AI 最终复核决定。</p>
+  </section>`;
+}
+
+function renderCriterionOutlierReview(review = {}) {
+  if (!review || typeof review !== "object" || !hasAnyText(review)) return "";
+  const triggered = review.triggered === true || String(review.triggered).toLowerCase() === "true";
+  const suspicious = ensureArray(review.suspiciousCriteria).filter(Boolean);
+  const reasons = ensureArray(review.triggerReasons).filter(Boolean);
+  const reasonsZh = ensureArray(review.triggerReasonsZh).filter(Boolean);
+  const reviewed = review.reviewedCriteria && typeof review.reviewedCriteria === "object" ? Object.entries(review.reviewedCriteria) : [];
+  const reviewedRows = reviewed.length ? `<div class="score-calculation-grid">${reviewed.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>AI reviewed Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>` : "";
+  return `<section class="grading-section low-score-safety-card criterion-outlier-card">
+    <div class="high-band-review-head">
+      <div><h4>单项异常分复核 / Criterion Outlier Review</h4><p class="muted">AI-only review evidence. Local code does not change the score.</p></div>
+      <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
+    </div>
+    <div class="task-check-badges">
+      ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
+      ${suspicious.length ? renderSafetyBadge("Suspicious", suspicious.join(", "), "is-warning") : ""}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>
+    ${reviewedRows}
+    ${reasons.length ? collapsibleSection("Trigger reasons", `<ul>${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonsZh.length ? renderZhToggle(reasonsZh.join("\n")) : ""}`, { className: "high-band-compact-details" }) : ""}
+    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+  </section>`;
+}
+
+function renderLowScoreOutlierReview(review = {}) {
+  if (!review || typeof review !== "object" || !hasAnyText(review)) return "";
+  const triggered = review.triggered === true || String(review.triggered).toLowerCase() === "true";
+  const reasons = ensureArray(review.triggerReasons).filter(Boolean);
+  const reasonsZh = ensureArray(review.triggerReasonsZh).filter(Boolean);
+  const reviewed = review.aiReviewedCriteria && typeof review.aiReviewedCriteria === "object" ? Object.entries(review.aiReviewedCriteria) : [];
+  const reviewedRows = reviewed.length ? `<div class="score-calculation-grid">${reviewed.map(([name, band]) => `<div class="score-calculation-row"><span>${escapeHtml(name)}</span><strong>AI reviewed Band ${escapeHtml(formatMockBand(band))}</strong></div>`).join("")}</div>` : "";
+  return `<section class="grading-section low-score-safety-card low-score-outlier-card">
+    <div class="high-band-review-head">
+      <div><h4>低分异常复核 / Low-score Outlier Review</h4><p class="muted">AI-only review evidence. Local code does not raise, lower, or cap the score.</p></div>
+      <span class="high-band-status ${triggered ? "is-triggered" : "is-skipped"}">${triggered ? "Triggered" : "Not triggered"}</span>
+    </div>
+    <div class="task-check-badges">
+      ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
+      ${review.originalOverallBand ? renderSafetyBadge("Original overall", `Band ${formatMockBand(review.originalOverallBand)}`) : ""}
+      ${review.reviewedRange ? renderSafetyBadge("Reviewed range", review.reviewedRange) : ""}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>
+    ${reviewedRows}
+    ${reasons.length ? collapsibleSection("Trigger reasons", `<ul>${reasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>${reasonsZh.length ? renderZhToggle(reasonsZh.join("\n")) : ""}`, { className: "high-band-compact-details" }) : ""}
+    ${review.whyLowBandMayBeImplausible ? collapsibleSection("Why the low band may be too low", renderTextWithTranslation(review.whyLowBandMayBeImplausible, review.whyLowBandMayBeImplausibleZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${review.whyLowBandMayStillBeJustified ? collapsibleSection("Why the low band may still be justified", renderTextWithTranslation(review.whyLowBandMayStillBeJustified, review.whyLowBandMayStillBeJustifiedZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${review.reviewConclusion ? collapsibleSection("AI review conclusion", renderTextWithTranslation(review.reviewConclusion, review.reviewConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+  </section>`;
+}
+
+function renderFinalStabilityCheck(check = {}) {
+  if (!check || typeof check !== "object" || !hasAnyText(check)) return "";
+  const triggered = check.triggered === true || String(check.triggered).toLowerCase() === "true";
+  const outliers = ensureArray(check.outlierCriteria).filter(Boolean);
+  return `<section class="grading-section low-score-safety-card final-stability-card">
+    <h4>最终稳定性检查 / Final Stability Check</h4>
+    <div class="task-check-badges">
+      ${renderSafetyBadge("Status", triggered ? "Triggered" : "Not triggered", triggered ? "is-warning" : "is-ok")}
+      ${outliers.length ? renderSafetyBadge("Outlier criteria", outliers.join(", "), "is-warning") : ""}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>
+    ${check.reason ? renderTextWithTranslation(check.reason, check.reasonZh, { tag: "p" }) : ""}
+  </section>`;
+}
+
+function renderLowScoreSafetyAudit(result = {}) {
+  const parts = [
+    renderRateabilityProfile(result.rateabilityProfile),
+    renderCriterionOutlierReview(result.criterionOutlierReview),
+    renderLowScoreOutlierReview(result.lowScoreOutlierReview),
+    renderFinalStabilityCheck(result.finalStabilityCheck)
+  ].filter(Boolean);
+  return parts.join("");
+}
+
 function highBandShortCriterionName(name) {
   const text = String(name || "").toLowerCase();
   if (text.includes("task response")) return "TR";
@@ -1686,6 +1863,7 @@ function renderScoreCalculation(result = {}) {
     <p><strong>评分系统：</strong>${escapeHtml(systemLabel)}</p>
     <p><strong>计算方式：</strong>${escapeHtml(formula)}</p>
     ${renderLocalScoreAudit(result)}
+    ${renderLowScoreSafetyAudit(result)}
     ${rows}
     ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
     ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatMockBand(finalBand))}</p>` : ""}
@@ -3436,6 +3614,7 @@ function mockPayloadForPrompt(prompt, essay) {
 const MOCK_FINAL_SCORING_STAGES = [
   ["prompt-analysis", "题目要求分析"],
   ["text-stats-completion", "文本统计与完成度检查"],
+  ["rateability-profile", "可评分性检查"],
   ["score", "内部评分信号初筛/反馈分轨"],
   ["spelling-wordform", "拼写和词形诊断"],
   ["lexical-choice-collocation", "用词搭配诊断"],
@@ -3446,6 +3625,8 @@ const MOCK_FINAL_SCORING_STAGES = [
   ["coherence-diagnosis", "结构与衔接诊断"],
   ["evidence-map", "评分证据地图"],
   ["criterion-boundary", "半分边界判断"],
+  ["criterion-outlier-review", "单项异常分复核"],
+  ["low-score-outlier-review", "低分异常复核"],
   ["high-band-boundary-review", "高分边界复核"],
   ["final-plan", "最终评分复核"]
 ];
@@ -3475,6 +3656,14 @@ async function postMockScore(endpoint, prompt, essay, label) {
   let result = null;
   for (let i = 0; i < MOCK_FINAL_SCORING_STAGES.length; i += 1) {
     const [aiStage, stageLabel] = MOCK_FINAL_SCORING_STAGES[i];
+    if (aiStage === "criterion-outlier-review" && !shouldRunCriterionOutlierReview(result || {}, basePayload)) {
+      setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}已跳过（未发现单项异常分）...`, "loading");
+      continue;
+    }
+    if (aiStage === "low-score-outlier-review" && !shouldRunLowScoreOutlierReview(result || {}, basePayload)) {
+      setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}已跳过（未发现低分异常）...`, "loading");
+      continue;
+    }
     if (aiStage === "high-band-boundary-review" && !shouldRunHighBandBoundaryReview(result || {}, basePayload)) {
       setMockStatus(`${label}：第 ${i + 1}/${MOCK_FINAL_SCORING_STAGES.length} 步，${stageLabel}已跳过（未发现明显高分边界疑点）...`, "loading");
       continue;

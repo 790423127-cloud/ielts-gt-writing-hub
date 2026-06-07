@@ -572,3 +572,17 @@
   padding:10px 12px;
 }
 .better-expression-line strong{color:var(--teal)}
+
+/* Low-score safety audit cards */
+.low-score-safety-card{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--soft);
+  padding:14px;
+  margin:12px 0;
+}
+.low-score-safety-card h4{margin:0 0 10px}
+.low-score-safety-card .score-calculation-grid{margin-top:10px}
+.low-score-safety-card .task-check-badges{margin:10px 0}
+.criterion-outlier-card,.low-score-outlier-card{border-left:4px solid var(--amber)}
+.final-stability-card{border-left:4px solid var(--blue)}

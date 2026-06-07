@@ -588,9 +588,131 @@ function buildTextStatsCompletionStage(body = {}) {
         }
       : { message: "", messageZh: "" },
     stageStatus: "complete",
-    noIssueReason: "Text statistics and completion signals were generated. Final score impact is decided by AI in Stage 13.",
-    noIssueReasonZh: "已生成文本统计和完成度信号；最终分数影响由第13步AI复核决定。"
+    noIssueReason: "Text statistics and completion signals were generated. Final score impact is decided by the final AI reconciliation stage.",
+    noIssueReasonZh: "已生成文本统计和完成度信号；最终分数影响由最终AI复核阶段决定。"
   };
+}
+
+
+function englishTokenCountServer(text) {
+  return (String(text || "").match(/[A-Za-z][A-Za-z'’-]*/g) || []).length;
+}
+
+function buildRateabilityProfile(body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const essay = String(body.essay || "");
+  const words = Number(body.wordCount) || countWordsServer(essay);
+  const threshold = task === "Task 1" ? 150 : 250;
+  const sentenceUnits = simpleSentenceUnitsServer(essay);
+  const paragraphs = countParagraphsServer(essay);
+  const englishTokens = englishTokenCountServer(essay);
+  const totalTokens = (String(essay || "").match(/\S+/g) || []).length;
+  const englishRatio = totalTokens ? englishTokens / totalTokens : 0;
+  const hasCompleteSentences = sentenceUnits.some((unit) => String(unit.text || "").split(/\s+/).filter(Boolean).length >= 5);
+  const relevanceProfile = task === "Task 1" ? buildTask1PromptRelevanceProfile(body) : buildTask2PromptRelevanceProfile(body);
+  const relatedToPrompt = task === "Task 1"
+    ? Boolean(relevanceProfile.functionalAttempt)
+    : Boolean(relevanceProfile.directAnswerAttempt || relevanceProfile.moderateTopicCoverage || relevanceProfile.phraseSignal);
+  const severeIssueFlags = [];
+  if (!essay.trim()) severeIssueFlags.push("blank_response");
+  if (englishRatio < 0.45 && words < 80) severeIssueFlags.push("mostly_non_english_or_unreadable");
+  if (task === "Task 1" ? words < 50 : words < 80) severeIssueFlags.push("severely_underlength");
+  if (!hasCompleteSentences && words > 0) severeIssueFlags.push("no_clear_complete_sentences");
+  if (!relatedToPrompt && words >= 80) severeIssueFlags.push("possible_off_topic_or_prompt_mismatch");
+
+  let status = "weak_but_rateable";
+  if (!essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || (!hasCompleteSentences && words < 90)) {
+    status = "not_rateable_or_severely_limited";
+  } else if (words >= Math.max(120, threshold * 0.70) && paragraphs >= 2 && hasCompleteSentences && relatedToPrompt) {
+    status = "clearly_rateable";
+  }
+
+  const mostlyUnderstandable = status === "clearly_rateable" || (status === "weak_but_rateable" && hasCompleteSentences && englishRatio >= 0.55);
+  return {
+    aiStage: "rateability-profile",
+    disclaimer: DISCLAIMER,
+    status,
+    task,
+    wordCount: words,
+    recommendedMinimum: threshold,
+    paragraphCount: paragraphs,
+    sentenceCount: sentenceUnits.length,
+    hasCompleteSentences,
+    mostlyUnderstandable,
+    relatedToPrompt,
+    englishRatio: Number(englishRatio.toFixed(2)),
+    severeIssueFlags,
+    reason: status === "not_rateable_or_severely_limited"
+      ? "The response may be blank, extremely short, mostly unreadable, or lacks complete English sentences; very low bands may be plausible if AI evidence confirms this."
+      : status === "clearly_rateable"
+        ? "The response is clearly rateable: it contains paragraphs, complete sentences, and relevant content even if language control may be weak."
+        : "The response is weak but rateable: it has enough English, sentence-level content, and task engagement to require evidence before any very low band is kept.",
+    reasonZh: status === "not_rateable_or_severely_limited"
+      ? "文本可能为空、极短、难以阅读或缺少完整英文句；如果AI证据支持，低分可能合理。"
+      : status === "clearly_rateable"
+        ? "文本明显可评分：有段落、完整句和相关内容，即使语言控制较弱也不能随意给极低分。"
+        : "文本较弱但可评分：有足够英文句子和任务回应，保留极低分前必须有具体证据。",
+    localScoreChanged: false,
+    scoringRole: "warning_only_no_local_scoring"
+  };
+}
+
+function criterionBandsMapFromResult(result = {}, task = "Task 2") {
+  const names = getWritingCriterionNames(task);
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const out = {};
+  names.forEach((name) => {
+    const raw = criteria[name]?.band ?? result.finalCriteria?.[name]?.finalBand ?? result.finalCriteria?.[name]?.band;
+    const n = Number(String(raw ?? "").replace(/band\s*/i, ""));
+    if (Number.isFinite(n) && n > 0) out[name] = n;
+  });
+  return out;
+}
+
+function averageNumbers(values) {
+  const nums = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+  return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : null;
+}
+
+function buildCriterionOutlierSignals(current = {}, body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const bands = criterionBandsMapFromResult(current, task);
+  const entries = Object.entries(bands);
+  const rateability = current.rateabilityProfile || buildRateabilityProfile(body);
+  const suspiciousCriteria = [];
+  const triggerReasons = [];
+  entries.forEach(([name, band]) => {
+    const otherAvg = averageNumbers(entries.filter(([other]) => other !== name).map(([, value]) => value));
+    if (otherAvg !== null && otherAvg - band >= 2) {
+      suspiciousCriteria.push(name);
+      triggerReasons.push(`${name} Band ${formatBand(band)} is at least 2 bands below the average of the other criteria.`);
+    }
+    if (band <= 2 && ["weak_but_rateable", "clearly_rateable"].includes(rateability.status)) {
+      suspiciousCriteria.push(name);
+      triggerReasons.push(`${name} is Band ${formatBand(band)} while the response is ${rateability.status}; Band 1/2 plausibility must be checked.`);
+    }
+    if (band <= 2.5 && /complete sentences|paragraph|sentence-based|simple and compound/i.test(String(current.criteria?.[name]?.feedback || current.criteria?.[name]?.whyThisBand || ""))) {
+      suspiciousCriteria.push(name);
+      triggerReasons.push(`${name} has a very low band but its feedback mentions sentence/paragraph evidence, so the band may be inconsistent.`);
+    }
+  });
+  return { triggered: [...new Set(suspiciousCriteria)].length > 0, suspiciousCriteria: [...new Set(suspiciousCriteria)], triggerReasons, bands, rateability };
+}
+
+function buildLowScoreOutlierSignals(current = {}, body = {}) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const bands = criterionBandsMapFromResult(current, task);
+  const overall = Number(current.overallBand || current.finalOverallBand || current.scoreCalculation?.finalBand || averageNumbers(Object.values(bands)));
+  const rateability = current.rateabilityProfile || buildRateabilityProfile(body);
+  const triggered = Number.isFinite(overall) && overall <= 4.5 && ["weak_but_rateable", "clearly_rateable"].includes(rateability.status);
+  const triggerReasons = [];
+  if (triggered) {
+    triggerReasons.push(`Overall Band ${formatBand(overall)} is in the low-score range.`);
+    triggerReasons.push(`Rateability profile is ${rateability.status}, so the response needs evidence before a very low overall band is kept.`);
+    if (rateability.relatedToPrompt) triggerReasons.push("The response appears related to the selected prompt.");
+    if (rateability.hasCompleteSentences) triggerReasons.push("The response contains complete sentence-level writing.");
+  }
+  return { triggered, triggerReasons, originalOverallBand: Number.isFinite(overall) ? overall : "", reviewedRange: triggered ? "3.0-5.5" : "", bands, rateability };
 }
 
 function roundHalf(value) {
@@ -5185,6 +5307,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 const TEN_STEP_AI_STAGES = new Set([
   "prompt-analysis",
   "text-stats-completion",
+  "rateability-profile",
   "half-band-summary",
   "criterion-boundary",
   "evidence-map",
@@ -5195,6 +5318,8 @@ const TEN_STEP_AI_STAGES = new Set([
   "grammar-diagnosis",
   "sentence-corrections",
   "better-expressions",
+  "criterion-outlier-review",
+  "low-score-outlier-review",
   "high-band-boundary-review",
   "final-plan",
   // Backward-compatible stage names still accepted.
@@ -5207,6 +5332,7 @@ function normalizeAiStage(value) {
   const raw = String(value || "all").toLowerCase().replace(/[_\s-]+/g, "");
   if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
   if (["textstatscompletion", "textstats", "completioncheck", "completionstatus", "basicstats", "sentencesplit", "stage2", "step2"].includes(raw)) return "text-stats-completion";
+  if (["rateabilityprofile", "rateability", "rateable", "rateabilitycheck", "stage2b", "step2b"].includes(raw)) return "rateability-profile";
   if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "scoresignal", "scoresignals", "stage3", "step3"].includes(raw)) return "score";
   if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary"].includes(raw)) return "half-band-summary";
   if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage12", "step12"].includes(raw)) return "criterion-boundary";
@@ -5218,6 +5344,8 @@ function normalizeAiStage(value) {
   if (["grammardiagnosis", "grammar", "gra", "grammaticalrangeandaccuracy", "grammaraccuracy", "stage6", "step6"].includes(raw)) return "grammar-diagnosis";
   if (["sentencecorrections", "sentencecorrection", "sentences", "sentence", "detailedsentence", "stage7", "step7"].includes(raw)) return "sentence-corrections";
   if (["betterexpressions", "betterexpression", "betterexpressionitems", "targetexpression", "stage8", "step8"].includes(raw)) return "better-expressions";
+  if (["criterionoutlierreview", "criterionoutlier", "singlecriterionoutlier", "outliercriterion", "stage12a", "step12a"].includes(raw)) return "criterion-outlier-review";
+  if (["lowscoreoutlierreview", "lowscoreoutlier", "lowbandoutlier", "lowscoreaudit", "stage12b", "step12b"].includes(raw)) return "low-score-outlier-review";
   if (["highbandboundaryreview", "highbandreview", "highbandboundary", "highbandaudit", "highbandunderestimate", "stage125", "step125"].includes(raw)) return "high-band-boundary-review";
   if (["finalplan", "studyplan", "improvementplan", "plan", "adviceplan", "finalstudyplan", "betterexpressionplan", "stage13", "step13"].includes(raw)) return "final-plan";
   if (["revision", "model", "modelanswer", "revisedessay", "stage14", "step14"].includes(raw)) return "revision";
@@ -5246,6 +5374,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
   const stageNames = {
     "prompt-analysis": "question requirement analysis only",
     "text-stats-completion": "basic text statistics, sentence splitting, and completion-status check only",
+    "rateability-profile": "objective rateability profile only; no scoring",
     "half-band-summary": "overall half-band boundary summary only",
     "criterion-boundary": "one-criterion-at-a-time half-band boundary explanation only",
     "score-boundary": "IELTS half-band boundary explanation only",
@@ -5258,6 +5387,8 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     "grammar-diagnosis": "Grammatical Range and Accuracy diagnosis only",
     "sentence-corrections": "sentence-level direct corrections only",
     "better-expressions": "single-sentence upgraded better expressions only",
+    "criterion-outlier-review": "AI-only single-criterion outlier review only",
+    "low-score-outlier-review": "AI-only low-score outlier review only",
     "high-band-boundary-review": "AI-only high-band boundary review only",
     "final-plan": "correction priority and final study plan only",
     "better-expression-plan": "single-sentence better expressions and final study plan only"
@@ -5320,7 +5451,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         completionStatus: { isIncomplete: false, completionLevel: "", missingParts: [], completionSignals: [], wordCountImpact: "", scoreImpact: "", scoreCapApplied: false, scoreCapReason: "", canSubmitForScoring: true },
         wordCountWarning: { message: "", messageZh: "" }
       }),
-      "This stage only identifies completion signals. The final score impact must be decided by Stage 13 AI reconciliation.",
+      "This stage only identifies completion signals. The final score impact must be decided by the final AI reconciliation stage.",
       ...common
     ].join("\n");
   }
@@ -5497,6 +5628,14 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
     ].join("\n");
   }
 
+  if (stage === "criterion-outlier-review") {
+    return buildCriterionOutlierReviewPrompt({ body, effectiveMode: mode, locale });
+  }
+
+  if (stage === "low-score-outlier-review") {
+    return buildLowScoreOutlierReviewPrompt({ body, effectiveMode: mode, locale });
+  }
+
   if (stage === "high-band-boundary-review") {
     return buildHighBandBoundaryReviewPrompt({ body, effectiveMode: mode, locale });
   }
@@ -5524,6 +5663,7 @@ function tenStepStageMaxTokens(stage) {
   return ({
     "prompt-analysis": envInt("AI_STAGE_PROMPT_ANALYSIS_TOKENS", 4500, 2500, 9000),
     "text-stats-completion": envInt("AI_STAGE_TEXT_STATS_TOKENS", 2500, 1000, 6000),
+    "rateability-profile": envInt("AI_STAGE_RATEABILITY_TOKENS", 1200, 800, 3000),
     "half-band-summary": envInt("AI_STAGE_HALF_BAND_SUMMARY_TOKENS", 5500, 3000, 11000),
     "criterion-boundary": envInt("AI_STAGE_CRITERION_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "score-boundary": envInt("AI_STAGE_SCORE_BOUNDARY_TOKENS", 6500, 3500, 12000),
@@ -5536,6 +5676,8 @@ function tenStepStageMaxTokens(stage) {
     "grammar-diagnosis": envInt("AI_STAGE_GRAMMAR_DIAGNOSIS_TOKENS", 7000, 3500, 12000),
     "sentence-corrections": envInt("AI_STAGE_SENTENCE_CORRECTIONS_TOKENS", 8000, 3500, 14000),
     "better-expressions": envInt("AI_STAGE_BETTER_EXPRESSIONS_TOKENS", 8000, 3500, 14000),
+    "criterion-outlier-review": envInt("AI_STAGE_CRITERION_OUTLIER_TOKENS", 5500, 2500, 10000),
+    "low-score-outlier-review": envInt("AI_STAGE_LOW_SCORE_OUTLIER_TOKENS", 5500, 2500, 10000),
     "high-band-boundary-review": envInt("AI_STAGE_HIGH_BAND_BOUNDARY_TOKENS", 6500, 3500, 12000),
     "better-expression-plan": envInt("AI_STAGE_BETTER_EXPRESSION_PLAN_TOKENS", 8000, 3500, 14000),
     "final-plan": envInt("AI_STAGE_FINAL_RECONCILIATION_TOKENS", 9500, 4500, 16000)
@@ -5546,6 +5688,7 @@ function tenStepStageHasUsableContent(stage, output) {
   if (!output || typeof output !== "object") return false;
   if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
   if (stage === "text-stats-completion") return Number.isFinite(Number(output.actualWordCount)) || hasUsefulText(output.textStats) || hasUsefulText(output.completionStatus);
+  if (stage === "rateability-profile") return hasUsefulText(output.rateabilityProfile) || hasUsefulText(output.status);
   if (stage === "half-band-summary") return hasUsefulText(output.scoreCalibration) || hasUsefulText(output.halfBandBoundary) || ensureArray(output.strengthItems).length || ensureArray(output.mainProblemItems).length;
   if (stage === "criterion-boundary" || stage === "score-boundary") return hasUsefulText(output.halfBandBoundary) || Object.values(output.criteria || {}).some((item) => hasUsefulText(item?.whyThisBand) || hasUsefulText(item?.whyNotHigher) || hasUsefulText(item?.whyNotLower));
   if (stage === "evidence-map") return Object.values(output.criteria || {}).some((item) => ensureArray(item?.evidenceQuotes).length || ensureArray(item?.positiveEvidence).length || ensureArray(item?.limitingEvidence).length || hasUsefulText(item?.whyThisBand));
@@ -5556,6 +5699,8 @@ function tenStepStageHasUsableContent(stage, output) {
   if (stage === "grammar-diagnosis") return ensureArray(output.grammarErrors).length || ensureArray(output.grammarAdvice).length || hasUsefulText(output.criteria?.["Grammatical Range and Accuracy"]) || hasUsefulText(output.errorAnalysis?.summary);
   if (stage === "sentence-corrections") return ensureArray(output.sentenceCorrections).length || ensureArray(output.detailedSentenceCorrections).length || hasUsefulText(output.sentenceCorrectionSummary);
   if (stage === "better-expressions") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length;
+  if (stage === "criterion-outlier-review") return hasUsefulText(output.criterionOutlierReview);
+  if (stage === "low-score-outlier-review") return hasUsefulText(output.lowScoreOutlierReview);
   if (stage === "high-band-boundary-review") return hasUsefulText(output.highBandBoundaryReview) || hasUsefulText(output.highBandDiagnostics);
   if (stage === "final-plan") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "better-expression-plan") return ensureArray(output.detailedSentenceCorrections).some((item) => hasUsefulText(item?.betterExpression)) || ensureArray(output.betterExpressionItems).length || hasUsefulText(output.targetImprovementPlan) || hasUsefulText(output.correctionPriority);
@@ -6529,6 +6674,122 @@ function applyFinalScoringReconciliation(result = {}, body = {}) {
 }
 
 
+
+function outlierReviewCriterionShape(task) {
+  const first = firstCriterionName(task);
+  return {
+    [first]: { originalBand: "", reviewedBand: "", keepOriginalBand: false, positiveEvidence: [], limitingEvidence: [], whyOriginalBandMayBeImplausible: "", whyReviewedBandFitsBetter: "", whyNotLower: "", whyNotHigher: "" },
+    "Coherence and Cohesion": { originalBand: "", reviewedBand: "", keepOriginalBand: false, positiveEvidence: [], limitingEvidence: [], whyOriginalBandMayBeImplausible: "", whyReviewedBandFitsBetter: "", whyNotLower: "", whyNotHigher: "" },
+    "Lexical Resource": { originalBand: "", reviewedBand: "", keepOriginalBand: false, positiveEvidence: [], limitingEvidence: [], whyOriginalBandMayBeImplausible: "", whyReviewedBandFitsBetter: "", whyNotLower: "", whyNotHigher: "" },
+    "Grammatical Range and Accuracy": { originalBand: "", reviewedBand: "", keepOriginalBand: false, positiveEvidence: [], limitingEvidence: [], whyOriginalBandMayBeImplausible: "", whyReviewedBandFitsBetter: "", whyNotLower: "", whyNotHigher: "" }
+  };
+}
+
+function buildCriterionOutlierReviewPrompt({ body, effectiveMode, locale }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const signals = buildCriterionOutlierSignals(current, body);
+  const snapshot = JSON.stringify(current || {}).slice(0, 10000);
+  return [
+    "AI-only Criterion Outlier Review pass.",
+    "This stage does NOT locally change scores and must not output a final displayed score. It supplies evidence for Final AI Reconciliation only.",
+    "Review only whether one or more IELTS criteria are implausibly low or high compared with the text and the other criteria.",
+    "Do not raise weak writing automatically. If an extreme band is justified, keep it and provide concrete text evidence.",
+    "Trigger logic supplied by local warning-only checks:",
+    JSON.stringify({ triggered: signals.triggered, suspiciousCriteria: signals.suspiciousCriteria, triggerReasons: signals.triggerReasons, currentBands: signals.bands, rateabilityProfile: signals.rateability }).slice(0, 4000),
+    "Band 1/2 plausibility check: Band 1/2 is only plausible when the criterion evidence is extremely limited, such as isolated words, almost no complete sentences, mostly unreadable text, or no criterion-specific control. If the response has paragraphs and complete sentence attempts, explain why Band 3/4 is not more appropriate before keeping Band 1/2.",
+    "For GRA: if the current band is 1.0 or 2.0 but the essay contains complete sentences, simple/compound sentence attempts, or largely understandable clauses, compare Band 1/2 vs Band 3/4 explicitly.",
+    "For LR: if the current band is 1.0 or 2.0 but the essay contains relevant topic vocabulary, compare Band 1/2 vs Band 3/4 explicitly.",
+    "For CC: if the current band is 1.0 or 2.0 but the essay has paragraphs, sequence markers, or basic progression, compare Band 1/2 vs Band 3/4 explicitly.",
+    "For Task 1 use letter standards; for Task 2 use essay standards. Do not mix them.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      criterionOutlierReview: {
+        triggered: signals.triggered,
+        taskType: task,
+        localScoreChanged: false,
+        suspiciousCriteria: signals.suspiciousCriteria,
+        triggerReasons: [],
+        triggerReasonsZh: [],
+        originalCriteria: signals.bands,
+        reviewedCriteria: {},
+        criteriaReview: outlierReviewCriterionShape(task),
+        reviewConclusion: "",
+        reviewConclusionZh: "",
+        finalReconciliationInstruction: "Use this as evidence only; final bands must be decided in final-plan."
+      }
+    }),
+    "If triggered is false, return triggered:false with a short reviewConclusion explaining why no single-criterion outlier is visible.",
+    "If triggered is true, reviewedCriteria must include a reviewed band for every suspicious criterion. If keeping the original band, repeat it and explain why it is not Band 3/4/5 where relevant.",
+    `Mode: ${effectiveMode}`,
+    `Task: ${task}`,
+    buildTaskRequirementInstruction(body),
+    "Accumulated current result:",
+    snapshot,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
+function buildLowScoreOutlierReviewPrompt({ body, effectiveMode, locale }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const signals = buildLowScoreOutlierSignals(current, body);
+  const snapshot = JSON.stringify(current || {}).slice(0, 10000);
+  const taskRules = task === "Task 1"
+    ? [
+        "Task 1 low-score review must use LETTER logic: purpose, recipient, tone/register, opening/closing, and each bullet point.",
+        "If most bullet points are missing, the low score may be justified. If the letter has a clear purpose and some bullet coverage, explain why it is or is not below Band 5."
+      ]
+    : [
+        "Task 2 low-score review must use ESSAY logic: question type, required parts, position, relevant paragraphs, reasons/examples, and conclusion.",
+        "If the essay has a relevant position, body paragraphs, and basic reasons, do not keep an overall Band 3/4 without specific evidence explaining why Band 4.5/5.0 is not met."
+      ];
+  return [
+    "AI-only Low-score Outlier Review pass.",
+    "This stage does NOT locally change scores and must not output a final displayed score. It supplies evidence for Final AI Reconciliation only.",
+    "Review only whether the whole response may have been abnormally under-scored in the low-band range.",
+    "Do not inflate genuinely blank, off-topic, note-form, extremely short, or mostly unreadable answers.",
+    "Trigger logic supplied by local warning-only checks:",
+    JSON.stringify({ triggered: signals.triggered, triggerReasons: signals.triggerReasons, originalOverallBand: signals.originalOverallBand, reviewedRange: signals.reviewedRange, currentBands: signals.bands, rateabilityProfile: signals.rateability }).slice(0, 4000),
+    "If the response is weak but rateable or clearly rateable, compare the current low score with Band 4.0, 4.5, 5.0, and 5.5 where relevant.",
+    "If keeping a very low overall band, give concrete evidence for why it does not reach Band 5.0 and why task response/achievement, coherence, vocabulary, or grammar cannot support a higher band.",
+    ...taskRules,
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({
+      lowScoreOutlierReview: {
+        triggered: signals.triggered,
+        taskType: task,
+        localScoreChanged: false,
+        originalOverallBand: signals.originalOverallBand,
+        reviewedRange: signals.reviewedRange || "",
+        triggerReasons: [],
+        triggerReasonsZh: [],
+        aiReviewedCriteria: {},
+        whyLowBandMayBeImplausible: "",
+        whyLowBandMayBeImplausibleZh: "",
+        whyLowBandMayStillBeJustified: "",
+        whyLowBandMayStillBeJustifiedZh: "",
+        reviewConclusion: "",
+        reviewConclusionZh: "",
+        finalReconciliationInstruction: "Use this as evidence only; final bands must be decided in final-plan."
+      }
+    }),
+    "If triggered is false, return triggered:false and a short reviewConclusion explaining why no low-score outlier is visible.",
+    `Mode: ${effectiveMode}`,
+    `Task: ${task}`,
+    buildTaskRequirementInstruction(body),
+    "Accumulated current result:",
+    snapshot,
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "User essay:",
+    String(body.essay || "")
+  ].join("\n");
+}
+
 function highBandReviewCriterionShape(task) {
   const first = firstCriterionName(task);
   return {
@@ -6607,7 +6868,16 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const firstCriterion = firstCriterionName(task);
   const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
-  const diagnosticSnapshot = JSON.stringify(current || {}).slice(0, 9000);
+  const lowScoreSafetySnapshot = JSON.stringify({
+    rateabilityProfile: current.rateabilityProfile,
+    criterionOutlierReview: current.criterionOutlierReview,
+    lowScoreOutlierReview: current.lowScoreOutlierReview,
+    highBandBoundaryReview: current.highBandBoundaryReview,
+    criteria: current.criteria,
+    overallBand: current.overallBand,
+    scoreCalculation: current.scoreCalculation
+  }).slice(0, 7000);
+  const diagnosticSnapshot = JSON.stringify(current || {}).slice(0, 11000);
   return [
     "Final AI score reconciliation and target plan pass.",
     "This is the ONLY stage that may output the final displayed score.",
@@ -6629,7 +6899,11 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "If all four criteria would be Band 5.0 for a short low-level Task 2, re-check whether Task Response, Lexical Resource, and Grammatical Range and Accuracy should instead be Band 4.0 or 4.5. Do not give four identical Band 5.0 bands as a safe default.",
     "If Task 2 content is mostly about another topic, finalCriteria for Task Response must explicitly say why it is Band 3.0, 3.5, 4.0, or 4.5 rather than a normal developed Task 2 score.",
     "If Task 1 content is not a functional letter or fails major bullet/purpose/tone requirements, finalCriteria for Task Achievement must explicitly say why it is capped and must not borrow Task 2 essay logic.",
-    "The server averages the four AI-returned final criterion bands and does not locally cap, raise, or lower them. Objective checks and the high-band boundary review are warning/evidence inputs only; your final AI bands must already reflect strict IELTS boundaries without relying on local score changes.",
+    "The server averages the four AI-returned final criterion bands and does not locally cap, raise, or lower them. Objective checks, rateability profile, criterion outlier review, low-score outlier review, and high-band boundary review are warning/evidence inputs only; your final AI bands must already reflect strict IELTS boundaries without relying on local score changes.",
+    "Low-score safety audit: if currentResult.rateabilityProfile says weak_but_rateable or clearly_rateable, do not keep Band 1/2 for any criterion unless the final criterion evidence proves why Band 3/4 is not met.",
+    "Criterion outlier reconciliation: if currentResult.criterionOutlierReview exists and a criterion remains 2+ bands away from the others, explain the exact text evidence for that gap. If you reject the review recommendation, explain why in that criterion's whyThisBand/whyNotLower fields.",
+    "Low-score outlier reconciliation: if currentResult.lowScoreOutlierReview exists, use it as evidence when deciding whether the final overall low band is justified. If the final score remains below Band 5.0 for a weak-but-rateable response, explain specifically why Band 5.0 is not met.",
+    "Final stability check: before returning final bands, check whether any criterion differs from the average of the other three by 2.0 bands or more. If yes, return finalStabilityCheck.triggered=true and explain why the difference is justified or adjust the AI final bands accordingly.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
     "High-band anti-underestimate audit: if the accumulated evidence shows a complete, fluent, well-organised essay with few errors and only minor refinement needs, do not keep all four final bands at 7.0. Compare 7.0 vs 7.5 vs 8.0, and assign the higher band when the concrete evidence supports it.",
@@ -6673,7 +6947,11 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
       scoreChangeReasonZh: "",
       scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [], criteriaIdentical: false, criteriaIdenticalReviewNeeded: false },
       scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+      rateabilityProfile: { status: "", task: task, wordCount: "", paragraphCount: "", sentenceCount: "", hasCompleteSentences: false, mostlyUnderstandable: false, relatedToPrompt: false, severeIssueFlags: [], reason: "", reasonZh: "", localScoreChanged: false },
+      criterionOutlierReview: { triggered: false, taskType: task, localScoreChanged: false, suspiciousCriteria: [], triggerReasons: [], triggerReasonsZh: [], originalCriteria: {}, reviewedCriteria: {}, reviewConclusion: "", reviewConclusionZh: "" },
+      lowScoreOutlierReview: { triggered: false, taskType: task, localScoreChanged: false, originalOverallBand: "", reviewedRange: "", triggerReasons: [], triggerReasonsZh: [], aiReviewedCriteria: {}, reviewConclusion: "", reviewConclusionZh: "" },
       highBandBoundaryReview: { triggered: false, taskType: task, triggerReasons: [], triggerReasonsZh: [], recommendedFinalBands: {}, overallRecommendation: "", overallRecommendationZh: "", whyNot7: "", whyNot7Zh: "", whyNotHigher: "", whyNotHigherZh: "" },
+      finalStabilityCheck: { triggered: false, outlierCriteria: [], reason: "", reasonZh: "", localScoreChanged: false },
       halfBandBoundary: { summary: "", summaryZh: "", criterionBoundaries: [{ criterion: "", currentBand: "", lowerBoundary: "", upperBoundary: "", whyThisHalfBand: "", whyThisHalfBandZh: "" }] },
       correctionPriority: { fixFirst: [], fixNext: [], polishLater: [], fixFirstZh: [], fixNextZh: [], polishLaterZh: [] },
       targetImprovementPlan: { currentBand: "", targetBandRange: "", targetBandRangeZh: "", targetReason: "", targetReasonZh: "", focus: [], focusZh: [], criterionUpgrades: [{ criterion: firstCriterion, currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Coherence and Cohesion", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Lexical Resource", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }, { criterion: "Grammatical Range and Accuracy", currentWeakness: "", currentWeaknessZh: "", target: "", targetZh: "", action: "", actionZh: "", exampleUpgrade: "", exampleUpgradeZh: "" }], practiceTasks: [], practiceTasksZh: [] }
@@ -6683,6 +6961,7 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "If the essay is unfinished, still produce final criterion bands. Explain completionStatus and score impact. Do not refuse to score incomplete responses.",
     `Mode: ${effectiveMode}`,
     `Task: ${task}`,
+    `Low/high boundary safety snapshot that MUST be considered before finalising scores: ${lowScoreSafetySnapshot}`,
     `Accumulated earlier AI evidence and diagnostics: ${diagnosticSnapshot}`,
     "Question prompt:",
     String(body.questionPrompt || ""),
@@ -7163,6 +7442,10 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
   if (stage === "text-stats-completion") return buildTextStatsCompletionStage(body);
+  if (stage === "rateability-profile") {
+    const profile = buildRateabilityProfile(body);
+    return { rateabilityProfile: profile, ...profile };
+  }
   const emptyAllowedStages = new Set(["prompt-analysis", "score", "final-plan"]);
   if (!String(body.essay || "").trim() && !emptyAllowedStages.has(stage)) {
     const error = new Error(`AI ${stage} stage cannot run because the essay is empty.`);
