@@ -5688,7 +5688,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 8/13. Produce upgraded single-sentence better expressions or high-band polish only. Do not rescore, do not repeat direct corrections, and do not write the final study plan.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
+        betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
       }),
       "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. It must be ONE usable IELTS sentence only, based on the corrected sentence, not a paragraph or explanation. Do not include meta-commentary such as 'which makes the idea clearer' or keep errors such as 'discuss about'. Every English explanation must have the matching Chinese field.",
       task === "Task 2" ? "PROMPT-QUESTION LOCK: upgraded introduction/topic sentences must answer the actual Task 2 question type. If the prompt asks good/bad, positive/negative, agree/disagree, causes/solutions, or advantages/disadvantages, the betterExpression must reflect that question focus." : "TASK 1 LETTER LOCK: upgraded sentences must stay in letter mode and improve purpose, tone, bullet detail, request/apology/thanks/invitation clarity, or practical communication.",
@@ -5960,13 +5960,31 @@ function sanitizeBetterExpressionCandidate(candidate, correctedSentence = "", or
   return text;
 }
 
-function betterExpressionIdentityKey(item = {}, index = 0) {
+
+function correctionIdForItem(item = {}, index = 0) {
+  const existing = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
+  if (existing) return String(existing).trim();
+  const sentenceNumber = Number(item.sentenceNumber) || index + 1;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
-  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.correction, item.revisedSentence);
+  const base = normalizeCorrectionKeyText([original, corrected].filter(Boolean).join(" || "));
+  if (base) return `c:${sentenceNumber}:${base.slice(0, 160)}`;
+  return `idx:${index}`;
+}
+
+function itemTextIdentityKey(item = {}, index = 0) {
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.correction);
   const base = normalizeCorrectionKeyText(original || corrected);
   if (base) return `o:${base}`;
   const sentenceNumber = Number(item.sentenceNumber) || 0;
   return sentenceNumber > 0 ? `n:${sentenceNumber}` : `idx:${index}`;
+}
+
+function betterExpressionIdentityKey(item = {}, index = 0) {
+  const correctionId = correctionIdForItem(item, index);
+  if (correctionId) return `id:${correctionId}`;
+  return itemTextIdentityKey(item, index);
 }
 
 function normalizeBetterExpressionItems(items = []) {
@@ -5984,6 +6002,7 @@ function normalizeBetterExpressionItems(items = []) {
     const key = betterExpressionIdentityKey(item, index);
     const normalized = {
       ...item,
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: Number(item.sentenceNumber) || index + 1,
       originalSentence,
       correctedSentence,
@@ -6022,6 +6041,7 @@ function collectUnsafeBetterExpressionCandidates(items = []) {
     if (!originalSentence || !correctedSentence || !betterExpression) return;
     if (!hasDisallowedBetterExpressionText(betterExpression) && shouldShowBetterExpression(correctedSentence, betterExpression)) return;
     candidates.push({
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: Number(item.sentenceNumber) || index + 1,
       originalSentence,
       correctedSentence,
@@ -6103,6 +6123,7 @@ function dedupeCorrections(items = []) {
 
     const normalized = {
       ...item,
+      correctionId: correctionIdForItem(item, index),
       sentenceNumber: sentenceNumber || index + 1,
       originalSentence: original,
       original: firstNonEmpty(item.original, original),
@@ -6210,6 +6231,7 @@ function collectUnsafeCorrectedSentenceCandidates(items = []) {
 function buildDirectCorrectionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const items = candidates.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Rejected direct correction: ${item.correctedSentence}`,
@@ -6320,13 +6342,21 @@ function correctionSourcesForBetterExpression(body = {}) {
   const current = body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
   const detailed = dedupeCorrections(ensureArray(current.detailedSentenceCorrections));
   if (detailed.length) return detailed.map((item, index) => ({
+    correctionId: correctionIdForItem(item, index),
     sentenceNumber: item.sentenceNumber || index + 1,
     originalSentence: firstNonEmpty(item.originalSentence, item.original),
     correctedSentence: firstNonEmpty(item.correctedSentence, item.corrected, item.originalSentence, item.original),
     problem: firstNonEmpty(item.problem, item.reason, item.explanation),
     errorType: firstNonEmpty(item.errorType, item.type)
   }));
-  return splitEssayIntoSentenceUnits(body.essay).map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text, problem: "", errorType: "" }));
+  return splitEssayIntoSentenceUnits(body.essay).map((item, index) => ({
+    correctionId: correctionIdForItem({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text }, index),
+    sentenceNumber: item.sentenceNumber,
+    originalSentence: item.text,
+    correctedSentence: item.text,
+    problem: "",
+    errorType: ""
+  }));
 }
 
 function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount, highBandPolish = false }) {
@@ -6334,6 +6364,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
   const targetRange = betterExpressionTargetRangeForBody(body);
   const feedbackTrackInstruction = buildFeedbackTrackInstruction(body);
   const items = batch.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Direct corrected sentence: ${item.correctedSentence || item.originalSentence}`,
@@ -6375,7 +6406,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({
       betterExpressionMode: highBandPolish ? "high_band_polish" : "correction_based",
-      betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "" }]
+      betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: targetRange, upgradeFocus: "" }]
     }),
     "Chinese requirement: every betterExpression item must include betterExpressionZh and whyBetterZh. Do not translate the full essay.",
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -6386,6 +6417,7 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
 
 function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
   const items = candidates.map((item) => [
+    `Correction ID: ${item.correctionId || correctionIdForItem(item)}`,
     `Sentence ${item.sentenceNumber}:`,
     `Original: ${item.originalSentence}`,
     `Direct corrected sentence: ${item.correctedSentence}`,
@@ -6400,7 +6432,7 @@ function buildBetterExpressionRepairPrompt({ body, candidates, batchIndex, batch
     "Do not use phrases such as 'which makes the idea clearer', 'clearer and more specific', 'this improves the sentence', 'discuss about', or 'should not avoid'.",
     "Do not omit any listed item. Return one clearly improved but still realistic betterExpression for every rejected item.",
     "Return exactly one valid JSON object with this shape:",
-    JSON.stringify({ betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
+    JSON.stringify({ betterExpressionItems: [{ correctionId: "", sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }] }),
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
     "Rejected items:",
     items
@@ -6434,11 +6466,9 @@ async function repairUnsafeBetterExpressionCandidates({ apiKey, model, body, eff
 
 
 function betterExpressionKeyForMatch(item = {}, index = 0) {
-  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
-  const originalKey = normalizeCorrectionKeyText(original);
-  if (originalKey) return `o:${originalKey}`;
-  const number = Number(item.sentenceNumber) || 0;
-  return number > 0 ? `n:${number}` : `idx:${index}`;
+  const correctionId = correctionIdForItem(item, index);
+  if (correctionId) return `id:${correctionId}`;
+  return itemTextIdentityKey(item, index);
 }
 
 function collectMissingBetterExpressionSources(sources = [], items = []) {
@@ -6473,6 +6503,104 @@ async function repairMissingBetterExpressionCandidates({ apiKey, model, body, ef
     })
   });
   return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
+}
+
+function normalizeDisplaySentenceCorrectionSource(item = {}, index = 0) {
+  if (!item || typeof item !== "object") return null;
+  const originalSentence = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  const correctedSentence = firstNonEmpty(item.correctedSentence, item.corrected, item.correction, item.revisedSentence, originalSentence);
+  if (!originalSentence && !correctedSentence) return null;
+  return {
+    ...item,
+    correctionId: correctionIdForItem(item, index),
+    sentenceNumber: Number(item.sentenceNumber) || index + 1,
+    originalSentence,
+    correctedSentence,
+    corrected: firstNonEmpty(item.corrected, correctedSentence),
+    problem: firstNonEmpty(item.problem, item.reason, item.explanation, item.issue),
+    errorType: firstNonEmpty(item.errorType, item.type, item.category)
+  };
+}
+
+function mergeBetterExpressionIntoCorrection(source = {}, betterItem = {}) {
+  const correctedSentence = firstNonEmpty(source.correctedSentence, source.corrected, betterItem.correctedSentence, betterItem.corrected, source.originalSentence);
+  const originalSentence = firstNonEmpty(source.originalSentence, source.original, betterItem.originalSentence, betterItem.original);
+  const betterExpression = sanitizeBetterExpressionCandidate(
+    firstNonEmpty(betterItem.betterExpression, betterItem.targetBandExpression, betterItem.upgradedSentence, betterItem.polishedSentence),
+    correctedSentence,
+    originalSentence
+  );
+  if (!betterExpression) return null;
+  return {
+    ...source,
+    correctionId: correctionIdForItem(source, Number(source.sentenceNumber) || 0),
+    originalSentence,
+    correctedSentence,
+    corrected: firstNonEmpty(source.corrected, correctedSentence),
+    betterExpression,
+    betterExpressionZh: firstNonEmpty(betterItem.betterExpressionZh, betterItem.whyBetterZh, source.betterExpressionZh),
+    betterExpressionTargetBand: firstNonEmpty(betterItem.targetBand, betterItem.betterExpressionTargetBand, source.betterExpressionTargetBand),
+    whyBetter: firstNonEmpty(betterItem.whyBetter, source.whyBetter),
+    whyBetterZh: firstNonEmpty(betterItem.whyBetterZh, source.whyBetterZh),
+    targetBandExpression: betterExpression,
+    displayReady: true,
+    scoreImpacting: source.scoreImpacting !== false
+  };
+}
+
+function buildDisplaySentenceCorrectionsForOutput(result = {}, body = {}) {
+  const current = body && body.currentResult && typeof body.currentResult === "object" ? body.currentResult : {};
+  const directSources = dedupeCorrections([
+    ...ensureArray(current.detailedSentenceCorrections),
+    ...ensureArray(result.detailedSentenceCorrections)
+  ]).map(normalizeDisplaySentenceCorrectionSource).filter(Boolean);
+
+  const betterItems = normalizeBetterExpressionItems([
+    ...ensureArray(current.betterExpressionItems),
+    ...ensureArray(result.betterExpressionItems)
+  ]);
+  const byId = new Map();
+  const byText = new Map();
+  betterItems.forEach((item, index) => {
+    const idKey = betterExpressionKeyForMatch(item, index);
+    if (idKey) byId.set(idKey, item);
+    const textKey = itemTextIdentityKey(item, index);
+    if (textKey) byText.set(textKey, item);
+  });
+
+  const display = [];
+  const missing = [];
+  directSources.forEach((source, index) => {
+    const idKey = betterExpressionKeyForMatch(source, index);
+    const textKey = itemTextIdentityKey(source, index);
+    const matched = byId.get(idKey) || byText.get(textKey) || null;
+    const merged = matched ? mergeBetterExpressionIntoCorrection(source, matched) : null;
+    if (merged && isScoreImpactingDetailedCorrection(merged)) {
+      display.push(merged);
+    } else {
+      missing.push({
+        correctionId: correctionIdForItem(source, index),
+        sentenceNumber: source.sentenceNumber,
+        originalSentence: source.originalSentence,
+        correctedSentence: source.correctedSentence,
+        reason: matched ? "betterExpression failed quality gate" : "missing betterExpression item"
+      });
+    }
+  });
+
+  return {
+    displaySentenceCorrections: dedupeCorrections(display),
+    sentenceCorrectionDisplayMeta: {
+      sourceItems: directSources.length,
+      betterExpressionItems: betterItems.length,
+      displayItems: display.length,
+      missingItems: missing.length,
+      missingCorrectionIds: missing.map((item) => item.correctionId).filter(Boolean).slice(0, 30),
+      missingSamples: missing.slice(0, 8),
+      ready: directSources.length > 0 && display.length === directSources.length,
+      rule: "Only sentence corrections with a usable betterExpression are exposed in displaySentenceCorrections. Local code does not generate sentences."
+    }
+  };
 }
 
 
@@ -7786,6 +7914,9 @@ async function handleRequest(req, res) {
       });
       result.detailedSentenceCorrections = dedupeCorrections(result.detailedSentenceCorrections || []);
       result.betterExpressionItems = applyFinalBetterExpressionTargetSync({ betterExpressionItems: normalizeBetterExpressionItems(result.betterExpressionItems || []) }, body).betterExpressionItems || [];
+      const displaySentenceOutput = buildDisplaySentenceCorrectionsForOutput(result, body);
+      result.displaySentenceCorrections = displaySentenceOutput.displaySentenceCorrections;
+      result.sentenceCorrectionDisplayMeta = displaySentenceOutput.sentenceCorrectionDisplayMeta;
     }
     sendJson(req, res, 200, result);
   } catch (error) {
