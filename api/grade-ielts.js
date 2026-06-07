@@ -153,6 +153,7 @@ async function readJsonBody(req) {
 
 function normalizeMode(mode) {
   const raw = String(mode || "").toLowerCase();
+  if (["revision_only", "revision-only", "model_only", "model-only"].includes(raw)) return "revision_only";
   if (["revision", "grading_revision", "detailed_revision", "with_model", "with-model", "model", "model_answer"].includes(raw)) return "revision";
   return "full";
 }
@@ -167,7 +168,7 @@ function maxTokensForMode(mode, veryShort) {
   // full = detailed grading without model answer; revision = detailed grading + model/revision.
   // The user now prefers maximum AI feedback quality over token savings.
   // Keep very short essays smaller, but allow full essays enough room for rich evidence.
-  if (mode === "revision") return veryShort ? 5200 : 11000;
+  if (mode === "revision" || mode === "revision_only") return veryShort ? 5200 : 11000;
   return veryShort ? 4200 : 8500;
 }
 
@@ -2560,41 +2561,155 @@ function buildFastRevisionSystemPrompt(locale = "en") {
   return [
     "You are an IELTS General Training writing coach.",
     "Return exactly one valid JSON object only. No markdown. No code fences. No trailing commas.",
-    "This pass generates revised/model answer content only. Do not rescore the essay.",
+    "This pass generates revised/model answer content only. Do not rescore the essay. Do not return new overallBand, criteria, or scoreCalculation.",
     "Do not translate the essay into Chinese. Use English for revised essays."
   ].join(" ");
+}
+
+function revisionTargetPlanForBand(value) {
+  const band = Number(value);
+  if (!Number.isFinite(band) || band <= 0) {
+    return {
+      currentBand: "",
+      targetRange: "Band 5.0-5.5",
+      generateBand5: true,
+      generateBand6: false,
+      generateBand7: false,
+      modelTarget: "Band 5.0-5.5",
+      focus: "Build a complete and clear response from the user's original ideas."
+    };
+  }
+  if (band < 5) {
+    return {
+      currentBand: band,
+      targetRange: "Band 5.0-5.5",
+      generateBand5: true,
+      generateBand6: false,
+      generateBand7: false,
+      modelTarget: "Band 5.0-5.5",
+      focus: "Move from Band 4/4.5 to Band 5/5.5 with clear simple sentences and complete task coverage."
+    };
+  }
+  if (band < 6) {
+    return {
+      currentBand: band,
+      targetRange: "Band 6.0-6.5",
+      generateBand5: false,
+      generateBand6: true,
+      generateBand7: false,
+      modelTarget: "Band 6.0-6.5",
+      focus: "Move from Band 5/5.5 to Band 6 with clearer development, paragraph logic, and more accurate collocations."
+    };
+  }
+  if (band < 7) {
+    return {
+      currentBand: band,
+      targetRange: "Band 7.0-7.5",
+      generateBand5: false,
+      generateBand6: false,
+      generateBand7: true,
+      modelTarget: "Band 7.0-7.5",
+      focus: "Move from Band 6/6.5 to Band 7 with more developed reasoning, natural cohesion, and flexible accurate grammar."
+    };
+  }
+  return {
+    currentBand: band,
+    targetRange: "Band 7.5-8.0",
+    generateBand5: false,
+    generateBand6: false,
+    generateBand7: false,
+    modelTarget: "Band 7.5-8.0",
+    focus: "Provide high-band polish: precision, nuance, flow, and concise mature expression. Do not rewrite into Band 5/6/7 versions."
+  };
 }
 
 function buildFastRevisionPrompt(body, locale = "en") {
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   const tooShort = body.task === "Task 1" ? words < 80 : words < 150;
+  const isRevisionOnly = normalizeMode(body.mode || body.gradingMode) === "revision_only" || body.revisionOnly === true;
+  const currentBand = Number(body.currentOverallBand || body.overallBand || body.currentResult?.overallBand || body.currentResult?.scoreCalculation?.finalBand);
+  const plan = revisionTargetPlanForBand(currentBand);
+  const band5SkipReason = !plan.generateBand5
+    ? (Number.isFinite(currentBand) && currentBand >= 5 ? "你当前已达到 Band 5 左右，因此不再生成 Band 5 修改版。" : "当前阶段暂不生成 Band 5 修改版。")
+    : "";
+  const band6SkipReason = !plan.generateBand6
+    ? (Number.isFinite(currentBand) && currentBand >= 6 ? "你当前已达到 Band 6 左右，因此不再生成 Band 6 修改版。" : "请先稳定达到 Band 5 后再练习 Band 6 修改版。")
+    : "";
+  const band7SkipReason = !plan.generateBand7
+    ? (Number.isFinite(currentBand) && currentBand >= 7 ? "你当前已达到 Band 7 左右，因此不再生成普通 Band 7 修改版，改为高分润色。" : "请先稳定达到 Band 6 后再练习 Band 7 修改版。")
+    : "";
+
   const shape = {
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
     modelAnswerOutline: "",
     modelAnswerOutlineZh: "",
+    modelAnswer: "",
+    highBandPolish: "",
     revisedEssayMeta: {
+      currentBand: Number.isFinite(currentBand) ? currentBand : "",
+      targetBandRange: isRevisionOnly ? plan.targetRange : "Band 5 / Band 6 / Band 7",
+      modelAnswerTarget: isRevisionOnly ? plan.modelTarget : "Suitable model answer, not Band 9 by default",
+      generatedTargets: isRevisionOnly ? {
+        band5: plan.generateBand5,
+        band6: plan.generateBand6,
+        band7: plan.generateBand7,
+        highBandPolish: Number.isFinite(currentBand) && currentBand >= 7
+      } : { band5: true, band6: true, band7: true, highBandPolish: false },
       band5Target: "Basic but complete response; simple grammar; suitable for Band 5.",
       band6Target: "Clear and complete response with better organisation and vocabulary; suitable for Band 6.",
       band7Target: "Well-developed and natural response; suitable for Band 7, not Band 9.",
+      band5SkipReason,
+      band6SkipReason,
+      band7SkipReason,
       revisionLimited: tooShort,
       revisionLimitReason: tooShort ? "The original response is very short, so only a limited revision is suitable." : ""
     },
     revisionNotes: [],
     revisionNotesZh: []
   };
-  return [
+  const commonRules = [
     "Return one JSON object matching this shape:",
     JSON.stringify(shape),
-    tooShort
-      ? "The original essay is very short. You may provide a Band 5 basic completion only; leave Band 6 and Band 7 empty if there is not enough content to upgrade."
-      : "Generate three clearly different revised versions: Band 5, Band 6, and Band 7. Do not write a Band 9 essay.",
-    "Keep each revised essay concise and appropriate for IELTS General Training.",
+    "Do not return scoring fields. Do not rescore the essay. Do not change the current IELTS band.",
+    "Revised Essay rules: revisedEssayBand5/6/7 must be based on the user's original essay, preserving the user's main position, paragraph direction, examples, and meaning. Improve clarity, accuracy, development and cohesion without replacing it with an unrelated essay.",
+    "Model answer rules: modelAnswer may use a cleaner independent approach to the same prompt, but it must target only the next realistic band range, not Band 9 by default.",
+    "Keep each generated essay concise and appropriate for IELTS General Training. Do not translate the essay into Chinese.",
     "Question:",
     String(body.questionPrompt || ""),
     "Original essay:",
-    String(body.essay || "")
+    String(body.essay || ""),
+    "Current grading snapshot:",
+    JSON.stringify({
+      currentOverallBand: Number.isFinite(currentBand) ? currentBand : "",
+      criteria: body.currentResult?.criteria || {},
+      mainProblems: body.currentResult?.mainProblems || [],
+      taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis || {},
+      targetImprovementPlan: body.currentResult?.targetImprovementPlan || {}
+    }).slice(0, 5000)
+  ];
+
+  if (!isRevisionOnly) {
+    return [
+      ...commonRules,
+      tooShort
+        ? "The original essay is very short. You may provide a Band 5 basic completion only; leave Band 6 and Band 7 empty if there is not enough content to upgrade."
+        : "Generate three clearly different revised versions: Band 5, Band 6, and Band 7. Do not write a Band 9 essay."
+    ].join("\n");
+  }
+
+  return [
+    ...commonRules,
+    `Revision-only mode. Current band: ${Number.isFinite(currentBand) ? currentBand : "unknown"}. Target next band: ${plan.targetRange}.`,
+    `Generate only the next useful target content: Band5=${plan.generateBand5}, Band6=${plan.generateBand6}, Band7=${plan.generateBand7}.`,
+    "Leave already achieved lower-band revised essay fields empty and explain why in revisedEssayMeta band skip reasons.",
+    Number.isFinite(currentBand) && currentBand >= 7
+      ? "For Band 7+ users, leave revisedEssayBand5/6/7 empty and return highBandPolish with targeted upgraded sentences/paragraph polish based on the user's original essay."
+      : "Do not generate a version that is more than one band above the current score. Avoid an unrealistic Band 9 rewrite.",
+    `Model answer target: ${plan.modelTarget}. The modelAnswer should answer the same prompt at this target level and be imitable for the user's next step.`,
+    `Main focus: ${plan.focus}`,
+    tooShort ? "Because the response is very short, keep the revision modest and complete missing task basics." : ""
   ].join("\n");
 }
 
@@ -2624,14 +2739,15 @@ async function callAiCompactScoringRetry({ apiKey, model, body, gradingMode, loc
 
 
 async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, locale, deadline, veryShort = false, timeoutMs }) {
-  const isRevisionPass = normalizeMode(gradingMode) === "revision";
+  const normalizedGradingMode = normalizeMode(gradingMode);
+  const isRevisionPass = normalizedGradingMode === "revision" || normalizedGradingMode === "revision_only";
   const systemPrompt = isRevisionPass ? buildFastRevisionSystemPrompt(locale) : buildFastAiGradingSystemPrompt(locale);
   const userPrompt = isRevisionPass
     ? buildFastRevisionPrompt({ ...body, mode: gradingMode }, locale)
     : buildFastAiGradingPrompt({ ...body, mode: gradingMode }, gradingMode, locale);
 
   const cappedMaxTokens = isRevisionPass
-    ? Math.min(maxTokens || 3600, 4200)
+    ? Math.min(maxTokens || 5200, 7000)
     : Math.min(maxTokens || 2600, veryShort ? 1800 : 2600);
 
   const rawText = await callDeepSeek({
@@ -2661,7 +2777,7 @@ async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, 
 function mergeRevisionPassIntoResult(result, revision) {
   if (!revision || typeof revision !== "object") return result;
   const merged = result && typeof result === "object" ? { ...result } : {};
-  ["revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline"].forEach((field) => {
+  ["revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline", "modelAnswer", "highBandPolish"].forEach((field) => {
     if (hasUsefulText(revision[field])) merged[field] = revision[field];
   });
   if (Array.isArray(revision.revisionNotes) && revision.revisionNotes.length) merged.revisionNotes = revision.revisionNotes;
@@ -3719,7 +3835,7 @@ async function callAiFinalPlanStageOnly({ apiKey, model, body, effectiveMode, lo
 
 async function callAiRevisionStageOnly({ apiKey, model, body, effectiveMode, veryShort, maxTokens, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "revision" };
-  if (effectiveMode !== "revision") return output;
+  if (effectiveMode !== "revision" && effectiveMode !== "revision_only") return output;
   try {
     const revision = await callAiGradingPass({
       apiKey,

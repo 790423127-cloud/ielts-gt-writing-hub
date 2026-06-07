@@ -5,6 +5,7 @@ let selected = null;
 let timerId = null;
 let remaining = 0;
 let currentLimit = 0;
+let latestGradingResult = null;
 const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
 const feedbackUiState = {
@@ -776,7 +777,7 @@ function mergeAiStageResult(base, incoming) {
     if (data[field] && typeof data[field] === "object") output[field] = { ...(output[field] || {}), ...data[field] };
   });
   [
-    "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline",
+    "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline", "modelAnswer", "highBandPolish",
     "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "sectionWarning", "disclaimer"
   ].forEach((field) => {
     if (typeof data[field] === "string" && data[field].trim()) output[field] = preferRicherText(output[field], data[field]);
@@ -909,7 +910,7 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     );
   }
   if (aiStage === "revision") {
-    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline);
+    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline || data.modelAnswer || data.highBandPolish);
   }
   // Backward-compatible checks for older endpoints/stages.
   if (aiStage === "correction-task") {
@@ -1000,6 +1001,104 @@ async function postAiStage(endpoint, payload, aiStage, statusText) {
     if (timeout) clearTimeout(timeout);
   }
 }
+
+
+function ensureRevisionOnlyButton() {
+  if (els.generateRevisionBtn && document.body.contains(els.generateRevisionBtn)) return els.generateRevisionBtn;
+  if (!els.gradeBtn || !els.gradeBtn.parentElement) return null;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.id = "generateRevisionBtn";
+  btn.className = "secondary";
+  btn.textContent = "生成修改版 / 范文";
+  btn.title = "只生成修改版和下一档范文，不重新评分，不改变当前分数。";
+  els.gradeBtn.parentElement.insertBefore(btn, els.gradeBtn.nextSibling);
+  btn.addEventListener("click", generateRevisionOnly);
+  els.generateRevisionBtn = btn;
+
+  let note = $("revisionOnlyHint");
+  if (!note) {
+    note = document.createElement("p");
+    note.id = "revisionOnlyHint";
+    note.className = "muted revision-only-hint";
+    note.textContent = "生成修改版 / 范文不会重新评分，不会改变当前分数；修改版基于你的原文，Model answer 按当前分数生成下一档范文。";
+    els.gradeBtn.parentElement.parentElement?.insertBefore(note, els.gradeBtn.parentElement.nextSibling);
+  }
+  return btn;
+}
+
+function revisionOnlyPayload() {
+  const base = gradingPayload();
+  const current = latestGradingResult && typeof latestGradingResult === "object" ? latestGradingResult : {};
+  const currentBand = Number(current.overallBand || current.scoreCalculation?.finalBand || current.finalOverallBand);
+  return {
+    ...base,
+    mode: "revision_only",
+    gradingMode: "revision_only",
+    includeRevision: true,
+    revisionOnly: true,
+    revisionTargets: ["next_band_only"],
+    currentOverallBand: Number.isFinite(currentBand) ? currentBand : undefined,
+    currentResult: current && Object.keys(current).length ? {
+      overallBand: current.overallBand,
+      estimatedLevel: current.estimatedLevel,
+      criteria: current.criteria,
+      scoreCalculation: current.scoreCalculation,
+      mainProblems: current.mainProblems,
+      mainProblemsZh: current.mainProblemsZh,
+      strengths: current.strengths,
+      strengthsZh: current.strengthsZh,
+      taskRequirementAnalysis: current.taskRequirementAnalysis,
+      task1LetterCorrections: current.task1LetterCorrections,
+      task2EssayCorrections: current.task2EssayCorrections,
+      targetImprovementPlan: current.targetImprovementPlan
+    } : null
+  };
+}
+
+async function generateRevisionOnly() {
+  if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
+  const endpoint = els.gradingEndpointInput.value.trim();
+  if (!endpoint) {
+    setGradingStatus("请先填写批改接口地址。", "error");
+    return;
+  }
+  const essay = els.essayInput.value.trim();
+  if (!essay) {
+    setGradingStatus("作文区为空，无法生成修改版。", "error");
+    return;
+  }
+
+  const btn = ensureRevisionOnlyButton();
+  const originalText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "生成中...";
+    btn.setAttribute("aria-busy", "true");
+  }
+  if (els.gradeBtn) els.gradeBtn.disabled = true;
+  if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
+
+  try {
+    setGradingStatus("正在生成修改版 / 范文；不会重新评分。", "loading");
+    const baseResult = latestGradingResult && typeof latestGradingResult === "object" ? latestGradingResult : {};
+    const revision = await postAiStage(endpoint, revisionOnlyPayload(), "revision", "正在生成修改版 / 范文");
+    const merged = mergeAiStageResult(baseResult, revision);
+    renderGradingResult(merged);
+    setGradingStatus("修改版 / 范文已生成；当前评分没有改变。", "done");
+  } catch (error) {
+    setGradingStatus(`修改版 / 范文生成失败：${error.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || "生成修改版 / 范文";
+      btn.removeAttribute("aria-busy");
+    }
+    if (els.gradeBtn) els.gradeBtn.disabled = false;
+    if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
+  }
+}
+
 
 async function startGrading() {
   if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
@@ -2584,8 +2683,10 @@ function renderSentenceCorrections(items = []) {
     </div>`).join("")}</div>`;
 }
 
-function renderRevisionBlock(label, target, text) {
-  const content = text ? `<pre>${escapeHtml(text)}</pre>` : `<p class="muted">后端暂未返回修改版作文。</p>`;
+function renderRevisionBlock(label, target, text, emptyReason = "") {
+  const content = text
+    ? `<pre>${escapeHtml(text)}</pre>`
+    : `<p class="muted">${escapeHtml(emptyReason || "这一档暂不生成。请先生成适合当前分数下一档的修改版。")}</p>`;
   const disabled = text ? "" : "disabled";
   return `<details class="feedback-collapse revision-block">
     <summary>${escapeHtml(label)}</summary>
@@ -2598,6 +2699,33 @@ function renderRevisionBlock(label, target, text) {
     </div>
     </div>
   </details>`;
+}
+
+function revisionSkipReason(meta = {}, target = "") {
+  const map = {
+    band5: meta.band5SkipReason || meta.skippedBand5Reason,
+    band6: meta.band6SkipReason || meta.skippedBand6Reason,
+    band7: meta.band7SkipReason || meta.skippedBand7Reason
+  };
+  return map[target] || "";
+}
+
+function renderRevisionOnlyPanel(result = {}) {
+  const modelAnswer = String(result.modelAnswer || "").trim();
+  const highBandPolish = String(result.highBandPolish || "").trim();
+  return `
+    ${collapsibleSection("Model answer outline", renderTextWithTranslation(result.modelAnswerOutline || "", result.modelAnswerOutlineZh, { fallback: "No model answer outline was returned." }))}
+    ${collapsibleSection("Model answer / 下一档范文", modelAnswer ? `<pre>${escapeHtml(modelAnswer)}</pre>` : `<p class="muted">暂未生成下一档范文。点击“生成修改版 / 范文”后会显示。</p>`)}
+    ${collapsibleSection("AI 修改版作文 / Revised Essays", `
+      <p class="revision-meta-note">修改版只按当前分数的下一档生成：已达到的低档位会留空；不会重新评分，也不会改变当前分数。</p>
+      ${renderRevisionLimitWarning(result)}
+      ${renderRevisionBlock("Band 5 Safe Revision", "band5", result.revisedEssayBand5 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band5"))}
+      ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", result.revisedEssayBand6 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band6"))}
+      ${renderRevisionBlock("Band 7+ High-score Revision", "band7", result.revisedEssayBand7 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band7"))}
+      ${highBandPolish ? collapsibleSection("High-band polish / 高分润色", `<pre>${escapeHtml(highBandPolish)}</pre>`) : ""}
+      ${collapsibleSection("Revision notes", `${listHtml(result.revisionNotes)}${(Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh) ? `<h4>修改重点中文说明</h4>${renderZhToggle(Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh)}` : ""}`)}
+    `)}
+  `;
 }
 
 
@@ -2667,6 +2795,7 @@ function renderFinalScoreArea(result = {}) {
 }
 
 function renderGradingResult(result = {}) {
+  latestGradingResult = result && typeof result === "object" ? result : null;
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
   const band7 = result.revisedEssayBand7 || "";
@@ -2707,15 +2836,7 @@ function renderGradingResult(result = {}) {
       <div><h4>Grammar Advice</h4>${renderListWithTranslations(result.grammarAdvice, result.grammarAdviceZh, "No grammar advice is available.")}</div>
     </div>`)}
     ${renderBandLadderPlans(result)}
-    ${collapsibleSection("Model answer outline", renderTextWithTranslation(result.modelAnswerOutline || "", result.modelAnswerOutlineZh, { fallback: "No model answer outline was returned." }))}
-    ${collapsibleSection("AI 修改版作文 / Revised Essays", `
-      <p class="revision-meta-note">修改版按 Band 5 / Band 6 / Band 7 分层生成，不是默认 9 分范文。</p>
-      ${renderRevisionLimitWarning(result)}
-      ${renderRevisionBlock("Band 5 Safe Revision", "band5", band5)}
-      ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", band6)}
-      ${renderRevisionBlock("Band 7+ High-score Revision", "band7", band7)}
-      ${collapsibleSection("Revision notes", `${listHtml(result.revisionNotes)}${revisionNotesZh ? `<h4>修改重点中文说明</h4>${renderZhToggle(revisionNotesZh)}` : ""}`)}
-    `)}`;
+    ${renderRevisionOnlyPanel(result)}`;
 
   els.gradingResults.innerHTML = `
     <div class="grading-result-layout">
@@ -3096,6 +3217,7 @@ function bind() {
   els.clearBtn.addEventListener("click", () => { if (!selected) return; els.essayInput.value = ""; save(selected.id, "essay", ""); updateWords(); els.essayInput.focus(); });
   els.gradingEndpointInput.addEventListener("input", () => localStorage.setItem(GRADING_ENDPOINT_KEY, els.gradingEndpointInput.value.trim()));
   els.gradeBtn.addEventListener("click", startGrading);
+  ensureRevisionOnlyButton();
   els.restoreOriginalBtn.addEventListener("click", restoreOriginalEssay);
   els.backBtn.addEventListener("click", () => document.querySelector(".list-panel").scrollIntoView({ behavior: "smooth" }));
   els.themeBtn.addEventListener("click", () => {
