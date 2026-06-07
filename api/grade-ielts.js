@@ -5313,6 +5313,7 @@ function correctionSourcesForBetterExpression(body = {}) {
 }
 
 function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex, batchCount, highBandPolish = false }) {
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   const targetRange = betterExpressionTargetRangeForBody(body);
   const feedbackTrackInstruction = buildFeedbackTrackInstruction(body);
   const items = batch.map((item) => [
@@ -5617,7 +5618,9 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   const hasUnderdevelopmentEvidence = /underdeveloped|lack(?:s|ing)? specific examples|shallow|listed but undeveloped|examples? (?:are )?(?:simple|general|too general|vague)|limited development|ideas? (?:are )?(?:not developed|underdeveloped|superficial)|lack(?:s|ing)? detail|not enough detail|details? (?:are )?(?:limited|thin)/.test(snapshot);
   const hasUnclearPositionEvidence = /unclear position|position is unclear|not consistently clear|vague position|no clear position|both good and bad|maybe not always good|definitive stance/.test(snapshot);
   const hasWeakCoherenceEvidence = /weak progression|limited cohesion|no clear logical link|paragraph unity|basic connectors|repetitive connectors|vague referencing|not always logical|poor progression|unclear referencing/.test(snapshot);
-  const hasSevereTask2OffTopicEvidence = /(clearly off[- ]topic|off[- ]topic|does not address the prompt|does not answer the question|content does not address the prompt|misinterprets? the topic|misread(?:s)? the prompt|wrong topic|task mismatch|instead of products or treatments|instead of buying products|instead of treatments to look younger|straying from the topic|further straying from the topic|unrelated to the task|not related to the prompt|changes? the topic|discusses? .* instead of)/.test(snapshot);
+  // Keep Task 2 A-category relevance caps narrow. Generic phrases like "use X instead of Y"
+  // appear in correction advice and must not be misread as an off-topic essay.
+  const hasSevereTask2OffTopicEvidence = /(clearly off[- ]topic|\boff[- ]topic\b|does not address the prompt|does not answer the question|content does not address the prompt|misinterprets? the topic|misread(?:s)? the prompt|wrong topic|task mismatch|straying from the topic|further straying from the topic|unrelated to the task|not related to the prompt|changes? the topic|answers? a different question|discusses? a different topic)/.test(snapshot);
   const hasWhollyUnrelatedEvidence = /(wholly unrelated|completely unrelated|entirely unrelated|no relevant message|almost no relevant message|no rateable relevant response|blank response|mostly non-english|mostly copied)/.test(snapshot);
   const hasTask1PurposeMismatchEvidence = /(unclear letter purpose|no clear purpose|wrong purpose|wrong recipient|recipient relationship.*wrong|does not fit the recipient|inappropriate tone|wrong tone|not recognisably a letter|not recognizable as a letter|not a letter|essay instead of a letter|missing letter format|no opening|no closing|missing salutation|missing sign-off|ignores? the bullet points|bullet points? not covered|no bullet point coverage|missing major bullet|only one bullet|two bullet points.*missing|one bullet point.*missing|largely unrelated to the letter situation)/.test(snapshot);
   const hasTask1DetailWeaknessEvidence = /(bullet[^.]{0,60}(limited|underdeveloped|missing|not covered|partly covered)|purpose[^.]{0,80}(unclear|weak)|tone[^.]{0,80}(inconsistent|inappropriate|too informal|too formal)|letter[^.]{0,80}(underdeveloped|limited detail|not enough detail)|opening|closing|salutation|sign[- ]off)/.test(snapshot);
@@ -6303,11 +6306,18 @@ async function callAiHighBandPolishExpressionsOnly({ apiKey, model, body, effect
   const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems });
   const betterExpressionItems = normalizeBetterExpressionItems([...rawItems, ...repairedBetterExpressionItems]).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
   if (!betterExpressionItems.length) {
-    const error = new Error("AI high-band polish returned no usable sentence upgrades.");
-    error.provider = DEFAULT_PROVIDER;
-    error.aiStage = stage;
-    error.status = 502;
-    throw error;
+    return {
+      aiStage: stage,
+      disclaimer: DISCLAIMER,
+      stageStatus: "warning",
+      noIssueReason: "High-band polish did not return usable sentence upgrades; the essay may already be sufficiently polished at sentence level or the provider omitted this optional content.",
+      noIssueReasonZh: "高分润色阶段没有返回可用的句子升级；可能句子层面已经较稳定，或供应商暂时没有输出这一可选内容。",
+      betterExpressionMode: "high_band_polish",
+      highBandPolish: true,
+      betterExpressionItems: [],
+      betterExpressionBatchMeta: { sourceItems: units.length, attemptedBatches: 1, successfulBatches: 0, highBandPolish: true },
+      stageWarnings: ensureArray(raw.stageWarnings).concat(["AI high-band polish returned no usable sentence upgrades."])
+    };
   }
   return {
     aiStage: stage,
@@ -6326,11 +6336,16 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
   }
   const sources = correctionSourcesForBetterExpression(body);
   if (!sources.length) {
-    const error = new Error("AI better-expressions stage cannot run because no source sentences were found.");
-    error.provider = DEFAULT_PROVIDER;
-    error.aiStage = stage;
-    error.status = 400;
-    throw error;
+    return {
+      aiStage: stage,
+      disclaimer: DISCLAIMER,
+      stageStatus: "warning",
+      noIssueReason: "No source sentence corrections were available for better-expression generation.",
+      noIssueReasonZh: "没有可用于生成更好表达的逐句批改来源。",
+      betterExpressionItems: [],
+      betterExpressionBatchMeta: { sourceItems: 0, attemptedBatches: 0, successfulBatches: 0, batchSize: 0, maxBatches: 0, truncatedByBatchLimit: false },
+      stageWarnings: ["Better-expression stage skipped: no source sentence corrections were available."]
+    };
   }
   const batchSize = envInt("AI_BETTER_BATCH_SIZE", 5, 2, 8);
   const maxBatches = envInt("AI_BETTER_MAX_BATCHES", 12, 1, 20);
@@ -6352,11 +6367,17 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
     })
   });
   if (!results.length) {
-    const error = new Error(`AI better-expressions batching failed. ${warnings.join(" | ")}`);
-    error.provider = DEFAULT_PROVIDER;
-    error.aiStage = stage;
-    error.status = 502;
-    throw error;
+    const safeWarnings = warnings.length ? warnings : ["AI better-expressions batching returned no usable results."];
+    return {
+      aiStage: stage,
+      disclaimer: DISCLAIMER,
+      stageStatus: "warning",
+      noIssueReason: "Better-expression generation did not return usable sentence upgrades, but grading can continue with direct corrections and final scoring.",
+      noIssueReasonZh: "更好表达阶段暂时没有返回可用的升级句；评分、逐句基础批改和最终复核仍可继续。",
+      betterExpressionItems: [],
+      betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: 0, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
+      stageWarnings: safeWarnings
+    };
   }
   const rawBetterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems));
   const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: rawBetterExpressionItems });
