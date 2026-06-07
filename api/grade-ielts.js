@@ -570,6 +570,8 @@ function buildSystemPrompt(veryShort = false, locale = "en") {
     "Always return completionStatus when completion is relevant: isIncomplete, completionLevel, missingParts, wordCountImpact, scoreImpact, scoreCapApplied, and scoreCapReason.",
     "Task 1 letter caps: if only one bullet point is addressed, Task Achievement normally no higher than 4.0; if two bullet points are addressed but one is missing, no higher than 5.0; if the response is not recognisably a letter, uses the wrong recipient/purpose, ignores the bullet points, or is largely unrelated to the letter situation, Task Achievement normally no higher than 3.0-4.0. Wrong tone, missing letter format, inappropriate opening/closing, copied prompt, or unclear purpose reduce Task Achievement.",
     "Task 2 argument and relevance caps: no clear position means Task Response normally no higher than 4.0; listed but undeveloped ideas no higher than 5.0; only one side when both required no higher than 5.0; a clearly off-topic or misread response normally gives Task Response no higher than 4.0; a wholly unrelated response or no relevant message normally gives Task Response no higher than 3.0; no conclusion or no examples/details reduces Task Response and/or Coherence.",
+    "Low-band boundary categories: Task 2 A = off-topic/misread, TR normally 3.0-4.0; Task 2 B = severe underlength plus weak development, TR normally 4.0-4.5; Task 2 C = answers the prompt but language errors are frequent and development is shallow, TR is usually 4.5-5.0 and should not be automatically crushed to 4.0.",
+    "Task 1 low-band boundary categories: A = wrong/non-functional letter, wrong recipient/purpose, or no bullet coverage; B = missing major bullet/purpose detail or severe underlength; C = functional letter with weak details/language. Use Task Achievement, not Task Response, for these Task 1 boundaries.",
     "Coherence caps: no paragraphing normally no higher than 4.0-5.0; ideas listed without progression no higher than 5.0; missing/unnatural linking or repeated and/so/because should not receive high CC; Band 6+ requires clear paragraphing and mostly logical progression.",
     "Lexical caps: extremely basic vocabulary normally no higher than 4.0; frequent word-choice errors affecting meaning normally no higher than 4.0-5.0; heavy repetition or inappropriate register reduces LR; Band 6+ requires enough topic vocabulary and mostly appropriate word choice.",
     "Grammar caps: if most sentences contain serious grammar errors or errors often reduce meaning, GRA normally no higher than 4.0; only simple sentence patterns normally no higher than 5.0; frequent tense/article/plural/word-order/sentence-structure errors should not receive Band 5.5+ unless meaning remains generally clear.",
@@ -1570,16 +1572,29 @@ function extractSourceLockQuotedTerms(text) {
   return terms;
 }
 
+function sourceLockEscapedRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sourceLockPhraseAppears(phrase, normalizedSources = []) {
+  const normalized = normalizeSourceLockText(phrase);
+  if (!normalized) return true;
+  const escaped = sourceLockEscapedRegex(normalized).replace(/\\ /g, "\\s+");
+  const pattern = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`);
+  return normalizedSources.some((source) => pattern.test(source));
+}
+
 function sourceLockTermAppears(term, sourceTexts = []) {
   const normTerm = normalizeSourceLockText(term);
   if (!normTerm) return true;
   const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
-  if (normSources.some((source) => source.includes(normTerm))) return true;
   const tokenSet = sourceLockTokenSet(sourceTexts);
   const variants = sourceLockTermVariants(term);
   if (normTerm.includes(" ")) {
-    return variants.some((variant) => normSources.some((source) => source.includes(variant)));
+    return variants.some((variant) => sourceLockPhraseAppears(variant, normSources));
   }
+  // Single-word terms must match complete tokens only. This prevents short words like
+  // at / in / to / a / the from leaking between neighbouring sentence explanations.
   return variants.some((variant) => tokenSet.has(variant));
 }
 
@@ -4036,6 +4051,50 @@ function nextBandTargetRange(currentBand) {
   return `${formatBand(lower)}-${formatBand(upper)}`;
 }
 
+
+function resolveFinalBandForSentenceTargets(result = {}, body = {}) {
+  const candidates = [
+    result?.overallBand,
+    result?.finalOverallBand,
+    result?.scoreCalculation?.finalBand,
+    result?.targetImprovementPlan?.currentBand,
+    body?.currentResult?.overallBand,
+    body?.currentResult?.finalOverallBand,
+    body?.currentResult?.scoreCalculation?.finalBand,
+    body?.currentOverallBand,
+    body?.overallBand
+  ];
+  for (const value of candidates) {
+    const match = String(value ?? "").match(/\d+(?:\.\d+)?/);
+    if (!match) continue;
+    const numeric = Number(match[0]);
+    if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 9) return roundHalf(numeric);
+  }
+  return null;
+}
+
+function applyFinalBetterExpressionTargetSync(result = {}, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const currentBand = resolveFinalBandForSentenceTargets(result, body);
+  const targetRange = nextBandTargetRange(currentBand);
+  if (!targetRange) return result;
+  const syncItem = (item) => {
+    if (!item || typeof item !== "object") return item;
+    item.betterExpressionTargetBand = targetRange;
+    item.targetBand = targetRange;
+    item.targetRange = targetRange;
+    return item;
+  };
+  if (Array.isArray(result.detailedSentenceCorrections)) result.detailedSentenceCorrections = result.detailedSentenceCorrections.map(syncItem);
+  if (Array.isArray(result.betterExpressionItems)) result.betterExpressionItems = result.betterExpressionItems.map(syncItem);
+  if (result.targetImprovementPlan && typeof result.targetImprovementPlan === "object") {
+    result.targetImprovementPlan.currentBand = formatBand(currentBand);
+    result.targetImprovementPlan.targetBandRange = targetRange;
+    result.targetImprovementPlan.targetBandRangeZh = result.targetImprovementPlan.targetBandRangeZh || `最终分数复核后，句子优化目标统一按当前${formatBand(currentBand)}分上调0.5到1.0分，即${targetRange}。`;
+  }
+  return result;
+}
+
 function applyNextBandTargetPlan(result = {}, body = {}) {
   if (!result || typeof result !== "object") return result;
   const plan = result.targetImprovementPlan;
@@ -5071,6 +5130,9 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
     }),
     "Chinese requirement: every item with reason/problem/rule/bandImpact must include the corresponding reasonZh/problemZh/ruleZh/bandImpactZh. Do not leave Chinese helper fields empty when the English field is non-empty.",
     "Do not return betterExpression, betterExpressionZh, or targetBandExpression in this direct-correction stage. Stage 12 handles upgraded expressions separately.",
+    task === "Task 1"
+      ? "Task 1 letter rule: correct sentences for letter purpose, recipient-appropriate tone, bullet-point clarity, opening/closing, and practical function. Do not mention thesis, argument, counterargument, or essay conclusion."
+      : "Task 2 essay rule: correct sentences for position, relevance, idea development, examples, paragraph logic, and conclusion. Do not mention recipient, salutation, letter closing, or bullet-point coverage.",
     `Task: ${task}`,
     `Mode: ${effectiveMode}`,
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -5079,6 +5141,106 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
     "Sentences to correct:",
     sentenceList
   ].join("\n");
+}
+
+function correctedSentenceHasRedFlags(text = "") {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const patterns = [
+    /\bdiscuss\s+about\b/i,
+    /\bdiscuss\s+nowadays\s+it['’]?s\b/i,
+    /\bneed\s+to\s+facing\b/i,
+    /\bwant\s+use\b/i,
+    /\bpay\s+for\s+treatments\s+was\b/i,
+    /\bthey\s+using\b/i,
+    /\bif\s+they\s+using\b/i,
+    /\bmaybe\s+dangerous\b/i,
+    /\bmore\s+comfortable\s+and\s+confident\s+at\s+work,\s*that\s+means\b/i,
+    /\bat\s+future\b/i,
+    /\bbeauty\s+never\s+important\b/i,
+    /\bevery\s+one\s+like\s+look\b/i,
+    /\bthey\s+own\s+judgement\b/i,
+    /\bit['’]?spossible\b/i,
+    /\bto\s+but\s+many\b/i,
+    /\bposiible\b/i,
+    /\bnowdays\b/i,
+    /\bimprotant\b/i,
+    /\bfurture\b/i,
+    /\bcaryfully\b/i,
+    /\bthemslves\b/i,
+    /\bdeepends\b/i,
+    /\bproformence\b/i
+  ];
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+function collectUnsafeCorrectedSentenceCandidates(items = []) {
+  return dedupeCorrections(ensureArray(items).filter((item) => {
+    if (!item || typeof item !== "object") return false;
+    const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+    const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.correction);
+    if (!original || !corrected) return false;
+    return sameCorrectionText(original, corrected) || correctedSentenceHasRedFlags(corrected);
+  }).map((item, index) => ({
+    sentenceNumber: Number(item.sentenceNumber) || index + 1,
+    originalSentence: firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence),
+    correctedSentence: firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.correction),
+    problem: firstNonEmpty(item.problem, item.reason, item.explanation, item.issue),
+    errorType: firstNonEmpty(item.errorType, item.type, item.category)
+  }))).slice(0, envInt("AI_DIRECT_CORRECTION_REPAIR_MAX_ITEMS", 18, 0, 40));
+}
+
+function buildDirectCorrectionRepairPrompt({ body, candidates, batchIndex, batchCount }) {
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const items = candidates.map((item) => [
+    `Sentence ${item.sentenceNumber}:`,
+    `Original: ${item.originalSentence}`,
+    `Rejected direct correction: ${item.correctedSentence}`,
+    item.problem ? `Problem: ${item.problem}` : "",
+    item.errorType ? `Error type: ${item.errorType}` : ""
+  ].filter(Boolean).join("\n")).join("\n\n");
+  return [
+    `AI-only direct correction quality repair ${batchIndex + 1}/${batchCount}.`,
+    "Rewrite only the direct correctedSentence for the listed items. The previous correction was unchanged, incomplete, unnatural, or still contained obvious errors.",
+    "Return a natural correctedSentence that fixes the sentence directly while preserving the student's intended meaning. Do not make a high-band rewrite here; this is a direct correction, not a betterExpression.",
+    "Do not keep errors such as discuss about, discuss nowadays it's, need to facing, want use, they using, at future, maybe dangerous, or misspellings.",
+    task === "Task 1"
+      ? "For Task 1, keep letter purpose, tone, recipient relationship, and bullet-point function. Do not use essay thesis/counterargument language."
+      : "For Task 2, keep essay position/reasoning and question relevance. Do not use letter salutation/recipient/bullet language.",
+    "Return exactly one valid JSON object with this shape:",
+    JSON.stringify({ detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", problem: "", problemZh: "", rule: "", ruleZh: "", errorType: "", errorTypeZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true }] }),
+    `Task: ${task}`,
+    `Current score snapshot: ${compactScoreSnapshot(body)}`,
+    "Items:",
+    items
+  ].join("\n");
+}
+
+async function repairUnsafeDirectCorrectionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems }) {
+  const candidates = collectUnsafeCorrectedSentenceCandidates(rawItems);
+  if (!candidates.length || !hasEnoughAiTime(deadline, 45000)) return [];
+  const batchSize = envInt("AI_DIRECT_CORRECTION_REPAIR_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_DIRECT_CORRECTION_REPAIR_MAX_BATCHES", 5, 1, 10);
+  const batchCount = Math.min(Math.ceil(candidates.length / batchSize), maxBatches);
+  const { results, warnings } = await runBatchedAiJson({
+    items: candidates,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_DIRECT_CORRECTION_REPAIR_CONCURRENCY", 1, 1, 3),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildDirectCorrectionRepairPrompt({ body, candidates: batch, batchIndex: index, batchCount }),
+      maxTokens: envInt("AI_DIRECT_CORRECTION_REPAIR_MAX_TOKENS", 5200, 2500, 10000),
+      deadline,
+      timeoutMs: Number(process.env.AI_DIRECT_CORRECTION_REPAIR_TIMEOUT_MS) || 100000
+    })
+  });
+  const repaired = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
+  if (warnings.length && repaired.length) repaired[0].stageWarnings = warnings;
+  return repaired;
 }
 
 async function callAiBatchedSentenceCorrections({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
@@ -5117,8 +5279,10 @@ async function callAiBatchedSentenceCorrections({ apiKey, model, body, effective
     error.status = 502;
     throw error;
   }
-  const detailed = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
+  let detailed = dedupeCorrections(results.flatMap((r) => ensureArray(r.detailedSentenceCorrections)));
   const simple = dedupeCorrections(results.flatMap((r) => ensureArray(r.sentenceCorrections)));
+  const repairedDirectCorrections = await repairUnsafeDirectCorrectionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: detailed });
+  if (repairedDirectCorrections.length) detailed = dedupeCorrections([...detailed, ...repairedDirectCorrections]);
   const noIssues = !simple.length && !detailed.length;
   return {
     aiStage: stage,
@@ -5176,6 +5340,9 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     ...modeLines,
     feedbackTrackInstruction,
     "Return only betterExpressionItems. Do not return detailedSentenceCorrections in this stage; direct corrections already came from Stage 7.",
+    task === "Task 1"
+      ? "Task 1 letter rule: the betterExpression must improve practical letter communication: purpose, bullet-point detail, politeness, register, request/apology/thanks/invitation clarity, or natural opening/closing. Never use essay terms like thesis, argument, counterargument, both sides, or conclusion unless the letter prompt genuinely requires them."
+      : "Task 2 essay rule: the betterExpression must improve essay communication: position, relevance, reasoning, examples, cohesion, or conclusion. Never use letter terms like recipient, salutation, bullet points, or closing.",
     "betterExpression must be based on the direct corrected sentence, not on the original wrong sentence.",
     "betterExpression must be ONE usable IELTS sentence only, not a paragraph and not an explanation.",
     "It must first fix all obvious errors from the corrected sentence. Never keep errors such as 'discuss about', 'need to facing', wrong spelling, wrong tense, or broken punctuation.",
@@ -5239,6 +5406,48 @@ async function repairUnsafeBetterExpressionCandidates({ apiKey, model, body, eff
       maxTokens: envInt("AI_BETTER_REPAIR_MAX_TOKENS", 5200, 2500, 10000),
       deadline,
       timeoutMs: Number(process.env.AI_BETTER_REPAIR_TIMEOUT_MS) || 100000
+    })
+  });
+  return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
+}
+
+
+function betterExpressionKeyForMatch(item = {}, index = 0) {
+  const number = Number(item.sentenceNumber) || 0;
+  if (number > 0) return `n:${number}`;
+  const original = firstNonEmpty(item.originalSentence, item.original, item.sentence, item.sourceSentence);
+  return normalizeCorrectionKeyText(original) || `idx:${index}`;
+}
+
+function collectMissingBetterExpressionSources(sources = [], items = []) {
+  const returnedKeys = new Set(ensureArray(items).map((item, index) => betterExpressionKeyForMatch(item, index)));
+  return ensureArray(sources).filter((source, index) => {
+    if (!source || typeof source !== "object") return false;
+    const key = betterExpressionKeyForMatch(source, index);
+    return key && !returnedKeys.has(key);
+  }).slice(0, envInt("AI_MISSING_BETTER_MAX_ITEMS", 18, 0, 40));
+}
+
+async function repairMissingBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, sources, currentItems }) {
+  const missing = collectMissingBetterExpressionSources(sources, currentItems);
+  if (!missing.length || !hasEnoughAiTime(deadline, 45000)) return [];
+  const batchSize = envInt("AI_MISSING_BETTER_BATCH_SIZE", 5, 2, 8);
+  const maxBatches = envInt("AI_MISSING_BETTER_MAX_BATCHES", 5, 1, 10);
+  const batchCount = Math.min(Math.ceil(missing.length / batchSize), maxBatches);
+  const { results } = await runBatchedAiJson({
+    items: missing,
+    batchSize,
+    maxBatches,
+    concurrency: envInt("AI_MISSING_BETTER_CONCURRENCY", 1, 1, 3),
+    runBatch: (batch, index) => callTenStepBatchJson({
+      apiKey,
+      model,
+      stage,
+      locale,
+      userPrompt: buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, batchIndex: index, batchCount, highBandPolish: false }) + "\n\nMISSING-ITEM REPAIR: Return a safe betterExpression for every listed score-impacting item if possible. Do not leave the item out unless the corrected sentence is already the best safe next-band expression.",
+      maxTokens: envInt("AI_MISSING_BETTER_MAX_TOKENS", 6200, 3000, 12000),
+      deadline,
+      timeoutMs: Number(process.env.AI_MISSING_BETTER_TIMEOUT_MS) || 110000
     })
   });
   return normalizeBetterExpressionItems(results.flatMap((r) => ensureArray(r.betterExpressionItems)));
@@ -5372,6 +5581,30 @@ function makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) {
   return `严格雅思边界复核已触发：${task} 当前约 ${words} 词，并出现 ${flagText}。Task 2 字数不足本身不是机械扣分，但如果同时存在基础语言错误密集、展开很浅，Band 5.0 应视为宽松上限，而不是默认分。建议考官区间：${recommendedRange}。`;
 }
 
+function boundaryCategoryLabel(category, task) {
+  const labels = {
+    task2_A_off_topic: "A. Task 2 off-topic / misread prompt",
+    task2_B_severe_underlength: "B. Task 2 severe underlength + underdevelopment",
+    task2_C_answered_but_weak: "C. Task 2 answered prompt but language errors / shallow development",
+    task1_A_not_functional_letter: "A. Task 1 wrong / non-functional letter response",
+    task1_B_missing_major_requirements: "B. Task 1 missing major bullet/purpose details or severe underlength",
+    task1_C_functional_but_weak: "C. Task 1 functional letter but weak detail / language control"
+  };
+  return labels[category] || (task === "Task 1" ? "Task 1 low-band boundary review" : "Task 2 low-band boundary review");
+}
+
+function boundaryCategoryLabelZh(category, task) {
+  const labels = {
+    task2_A_off_topic: "A类：Task 2 跑题 / 误读题目",
+    task2_B_severe_underlength: "B类：Task 2 字数严重不足 + 展开不足",
+    task2_C_answered_but_weak: "C类：Task 2 回答了题目，但语言错误多 / 展开浅",
+    task1_A_not_functional_letter: "A类：Task 1 非功能性书信 / 题目任务明显错误",
+    task1_B_missing_major_requirements: "B类：Task 1 重要要点或书信目的缺失 / 字数严重不足",
+    task1_C_functional_but_weak: "C类：Task 1 是一封可识别的信，但细节不足 / 语言控制弱"
+  };
+  return labels[category] || (task === "Task 1" ? "Task 1 低分边界复核" : "Task 2 低分边界复核");
+}
+
 function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
   const words = Number(body?.wordCount) || Number(result?.actualWordCount) || countWordsServer(body?.essay);
@@ -5379,24 +5612,26 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   const issueCount = countBoundaryAuditItems(result, body);
   const flags = [];
 
-  const hasFrequentGrammarEvidence = /frequent[^.]{0,90}(grammar|grammatical|verb|article|plural|subject-verb|tense|sentence)|grammar[^.]{0,80}(frequent|limited|errors? often|obscure|weak)|errors? often obscure|basic grammar errors|limited grammatical range/.test(snapshot);
-  const hasFrequentLexicalEvidence = /frequent[^.]{0,90}(spelling|word choice|word-choice|lexical|word form|vocabulary)|lexical[^.]{0,80}(limited|frequent|errors)|spelling[^.]{0,80}(frequent|errors)|word choice[^.]{0,80}(errors|limited)|limited vocabulary/.test(snapshot);
-  const hasUnderdevelopmentEvidence = /underdeveloped|lack(?:s|ing)? specific examples|shallow|listed but undeveloped|examples? (?:are )?(?:simple|general|too general|vague)|limited development|ideas? (?:are )?(?:not developed|underdeveloped|superficial)/.test(snapshot);
+  const hasFrequentGrammarEvidence = /frequent[^.]{0,90}(grammar|grammatical|verb|article|plural|subject-verb|tense|sentence)|grammar[^.]{0,80}(frequent|limited|errors? often|obscure|weak)|errors? often obscure|basic grammar errors|limited grammatical range|verb forms?|articles?|singular|plural|word order|sentence structure/.test(snapshot);
+  const hasFrequentLexicalEvidence = /frequent[^.]{0,90}(spelling|word choice|word-choice|lexical|word form|vocabulary)|lexical[^.]{0,80}(limited|frequent|errors)|spelling[^.]{0,80}(frequent|errors)|word choice[^.]{0,80}(errors|limited)|limited vocabulary|basic vocabulary|misspell/.test(snapshot);
+  const hasUnderdevelopmentEvidence = /underdeveloped|lack(?:s|ing)? specific examples|shallow|listed but undeveloped|examples? (?:are )?(?:simple|general|too general|vague)|limited development|ideas? (?:are )?(?:not developed|underdeveloped|superficial)|lack(?:s|ing)? detail|not enough detail|details? (?:are )?(?:limited|thin)/.test(snapshot);
   const hasUnclearPositionEvidence = /unclear position|position is unclear|not consistently clear|vague position|no clear position|both good and bad|maybe not always good|definitive stance/.test(snapshot);
-  const hasWeakCoherenceEvidence = /weak progression|limited cohesion|no clear logical link|paragraph unity|basic connectors|repetitive connectors|vague referencing|not always logical/.test(snapshot);
+  const hasWeakCoherenceEvidence = /weak progression|limited cohesion|no clear logical link|paragraph unity|basic connectors|repetitive connectors|vague referencing|not always logical|poor progression|unclear referencing/.test(snapshot);
   const hasSevereTask2OffTopicEvidence = /(clearly off[- ]topic|off[- ]topic|does not address the prompt|does not answer the question|content does not address the prompt|misinterprets? the topic|misread(?:s)? the prompt|wrong topic|task mismatch|instead of products or treatments|instead of buying products|instead of treatments to look younger|straying from the topic|further straying from the topic|unrelated to the task|not related to the prompt|changes? the topic|discusses? .* instead of)/.test(snapshot);
   const hasWhollyUnrelatedEvidence = /(wholly unrelated|completely unrelated|entirely unrelated|no relevant message|almost no relevant message|no rateable relevant response|blank response|mostly non-english|mostly copied)/.test(snapshot);
   const hasTask1PurposeMismatchEvidence = /(unclear letter purpose|no clear purpose|wrong purpose|wrong recipient|recipient relationship.*wrong|does not fit the recipient|inappropriate tone|wrong tone|not recognisably a letter|not recognizable as a letter|not a letter|essay instead of a letter|missing letter format|no opening|no closing|missing salutation|missing sign-off|ignores? the bullet points|bullet points? not covered|no bullet point coverage|missing major bullet|only one bullet|two bullet points.*missing|one bullet point.*missing|largely unrelated to the letter situation)/.test(snapshot);
+  const hasTask1DetailWeaknessEvidence = /(bullet[^.]{0,60}(limited|underdeveloped|missing|not covered|partly covered)|purpose[^.]{0,80}(unclear|weak)|tone[^.]{0,80}(inconsistent|inappropriate|too informal|too formal)|letter[^.]{0,80}(underdeveloped|limited detail|not enough detail)|opening|closing|salutation|sign[- ]off)/.test(snapshot);
 
   if (task === "Task 2" && words < 180) flags.push(`Task 2 below 180 words (${words})`);
   else if (task === "Task 2" && words < 200) flags.push(`Task 2 below 200 words (${words})`);
   if (task === "Task 1" && words < 80) flags.push(`Task 1 very short (${words})`);
   else if (task === "Task 1" && words < 120) flags.push(`Task 1 below 120 words (${words})`);
-  if (hasUnderdevelopmentEvidence) flags.push("underdeveloped ideas/details");
+  if (hasUnderdevelopmentEvidence) flags.push(task === "Task 1" ? "underdeveloped bullet details" : "underdeveloped ideas/details");
   if (hasUnclearPositionEvidence) flags.push(task === "Task 1" ? "unclear letter purpose" : "unclear or weak position");
   if (hasWeakCoherenceEvidence) flags.push("weak coherence/progression");
   if (task === "Task 2" && hasSevereTask2OffTopicEvidence) flags.push(hasWhollyUnrelatedEvidence ? "wholly unrelated or no relevant Task 2 response" : "clear Task 2 task mismatch/off-topic content");
   if (task === "Task 1" && hasTask1PurposeMismatchEvidence) flags.push("Task 1 purpose/bullet/letter-format mismatch");
+  if (task === "Task 1" && hasTask1DetailWeaknessEvidence && !hasTask1PurposeMismatchEvidence) flags.push("Task 1 detail/tone/function weakness");
   if (hasFrequentLexicalEvidence) flags.push("frequent spelling/word-choice errors");
   if (hasFrequentGrammarEvidence) flags.push("frequent basic grammar errors");
   if (issueCount >= 10) flags.push(`high correction density (${issueCount} AI issue items)`);
@@ -5407,69 +5642,95 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   let strictExaminerBand = "";
   let generousExaminerBand = "";
   let boundaryPosition = "";
+  let boundaryCategory = "";
 
   if (task === "Task 2") {
     if (hasSevereTask2OffTopicEvidence || hasWhollyUnrelatedEvidence) {
+      // A. Off-topic / misread prompt: task relevance is the main limiter.
       triggered = true;
-      recommendedRange = hasWhollyUnrelatedEvidence ? "Band 1.0-3.0 for Task Response unless there is a small relevant attempt" : "Band 3.5-4.5, depending on how much relevant content remains";
-      strictExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.0 or below for Task Response" : "Band 3.5-4.0 for Task Response";
-      generousExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.5" : "Band 4.5";
-      boundaryPosition = "Task 2 task-relevance boundary: off-topic/misread prompt review";
+      boundaryCategory = "task2_A_off_topic";
+      recommendedRange = hasWhollyUnrelatedEvidence ? "Band 1.0-3.0 for Task Response unless there is a small relevant attempt" : "Band 3.0-4.0 for Task Response; overall depends on remaining language/coherence";
+      strictExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.0 or below for Task Response" : "Band 3.0-4.0 for Task Response";
+      generousExaminerBand = hasWhollyUnrelatedEvidence ? "Band 3.5" : "Band 4.0";
+      boundaryPosition = "A. Task 2 task-relevance boundary: off-topic/misread prompt review";
       caps["Task Response"] = hasWhollyUnrelatedEvidence ? 3.0 : 4.0;
       if (hasWeakCoherenceEvidence || hasSevereTask2OffTopicEvidence) caps["Coherence and Cohesion"] = 4.5;
       if (hasFrequentLexicalEvidence) caps["Lexical Resource"] = 4.5;
       if (hasFrequentGrammarEvidence) caps["Grammatical Range and Accuracy"] = 4.5;
     }
-    const severeLowBoundary = words > 0 && words < 180 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || issueCount >= 8) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence || hasWeakCoherenceEvidence);
-    const moderateLowBoundary = words >= 180 && words < 200 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence);
-    const veryShortBoundary = words > 0 && words < 150;
-    if (severeLowBoundary || veryShortBoundary) {
+
+    const severeLowBoundary = words > 0 && words < 180 && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence || hasWeakCoherenceEvidence) && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || issueCount >= 8);
+    const severeUnderlengthOnly = words > 0 && words < 150 && (hasUnderdevelopmentEvidence || hasWeakCoherenceEvidence || hasFrequentGrammarEvidence || hasFrequentLexicalEvidence);
+    const answeredButWeak = !triggered && words >= 180 && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence || hasWeakCoherenceEvidence) && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || issueCount >= 8);
+    const moderateLowBoundary = !triggered && words >= 180 && words < 200 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && (hasUnderdevelopmentEvidence || hasUnclearPositionEvidence);
+
+    if (severeLowBoundary || severeUnderlengthOnly) {
+      // B. Severe underlength + weak development/errors: Band 5 is a generous ceiling, not a default.
       triggered = true;
+      boundaryCategory = boundaryCategory || "task2_B_severe_underlength";
       if (!recommendedRange) recommendedRange = words < 150 ? "Band 4.0 or below unless the response is unusually strong" : "Band 4.0-4.5, with Band 5.0 only as a generous upper limit";
       if (!strictExaminerBand) strictExaminerBand = words < 150 ? "Band 4.0" : "Band 4.0-4.5";
       if (!generousExaminerBand) generousExaminerBand = words < 150 ? "Band 4.5" : "Band 5.0";
-      if (!boundaryPosition) boundaryPosition = "low-band boundary: 4.0/4.5/5.0 strict review";
+      if (!boundaryPosition) boundaryPosition = "B. Task 2 low-band boundary: severe underlength + underdevelopment review";
       caps["Task Response"] = Math.min(Number(caps["Task Response"] ?? 9), words < 150 ? 4.0 : 4.5);
       caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), hasWeakCoherenceEvidence || words < 180 ? 4.5 : 5.0);
-      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.0 : 4.5);
+      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.5 : 5.0);
       caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.0 : 4.5);
-    } else if (moderateLowBoundary) {
+    } else if (answeredButWeak || moderateLowBoundary) {
+      // C. On-topic but weak: do not automatically crush TR to 4.0.
       triggered = true;
-      if (!recommendedRange) recommendedRange = "Band 4.5-5.0";
+      boundaryCategory = "task2_C_answered_but_weak";
+      if (!recommendedRange) recommendedRange = "Band 4.5-5.0; Band 5.0 is possible only if the task is answered and meaning is mostly clear";
       if (!strictExaminerBand) strictExaminerBand = "Band 4.5";
       if (!generousExaminerBand) generousExaminerBand = "Band 5.0";
-      if (!boundaryPosition) boundaryPosition = "low-band boundary: 4.5/5.0/5.5 strict review";
-      caps["Task Response"] = Math.min(Number(caps["Task Response"] ?? 9), 4.5);
-      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), 5.0);
+      if (!boundaryPosition) boundaryPosition = "C. Task 2 boundary: answered prompt but language errors / shallow development review";
+      caps["Task Response"] = Math.min(Number(caps["Task Response"] ?? 9), hasUnclearPositionEvidence ? 4.5 : 5.0);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), hasWeakCoherenceEvidence ? 4.5 : 5.0);
       caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.5 : 5.0);
-      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.5 : 5.0);
+      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.0 : 4.5);
     }
   } else {
-    if (hasTask1PurposeMismatchEvidence) {
+    if (hasTask1PurposeMismatchEvidence && (/not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated|no bullet point coverage|ignores? the bullet points/.test(snapshot))) {
+      // A. Not a functional response to the letter task.
       triggered = true;
-      recommendedRange = "Band 3.0-4.5 for Task Achievement, depending on how many bullet points and letter functions remain";
-      strictExaminerBand = "Band 3.0-4.0 for Task Achievement";
-      generousExaminerBand = "Band 4.5";
-      boundaryPosition = "Task 1 task-achievement boundary: purpose/bullet/tone/letter-format review";
+      boundaryCategory = "task1_A_not_functional_letter";
+      recommendedRange = "Band 2.0-4.0 for Task Achievement, depending on how much functional letter response remains";
+      strictExaminerBand = "Band 2.0-3.5 for Task Achievement";
+      generousExaminerBand = "Band 4.0";
+      boundaryPosition = "A. Task 1 boundary: wrong / non-functional letter response";
       caps["Task Achievement"] = /no bullet point coverage|ignores? the bullet points|not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated/.test(snapshot) ? 3.5 : 4.0;
-      if (/missing letter format|no opening|no closing|missing salutation|missing sign-off|not a letter|essay instead of a letter/.test(snapshot)) caps["Coherence and Cohesion"] = 4.5;
+      caps["Coherence and Cohesion"] = 4.5;
       if (hasFrequentLexicalEvidence) caps["Lexical Resource"] = 4.5;
       if (hasFrequentGrammarEvidence) caps["Grammatical Range and Accuracy"] = 4.5;
-    }
-    const task1LowBoundary = words > 0 && words < 80 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || hasUnderdevelopmentEvidence);
-    const task1ModerateBoundary = words >= 80 && words < 120 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence) && hasUnderdevelopmentEvidence;
-    if (task1LowBoundary || task1ModerateBoundary) {
+    } else if (hasTask1PurposeMismatchEvidence || (words > 0 && words < 80 && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || hasUnderdevelopmentEvidence))) {
+      // B. Letter task attempted but major bullet/purpose/detail or severe length problem.
       triggered = true;
-      if (!recommendedRange) recommendedRange = task1LowBoundary ? "Band 4.0-4.5" : "Band 4.5-5.0";
-      if (!strictExaminerBand) strictExaminerBand = task1LowBoundary ? "Band 4.0" : "Band 4.5";
-      if (!generousExaminerBand) generousExaminerBand = task1LowBoundary ? "Band 4.5" : "Band 5.0";
-      if (!boundaryPosition) boundaryPosition = "Task 1 low-band boundary strict review";
-      caps["Task Achievement"] = Math.min(Number(caps["Task Achievement"] ?? 9), task1LowBoundary ? 4.0 : 4.5);
-      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), task1LowBoundary ? 4.5 : 5.0);
-      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0);
-      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? (task1LowBoundary ? 4.0 : 4.5) : 5.0);
+      boundaryCategory = "task1_B_missing_major_requirements";
+      recommendedRange = words < 80 ? "Band 4.0-4.5" : "Band 4.0-5.0 for Task Achievement, depending on bullet coverage and functional detail";
+      strictExaminerBand = words < 80 ? "Band 4.0" : "Band 4.0-4.5 for Task Achievement";
+      generousExaminerBand = words < 80 ? "Band 4.5" : "Band 5.0";
+      boundaryPosition = "B. Task 1 boundary: missing major bullet/purpose detail or severe underlength";
+      caps["Task Achievement"] = Math.min(Number(caps["Task Achievement"] ?? 9), /only one bullet|one bullet point.*missing|two bullet points.*missing|missing major bullet/.test(snapshot) ? 4.0 : 4.5);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), /missing letter format|no opening|no closing|missing salutation|missing sign-off/.test(snapshot) ? 4.5 : 5.0);
+      if (hasFrequentLexicalEvidence) caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), words < 80 ? 4.0 : 4.5);
+      if (hasFrequentGrammarEvidence) caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), words < 80 ? 4.0 : 4.5);
+    } else if (words > 0 && (words < 120 || hasTask1DetailWeaknessEvidence) && (hasFrequentGrammarEvidence || hasFrequentLexicalEvidence || hasUnderdevelopmentEvidence || issueCount >= 8)) {
+      // C. Functional but weak letter: do not automatically force Task Achievement to 4.0 if it covers the situation.
+      triggered = true;
+      boundaryCategory = "task1_C_functional_but_weak";
+      recommendedRange = "Band 4.5-5.0; Band 5.0 is possible if the letter purpose is clear and enough bullet content is present";
+      strictExaminerBand = "Band 4.5";
+      generousExaminerBand = "Band 5.0";
+      boundaryPosition = "C. Task 1 boundary: functional letter but weak detail / language control";
+      caps["Task Achievement"] = Math.min(Number(caps["Task Achievement"] ?? 9), hasUnderdevelopmentEvidence ? 4.5 : 5.0);
+      caps["Coherence and Cohesion"] = Math.min(Number(caps["Coherence and Cohesion"] ?? 9), hasWeakCoherenceEvidence ? 4.5 : 5.0);
+      caps["Lexical Resource"] = Math.min(Number(caps["Lexical Resource"] ?? 9), hasFrequentLexicalEvidence ? 4.5 : 5.0);
+      caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.0 : 4.5);
     }
   }
+
+  const categoryLabel = boundaryCategoryLabel(boundaryCategory, task);
+  const categoryLabelZh = boundaryCategoryLabelZh(boundaryCategory, task);
   return {
     triggered,
     task,
@@ -5481,12 +5742,15 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
     strictExaminerBand,
     generousExaminerBand,
     boundaryPosition,
-    reason: triggered ? makeBoundaryAuditReason({ task, words, flags, recommendedRange }) : "",
-    reasonZh: triggered ? makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange }) : "",
-    auditType: boundaryPosition && boundaryPosition.includes("task-relevance") ? "task_relevance_boundary" : boundaryPosition && boundaryPosition.includes("Task 1 task-achievement") ? "task1_achievement_boundary" : "low_word_count_boundary",
+    boundaryCategory,
+    boundaryCategoryLabel: categoryLabel,
+    boundaryCategoryLabelZh: categoryLabelZh,
+    reason: triggered ? appendBoundaryNote(`${categoryLabel}.`, makeBoundaryAuditReason({ task, words, flags, recommendedRange })) : "",
+    reasonZh: triggered ? appendBoundaryNote(`${categoryLabelZh}。`, makeBoundaryAuditReasonZh({ task, words, flags, recommendedRange })) : "",
+    auditType: boundaryCategory === "task2_A_off_topic" ? "task_relevance_boundary" : boundaryCategory && boundaryCategory.startsWith("task1_") ? "task1_achievement_boundary" : "low_word_count_boundary",
     capRule: task === "Task 2"
-      ? "For Task 2, clear task mismatch/off-topic content caps Task Response; below 180 words with frequent basic errors treats Band 5.0 as a generous upper limit, not a default."
-      : "For Task 1 letters, Task Achievement is capped by letter purpose, bullet coverage, tone/register, format, and relevance; very short letters also trigger low-band boundary review."
+      ? "Task 2 low-band boundary categories: A off-topic/misread caps Task Response around Band 3.0-4.0; B severe underlength + weak development caps around Band 4.0-4.5; C answered prompt but error-dense/shallow usually stays around Band 4.5-5.0 rather than being automatically crushed to Band 4.0."
+      : "Task 1 low-band boundary categories: A wrong/non-functional letter caps Task Achievement around Band 2.0-4.0; B missing major bullet/purpose detail or severe underlength caps around Band 4.0-5.0; C functional but weak letters usually stay around Band 4.5-5.0 if the purpose and bullet content are partly present."
   };
 }
 
@@ -5571,8 +5835,10 @@ function applyStrictLowBandBoundaryGuard(result = {}, body = {}) {
 
   if (changed) {
     result.scoreChanged = true;
-    result.scoreChangeReason = appendBoundaryNote(result.scoreChangeReason, `Strict IELTS low-band boundary guard adjusted criterion bands: ${appliedCaps.join("; ")}.`);
-    result.scoreChangeReasonZh = appendBoundaryNote(result.scoreChangeReasonZh, `严格雅思低分边界保护已调整四项分数：${appliedCaps.join("；")}。`);
+    const categoryPart = audit.boundaryCategoryLabel ? `${audit.boundaryCategoryLabel}: ` : "";
+    const categoryPartZh = audit.boundaryCategoryLabelZh ? `${audit.boundaryCategoryLabelZh}：` : "";
+    result.scoreChangeReason = appendBoundaryNote(result.scoreChangeReason, `${categoryPart}Strict IELTS low-band boundary guard adjusted criterion bands: ${appliedCaps.join("; ")}.`);
+    result.scoreChangeReasonZh = appendBoundaryNote(result.scoreChangeReasonZh, `${categoryPartZh}严格雅思低分边界保护已调整四项分数：${appliedCaps.join("；")}。`);
   }
   result.bandRange = result.bandRange || audit.recommendedRange;
   result.boundaryPosition = result.boundaryPosition || audit.boundaryPosition;
@@ -5654,6 +5920,8 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "For every criterion, include a visible 0.5 half-band decision: why not 0.5 lower, why not 0.5 higher, and why this exact final band was selected.",
     "Strict IELTS low-band boundary rule: for Task 2 below 180 words, Band 5.0 is normally only a generous upper limit unless the language is unusually strong. If the essay is below 180 words AND has frequent basic grammar, spelling, word-choice errors, shallow development, or unclear position, explicitly compare Band 4.0, 4.5, and 5.0, and prefer the stricter lower band unless evidence clearly supports 5.0.",
     "Strict IELTS low-band rule for Task 2 below 200 words: do not treat 'normally no higher than Band 5.0' as 'give Band 5.0'. Underlength must be combined with development and language evidence. If frequent basic errors and weak development are present, TR/LR/GRA should usually fall around Band 4.0-4.5; CC may be 4.5-5.0 only if paragraphing and progression are clearly present.",
+    "Task 2 low-band boundary categories must be separated: A off-topic/misread prompt can cap Task Response around Band 3.0-4.0; B severe underlength plus weak development can cap Task Response around Band 4.0-4.5; C answers the prompt but has many language errors and shallow development should usually be judged around Band 4.5-5.0 rather than automatically crushed to Band 4.0.",
+    "Task 1 low-band boundary categories must follow letter rules: A wrong/non-functional letter or wrong recipient/purpose can cap Task Achievement around Band 2.0-4.0; B missing major bullet points, unclear purpose, or severe underlength can cap Task Achievement around Band 4.0-5.0; C functional letter with weak detail/language should usually remain around Band 4.5-5.0 if purpose and some bullet content are present.",
     "If all four criteria would be Band 5.0 for a short low-level Task 2, re-check whether Task Response, Lexical Resource, and Grammatical Range and Accuracy should instead be Band 4.0 or 4.5. Do not give four identical Band 5.0 bands as a safe default.",
     "If Task 2 content is mostly about another topic, finalCriteria for Task Response must explicitly say why it is Band 3.0, 3.5, 4.0, or 4.5 rather than a normal developed Task 2 score.",
     "If Task 1 content is not a functional letter or fails major bullet/purpose/tone requirements, finalCriteria for Task Achievement must explicitly say why it is capped and must not borrow Task 2 essay logic.",
@@ -6092,10 +6360,13 @@ async function callAiBatchedBetterExpressionsOnly({ apiKey, model, body, effecti
   }
   const rawBetterExpressionItems = results.flatMap((r) => ensureArray(r.betterExpressionItems));
   const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: rawBetterExpressionItems });
+  const normalizedInitialBetterExpressionItems = normalizeBetterExpressionItems([...rawBetterExpressionItems, ...repairedBetterExpressionItems]);
+  const missingBetterExpressionItems = await repairMissingBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, sources, currentItems: normalizedInitialBetterExpressionItems });
+  const finalBetterExpressionItems = normalizeBetterExpressionItems([...normalizedInitialBetterExpressionItems, ...missingBetterExpressionItems]);
   return {
     aiStage: stage,
     disclaimer: DISCLAIMER,
-    betterExpressionItems: normalizeBetterExpressionItems([...rawBetterExpressionItems, ...repairedBetterExpressionItems]),
+    betterExpressionItems: applyFinalBetterExpressionTargetSync({ betterExpressionItems: finalBetterExpressionItems }, body).betterExpressionItems,
     betterExpressionBatchMeta: { sourceItems: sources.length, attemptedBatches: attempted, successfulBatches: results.length, batchSize, maxBatches, truncatedByBatchLimit: Math.ceil(sources.length / batchSize) > maxBatches },
     stageWarnings: warnings
   };
@@ -6381,9 +6652,10 @@ async function handleRequest(req, res) {
       result = normalizeResultForMode(result, effectiveMode, veryShort, body, locale);
     }
     result = applyNextBandTargetPlan(result, body);
+    result = applyFinalBetterExpressionTargetSync(result, body);
     if (result && typeof result === "object") {
       result.detailedSentenceCorrections = dedupeCorrections(result.detailedSentenceCorrections || []);
-      result.betterExpressionItems = normalizeBetterExpressionItems(result.betterExpressionItems || []);
+      result.betterExpressionItems = applyFinalBetterExpressionTargetSync({ betterExpressionItems: normalizeBetterExpressionItems(result.betterExpressionItems || []) }, body).betterExpressionItems || [];
     }
     sendJson(req, res, 200, result);
   } catch (error) {

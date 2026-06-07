@@ -1226,6 +1226,7 @@ function renderStrictBoundaryAudit(result = {}) {
     : "";
   return `<div class="ai-warning strict-boundary-audit">
     <p><strong>${escapeHtml(title)}：</strong>${escapeHtml(audit.reason || result.boundaryReason || fallbackMessage)}${renderZhToggle(audit.reasonZh || result.boundaryReasonZh || "")}</p>
+    ${audit.boundaryCategoryLabel || audit.boundaryCategoryLabelZh ? `<p><strong>边界分类：</strong>${escapeHtml(audit.boundaryCategoryLabelZh || audit.boundaryCategoryLabel)}${audit.boundaryCategoryLabel && audit.boundaryCategoryLabelZh ? ` / ${escapeHtml(audit.boundaryCategoryLabel)}` : ""}</p>` : ""}
     ${audit.recommendedRange ? `<p><strong>建议考官区间：</strong>${escapeHtml(audit.recommendedRange)}</p>` : ""}
     ${audit.boundaryPosition ? `<p><strong>边界类型：</strong>${escapeHtml(audit.boundaryPosition)}</p>` : ""}
     ${flags.length ? `<p><strong>触发原因：</strong>${escapeHtml(flags.join("；"))}</p>` : ""}
@@ -1726,14 +1727,25 @@ function extractSourceLockQuotedTerms(text) {
   return terms;
 }
 
+function sourceLockEscapedRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sourceLockPhraseAppears(phrase, normalizedSources = []) {
+  const normalized = normalizeSourceLockText(phrase);
+  if (!normalized) return true;
+  const escaped = sourceLockEscapedRegex(normalized).replace(/\\ /g, "\\s+");
+  const pattern = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`);
+  return normalizedSources.some((source) => pattern.test(source));
+}
+
 function sourceLockTermAppears(term, sourceTexts = []) {
   const normTerm = normalizeSourceLockText(term);
   if (!normTerm) return true;
   const normSources = sourceTexts.map(normalizeSourceLockText).filter(Boolean);
-  if (normSources.some((source) => source.includes(normTerm))) return true;
   const tokenSet = sourceLockTokenSet(sourceTexts);
   const variants = sourceLockTermVariants(term);
-  if (normTerm.includes(" ")) return variants.some((variant) => normSources.some((source) => source.includes(variant)));
+  if (normTerm.includes(" ")) return variants.some((variant) => sourceLockPhraseAppears(variant, normSources));
   return variants.some((variant) => tokenSet.has(variant));
 }
 
@@ -2009,6 +2021,7 @@ function getSentenceCorrectionItems(result = {}) {
 }
 
 function renderDetailedSentenceCorrections(items = [], result = {}) {
+  const calibratedSentenceTargetRange = nextBandTargetRangeForDisplay(result.targetImprovementPlan || {}, result);
   const normalized = ensureArray(items)
     .map((item, index) => normalizeSentenceCorrectionItem(item, index))
     .filter(Boolean);
@@ -2019,7 +2032,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
   if (!filtered.length && normalized.length) {
     return collapsibleSection(title, `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
   }
-  if (!filtered.length) return collapsibleSection(title, `<p class="muted">No sentence-level corrections are available. If this is a high-band essay, Stage 12 should return high-band polish suggestions; otherwise check the AI stage log.</p>`);
+  if (!filtered.length) return collapsibleSection(title, `<p class="muted">暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。</p>`);
 
   return collapsibleSection(title, `
     ${highBandPolish ? `<p class="muted">这些不是错误修正，而是针对 Band 7+ 作文的可选高分润色，目标是提升约 0.5–1.0 分。</p>` : ""}
@@ -2027,7 +2040,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
       const original = firstNonEmpty(item.originalSentence, item.original);
       const corrected = firstNonEmpty(item.correctedSentence, item.corrected, original);
       const better = resolveBetterExpressionForDisplay(item, corrected, original);
-      const betterTarget = firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
+      const betterTarget = calibratedSentenceTargetRange || firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
       const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
       const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
       const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
@@ -2259,11 +2272,12 @@ function priorityLabelsForTrack(track) {
 
 function missingBetterExpressionNotice(track) {
   if (track === "high_band_polish") return "";
-  return "AI 未返回该句的更好表达；请重试第 8 步，或检查后端是否要求每个分数相关句子返回 betterExpression。";
+  return "这一句已完成基础修正，暂无安全的下一档表达。";
 }
 
 function nextBandTargetRangeForDisplay(plan = {}, result = {}) {
-  const current = parseBandNumber(plan.currentBand || result.overallBand || result.scoreCalculation?.finalBand || result.estimatedLevel);
+  // Final displayed score must win over stale earlier-stage plan.currentBand.
+  const current = parseBandNumber(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand || result.estimatedLevel || plan.currentBand);
   if (!current) return "";
   const lower = Math.min(9, Math.round((current + 0.5) * 2) / 2);
   const upper = Math.min(9, Math.round((current + 1.0) * 2) / 2);
