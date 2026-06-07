@@ -825,20 +825,20 @@ function mergeAiStageResult(base, incoming) {
     "lexicalAdvice", "lexicalAdviceZh", "grammarAdvice", "grammarAdviceZh",
     "band5FixPlan", "band5FixPlanZh", "band6UpgradePlan", "band6UpgradePlanZh",
     "band7UpgradePlan", "band7UpgradePlanZh", "revisionNotes", "revisionNotesZh",
-    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "strengthItems", "mainProblemItems", "betterExpressionItems", "displaySentenceCorrections", "stageWarnings", "stageProgress"
+    "strengths", "strengthsZh", "mainProblems", "mainProblemsZh", "strengthItems", "mainProblemItems", "betterExpressionItems", "stageWarnings", "stageProgress"
   ];
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "rateabilityProfile", "criterionOutlierReview", "lowScoreOutlierReview", "finalStabilityCheck", "taskMatchCheck", "wordCountWarning",
-    "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta", "sentenceCorrectionDisplayMeta",
+    "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
     if (Array.isArray(data[field]) && data[field].length) {
       const limit = /detailedSentenceCorrections/i.test(field) ? 80
-        : /(betterExpressionItems|displaySentenceCorrections)/i.test(field) ? 80
+        : /betterExpressionItems/i.test(field) ? 80
         : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 80
         : /(Advice|Plan|Problems|strengths)/i.test(field) ? 18
         : 16;
@@ -2573,7 +2573,6 @@ function normalizeSentenceCorrectionItem(item, index = 0) {
 
   const normalized = sourceLockSentenceItem({
     ...item,
-    correctionId: firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId),
     sentenceNumber: item.sentenceNumber || index + 1,
     originalSentence: original,
     correctedSentence: corrected,
@@ -2600,8 +2599,6 @@ function normalizeCorrectionIdentityText(value) {
 }
 
 function correctionIdentityKey(item = {}) {
-  const correctionId = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
-  if (correctionId) return `id:${correctionId}`;
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence, item.inputSentence, item.before);
   const corrected = firstNonEmpty(item.correctedSentence, item.corrected, item.revisedSentence, item.fixedSentence, item.after, item.correction);
   const base = normalizeCorrectionIdentityText(original || corrected);
@@ -2629,11 +2626,6 @@ function sentenceIdentitySimilarity(a, b) {
 }
 
 function findMatchingCorrectionIndex(corrections = [], item = {}) {
-  const itemCorrectionId = firstNonEmpty(item.correctionId, item.sourceId, item.displayCorrectionId);
-  if (itemCorrectionId) {
-    const idIndex = corrections.findIndex((entry) => firstNonEmpty(entry.correctionId, entry.sourceId, entry.displayCorrectionId) === itemCorrectionId);
-    if (idIndex >= 0) return idIndex;
-  }
   const original = firstNonEmpty(item.originalSentence, item.original, item.sourceSentence, item.sentence);
   const normalized = normalizeCorrectionIdentityText(original);
   let bestIndex = -1;
@@ -2717,7 +2709,6 @@ function attachBetterExpressionItems(corrections = [], betterItems = [], options
   ensureArray(betterItems).forEach((raw, rawIndex) => {
     if (!raw || typeof raw !== "object") return;
     const item = normalizeSentenceCorrectionItem({
-      correctionId: firstNonEmpty(raw.correctionId, raw.sourceId, raw.displayCorrectionId),
       sentenceNumber: raw.sentenceNumber,
       originalSentence: firstNonEmpty(raw.originalSentence, raw.original, raw.sourceSentence),
       correctedSentence: firstNonEmpty(raw.correctedSentence, raw.corrected, raw.revisedSentence, raw.originalSentence, raw.original, raw.sourceSentence),
@@ -2747,16 +2738,6 @@ function attachBetterExpressionItems(corrections = [], betterItems = [], options
 }
 
 function getSentenceCorrectionItems(result = {}) {
-  const displayReady = ensureArray(result.displaySentenceCorrections)
-    .map((item, index) => normalizeSentenceCorrectionItem(item, index))
-    .filter(Boolean)
-    .filter((item) => hasAnyText(resolveBetterExpressionForDisplay(item, item.correctedSentence, item.originalSentence)));
-  if (displayReady.length) {
-    return displayReady
-      .filter(isScoreImpactingDetailedCorrection)
-      .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
-  }
-
   const rawItems = [
     ...ensureArray(result.detailedSentenceCorrections),
     ...ensureArray(result.sentenceCorrections),
@@ -2779,10 +2760,8 @@ function getSentenceCorrectionItems(result = {}) {
     });
 
   attachBetterExpressionItems(merged, result.betterExpressionItems, { allowStandalone: isHighBandPolishResult(result) || !merged.length });
-  const highBand = isHighBandPolishResult(result);
   return merged
     .filter(isScoreImpactingDetailedCorrection)
-    .filter((item) => highBand || hasAnyText(resolveBetterExpressionForDisplay(item, item.correctedSentence, item.originalSentence)))
     .sort((a, b) => (Number(a.sentenceNumber) || 9999) - (Number(b.sentenceNumber) || 9999));
 }
 
@@ -2802,13 +2781,9 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
     return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
   }
   if (!filtered.length) {
-    const meta = result.sentenceCorrectionDisplayMeta || {};
-    const rawSentenceItems = ensureArray(result.detailedSentenceCorrections).length + ensureArray(result.sentenceCorrections).length;
     const msg = highBandPolish
       ? "高分表达优化暂未生成可展示内容。请重试“更好表达/高分表达优化”阶段。"
-      : rawSentenceItems || Number(meta.sourceItems) > 0
-        ? "逐句批改已生成，但还没有拿到可安全展示的强制更好表达。请重试“更好表达/高分表达优化”阶段；页面不会展示缺少更好表达的半成品句子卡。"
-        : "暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。";
+      : "暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。";
     return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
   }
 
@@ -2819,7 +2794,7 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
       const corrected = firstNonEmpty(item.correctedSentence, item.corrected, original);
       const better = resolveBetterExpressionForDisplay(item, corrected, original);
       const betterTarget = calibratedSentenceTargetRange || firstNonEmpty(item.betterExpressionTargetBand, item.targetExpressionBand, item.targetBand, item.targetLevel) || "下一档 +0.5–1.0";
-      const betterZh = better ? (item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。") : "";
+      const betterZh = item.betterExpressionZh || "这个更好表达不是只修正错误，而是在保留原意的基础上，让句子更自然、更清楚，并提升约0.5到1分。";
       const errorType = firstNonEmpty(item.errorType, item.type, item.category, item.issueType);
       const errorTypeZh = firstNonEmpty(item.errorTypeZh, item.typeZh, item.categoryZh, item.issueTypeZh);
       const lockedDisplayItem = sourceLockSentenceItem(item);
