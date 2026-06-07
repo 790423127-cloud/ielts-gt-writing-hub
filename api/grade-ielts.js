@@ -2568,58 +2568,32 @@ function buildFastRevisionSystemPrompt(locale = "en") {
 
 function revisionTargetPlanForBand(value) {
   const band = Number(value);
-  if (!Number.isFinite(band) || band <= 0) {
-    return {
-      currentBand: "",
-      targetRange: "Band 5.0-5.5",
-      generateBand5: true,
-      generateBand6: false,
-      generateBand7: false,
-      modelTarget: "Band 5.0-5.5",
-      focus: "Build a complete and clear response from the user's original ideas."
-    };
-  }
-  if (band < 5) {
-    return {
-      currentBand: band,
-      targetRange: "Band 5.0-5.5",
-      generateBand5: true,
-      generateBand6: false,
-      generateBand7: false,
-      modelTarget: "Band 5.0-5.5",
-      focus: "Move from Band 4/4.5 to Band 5/5.5 with clear simple sentences and complete task coverage."
-    };
-  }
-  if (band < 6) {
-    return {
-      currentBand: band,
-      targetRange: "Band 6.0-6.5",
-      generateBand5: false,
-      generateBand6: true,
-      generateBand7: false,
-      modelTarget: "Band 6.0-6.5",
-      focus: "Move from Band 5/5.5 to Band 6 with clearer development, paragraph logic, and more accurate collocations."
-    };
-  }
-  if (band < 7) {
-    return {
-      currentBand: band,
-      targetRange: "Band 7.0-7.5",
-      generateBand5: false,
-      generateBand6: false,
-      generateBand7: true,
-      modelTarget: "Band 7.0-7.5",
-      focus: "Move from Band 6/6.5 to Band 7 with more developed reasoning, natural cohesion, and flexible accurate grammar."
-    };
-  }
+  const hasBand = Number.isFinite(band) && band > 0;
+  const currentBand = hasBand ? roundHalf(band) : null;
+  const foundationMode = !hasBand || currentBand < 5;
+  const targetHalfBand = foundationMode ? 5.0 : Math.min(9, roundHalf(currentBand + 0.5));
+  const targetOneBand = foundationMode ? 5.5 : Math.min(9, roundHalf(currentBand + 1.0));
+  const targetRange = `Band ${formatBand(targetHalfBand)}-${formatBand(targetOneBand)}`;
+  const focus = foundationMode
+    ? "The current score is below Band 5 or unknown, so generate only Band 5.0 and Band 5.5 foundation versions. Do not generate sub-Band-5 model answers because they are not useful for the user's goal."
+    : `Generate two realistic next-step versions: Band ${formatBand(targetHalfBand)} for +0.5 improvement and Band ${formatBand(targetOneBand)} for stable +1.0 improvement.`;
+
   return {
-    currentBand: band,
-    targetRange: "Band 7.5-8.0",
-    generateBand5: false,
-    generateBand6: false,
-    generateBand7: false,
-    modelTarget: "Band 7.5-8.0",
-    focus: "Provide high-band polish: precision, nuance, flow, and concise mature expression. Do not rewrite into Band 5/6/7 versions."
+    currentBand: hasBand ? currentBand : "",
+    targetRange,
+    targetHalfBand,
+    targetOneBand,
+    targetHalfLabel: `Band ${formatBand(targetHalfBand)}`,
+    targetOneLabel: `Band ${formatBand(targetOneBand)}`,
+    modelTarget: targetRange,
+    foundationMode,
+    focus,
+    generateHalf: true,
+    generateOne: true,
+    // Backward-compatible flags for older front-end fields. Revision-only mode should use the dynamic fields below.
+    generateBand5: foundationMode,
+    generateBand6: !foundationMode && targetHalfBand <= 6.5,
+    generateBand7: !foundationMode && targetOneBand >= 6.5
   };
 }
 
@@ -2629,17 +2603,55 @@ function buildFastRevisionPrompt(body, locale = "en") {
   const isRevisionOnly = normalizeMode(body.mode || body.gradingMode) === "revision_only" || body.revisionOnly === true;
   const currentBand = Number(body.currentOverallBand || body.overallBand || body.currentResult?.overallBand || body.currentResult?.scoreCalculation?.finalBand);
   const plan = revisionTargetPlanForBand(currentBand);
-  const band5SkipReason = !plan.generateBand5
-    ? (Number.isFinite(currentBand) && currentBand >= 5 ? "你当前已达到 Band 5 左右，因此不再生成 Band 5 修改版。" : "当前阶段暂不生成 Band 5 修改版。")
-    : "";
-  const band6SkipReason = !plan.generateBand6
-    ? (Number.isFinite(currentBand) && currentBand >= 6 ? "你当前已达到 Band 6 左右，因此不再生成 Band 6 修改版。" : "请先稳定达到 Band 5 后再练习 Band 6 修改版。")
-    : "";
-  const band7SkipReason = !plan.generateBand7
-    ? (Number.isFinite(currentBand) && currentBand >= 7 ? "你当前已达到 Band 7 左右，因此不再生成普通 Band 7 修改版，改为高分润色。" : "请先稳定达到 Band 6 后再练习 Band 7 修改版。")
-    : "";
+  const currentBandText = Number.isFinite(Number(plan.currentBand)) ? formatBand(plan.currentBand) : "unknown";
+  const targetHalfText = formatBand(plan.targetHalfBand);
+  const targetOneText = formatBand(plan.targetOneBand);
 
-  const shape = {
+  const dynamicShape = {
+    ok: true,
+    mode: "revision_only",
+    aiStage: "revision",
+    revisionTargetMeta: {
+      currentBand: Number.isFinite(Number(plan.currentBand)) ? plan.currentBand : "",
+      targetHalfBand: plan.targetHalfBand,
+      targetOneBand: plan.targetOneBand,
+      targetHalfLabel: plan.targetHalfLabel,
+      targetOneLabel: plan.targetOneLabel,
+      targetBandRange: plan.targetRange,
+      foundationMode: Boolean(plan.foundationMode),
+      scoringChanged: false,
+      scoringChangedReason: "Revision-only mode does not rescore or change IELTS bands."
+    },
+    modelAnswerOutlineHalf: "",
+    modelAnswerOutlineOne: "",
+    modelAnswerHalf: "",
+    modelAnswerOne: "",
+    revisedEssayHalf: "",
+    revisedEssayOne: "",
+    revisedEssayMeta: {
+      currentBand: Number.isFinite(Number(plan.currentBand)) ? plan.currentBand : "",
+      targetBandRange: plan.targetRange,
+      modelAnswerTarget: plan.targetRange,
+      targetHalfBand: plan.targetHalfBand,
+      targetOneBand: plan.targetOneBand,
+      targetHalfLabel: plan.targetHalfLabel,
+      targetOneLabel: plan.targetOneLabel,
+      foundationMode: Boolean(plan.foundationMode),
+      revisionLimited: tooShort,
+      revisionLimitReason: tooShort ? "The original response is very short, so the revision should focus on basic task completion before higher-band polish." : ""
+    },
+    revisionNotes: [],
+    revisionNotesZh: [],
+    // Legacy fields are kept only for backward compatibility. In revision_only mode, prefer the dynamic fields above.
+    revisedEssayBand5: "",
+    revisedEssayBand6: "",
+    revisedEssayBand7: "",
+    modelAnswerOutline: "",
+    modelAnswer: "",
+    highBandPolish: ""
+  };
+
+  const legacyShape = {
     revisedEssayBand5: "",
     revisedEssayBand6: "",
     revisedEssayBand7: "",
@@ -2649,67 +2661,69 @@ function buildFastRevisionPrompt(body, locale = "en") {
     highBandPolish: "",
     revisedEssayMeta: {
       currentBand: Number.isFinite(currentBand) ? currentBand : "",
-      targetBandRange: isRevisionOnly ? plan.targetRange : "Band 5 / Band 6 / Band 7",
-      modelAnswerTarget: isRevisionOnly ? plan.modelTarget : "Suitable model answer, not Band 9 by default",
-      generatedTargets: isRevisionOnly ? {
-        band5: plan.generateBand5,
-        band6: plan.generateBand6,
-        band7: plan.generateBand7,
-        highBandPolish: Number.isFinite(currentBand) && currentBand >= 7
-      } : { band5: true, band6: true, band7: true, highBandPolish: false },
+      targetBandRange: "Band 5 / Band 6 / Band 7",
+      modelAnswerTarget: "Suitable model answer, not Band 9 by default",
+      generatedTargets: { band5: true, band6: true, band7: true, highBandPolish: false },
       band5Target: "Basic but complete response; simple grammar; suitable for Band 5.",
       band6Target: "Clear and complete response with better organisation and vocabulary; suitable for Band 6.",
       band7Target: "Well-developed and natural response; suitable for Band 7, not Band 9.",
-      band5SkipReason,
-      band6SkipReason,
-      band7SkipReason,
       revisionLimited: tooShort,
       revisionLimitReason: tooShort ? "The original response is very short, so only a limited revision is suitable." : ""
     },
     revisionNotes: [],
     revisionNotesZh: []
   };
+
+  const commonSnapshot = JSON.stringify({
+    currentOverallBand: Number.isFinite(currentBand) ? currentBand : "",
+    criteria: body.currentResult?.criteria || {},
+    mainProblems: body.currentResult?.mainProblems || [],
+    taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis || {},
+    targetImprovementPlan: body.currentResult?.targetImprovementPlan || {}
+  }).slice(0, 5000);
+
   const commonRules = [
-    "Return one JSON object matching this shape:",
-    JSON.stringify(shape),
-    "Do not return scoring fields. Do not rescore the essay. Do not change the current IELTS band.",
-    "Revised Essay rules: revisedEssayBand5/6/7 must be based on the user's original essay, preserving the user's main position, paragraph direction, examples, and meaning. Improve clarity, accuracy, development and cohesion without replacing it with an unrelated essay.",
-    "Model answer rules: modelAnswer may use a cleaner independent approach to the same prompt, but it must target only the next realistic band range, not Band 9 by default.",
-    "Keep each generated essay concise and appropriate for IELTS General Training. Do not translate the essay into Chinese.",
+    "This pass generates revised/model-answer content only.",
+    "Do not rescore the essay. Do not return or alter overallBand, criteria, scoreCalculation, finalOverallBand, scoreChanged, or any scoring fields.",
     "Question:",
     String(body.questionPrompt || ""),
     "Original essay:",
     String(body.essay || ""),
     "Current grading snapshot:",
-    JSON.stringify({
-      currentOverallBand: Number.isFinite(currentBand) ? currentBand : "",
-      criteria: body.currentResult?.criteria || {},
-      mainProblems: body.currentResult?.mainProblems || [],
-      taskRequirementAnalysis: body.currentResult?.taskRequirementAnalysis || {},
-      targetImprovementPlan: body.currentResult?.targetImprovementPlan || {}
-    }).slice(0, 5000)
+    commonSnapshot
   ];
 
   if (!isRevisionOnly) {
     return [
+      "Return one JSON object matching this shape:",
+      JSON.stringify(legacyShape),
       ...commonRules,
-      tooShort
-        ? "The original essay is very short. You may provide a Band 5 basic completion only; leave Band 6 and Band 7 empty if there is not enough content to upgrade."
-        : "Generate three clearly different revised versions: Band 5, Band 6, and Band 7. Do not write a Band 9 essay."
+      "Generate three clearly different revised versions: Band 5, Band 6, and Band 7. Do not write a Band 9 essay.",
+      "Each revisedEssayBand5/6/7 must be based on the user's original essay, preserving the user's main position, paragraph direction, examples, and meaning.",
+      "modelAnswer may use a cleaner independent approach to the same prompt, but it must not default to Band 9.",
+      "Keep each generated essay concise and appropriate for IELTS General Training. Do not translate the essay into Chinese."
     ].join("\n");
   }
 
   return [
+    "Return exactly one valid JSON object matching this shape. Use the dynamic fields, not the legacy Band 5/6/7 fields:",
+    JSON.stringify(dynamicShape),
     ...commonRules,
-    `Revision-only mode. Current band: ${Number.isFinite(currentBand) ? currentBand : "unknown"}. Target next band: ${plan.targetRange}.`,
-    `Generate only the next useful target content: Band5=${plan.generateBand5}, Band6=${plan.generateBand6}, Band7=${plan.generateBand7}.`,
-    "Leave already achieved lower-band revised essay fields empty and explain why in revisedEssayMeta band skip reasons.",
-    Number.isFinite(currentBand) && currentBand >= 7
-      ? "For Band 7+ users, leave revisedEssayBand5/6/7 empty and return highBandPolish with targeted upgraded sentences/paragraph polish based on the user's original essay."
-      : "Do not generate a version that is more than one band above the current score. Avoid an unrealistic Band 9 rewrite.",
-    `Model answer target: ${plan.modelTarget}. The modelAnswer should answer the same prompt at this target level and be imitable for the user's next step.`,
+    `Revision-only mode. Current band: ${currentBandText}. Target A (+0.5 or foundation target): Band ${targetHalfText}. Target B (+1.0 or foundation target): Band ${targetOneText}.`,
+    plan.foundationMode
+      ? "Important foundation rule: because the current score is below Band 5 or unknown, do NOT generate Band 4/4.5 content. Generate Band 5.0 and Band 5.5 only."
+      : "Generate exactly two next-step versions: one at current +0.5 and one at current +1.0. Do not jump to a much higher band.",
+    `modelAnswerHalf: write a complete same-prompt model answer targeting Band ${targetHalfText}. It may use a cleaner independent approach, but it must be imitable for the user's next step.`,
+    `modelAnswerOne: write a complete same-prompt model answer targeting Band ${targetOneText}. It may be more developed than modelAnswerHalf but must not be an unrealistic Band 9 rewrite.`,
+    `revisedEssayHalf: revise the user's original essay to target Band ${targetHalfText}. Preserve the user's main position, paragraph direction, examples, and meaning.`,
+    `revisedEssayOne: revise the user's original essay to target Band ${targetOneText}. Preserve the user's main position, paragraph direction, examples, and meaning, while improving development and cohesion.`,
+    "modelAnswerOutlineHalf and modelAnswerOutlineOne must each give a short usable outline for the corresponding model answer.",
+    "revisionNotes must be rich and practical. Include these sections as separate array items: current score, main current limitations, target A purpose, target B purpose, why not generate a much higher-band version, which version to imitate first, what to imitate in Target A, what to imitate in Target B, what not to copy blindly, and one concrete next practice task.",
+    "revisionNotesZh must provide accurate Chinese learning guidance matching the revisionNotes, not generic text.",
+    "Keep generated essays concise and IELTS-appropriate. Do not translate the essays into Chinese.",
+    "Do not leave modelAnswerOutlineHalf, modelAnswerOutlineOne, modelAnswerHalf, modelAnswerOne, revisedEssayHalf, revisedEssayOne, or revisionNotes empty unless the original essay is blank or not rateable.",
     `Main focus: ${plan.focus}`,
-    tooShort ? "Because the response is very short, keep the revision modest and complete missing task basics." : ""
+    tooShort ? "Because the response is very short, keep the revisions realistic and focus on task completion and clear simple English." : ""
   ].join("\n");
 }
 
@@ -2777,11 +2791,23 @@ async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, 
 function mergeRevisionPassIntoResult(result, revision) {
   if (!revision || typeof revision !== "object") return result;
   const merged = result && typeof result === "object" ? { ...result } : {};
-  ["revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline", "modelAnswer", "highBandPolish"].forEach((field) => {
+  [
+    "revisedEssayHalf", "revisedEssayOne",
+    "modelAnswerOutlineHalf", "modelAnswerOutlineOne",
+    "modelAnswerHalf", "modelAnswerOne",
+    "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7",
+    "modelAnswerOutline", "modelAnswer", "highBandPolish"
+  ].forEach((field) => {
     if (hasUsefulText(revision[field])) merged[field] = revision[field];
   });
   if (Array.isArray(revision.revisionNotes) && revision.revisionNotes.length) merged.revisionNotes = revision.revisionNotes;
   if (Array.isArray(revision.revisionNotesZh) && revision.revisionNotesZh.length) merged.revisionNotesZh = revision.revisionNotesZh;
+  if (revision.revisionTargetMeta && typeof revision.revisionTargetMeta === "object") {
+    merged.revisionTargetMeta = {
+      ...(merged.revisionTargetMeta && typeof merged.revisionTargetMeta === "object" ? merged.revisionTargetMeta : {}),
+      ...revision.revisionTargetMeta
+    };
+  }
   if (revision.revisedEssayMeta && typeof revision.revisedEssayMeta === "object") {
     merged.revisedEssayMeta = {
       ...(merged.revisedEssayMeta && typeof merged.revisedEssayMeta === "object" ? merged.revisedEssayMeta : {}),
@@ -3841,7 +3867,7 @@ async function callAiRevisionStageOnly({ apiKey, model, body, effectiveMode, ver
       apiKey,
       model,
       body,
-      gradingMode: "revision",
+      gradingMode: effectiveMode === "revision_only" ? "revision_only" : "revision",
       maxTokens,
       locale,
       deadline,
@@ -4393,8 +4419,8 @@ function resolveCurrentBandForTarget(result = {}, body = {}) {
 function nextBandTargetRange(currentBand) {
   const current = Number(currentBand);
   if (!Number.isFinite(current)) return "";
-  const lower = Math.min(9, roundHalf(current + 0.5));
-  const upper = Math.min(9, roundHalf(current + 1.0));
+  const lower = current < 5 ? 5.0 : Math.min(9, roundHalf(current + 0.5));
+  const upper = current < 5 ? 5.5 : Math.min(9, roundHalf(current + 1.0));
   return `${formatBand(lower)}-${formatBand(upper)}`;
 }
 

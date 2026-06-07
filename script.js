@@ -755,7 +755,7 @@ function mergeAiStageResult(base, incoming) {
   ];
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
-    "task2EssayCorrections", "revisedEssayMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
+    "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
     "completionStatus", "textStats",
@@ -777,6 +777,9 @@ function mergeAiStageResult(base, incoming) {
     if (data[field] && typeof data[field] === "object") output[field] = { ...(output[field] || {}), ...data[field] };
   });
   [
+    "revisedEssayHalf", "revisedEssayOne",
+    "modelAnswerOutlineHalf", "modelAnswerOutlineOne",
+    "modelAnswerHalf", "modelAnswerOne",
     "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline", "modelAnswer", "highBandPolish",
     "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "sectionWarning", "disclaimer"
   ].forEach((field) => {
@@ -815,7 +818,7 @@ function mergeAiStageResult(base, incoming) {
   if (typeof data.wordCountStatus !== "undefined") output.wordCountStatus = data.wordCountStatus;
   if (typeof data.completionLevel !== "undefined") output.completionLevel = data.completionLevel;
   output.overallEstimatedBand = output.overallBand;
-  output.revisedEssay = output.revisedEssayBand7 || output.revisedEssayBand6 || output.revisedEssayBand5 || output.revisedEssay || "";
+  output.revisedEssay = output.revisedEssayOne || output.revisedEssayHalf || output.revisedEssayBand7 || output.revisedEssayBand6 || output.revisedEssayBand5 || output.revisedEssay || "";
   return output;
 }
 
@@ -910,7 +913,13 @@ function stageResultHasExpectedContent(aiStage, data = {}) {
     );
   }
   if (aiStage === "revision") {
-    return Boolean(data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 || data.modelAnswerOutline || data.modelAnswer || data.highBandPolish);
+    return Boolean(
+      data.revisedEssayHalf || data.revisedEssayOne ||
+      data.modelAnswerHalf || data.modelAnswerOne ||
+      data.modelAnswerOutlineHalf || data.modelAnswerOutlineOne ||
+      data.revisedEssayBand5 || data.revisedEssayBand6 || data.revisedEssayBand7 ||
+      data.modelAnswerOutline || data.modelAnswer || data.highBandPolish
+    );
   }
   // Backward-compatible checks for older endpoints/stages.
   if (aiStage === "correction-task") {
@@ -1037,7 +1046,7 @@ function revisionOnlyPayload() {
     gradingMode: "revision_only",
     includeRevision: true,
     revisionOnly: true,
-    revisionTargets: ["next_band_only"],
+    revisionTargets: ["target_half", "target_one"],
     currentOverallBand: Number.isFinite(currentBand) ? currentBand : undefined,
     currentResult: current && Object.keys(current).length ? {
       overallBand: current.overallBand,
@@ -2683,21 +2692,71 @@ function renderSentenceCorrections(items = []) {
     </div>`).join("")}</div>`;
 }
 
+function revisionPanelBandNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(9, Math.round(numeric * 2) / 2));
+}
+
+function revisionPanelBandLabel(value) {
+  const rounded = revisionPanelBandNumber(value);
+  return Number.isInteger(rounded) ? `${rounded}.0` : String(rounded);
+}
+
+function computeRevisionTargetsFromBand(value) {
+  const current = revisionPanelBandNumber(value);
+  if (!current || current < 5) {
+    return { currentBand: current || "", targetHalfBand: 5.0, targetOneBand: 5.5, foundationMode: true };
+  }
+  return {
+    currentBand: current,
+    targetHalfBand: Math.min(9, revisionPanelBandNumber(current + 0.5)),
+    targetOneBand: Math.min(9, revisionPanelBandNumber(current + 1.0)),
+    foundationMode: false
+  };
+}
+
+function getRevisionTargetMeta(result = {}) {
+  const meta = result.revisionTargetMeta && typeof result.revisionTargetMeta === "object" ? result.revisionTargetMeta : {};
+  const legacy = result.revisedEssayMeta && typeof result.revisedEssayMeta === "object" ? result.revisedEssayMeta : {};
+  const currentSource = meta.currentBand || legacy.currentBand || result.overallBand || result.scoreCalculation?.finalBand || result.finalOverallBand;
+  const computed = computeRevisionTargetsFromBand(currentSource);
+  const targetHalfBand = revisionPanelBandNumber(meta.targetHalfBand || legacy.targetHalfBand || computed.targetHalfBand);
+  const targetOneBand = revisionPanelBandNumber(meta.targetOneBand || legacy.targetOneBand || computed.targetOneBand);
+  return {
+    currentBand: revisionPanelBandNumber(meta.currentBand || legacy.currentBand || computed.currentBand),
+    targetHalfBand,
+    targetOneBand,
+    targetHalfLabel: meta.targetHalfLabel || legacy.targetHalfLabel || `Band ${revisionPanelBandLabel(targetHalfBand)}`,
+    targetOneLabel: meta.targetOneLabel || legacy.targetOneLabel || `Band ${revisionPanelBandLabel(targetOneBand)}`,
+    targetBandRange: meta.targetBandRange || legacy.targetBandRange || `Band ${revisionPanelBandLabel(targetHalfBand)}-${revisionPanelBandLabel(targetOneBand)}`,
+    foundationMode: Boolean(meta.foundationMode || legacy.foundationMode || computed.foundationMode),
+    scoringChanged: Boolean(meta.scoringChanged)
+  };
+}
+
+function renderModelAnswerBlock(label, text, emptyReason = "") {
+  const content = text
+    ? `<pre>${escapeHtml(text)}</pre><div class="actions"><button class="secondary" type="button" data-copy-text="${escapeHtml(text)}">复制范文</button></div>`
+    : `<p class="muted">${escapeHtml(emptyReason || "暂未生成这一篇范文。点击“生成修改版 / 范文”后会显示。")}</p>`;
+  return `<details class="feedback-collapse revision-block"${text ? " open" : ""}>
+    <summary>${escapeHtml(label)}</summary>
+    <div class="feedback-collapse-body">${content}</div>
+  </details>`;
+}
+
 function renderRevisionBlock(label, target, text, emptyReason = "") {
   const content = text
-    ? `<pre>${escapeHtml(text)}</pre>`
-    : `<p class="muted">${escapeHtml(emptyReason || "这一档暂不生成。请先生成适合当前分数下一档的修改版。")}</p>`;
-  const disabled = text ? "" : "disabled";
-  return `<details class="feedback-collapse revision-block">
+    ? `<pre>${escapeHtml(text)}</pre>
+      <div class="actions">
+        <button class="secondary" type="button" data-revision-action="copy" data-target="${target}">复制修改版</button>
+        <button class="primary" type="button" data-revision-action="apply" data-target="${target}">应用到作文输入区</button>
+        <button class="secondary" type="button" data-revision-action="compare" data-target="${target}">和原文对比</button>
+      </div>`
+    : `<p class="muted">${escapeHtml(emptyReason || "暂未生成这一档修改版。点击“生成修改版 / 范文”后会显示。")}</p>`;
+  return `<details class="feedback-collapse revision-block"${text ? " open" : ""}>
     <summary>${escapeHtml(label)}</summary>
-    <div class="feedback-collapse-body">
-    ${content}
-    <div class="actions">
-      <button class="secondary" type="button" data-revision-action="copy" data-target="${target}" ${disabled}>复制修改版</button>
-      <button class="primary" type="button" data-revision-action="apply" data-target="${target}" ${disabled}>应用到作文输入区</button>
-      <button class="secondary" type="button" data-revision-action="compare" data-target="${target}" ${disabled}>和原文对比</button>
-    </div>
-    </div>
+    <div class="feedback-collapse-body">${content}</div>
   </details>`;
 }
 
@@ -2705,29 +2764,90 @@ function revisionSkipReason(meta = {}, target = "") {
   const map = {
     band5: meta.band5SkipReason || meta.skippedBand5Reason,
     band6: meta.band6SkipReason || meta.skippedBand6Reason,
-    band7: meta.band7SkipReason || meta.skippedBand7Reason
+    band7: meta.band7SkipReason || meta.skippedBand7Reason,
+    half: meta.halfSkipReason || meta.targetHalfSkipReason,
+    one: meta.oneSkipReason || meta.targetOneSkipReason
   };
   return map[target] || "";
 }
 
+function revisionTextFallback(result = {}, kind = "") {
+  const meta = getRevisionTargetMeta(result);
+  if (kind === "revisedHalf") {
+    return result.revisedEssayHalf || result.revisedEssayTargetHalf || result.revisedEssayNext || result.revisedEssayBand5 || result.revisedEssayBand6 || "";
+  }
+  if (kind === "revisedOne") {
+    const first = result.revisedEssayHalf || result.revisedEssayTargetHalf || result.revisedEssayNext || "";
+    const candidate = result.revisedEssayOne || result.revisedEssayTargetOne || result.revisedEssayStable || result.revisedEssayBand7 || result.revisedEssayBand6 || "";
+    return candidate && candidate !== first ? candidate : "";
+  }
+  if (kind === "modelHalf") return result.modelAnswerHalf || result.modelAnswerTargetHalf || result.modelAnswer || "";
+  if (kind === "modelOne") {
+    const first = result.modelAnswerHalf || result.modelAnswerTargetHalf || result.modelAnswer || "";
+    const candidate = result.modelAnswerOne || result.modelAnswerTargetOne || "";
+    return candidate && candidate !== first ? candidate : "";
+  }
+  if (kind === "outlineHalf") return result.modelAnswerOutlineHalf || result.modelAnswerOutlineTargetHalf || result.modelAnswerOutline || "";
+  if (kind === "outlineOne") {
+    const first = result.modelAnswerOutlineHalf || result.modelAnswerOutlineTargetHalf || result.modelAnswerOutline || "";
+    const candidate = result.modelAnswerOutlineOne || result.modelAnswerOutlineTargetOne || "";
+    return candidate && candidate !== first ? candidate : "";
+  }
+  return "";
+}
+
+function renderRevisionNotes(result = {}) {
+  const meta = getRevisionTargetMeta(result);
+  const notes = ensureArray(result.revisionNotes).filter(Boolean);
+  const zh = ensureArray(result.revisionNotesZh).filter(Boolean).join("\n");
+  const fallbackNotes = [
+    meta.currentBand ? `当前分数：Band ${revisionPanelBandLabel(meta.currentBand)}。` : "当前分数：请先完成一次评分，系统会按最近一次评分生成目标版本。",
+    meta.foundationMode
+      ? `本次生成目标：低于 Band 5 的作文统一生成 ${meta.targetHalfLabel} 和 ${meta.targetOneLabel}，不展示 5 分以下范文。`
+      : `本次生成目标：${meta.targetHalfLabel}（提高约0.5分）和 ${meta.targetOneLabel}（稳定提高约1分）。`,
+    "为什么不生成太高分版本：目标跳得太高会引入过难词汇和长句，不适合当前阶段直接模仿，容易增加错误。",
+    `优先模仿建议：先模仿 ${meta.targetHalfLabel} 版本，稳定后再练习 ${meta.targetOneLabel} 版本。`,
+    `${meta.targetHalfLabel} 重点：清楚主题句、准确基本句型、自然词组和简单完整例子。`,
+    `${meta.targetOneLabel} 重点：更充分解释、更具体例子、更自然衔接和少量可控复杂句。`,
+    "不建议：不要整篇死背，不要强行使用不熟悉的高级词，不要模仿自己还不能控制的长句。",
+    "下一步训练：先用下一档修改版重写一个主体段，再把其中一个例子扩展成稳定提分版本的写法。"
+  ];
+  const finalNotes = notes.length ? notes : fallbackNotes;
+  return `${listHtml(finalNotes)}${zh ? `<h4>修改重点中文说明</h4>${renderZhToggle(zh)}` : ""}`;
+}
+
 function renderRevisionOnlyPanel(result = {}) {
-  const modelAnswer = String(result.modelAnswer || "").trim();
+  const meta = getRevisionTargetMeta(result);
+  const outlineHalf = String(revisionTextFallback(result, "outlineHalf") || "").trim();
+  const outlineOne = String(revisionTextFallback(result, "outlineOne") || "").trim();
+  const modelHalf = String(revisionTextFallback(result, "modelHalf") || "").trim();
+  const modelOne = String(revisionTextFallback(result, "modelOne") || "").trim();
+  const revisedHalf = String(revisionTextFallback(result, "revisedHalf") || "").trim();
+  const revisedOne = String(revisionTextFallback(result, "revisedOne") || "").trim();
   const highBandPolish = String(result.highBandPolish || "").trim();
+
   return `
-    ${collapsibleSection("Model answer outline", renderTextWithTranslation(result.modelAnswerOutline || "", result.modelAnswerOutlineZh, { fallback: "No model answer outline was returned." }))}
-    ${collapsibleSection("Model answer / 下一档范文", modelAnswer ? `<pre>${escapeHtml(modelAnswer)}</pre>` : `<p class="muted">暂未生成下一档范文。点击“生成修改版 / 范文”后会显示。</p>`)}
+    ${collapsibleSection("Model answer outline", `
+      <p class="revision-meta-note">${escapeHtml(meta.foundationMode
+        ? `低于 Band 5 的作文统一生成 ${meta.targetHalfLabel} / ${meta.targetOneLabel}，不展示 5 分以下范文。`
+        : `根据当前分数生成 ${meta.targetHalfLabel} / ${meta.targetOneLabel} 两个下一阶段目标。`)}</p>
+      ${renderModelAnswerBlock(`下一档范文提纲 / Target ${meta.targetHalfLabel}`, outlineHalf, "暂未生成下一档范文提纲。")}
+      ${renderModelAnswerBlock(`稳定提分范文提纲 / Target ${meta.targetOneLabel}`, outlineOne, "暂未生成稳定提分范文提纲。")}
+    `)}
+    ${collapsibleSection("同题范文 / Model Answers", `
+      ${renderModelAnswerBlock(`下一档同题范文 / Target ${meta.targetHalfLabel}`, modelHalf)}
+      ${renderModelAnswerBlock(`稳定提分同题范文 / Target ${meta.targetOneLabel}`, modelOne)}
+    `)}
     ${collapsibleSection("AI 修改版作文 / Revised Essays", `
-      <p class="revision-meta-note">修改版只按当前分数的下一档生成：已达到的低档位会留空；不会重新评分，也不会改变当前分数。</p>
+      <p class="revision-meta-note">修改版基于你的原文生成，不重新评分，不改变当前分数；同题范文可以采用更清晰的独立写法。</p>
       ${renderRevisionLimitWarning(result)}
-      ${renderRevisionBlock("Band 5 Safe Revision", "band5", result.revisedEssayBand5 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band5"))}
-      ${renderRevisionBlock("Band 6+ Upgrade Revision", "band6", result.revisedEssayBand6 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band6"))}
-      ${renderRevisionBlock("Band 7+ High-score Revision", "band7", result.revisedEssayBand7 || "", revisionSkipReason(result.revisedEssayMeta || {}, "band7"))}
+      ${renderRevisionBlock(`下一档修改版 / Target ${meta.targetHalfLabel}`, "half", revisedHalf, revisionSkipReason(result.revisedEssayMeta || {}, "half"))}
+      ${renderRevisionBlock(`稳定提分修改版 / Target ${meta.targetOneLabel}`, "one", revisedOne, revisionSkipReason(result.revisedEssayMeta || {}, "one"))}
       ${highBandPolish ? collapsibleSection("High-band polish / 高分润色", `<pre>${escapeHtml(highBandPolish)}</pre>`) : ""}
-      ${collapsibleSection("Revision notes", `${listHtml(result.revisionNotes)}${(Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh) ? `<h4>修改重点中文说明</h4>${renderZhToggle(Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh)}` : ""}`)}
+      ${collapsibleSection("Revision notes / 学习说明", renderRevisionNotes(result), { defaultOpen: true })}
     `)}
   `;
 }
-
 
 function numericBand(value) {
   const number = Number(value);
@@ -2796,11 +2916,13 @@ function renderFinalScoreArea(result = {}) {
 
 function renderGradingResult(result = {}) {
   latestGradingResult = result && typeof result === "object" ? result : null;
+  const halfRevision = String(revisionTextFallback(result, "revisedHalf") || "").trim();
+  const oneRevision = String(revisionTextFallback(result, "revisedOne") || "").trim();
   const band5 = result.revisedEssayBand5 || "";
   const band6 = result.revisedEssayBand6 || "";
   const band7 = result.revisedEssayBand7 || "";
-  const revisionMeta = result.revisedEssayMeta || {};
-  const revisionNotesZh = Array.isArray(result.revisionNotesZh) ? result.revisionNotesZh.join("\n") : result.revisionNotesZh;
+  els.gradingResults.dataset.half = halfRevision;
+  els.gradingResults.dataset.one = oneRevision;
   els.gradingResults.dataset.band5 = band5;
   els.gradingResults.dataset.band6 = band6;
   els.gradingResults.dataset.band7 = band7;
