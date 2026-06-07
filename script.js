@@ -726,6 +726,15 @@ function mergeCriteriaPreservingRichText(existingCriteria = {}, incomingCriteria
   return merged;
 }
 
+function sanitizeStageWarningForUser(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/better[- ]expressions?|better-expression|high-band polish|task is not defined|AI batch|HTTP 502|HTTP 500|AI grading failed|provider:|runtime logs|object Object/i.test(text)) {
+    return "更好表达/高分表达优化阶段暂时没有返回完整内容；基础评分、逐句批改和最终复核仍可正常使用。";
+  }
+  return text;
+}
+
 function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
@@ -758,7 +767,8 @@ function mergeAiStageResult(base, incoming) {
         : /(sentenceCorrections|grammarErrors|spellingCorrections)/i.test(field) ? 80
         : /(Advice|Plan|Problems|strengths)/i.test(field) ? 18
         : 16;
-      output[field] = mergeUniqueArray(output[field], data[field], limit);
+      const incomingValues = field === "stageWarnings" ? data[field].map(sanitizeStageWarningForUser).filter(Boolean) : data[field];
+      output[field] = mergeUniqueArray(output[field], incomingValues, limit);
     }
   });
   objectFields.forEach((field) => {
@@ -1047,6 +1057,10 @@ async function startGrading() {
         const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的完整结构化内容。`;
         stageWarnings.push(warning);
         markStage(warningPrefix, "warning", warning, JSON.stringify(stageResult || {}).slice(0, 1200));
+      } else if (stageResult?.stageStatus === "warning") {
+        const warning = `${warningPrefix}：${stageResult.noIssueReasonZh || stageResult.noIssueReason || "这一阶段暂时没有返回完整内容。"}`;
+        stageWarnings.push(sanitizeStageWarningForUser(warning));
+        markStage(warningPrefix, "warning", sanitizeStageWarningForUser(warning), "");
       } else if (stageResult?.stageStatus === "no_issues") {
         markStage(warningPrefix, "done", `${warningPrefix}已完成：${stageResult.noIssueReasonZh || stageResult.noIssueReason || "未发现明显问题。"}`);
       } else {
@@ -1057,10 +1071,14 @@ async function startGrading() {
       renderGradingResult(result);
       return hasExpectedContent;
     } catch (stageError) {
-      const warning = `${warningPrefix}：${stageError.message}`;
+      const rawStageMessage = String(stageError?.message || "");
+      const friendlyOptionalMessage = !options.required && /better[- ]expressions?|task is not defined|HTTP 502|AI grading failed|batching failed/i.test(rawStageMessage)
+        ? "这一可选阶段暂时没有返回可用内容，基础评分、逐句批改和最终复核仍会继续。"
+        : rawStageMessage;
+      const warning = `${warningPrefix}：${friendlyOptionalMessage}`;
       stageWarnings.push(warning);
       if (result) {
-        markStage(warningPrefix, options.required ? "error" : "warning", warning, stageError.stack || stageError.message || "");
+        markStage(warningPrefix, options.required ? "error" : "warning", warning, options.required ? (stageError.stack || stageError.message || "") : "");
         syncStageMeta();
         renderGradingResult(result);
       }
@@ -1113,7 +1131,7 @@ async function startGrading() {
 
 function isNonBlockingStageWarning(text) {
   const value = String(text || "");
-  return /grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON|Failed to fetch|NetworkError|Load failed|AbortError|timed out after waiting|network request failed/i.test(value);
+  return /better[- ]expressions? stage|better-expression generation did not return usable|high-band polish returned no usable|grammar stage returned no usable detailed content|grammar stage did not return enough usable detail|AI grammar stage returned no usable detailed content|AI JSON was repaired after|Unterminated string in JSON|malformed JSON|Failed to fetch|NetworkError|Load failed|AbortError|timed out after waiting|network request failed/i.test(value);
 }
 
 function isWordCountWarningText(text) {
@@ -1130,7 +1148,7 @@ function renderStageProgress(result = {}) {
   const warnings = Array.isArray(result.stageWarnings) ? result.stageWarnings : [];
   const inlineWarnings = [result.gradingWarning, result.correctionWarning, result.correctionPassWarning, result.revisionWarning, result.sectionWarning]
     .filter((item) => String(item || "").trim());
-  const allWarnings = [...warnings, ...inlineWarnings].filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
+  const allWarnings = [...warnings, ...inlineWarnings].map(sanitizeStageWarningForUser).filter((item, index, arr) => String(item || "").trim() && arr.indexOf(item) === index);
   if (!progress.length && !allWarnings.length) return "";
   return collapsibleSection("AI 批改进度与错误日志", `
     ${progress.length ? `<ul class="stage-log-list">${progress.map((item) => {
@@ -1766,12 +1784,18 @@ function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence
   const raw = String(text || "").trim();
   if (!raw) return "";
   const sourceTexts = [originalSentence, correctedSentence].filter(Boolean);
-  return splitSourceLockClauses(raw).filter((clause) => {
-    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return false;
+  const kept = [];
+  const seen = new Set();
+  splitSourceLockClauses(raw).forEach((clause) => {
+    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return;
     const quotedTerms = extractSourceLockQuotedTerms(clause);
-    if (!quotedTerms.length) return true;
-    return quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts));
-  }).join("; ").replace(/\s+/g, " ").trim();
+    if (quotedTerms.length && !quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts))) return;
+    const key = compactTranslationCompare(clause);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    kept.push(clause);
+  });
+  return kept.join("; ").replace(/\s+/g, " ").trim();
 }
 
 function sourceLockSentenceItem(item = {}) {
@@ -2272,12 +2296,22 @@ function priorityLabelsForTrack(track) {
 
 function missingBetterExpressionNotice(track) {
   if (track === "high_band_polish") return "";
-  return "这一句已完成基础修正，暂无安全的下一档表达。";
+  return "这一句先保留基础修正；系统没有展示不够安全或不够有提升价值的下一档表达。";
+}
+
+function finalDisplayBandForTarget(result = {}, plan = {}) {
+  return parseBandNumber(
+    result?.scoreCalculation?.finalBand ??
+    result?.finalOverallBand ??
+    result?.overallBand ??
+    result?.estimatedLevel ??
+    plan?.currentBand
+  );
 }
 
 function nextBandTargetRangeForDisplay(plan = {}, result = {}) {
   // Final displayed score must win over stale earlier-stage plan.currentBand.
-  const current = parseBandNumber(result.overallBand || result.finalOverallBand || result.scoreCalculation?.finalBand || result.estimatedLevel || plan.currentBand);
+  const current = finalDisplayBandForTarget(result, plan);
   if (!current) return "";
   const lower = Math.min(9, Math.round((current + 0.5) * 2) / 2);
   const upper = Math.min(9, Math.round((current + 1.0) * 2) / 2);
@@ -2306,7 +2340,7 @@ function renderTargetImprovementPlan(plan, result = {}) {
   return collapsibleSection("下一阶段提分计划 Target Improvement Plan", `
     ${trackNote}
     <div class="compact-facts">
-      <p><strong>当前分数：</strong>${escapeHtml(formatBandNumber(parseBandNumber(plan.currentBand || result.overallBand || result.estimatedLevel)) || plan.currentBand || result.overallBand || "")}</p>
+      <p><strong>当前分数：</strong>${escapeHtml(formatBandNumber(finalDisplayBandForTarget(result, plan)) || plan.currentBand || result.overallBand || "")}</p>
       <div><strong>目标范围：</strong>${renderTextWithTranslation(targetRangeText, targetRangeZh, { tag: "span" })}</div>
       ${plan.targetReason ? `<div><strong>为什么是这个目标：</strong>${renderTextWithTranslation(plan.targetReason, targetReasonZh, { tag: "span" })}</div>` : ""}
     </div>
