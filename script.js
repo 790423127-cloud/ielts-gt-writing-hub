@@ -832,7 +832,7 @@ function mergeAiStageResult(base, incoming) {
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "taskMatchCheck", "wordCountWarning",
-    "completionStatus", "textStats",
+    "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
@@ -852,9 +852,10 @@ function mergeAiStageResult(base, incoming) {
   });
   [
     "revisedEssayHalf", "revisedEssayOne",
-    "modelAnswerOutlineHalf", "modelAnswerOutlineOne",
+    "modelAnswerOutlineHalf", "modelAnswerOutlineHalfZh", "modelAnswerOutlineOne", "modelAnswerOutlineOneZh", "modelAnswerOutlineZh",
     "modelAnswerHalf", "modelAnswerOne",
     "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7", "modelAnswerOutline", "modelAnswer", "highBandPolish",
+    "betterExpressionMode",
     "correctionWarning", "correctionPassWarning", "revisionWarning", "gradingWarning", "sectionWarning", "disclaimer"
   ].forEach((field) => {
     if (typeof data[field] === "string" && data[field].trim()) output[field] = preferRicherText(output[field], data[field]);
@@ -2339,9 +2340,17 @@ function renderDetailedSentenceCorrections(items = [], result = {}) {
   const highBandPolish = isHighBandPolishResult(result) || filtered.some((item) => item.polishMode === "high_band_polish" || item.errorType === "High-band polish");
   const title = highBandPolish ? "高分表达优化 High-band Polish" : "逐句批改 Sentence Corrections";
   if (!filtered.length && normalized.length) {
-    return collapsibleSection(title, `<p class="muted">AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。</p>`);
+    const msg = highBandPolish
+      ? "AI 返回了高分句子优化内容，但前端过滤后没有可安全展示的项目；请重试高分表达优化阶段。"
+      : "AI 返回了句子级内容，但没有检测到会明显影响分数的逐句错误。";
+    return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
   }
-  if (!filtered.length) return collapsibleSection(title, `<p class="muted">暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。</p>`);
+  if (!filtered.length) {
+    const msg = highBandPolish
+      ? "高分表达优化暂未生成可展示内容。请重试“更好表达/高分表达优化”阶段。"
+      : "暂无需要展示的逐句错误；如果是高分作文，请查看高分表达优化部分。";
+    return collapsibleSection(title, `<p class="muted">${escapeHtml(msg)}</p>`);
+  }
 
   return collapsibleSection(title, `
     ${highBandPolish ? `<p class="muted">这些不是错误修正，而是针对 Band 7+ 作文的可选高分润色，目标是提升约 0.5–1.0 分。</p>` : ""}
@@ -2873,10 +2882,31 @@ function revisionTextFallback(result = {}, kind = "") {
   return "";
 }
 
+const REVISION_STUDY_GUIDE_TITLES = [
+  "当前水平定位",
+  "本次核心训练目标",
+  "为什么先练这个",
+  "主学修改版怎么用",
+  "主学范文大纲怎么用",
+  "对照版本怎么用",
+  "本次不要学什么",
+  "下一步训练任务",
+  "完成标准"
+];
+
+function revisionStudyGuideIsComplete(guide = {}) {
+  const sections = ensureArray(guide.sections).filter((section) => section && typeof section === "object");
+  return REVISION_STUDY_GUIDE_TITLES.every((title) =>
+    sections.some((section) => String(section.title || "").trim() === title && hasAnyText(section.content || section.text))
+  );
+}
+
 function renderRevisionStudyGuide(result = {}) {
   const guide = result.revisionStudyGuide && typeof result.revisionStudyGuide === "object" ? result.revisionStudyGuide : null;
-  if (!guide) return "";
-  const sections = ensureArray(guide.sections).filter((section) => section && typeof section === "object" && (section.title || section.content || section.text));
+  if (!guide || !revisionStudyGuideIsComplete(guide)) return "";
+  const sections = REVISION_STUDY_GUIDE_TITLES.map((title) =>
+    ensureArray(guide.sections).find((section) => section && typeof section === "object" && String(section.title || "").trim() === title)
+  ).filter(Boolean);
   const headerParts = [
     guide.currentBand ? `当前 Band ${revisionPanelBandLabel(guide.currentBand)}` : "",
     guide.primaryTargetBand ? `主学 Band ${revisionPanelBandLabel(guide.primaryTargetBand)}` : "",
@@ -2893,8 +2923,13 @@ function renderRevisionStudyGuide(result = {}) {
 }
 
 function renderRevisionNotes(result = {}) {
+  const hasGuideObject = result.revisionStudyGuide && typeof result.revisionStudyGuide === "object";
   const studyGuide = renderRevisionStudyGuide(result);
   if (studyGuide) return studyGuide;
+
+  if (hasGuideObject) {
+    return `<p class="muted">学习说明暂未生成完整 9 项内容。请重新点击“生成修改版 / 范文”，系统会尝试补齐 AI 学习计划。</p>`;
+  }
 
   const zhNotes = ensureArray(result.revisionNotesZh).filter(Boolean);
   if (zhNotes.length) return listHtml(zhNotes);
@@ -2915,7 +2950,7 @@ function renderRevisionOnlyPanel(result = {}) {
   const modelOne = String(revisionTextFallback(result, "modelOne") || "").trim();
   const revisedHalf = String(revisionTextFallback(result, "revisedHalf") || "").trim();
   const revisedOne = String(revisionTextFallback(result, "revisedOne") || "").trim();
-  const highBandPolish = String(result.highBandPolish || "").trim();
+  const highBandPolish = typeof result.highBandPolish === "string" ? result.highBandPolish.trim() : "";
 
   return `
     ${collapsibleSection("Model answer outline", `

@@ -2974,7 +2974,7 @@ async function callAiGradingPass({ apiKey, model, body, gradingMode, maxTokens, 
     : buildFastAiGradingPrompt({ ...body, mode: gradingMode }, gradingMode, locale);
 
   const cappedMaxTokens = isRevisionPass
-    ? Math.min(maxTokens || 5200, 7000)
+    ? Math.min(maxTokens || 11000, envInt("AI_REVISION_STAGE_MAX_TOKENS", 12000, 7000, 16000))
     : Math.min(maxTokens || 2600, veryShort ? 1800 : 2600);
 
   const rawText = await callDeepSeek({
@@ -3029,6 +3029,148 @@ function mergeRevisionPassIntoResult(result, revision) {
     };
   }
   return merged;
+}
+
+
+const REVISION_STUDY_GUIDE_TITLES = [
+  "当前水平定位",
+  "本次核心训练目标",
+  "为什么先练这个",
+  "主学修改版怎么用",
+  "主学范文大纲怎么用",
+  "对照版本怎么用",
+  "本次不要学什么",
+  "下一步训练任务",
+  "完成标准"
+];
+
+function revisionStudyGuideHasCompleteSections(guide) {
+  if (!guide || typeof guide !== "object") return false;
+  const sections = Array.isArray(guide.sections) ? guide.sections : [];
+  return REVISION_STUDY_GUIDE_TITLES.every((title) =>
+    sections.some((section) =>
+      section && typeof section === "object" &&
+      String(section.title || "").trim() === title &&
+      hasUsefulText(section.content || section.text)
+    )
+  );
+}
+
+function revisionOnlyMissingContentFields(result = {}) {
+  const missing = [];
+  [
+    "modelAnswerOutlineHalf",
+    "modelAnswerOutlineHalfZh",
+    "modelAnswerOutlineOne",
+    "modelAnswerOutlineOneZh",
+    "modelAnswerHalf",
+    "modelAnswerOne",
+    "revisedEssayHalf",
+    "revisedEssayOne"
+  ].forEach((field) => {
+    if (!hasUsefulText(result[field])) missing.push(field);
+  });
+  if (!revisionStudyGuideHasCompleteSections(result.revisionStudyGuide)) missing.push("revisionStudyGuide");
+  return missing;
+}
+
+function buildRevisionCompletionRepairPrompt(body = {}, currentRevision = {}, missingFields = [], locale = "en") {
+  const currentBand = Number(body.currentOverallBand || body.overallBand || body.currentResult?.overallBand || body.currentResult?.scoreCalculation?.finalBand);
+  const plan = revisionTargetPlanForBand(currentBand);
+  const targetHalfText = formatBand(plan.targetHalfBand);
+  const targetOneText = formatBand(plan.targetOneBand);
+  const repairShape = {
+    modelAnswerOutlineHalf: "",
+    modelAnswerOutlineHalfZh: "",
+    modelAnswerOutlineOne: "",
+    modelAnswerOutlineOneZh: "",
+    modelAnswerHalf: "",
+    modelAnswerOne: "",
+    revisedEssayHalf: "",
+    revisedEssayOne: "",
+    revisionStudyGuide: {
+      title: "学习说明：本次重点提高一档",
+      taskType: body.task === "Task 1" ? "Task 1" : "Task 2",
+      currentBand: Number.isFinite(Number(plan.currentBand)) ? plan.currentBand : "",
+      primaryTargetBand: plan.targetHalfBand,
+      comparisonTargetBand: plan.targetOneBand,
+      coreTrainingGoal: "",
+      sections: REVISION_STUDY_GUIDE_TITLES.map((title) => ({ title, content: "" }))
+    }
+  };
+  return [
+    "Revision-only completion repair pass. Return exactly one valid JSON object only.",
+    "Do not rescore. Do not return overallBand, criteria, scoreCalculation, scoreChanged, finalCriteria, or any scoring fields.",
+    `Current band: ${Number.isFinite(currentBand) ? formatBand(currentBand) : "unknown"}. Primary target: Band ${targetHalfText}. Comparison target: Band ${targetOneText}.`,
+    "Fill the missing or incomplete revision-only fields. Keep existing useful content consistent; do not contradict it.",
+    `Missing/incomplete fields: ${missingFields.join(", ") || "none"}.`,
+    "Required output shape:",
+    JSON.stringify(repairShape),
+    "Rules:",
+    "modelAnswerOutlineHalf and modelAnswerOutlineOne must be learnable outlines, not vague summaries.",
+    "For Task 2 outline: include question type, required parts, paragraph plan, what each paragraph teaches, main imitable move, and what not to imitate yet.",
+    "For Task 1 outline: include letter type, purpose, recipient/tone, each bullet-point plan, opening, purpose sentence, bullet paragraphs, closing, and tone warning.",
+    "modelAnswerOutlineHalfZh and modelAnswerOutlineOneZh must be Chinese learning explanations for their corresponding English outlines; do not merely translate word by word.",
+    "revisionStudyGuide must be written mainly in Chinese and must contain exactly the 9 required section titles with specific non-empty content.",
+    "The study guide must focus on the primary target band. The comparison target is only for observing differences, not for immediate full imitation.",
+    "Do not repeat sentence-level spelling, grammar, or word-choice corrections; earlier sections already handle that. Focus on whole-writing training.",
+    "For Task 1, the next task should normally be one bullet-point paragraph. For Task 2, the next task should normally be one body paragraph.",
+    "Question prompt:",
+    String(body.questionPrompt || ""),
+    "Original essay:",
+    String(body.essay || ""),
+    "Existing revision output snapshot:",
+    JSON.stringify(currentRevision || {}).slice(0, 12000),
+    "Current grading snapshot:",
+    JSON.stringify(body.currentResult || {}).slice(0, 6000)
+  ].join("\n");
+}
+
+async function repairIncompleteRevisionOnlyOutput({ apiKey, model, body, output, effectiveMode, locale, deadline }) {
+  if (effectiveMode !== "revision_only" && effectiveMode !== "revision") return output;
+  const missingFields = revisionOnlyMissingContentFields(output);
+  if (!missingFields.length) return output;
+  if (!hasEnoughAiTime(deadline, 55000)) {
+    output.revisionWarning = appendBoundaryNote(output.revisionWarning, "Revision study guide or outline Chinese explanation was incomplete and there was not enough server time for AI repair.");
+    output.revisionRepairMissingFields = missingFields;
+    return output;
+  }
+  try {
+    const rawText = await callDeepSeek({
+      apiKey,
+      model,
+      systemPrompt: buildFastRevisionSystemPrompt(locale),
+      userPrompt: buildRevisionCompletionRepairPrompt(body, output, missingFields, locale),
+      maxTokens: envInt("AI_REVISION_REPAIR_MAX_TOKENS", 6500, 3500, 10000),
+      temperature: 0.08,
+      jsonMode: true,
+      deadline,
+      timeoutMs: safePassTimeout(deadline, Number(process.env.AI_REVISION_REPAIR_TIMEOUT_MS) || 75000, 45000)
+    });
+    const repaired = await parseOrRepairAiJson({
+      apiKey,
+      model,
+      rawText,
+      body: { ...body, mode: effectiveMode },
+      locale,
+      maxTokens: envInt("AI_REVISION_REPAIR_MAX_TOKENS", 6500, 3500, 10000),
+      allowRepair: true,
+      deadline
+    });
+    const merged = mergeRevisionPassIntoResult(output, repaired);
+    const stillMissing = revisionOnlyMissingContentFields(merged);
+    if (stillMissing.length) {
+      merged.revisionWarning = appendBoundaryNote(merged.revisionWarning, `AI revision repair still missed: ${stillMissing.join(", ")}.`);
+      merged.revisionRepairMissingFields = stillMissing;
+    } else {
+      merged.revisionRepairApplied = true;
+    }
+    return merged;
+  } catch (error) {
+    output.revisionWarning = appendBoundaryNote(output.revisionWarning, `AI revision repair failed: ${error.message || error.name || String(error)}.`);
+    output.revisionRepairMissingFields = missingFields;
+    return output;
+  }
 }
 
 function addRevisionTimeoutWarning(result) {
@@ -3415,7 +3557,9 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- For all criterion evidence fields, also return accurate matching Chinese fields: evidenceZh, evidenceQuotesZh, positiveEvidenceZh, limitingEvidenceZh, whyThisBandZh, whyNotHigherZh, and whyNotLowerZh. Do not use generic Chinese templates.",
     "- Do not keep all four criterion bands identical unless the evidence for all four criteria is genuinely equivalent.",
     "- High-band calibration is mandatory: when the evidence shows full task fulfilment, natural organisation, precise vocabulary, flexible grammar, and rare minor errors, use Band 8-9. Do not force such writing into Band 7.",
-    "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must name exact score-limiting features from the essay, not vague strictness.",
+    "- Band 7.0 is not a safe default for fluent, complete essays. If the essay has clear position/purpose, logical paragraphing, topic-specific vocabulary, flexible sentence control, and only minor errors, explicitly compare Band 7.0, 7.5, 8.0, and 8.5 before deciding.",
+    "- Do not assign four identical Band 7.0 criterion bands unless each criterion has separate, concrete Band-7-only limitations. If the only limits are minor nuance, slightly smoother cohesion, or example depth, consider 7.5/8.0 instead.",
+    "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must quote exact score-limiting features from the essay, not vague strictness.",
     "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
     buildTargetImprovementInstruction(body),
     "Return feedbackTrack as one of: low_band_correction, mid_band_improvement, high_band_polish. Return estimatedBandZone as low, middle, or high. The track must match the final evidence: low = foundations; middle = improve development/stability; high = polish naturalness/precision.",
@@ -4097,6 +4241,15 @@ async function callAiRevisionStageOnly({ apiKey, model, body, effectiveMode, ver
       veryShort
     });
     output = mergeRevisionPassIntoResult(output, revision);
+    output = await repairIncompleteRevisionOnlyOutput({
+      apiKey,
+      model,
+      body,
+      output,
+      effectiveMode: effectiveMode === "revision_only" ? "revision_only" : "revision",
+      locale,
+      deadline
+    });
   } catch (error) {
     output = addRevisionTimeoutWarning(output);
     output.revisionWarning = isDeepSeekTimeoutError(error)
@@ -6360,6 +6513,8 @@ function buildFinalPlanPrompt({ body, effectiveMode, locale }) {
     "The server normally averages the four AI-returned final criterion bands. For clear objective low-band boundary conflicts, task-relevance conflicts, or Task 1 achievement conflicts, a strict IELTS boundary audit may flag or cap the displayed criterion bands; therefore your AI bands must already reflect strict IELTS boundaries.",
     "Also return bandRange, boundaryPosition, strictExaminerBand, generousExaminerBand, boundaryReason, and boundaryReasonZh. These explain whether the essay is a low/mid/high position within the displayed half-band, especially for 7.5/8.0 boundaries.",
     "For Band 7.5-8.0 writing, avoid Band 9-style absolute language unless the evidence truly supports it. Use cautious high-band wording and name concrete remaining limits.",
+    "High-band anti-underestimate audit: if the accumulated evidence shows a complete, fluent, well-organised essay with few errors and only minor refinement needs, do not keep all four final bands at 7.0. Compare 7.0 vs 7.5 vs 8.0, and assign the higher band when the concrete evidence supports it.",
+    "If the final displayed score remains Band 7.0 for a high-quality essay, every final criterion must name a specific limitation from the essay that prevents 7.5. Do not use vague phrases such as 'could be more nuanced' unless you identify where and how.",
     buildFeedbackTrackInstruction(body),
     "Final priority plan must follow the track: low band = fixFirst/fixNext/polishLater; mid band = improveFirst/stabiliseNext/polishLater using the same JSON arrays fixFirst/fixNext/polishLater; high band = high-band polish priorities only.",
     "For low-band plans, do not put complex sentence structures, wider linking devices, or more advanced vocabulary in fixFirst. Those belong only in polishLater after accuracy and task clarity are stable.",
@@ -6716,7 +6871,7 @@ async function callAiHighBandPolishExpressionsOnly({ apiKey, model, body, effect
     error.status = 400;
     throw error;
   }
-  const raw = await callTenStepBatchJson({
+  let raw = await callTenStepBatchJson({
     apiKey,
     model,
     stage,
@@ -6731,9 +6886,35 @@ async function callAiHighBandPolishExpressionsOnly({ apiKey, model, body, effect
     deadline,
     timeoutMs: Number(process.env.AI_HIGH_BAND_POLISH_TIMEOUT_MS) || 150000
   });
-  const rawItems = ensureArray(raw.betterExpressionItems).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
-  const repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems });
-  const betterExpressionItems = normalizeBetterExpressionItems([...rawItems, ...repairedBetterExpressionItems]).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+  let rawItems = ensureArray(raw.betterExpressionItems).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+  let repairedBetterExpressionItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems });
+  let betterExpressionItems = normalizeBetterExpressionItems([...rawItems, ...repairedBetterExpressionItems]).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+
+  if (!betterExpressionItems.length && hasEnoughAiTime(deadline, 45000)) {
+    try {
+      const retrySources = units.slice(0, Math.min(units.length, 10)).map((item) => ({ sentenceNumber: item.sentenceNumber, originalSentence: item.text, correctedSentence: item.text }));
+      const retryRaw = await callTenStepBatchJson({
+        apiKey,
+        model,
+        stage,
+        locale,
+        userPrompt: [
+          buildHighBandPolishPrompt({ body, effectiveMode, locale, sources: retrySources }),
+          "RETRY REQUIREMENT: the previous high-band polish attempt returned no usable items. This essay is Band 7.0+ or a high-band candidate. Return 3-6 realistic optional polish items unless every sentence is already Band 9 quality. Do not invent errors; improve nuance, concision, cohesion, register, or precision."
+        ].join("\n"),
+        maxTokens: envInt("AI_HIGH_BAND_POLISH_RETRY_MAX_TOKENS", 6200, 3000, 10000),
+        deadline,
+        timeoutMs: safePassTimeout(deadline, Number(process.env.AI_HIGH_BAND_POLISH_RETRY_TIMEOUT_MS) || 65000, 45000)
+      });
+      const retryItems = ensureArray(retryRaw.betterExpressionItems).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+      const repairedRetryItems = await repairUnsafeBetterExpressionCandidates({ apiKey, model, body, effectiveMode, stage, locale, deadline, rawItems: retryItems });
+      betterExpressionItems = normalizeBetterExpressionItems([...retryItems, ...repairedRetryItems]).slice(0, envInt("AI_HIGH_BAND_POLISH_MAX_ITEMS", 6, 3, 10));
+      rawItems = retryItems;
+      repairedBetterExpressionItems = repairedRetryItems;
+    } catch (retryError) {
+      raw.stageWarnings = ensureArray(raw.stageWarnings).concat([`AI high-band polish retry failed: ${retryError.message || retryError.name || String(retryError)}`]);
+    }
+  }
   if (!betterExpressionItems.length) {
     return {
       aiStage: stage,
