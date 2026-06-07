@@ -2809,9 +2809,12 @@ function getRevisionTargetMeta(result = {}) {
   };
 }
 
-function renderModelAnswerBlock(label, text, emptyReason = "") {
+function renderModelAnswerBlock(label, text, emptyReason = "", options = {}) {
+  const copyLabel = options.copyLabel || "复制范文";
+  const zhText = options.zhText || "";
+  const explanation = hasTranslationValue(zhText) ? renderZhToggle(zhText) : "";
   const content = text
-    ? `<pre>${escapeHtml(text)}</pre><div class="actions"><button class="secondary" type="button" data-copy-text="${escapeHtml(text)}">复制范文</button></div>`
+    ? `<pre>${escapeHtml(text)}</pre>${explanation}<div class="actions"><button class="secondary" type="button" data-copy-text="${escapeHtml(text)}">${escapeHtml(copyLabel)}</button></div>`
     : `<p class="muted">${escapeHtml(emptyReason || "暂未生成这一篇范文。点击“生成修改版 / 范文”后会显示。")}</p>`;
   return `<details class="feedback-collapse revision-block"${text ? " open" : ""}>
     <summary>${escapeHtml(label)}</summary>
@@ -2870,30 +2873,44 @@ function revisionTextFallback(result = {}, kind = "") {
   return "";
 }
 
+function renderRevisionStudyGuide(result = {}) {
+  const guide = result.revisionStudyGuide && typeof result.revisionStudyGuide === "object" ? result.revisionStudyGuide : null;
+  if (!guide) return "";
+  const sections = ensureArray(guide.sections).filter((section) => section && typeof section === "object" && (section.title || section.content || section.text));
+  const headerParts = [
+    guide.currentBand ? `当前 Band ${revisionPanelBandLabel(guide.currentBand)}` : "",
+    guide.primaryTargetBand ? `主学 Band ${revisionPanelBandLabel(guide.primaryTargetBand)}` : "",
+    guide.comparisonTargetBand ? `对照 Band ${revisionPanelBandLabel(guide.comparisonTargetBand)}` : "",
+    guide.coreTrainingGoal ? `核心目标：${guide.coreTrainingGoal}` : ""
+  ].filter(Boolean);
+  const header = headerParts.length ? `<p class="revision-meta-note">${escapeHtml(headerParts.join(" ｜ "))}</p>` : "";
+  const body = sections.map((section, index) => {
+    const title = section.title || `学习步骤 ${index + 1}`;
+    const content = section.content || section.text || "";
+    return `<div class="advice-card-inline"><h4>${escapeHtml(index + 1)}. ${title}</h4>${proseHtml(content)}</div>`;
+  }).join("");
+  return body ? `${header}${body}` : "";
+}
+
 function renderRevisionNotes(result = {}) {
-  const meta = getRevisionTargetMeta(result);
+  const studyGuide = renderRevisionStudyGuide(result);
+  if (studyGuide) return studyGuide;
+
+  const zhNotes = ensureArray(result.revisionNotesZh).filter(Boolean);
+  if (zhNotes.length) return listHtml(zhNotes);
+
   const notes = ensureArray(result.revisionNotes).filter(Boolean);
-  const zh = ensureArray(result.revisionNotesZh).filter(Boolean).join("\n");
-  const fallbackNotes = [
-    meta.currentBand ? `当前分数：Band ${revisionPanelBandLabel(meta.currentBand)}。` : "当前分数：请先完成一次评分，系统会按最近一次评分生成目标版本。",
-    meta.foundationMode
-      ? `本次生成目标：低于 Band 5 的作文统一生成 ${meta.targetHalfLabel} 和 ${meta.targetOneLabel}，不展示 5 分以下范文。`
-      : `本次生成目标：${meta.targetHalfLabel}（提高约0.5分）和 ${meta.targetOneLabel}（稳定提高约1分）。`,
-    "为什么不生成太高分版本：目标跳得太高会引入过难词汇和长句，不适合当前阶段直接模仿，容易增加错误。",
-    `优先模仿建议：先模仿 ${meta.targetHalfLabel} 版本，稳定后再练习 ${meta.targetOneLabel} 版本。`,
-    `${meta.targetHalfLabel} 重点：清楚主题句、准确基本句型、自然词组和简单完整例子。`,
-    `${meta.targetOneLabel} 重点：更充分解释、更具体例子、更自然衔接和少量可控复杂句。`,
-    "不建议：不要整篇死背，不要强行使用不熟悉的高级词，不要模仿自己还不能控制的长句。",
-    "下一步训练：先用下一档修改版重写一个主体段，再把其中一个例子扩展成稳定提分版本的写法。"
-  ];
-  const finalNotes = notes.length ? notes : fallbackNotes;
-  return `${listHtml(finalNotes)}${zh ? `<h4>修改重点中文说明</h4>${renderZhToggle(zh)}` : ""}`;
+  if (notes.length) return listHtml(notes);
+
+  return `<p class="muted">学习说明暂未生成成功。请重新点击“生成修改版 / 范文”。</p>`;
 }
 
 function renderRevisionOnlyPanel(result = {}) {
   const meta = getRevisionTargetMeta(result);
   const outlineHalf = String(revisionTextFallback(result, "outlineHalf") || "").trim();
   const outlineOne = String(revisionTextFallback(result, "outlineOne") || "").trim();
+  const outlineHalfZh = String(result.modelAnswerOutlineHalfZh || result.modelAnswerOutlineTargetHalfZh || result.modelAnswerOutlineZh || "").trim();
+  const outlineOneZh = String(result.modelAnswerOutlineOneZh || result.modelAnswerOutlineTargetOneZh || "").trim();
   const modelHalf = String(revisionTextFallback(result, "modelHalf") || "").trim();
   const modelOne = String(revisionTextFallback(result, "modelOne") || "").trim();
   const revisedHalf = String(revisionTextFallback(result, "revisedHalf") || "").trim();
@@ -2905,8 +2922,8 @@ function renderRevisionOnlyPanel(result = {}) {
       <p class="revision-meta-note">${escapeHtml(meta.foundationMode
         ? `低于 Band 5 的作文统一生成 ${meta.targetHalfLabel} / ${meta.targetOneLabel}，不展示 5 分以下范文。`
         : `根据当前分数生成 ${meta.targetHalfLabel} / ${meta.targetOneLabel} 两个下一阶段目标。`)}</p>
-      ${renderModelAnswerBlock(`下一档范文提纲 / Target ${meta.targetHalfLabel}`, outlineHalf, "暂未生成下一档范文提纲。")}
-      ${renderModelAnswerBlock(`稳定提分范文提纲 / Target ${meta.targetOneLabel}`, outlineOne, "暂未生成稳定提分范文提纲。")}
+      ${renderModelAnswerBlock(`主学范文大纲 / Target ${meta.targetHalfLabel}`, outlineHalf, "暂未生成主学范文大纲。", { zhText: outlineHalfZh, copyLabel: "复制大纲" })}
+      ${renderModelAnswerBlock(`对照范文大纲 / Target ${meta.targetOneLabel}`, outlineOne, "暂未生成对照范文大纲。", { zhText: outlineOneZh, copyLabel: "复制大纲" })}
     `)}
     ${collapsibleSection("同题范文 / Model Answers", `
       ${renderModelAnswerBlock(`下一档同题范文 / Target ${meta.targetHalfLabel}`, modelHalf)}
@@ -2918,7 +2935,7 @@ function renderRevisionOnlyPanel(result = {}) {
       ${renderRevisionBlock(`下一档修改版 / Target ${meta.targetHalfLabel}`, "half", revisedHalf, revisionSkipReason(result.revisedEssayMeta || {}, "half"))}
       ${renderRevisionBlock(`稳定提分修改版 / Target ${meta.targetOneLabel}`, "one", revisedOne, revisionSkipReason(result.revisedEssayMeta || {}, "one"))}
       ${highBandPolish ? collapsibleSection("High-band polish / 高分润色", `<pre>${escapeHtml(highBandPolish)}</pre>`) : ""}
-      ${collapsibleSection("Revision notes / 学习说明", renderRevisionNotes(result), { defaultOpen: true })}
+      ${collapsibleSection("学习说明：本次重点提高一档", renderRevisionNotes(result), { defaultOpen: true })}
     `)}
   `;
 }

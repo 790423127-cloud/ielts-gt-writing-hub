@@ -2810,7 +2810,9 @@ function buildFastRevisionPrompt(body, locale = "en") {
       scoringChangedReason: "Revision-only mode does not rescore or change IELTS bands."
     },
     modelAnswerOutlineHalf: "",
+    modelAnswerOutlineHalfZh: "",
     modelAnswerOutlineOne: "",
+    modelAnswerOutlineOneZh: "",
     modelAnswerHalf: "",
     modelAnswerOne: "",
     revisedEssayHalf: "",
@@ -2829,6 +2831,25 @@ function buildFastRevisionPrompt(body, locale = "en") {
     },
     revisionNotes: [],
     revisionNotesZh: [],
+    revisionStudyGuide: {
+      title: "学习说明：本次重点提高一档",
+      taskType: body.task === "Task 1" ? "Task 1" : "Task 2",
+      currentBand: Number.isFinite(Number(plan.currentBand)) ? plan.currentBand : "",
+      primaryTargetBand: plan.targetHalfBand,
+      comparisonTargetBand: plan.targetOneBand,
+      coreTrainingGoal: "",
+      sections: [
+        { title: "当前水平定位", content: "" },
+        { title: "本次核心训练目标", content: "" },
+        { title: "为什么先练这个", content: "" },
+        { title: "主学修改版怎么用", content: "" },
+        { title: "主学范文大纲怎么用", content: "" },
+        { title: "对照版本怎么用", content: "" },
+        { title: "本次不要学什么", content: "" },
+        { title: "下一步训练任务", content: "" },
+        { title: "完成标准", content: "" }
+      ]
+    },
     // Legacy fields are kept only for backward compatibility. In revision_only mode, prefer the dynamic fields above.
     revisedEssayBand5: "",
     revisedEssayBand6: "",
@@ -2904,11 +2925,16 @@ function buildFastRevisionPrompt(body, locale = "en") {
     `modelAnswerOne: write a complete same-prompt model answer targeting Band ${targetOneText}. It may be more developed than modelAnswerHalf but must not be an unrealistic Band 9 rewrite.`,
     `revisedEssayHalf: revise the user's original essay to target Band ${targetHalfText}. Preserve the user's main position, paragraph direction, examples, and meaning.`,
     `revisedEssayOne: revise the user's original essay to target Band ${targetOneText}. Preserve the user's main position, paragraph direction, examples, and meaning, while improving development and cohesion.`,
-    "modelAnswerOutlineHalf and modelAnswerOutlineOne must each give a short usable outline for the corresponding model answer.",
-    "revisionNotes must be rich and practical. Include these sections as separate array items: current score, main current limitations, target A purpose, target B purpose, why not generate a much higher-band version, which version to imitate first, what to imitate in Target A, what to imitate in Target B, what not to copy blindly, and one concrete next practice task.",
-    "revisionNotesZh must provide accurate Chinese learning guidance matching the revisionNotes, not generic text.",
+    "modelAnswerOutlineHalf and modelAnswerOutlineOne must each be a learnable outline, not a vague summary. For Task 2 include: question type, required parts, paragraph plan, what each paragraph teaches, the main imitable move, and what not to imitate yet. For Task 1 include: letter type, purpose, recipient/tone, each bullet-point plan, opening, purpose sentence, bullet paragraphs, closing, and tone warning.",
+    "modelAnswerOutlineHalfZh and modelAnswerOutlineOneZh must explain the corresponding outline in Chinese for learning use. They must not merely translate word by word; explain how the user should learn from the outline.",
+    "revisionStudyGuide must be the main Chinese next-band training plan. It must be based on the actual generated revised essays, model answers, and outlines. Do not use a generic local-template style answer.",
+    "revisionStudyGuide.sections must contain exactly these 9 section titles in Chinese: 当前水平定位, 本次核心训练目标, 为什么先练这个, 主学修改版怎么用, 主学范文大纲怎么用, 对照版本怎么用, 本次不要学什么, 下一步训练任务, 完成标准.",
+    "The study guide must focus mainly on Target A / the primary target band. Target B is only a comparison version: explain what to observe, but do not ask the user to fully imitate it now.",
+    "Do not repeat sentence-level spelling, grammar, or word-choice corrections in the study guide because earlier sections already handle those. Focus on whole-writing training: Task 1 purpose/bullet detail/tone/closing, or Task 2 question type/required parts/body paragraph development/examples/conclusion.",
+    "For Task 1, the next practice task should normally be rewriting one bullet-point paragraph. For Task 2, the next practice task should normally be rewriting one body paragraph. Include a concrete completion checklist.",
+    "revisionNotes and revisionNotesZh may be kept for backward compatibility, but they should not replace revisionStudyGuide.",
     "Keep generated essays concise and IELTS-appropriate. Do not translate the essays into Chinese.",
-    "Do not leave modelAnswerOutlineHalf, modelAnswerOutlineOne, modelAnswerHalf, modelAnswerOne, revisedEssayHalf, revisedEssayOne, or revisionNotes empty unless the original essay is blank or not rateable.",
+    "Do not leave modelAnswerOutlineHalf, modelAnswerOutlineHalfZh, modelAnswerOutlineOne, modelAnswerOutlineOneZh, modelAnswerHalf, modelAnswerOne, revisedEssayHalf, revisedEssayOne, or revisionStudyGuide.sections empty unless the original essay is blank or not rateable.",
     `Main focus: ${plan.focus}`,
     tooShort ? "Because the response is very short, keep the revisions realistic and focus on task completion and clear simple English." : ""
   ].join("\n");
@@ -2980,7 +3006,7 @@ function mergeRevisionPassIntoResult(result, revision) {
   const merged = result && typeof result === "object" ? { ...result } : {};
   [
     "revisedEssayHalf", "revisedEssayOne",
-    "modelAnswerOutlineHalf", "modelAnswerOutlineOne",
+    "modelAnswerOutlineHalf", "modelAnswerOutlineHalfZh", "modelAnswerOutlineOne", "modelAnswerOutlineOneZh",
     "modelAnswerHalf", "modelAnswerOne",
     "revisedEssayBand5", "revisedEssayBand6", "revisedEssayBand7",
     "modelAnswerOutline", "modelAnswer", "highBandPolish"
@@ -2989,6 +3015,7 @@ function mergeRevisionPassIntoResult(result, revision) {
   });
   if (Array.isArray(revision.revisionNotes) && revision.revisionNotes.length) merged.revisionNotes = revision.revisionNotes;
   if (Array.isArray(revision.revisionNotesZh) && revision.revisionNotesZh.length) merged.revisionNotesZh = revision.revisionNotesZh;
+  if (revision.revisionStudyGuide && typeof revision.revisionStudyGuide === "object") merged.revisionStudyGuide = revision.revisionStudyGuide;
   if (revision.revisionTargetMeta && typeof revision.revisionTargetMeta === "object") {
     merged.revisionTargetMeta = {
       ...(merged.revisionTargetMeta && typeof merged.revisionTargetMeta === "object" ? merged.revisionTargetMeta : {}),
