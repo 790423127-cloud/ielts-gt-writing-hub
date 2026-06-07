@@ -176,6 +176,147 @@ function countWordsServer(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
 }
 
+
+// Deterministic task-relevance helper used only to prevent false low-band A-category caps.
+// It does not grade the essay. It checks whether the submitted answer visibly engages with
+// the selected prompt before allowing an off-topic/misread-prompt boundary cap.
+const RELEVANCE_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "if", "when", "while", "that", "this", "these", "those",
+  "to", "of", "for", "in", "on", "at", "by", "with", "from", "as", "be", "is", "are", "was", "were",
+  "it", "its", "it's", "s", "they", "them", "their", "people", "person", "someone", "some", "many", "much", "more",
+  "most", "very", "can", "could", "should", "would", "will", "may", "might", "do", "does", "did", "have", "has",
+  "had", "been", "being", "there", "nowadays", "today", "modern", "society", "thing", "things", "possible", "help",
+  "nowaday", "essay", "discuss", "opinion", "believe", "think", "write", "give", "explain", "describe", "tell", "say", "letter"
+]);
+
+const RELEVANCE_STANCE_WORDS = new Set([
+  "good", "bad", "positive", "negative", "benefit", "beneficial", "advantage", "disadvantage", "risk", "problem", "drawback",
+  "agree", "disagree", "opinion", "view", "support", "oppose", "important", "better", "worse"
+]);
+
+const UNPROMPTED_DOMAIN_DRIFT_GROUPS = [
+  ["agriculture", "agricultural", "farm", "farming", "farmer", "vegetable", "fruit", "tomato", "pesticide", "organic", "supermarket"],
+  ["restaurant", "cooking", "cook", "dinner", "food", "meal", "importing", "import"],
+  ["environment", "pollution", "climate", "recycling", "plastic", "traffic", "transport"],
+  ["technology", "internet", "online", "phone", "computer", "robot", "ai"],
+  ["school", "student", "teacher", "education", "university", "homework"],
+  ["sport", "sports", "exercise", "football", "basketball", "athlete"]
+];
+
+function normalizeRelevanceToken(token) {
+  let t = String(token || "").toLowerCase().replace(/[’‘`]/g, "'").replace(/^'+|'+$/g, "");
+  if (!t) return "";
+  const dictionary = {
+    younger: "young", youngest: "young", older: "old", oldest: "old",
+    buying: "buy", bought: "buy", buys: "buy",
+    paying: "pay", pays: "pay", paid: "pay",
+    looking: "look", looks: "look", looked: "look",
+    treatments: "treatment", products: "product", procedures: "procedure", choices: "choice",
+    benefits: "benefit", risks: "risk", drawbacks: "drawback", advantages: "advantage", disadvantages: "disadvantage",
+    letters: "letter", recipients: "recipient", bullets: "bullet"
+  };
+  if (dictionary[t]) return dictionary[t];
+  if (t.length > 4 && t.endsWith("ies")) t = `${t.slice(0, -3)}y`;
+  else if (t.length > 5 && t.endsWith("ments")) t = t.slice(0, -1);
+  else if (t.length > 4 && t.endsWith("s") && !t.endsWith("ss")) t = t.slice(0, -1);
+  if (t.length > 5 && t.endsWith("ing")) t = t.slice(0, -3);
+  if (t.length > 4 && t.endsWith("ed")) t = t.slice(0, -2);
+  return t;
+}
+
+function relevanceTokens(text) {
+  return (String(text || "").toLowerCase().match(/[a-z][a-z'’-]*/g) || [])
+    .map(normalizeRelevanceToken)
+    .filter(Boolean);
+}
+
+function promptTopicTokenSet(prompt) {
+  const tokens = relevanceTokens(prompt)
+    .filter((token) => token.length >= 3 && !RELEVANCE_STOPWORDS.has(token) && !RELEVANCE_STANCE_WORDS.has(token));
+  return new Set(tokens);
+}
+
+function essayTokenSet(text) {
+  return new Set(relevanceTokens(text).filter((token) => token.length >= 2));
+}
+
+function countSetOverlap(left, right) {
+  let count = 0;
+  left.forEach((token) => { if (right.has(token)) count += 1; });
+  return count;
+}
+
+function hasTask2StanceSignal(essayTokens, essay) {
+  const text = String(essay || "").toLowerCase();
+  if ([...essayTokens].some((token) => RELEVANCE_STANCE_WORDS.has(token))) return true;
+  return /\b(in my opinion|i think|i believe|good and bad|positive|negative|benefit|risk|problem|drawback|advantage|disadvantage)\b/i.test(text);
+}
+
+function unpromptedDomainDriftCount(promptText, essayText) {
+  const promptTokens = essayTokenSet(promptText);
+  const essayTokens = essayTokenSet(essayText);
+  return UNPROMPTED_DOMAIN_DRIFT_GROUPS.reduce((sum, group) => {
+    const promptHasGroup = group.some((word) => promptTokens.has(normalizeRelevanceToken(word)));
+    if (promptHasGroup) return sum;
+    const count = group.filter((word) => essayTokens.has(normalizeRelevanceToken(word))).length;
+    return sum + (count >= 2 ? 1 : 0);
+  }, 0);
+}
+
+function buildTask2PromptRelevanceProfile(body = {}) {
+  const prompt = String(body.questionPrompt || body.promptText || body.task2Instruction || "");
+  const essay = String(body.essay || "");
+  const promptTopics = promptTopicTokenSet(prompt);
+  const essayTokens = essayTokenSet(essay);
+  const overlapCount = countSetOverlap(promptTopics, essayTokens);
+  const topicCount = promptTopics.size;
+  const coverage = topicCount ? overlapCount / topicCount : 0;
+  const stanceSignal = hasTask2StanceSignal(essayTokens, essay);
+  const phraseSignal = /\b(good|bad|positive|negative|benefit|risk|advantage|disadvantage|problem|drawback)\b/i.test(essay)
+    && /\b(look\s+young|look\s+younger|looking\s+younger|young\s+face|youthful|appearance|beauty|cosmetic|treatment|product)\b/i.test(essay);
+  const strongTopicCoverage = topicCount === 0
+    ? false
+    : overlapCount >= Math.max(3, Math.ceil(topicCount * 0.70));
+  const moderateTopicCoverage = topicCount === 0
+    ? false
+    : overlapCount >= Math.max(2, Math.ceil(topicCount * 0.45));
+  const directAnswerAttempt = (strongTopicCoverage && stanceSignal) || phraseSignal || (moderateTopicCoverage && stanceSignal && countWordsServer(essay) >= 80);
+  const domainDriftCount = unpromptedDomainDriftCount(prompt, essay);
+  return {
+    promptTopicTokens: [...promptTopics],
+    overlapCount,
+    topicCount,
+    coverage,
+    stanceSignal,
+    phraseSignal,
+    directAnswerAttempt,
+    strongTopicCoverage,
+    moderateTopicCoverage,
+    domainDriftCount,
+    hasUnpromptedDomainDrift: domainDriftCount > 0
+  };
+}
+
+function buildTask1PromptRelevanceProfile(body = {}) {
+  const prompt = String(body.questionPrompt || body.promptText || "");
+  const essay = String(body.essay || "");
+  const promptTopics = promptTopicTokenSet(prompt);
+  const essayTokens = essayTokenSet(essay);
+  const overlapCount = countSetOverlap(promptTopics, essayTokens);
+  const topicCount = promptTopics.size;
+  const coverage = topicCount ? overlapCount / topicCount : 0;
+  const letterSignal = /\b(dear|hi|hello|regards|sincerely|yours|thank you|please|i am writing|could you|would you|apologise|apologize|invite|request|complain|inform)\b/i.test(essay);
+  const functionalAttempt = letterSignal || overlapCount >= Math.max(2, Math.ceil(topicCount * 0.35));
+  return { promptTopicTokens: [...promptTopics], overlapCount, topicCount, coverage, letterSignal, functionalAttempt };
+}
+
+function stripPreviousBoundaryGuardText(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .filter((line) => !/strict ielts low-band boundary guard|strict task 2 relevance boundary guard|strict task 1 achievement boundary guard|低分边界保护|任务相关性边界|评分复核已调整/i.test(line))
+    .join("\n");
+}
+
 function countParagraphsServer(text) {
   return String(text || "")
     .split(/\n\s*\n|\r?\n/)
@@ -1611,15 +1752,62 @@ function splitSourceLockClauses(text) {
     .filter(Boolean);
 }
 
+
+const SOURCE_LOCK_ALLOWED_META_TERMS = new Set([
+  "missing", "incorrect", "correct", "corrected", "correction", "error", "errors", "spelling", "misspelling", "grammar", "grammatical",
+  "word", "words", "choice", "form", "forms", "formation", "sentence", "structure", "clause", "phrase", "phrasing", "preposition", "article",
+  "plural", "singular", "noun", "nouns", "verb", "verbs", "tense", "agreement", "subject", "object", "pronoun", "adjective", "adverb",
+  "comparative", "superlative", "punctuation", "capitalization", "comma", "period", "space", "hyphen", "apostrophe", "collocation",
+  "natural", "idiomatic", "formal", "informal", "clear", "clarity", "precise", "precision", "better", "improve", "improved", "replace", "replaced",
+  "use", "uses", "using", "needed", "needs", "should", "requires", "require", "after", "before", "instead", "because", "meaning", "context",
+  "score", "band", "lexical", "resource", "coherence", "cohesion", "task", "response", "achievement", "range", "accuracy", "affect", "reduce",
+  "common", "basic", "frequent", "limited", "issue", "issues", "problem", "rule", "impact", "score-impacting", "score", "ielts"
+]);
+
+function sourceLockUnsupportedContentTerms(clause, sourceTexts = []) {
+  const sourceTokens = sourceLockTokenSet(sourceTexts);
+  const terms = normalizeSourceLockText(clause)
+    .split(" ")
+    .map((token) => token.replace(/^'+|'+$/g, ""))
+    .filter((token) => token.length >= 4)
+    .filter((token) => !SOURCE_LOCK_ALLOWED_META_TERMS.has(token))
+    .filter((token) => !sourceTokens.has(token));
+  const seen = new Set();
+  return terms.filter((token) => {
+    if (seen.has(token)) return false;
+    seen.add(token);
+    return true;
+  });
+}
+
+function sourceLockClauseDedupeKey(clause) {
+  if (typeof compactTranslationCompare === "function") return compactTranslationCompare(clause);
+  return normalizeSourceLockText(clause);
+}
+
+function sourceLockClauseLooksContaminated(clause, sourceTexts = [], options = {}) {
+  const quotedTerms = extractSourceLockQuotedTerms(clause);
+  if (quotedTerms.length && !quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts))) return true;
+  if (options.allowMetaClause) return false;
+  const unsupported = sourceLockUnsupportedContentTerms(clause, sourceTexts);
+  // Two or more unsupported specific content words usually means a note from a different sentence
+  // leaked into this card, e.g. mentioning shop/office/customers under a sentence about appearance.
+  return unsupported.length >= 2;
+}
+
 function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence, options = {}) {
   const raw = String(text || "").trim();
   if (!raw) return "";
   const sourceTexts = [originalSentence, correctedSentence].filter(Boolean);
-  const kept = splitSourceLockClauses(raw).filter((clause) => {
-    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return false;
-    const quotedTerms = extractSourceLockQuotedTerms(clause);
-    if (!quotedTerms.length) return true;
-    return quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts));
+  const kept = [];
+  const seen = new Set();
+  splitSourceLockClauses(raw).forEach((clause) => {
+    if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return;
+    if (sourceLockClauseLooksContaminated(clause, sourceTexts, options)) return;
+    const key = sourceLockClauseDedupeKey(clause);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    kept.push(clause);
   });
   return kept.join("; ").replace(/\s+/g, " ").trim();
 }
@@ -4704,6 +4892,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
         betterExpressionItems: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", betterExpression: "", betterExpressionZh: "", whyBetter: "", whyBetterZh: "", targetBand: "" }]
       }),
       "For every score-impacting sentence below Band 9, include a betterExpression when a safe upgrade is possible. It must be ONE usable IELTS sentence only, based on the corrected sentence, not a paragraph or explanation. Do not include meta-commentary such as 'which makes the idea clearer' or keep errors such as 'discuss about'. Every English explanation must have the matching Chinese field.",
+      task === "Task 2" ? "PROMPT-QUESTION LOCK: upgraded introduction/topic sentences must answer the actual Task 2 question type. If the prompt asks good/bad, positive/negative, agree/disagree, causes/solutions, or advantages/disadvantages, the betterExpression must reflect that question focus." : "TASK 1 LETTER LOCK: upgraded sentences must stay in letter mode and improve purpose, tone, bullet detail, request/apology/thanks/invitation clarity, or practical communication.",
       "SOURCE LOCK: every betterExpression item must attach to the exact originalSentence/correctedSentence. whyBetter may explain the upgrade, but problem/rule fields in detailed corrections must not contain notes from other sentences.",
       ...common
     ].join("\n");
@@ -5133,6 +5322,9 @@ function buildSentenceBatchPrompt({ body, effectiveMode, locale, batch, batchInd
     task === "Task 1"
       ? "Task 1 letter rule: correct sentences for letter purpose, recipient-appropriate tone, bullet-point clarity, opening/closing, and practical function. Do not mention thesis, argument, counterargument, or essay conclusion."
       : "Task 2 essay rule: correct sentences for position, relevance, idea development, examples, paragraph logic, and conclusion. Do not mention recipient, salutation, letter closing, or bullet-point coverage.",
+    task === "Task 2"
+      ? "PROMPT-QUESTION LOCK: if an introduction sentence says 'In this essay I will discuss...' but discusses the wrong focus (for example 'whether it is possible' when the prompt asks whether it is good or bad), the direct correction must fix the task focus too. It should discuss the actual question requirement from the prompt, not only correct spelling."
+      : "TASK 1 LETTER LOCK: if a sentence states the wrong letter purpose, recipient, or bullet-point function, the direct correction must align it with the selected Task 1 prompt.",
     `Task: ${task}`,
     `Mode: ${effectiveMode}`,
     `Current score snapshot: ${compactScoreSnapshot(body)}`,
@@ -5149,6 +5341,8 @@ function correctedSentenceHasRedFlags(text = "") {
   const patterns = [
     /\bdiscuss\s+about\b/i,
     /\bdiscuss\s+nowadays\s+it['’]?s\b/i,
+    /\bdiscuss\s+whether\s+nowadays\s+(?:it\s+is|it['’]?s)\s+possible\b/i,
+    /\bdiscuss\s+whether\s+(?:it\s+is|it['’]?s)\s+possible\s+for\s+people\s+to\s+buy\b/i,
     /\bneed\s+to\s+facing\b/i,
     /\bwant\s+use\b/i,
     /\bpay\s+for\s+treatments\s+was\b/i,
@@ -5203,10 +5397,10 @@ function buildDirectCorrectionRepairPrompt({ body, candidates, batchIndex, batch
     `AI-only direct correction quality repair ${batchIndex + 1}/${batchCount}.`,
     "Rewrite only the direct correctedSentence for the listed items. The previous correction was unchanged, incomplete, unnatural, or still contained obvious errors.",
     "Return a natural correctedSentence that fixes the sentence directly while preserving the student's intended meaning. Do not make a high-band rewrite here; this is a direct correction, not a betterExpression.",
-    "Do not keep errors such as discuss about, discuss nowadays it's, need to facing, want use, they using, at future, maybe dangerous, or misspellings.",
+    "Do not keep errors such as discuss about, discuss nowadays it's, discuss whether nowadays it is possible when the prompt asks good/bad, need to facing, want use, they using, at future, maybe dangerous, or misspellings.",
     task === "Task 1"
       ? "For Task 1, keep letter purpose, tone, recipient relationship, and bullet-point function. Do not use essay thesis/counterargument language."
-      : "For Task 2, keep essay position/reasoning and question relevance. Do not use letter salutation/recipient/bullet language.",
+      : "For Task 2, keep essay position/reasoning and question relevance. Do not use letter salutation/recipient/bullet language. If an introduction/meta sentence focuses on the wrong question, correct it so it answers the actual prompt focus.",
     "Return exactly one valid JSON object with this shape:",
     JSON.stringify({ detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", problem: "", problemZh: "", rule: "", ruleZh: "", errorType: "", errorTypeZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true }] }),
     `Task: ${task}`,
@@ -5344,6 +5538,9 @@ function buildBetterExpressionBatchPrompt({ body, effectiveMode, locale, batch, 
     task === "Task 1"
       ? "Task 1 letter rule: the betterExpression must improve practical letter communication: purpose, bullet-point detail, politeness, register, request/apology/thanks/invitation clarity, or natural opening/closing. Never use essay terms like thesis, argument, counterargument, both sides, or conclusion unless the letter prompt genuinely requires them."
       : "Task 2 essay rule: the betterExpression must improve essay communication: position, relevance, reasoning, examples, cohesion, or conclusion. Never use letter terms like recipient, salutation, bullet points, or closing.",
+    task === "Task 2"
+      ? "PROMPT-QUESTION LOCK: the betterExpression must answer the selected prompt's real question. For a good/bad prompt, it should refer to benefits/risks or positive/negative judgement, not merely whether something is possible."
+      : "TASK 1 LETTER LOCK: the betterExpression must preserve and improve the selected letter task purpose and bullet-point function, not convert it into essay language.",
     "betterExpression must be based on the direct corrected sentence, not on the original wrong sentence.",
     "betterExpression must be ONE usable IELTS sentence only, not a paragraph and not an explanation.",
     "It must first fix all obvious errors from the corrected sentence. Never keep errors such as 'discuss about', 'need to facing', wrong spelling, wrong tense, or broken punctuation.",
@@ -5527,8 +5724,8 @@ function boundaryAuditTextSnapshot(result = {}, body = {}) {
   ];
   return pieces.map((item) => {
     if (item === undefined || item === null) return "";
-    if (typeof item === "string") return item;
-    try { return JSON.stringify(item); } catch (_) { return String(item || ""); }
+    if (typeof item === "string") return stripPreviousBoundaryGuardText(item);
+    try { return stripPreviousBoundaryGuardText(JSON.stringify(item)); } catch (_) { return stripPreviousBoundaryGuardText(String(item || "")); }
   }).join("\n").toLowerCase();
 }
 
@@ -5624,6 +5821,18 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   const hasWhollyUnrelatedEvidence = /(wholly unrelated|completely unrelated|entirely unrelated|no relevant message|almost no relevant message|no rateable relevant response|blank response|mostly non-english|mostly copied)/.test(snapshot);
   const hasTask1PurposeMismatchEvidence = /(unclear letter purpose|no clear purpose|wrong purpose|wrong recipient|recipient relationship.*wrong|does not fit the recipient|inappropriate tone|wrong tone|not recognisably a letter|not recognizable as a letter|not a letter|essay instead of a letter|missing letter format|no opening|no closing|missing salutation|missing sign-off|ignores? the bullet points|bullet points? not covered|no bullet point coverage|missing major bullet|only one bullet|two bullet points.*missing|one bullet point.*missing|largely unrelated to the letter situation)/.test(snapshot);
   const hasTask1DetailWeaknessEvidence = /(bullet[^.]{0,60}(limited|underdeveloped|missing|not covered|partly covered)|purpose[^.]{0,80}(unclear|weak)|tone[^.]{0,80}(inconsistent|inappropriate|too informal|too formal)|letter[^.]{0,80}(underdeveloped|limited detail|not enough detail)|opening|closing|salutation|sign[- ]off)/.test(snapshot);
+  const task2Relevance = task === "Task 2" ? buildTask2PromptRelevanceProfile(body) : null;
+  const task1Relevance = task === "Task 1" ? buildTask1PromptRelevanceProfile(body) : null;
+  const task2AnsweredPromptProtection = Boolean(task2Relevance?.directAnswerAttempt && !task2Relevance?.hasUnpromptedDomainDrift);
+  const task2AllowedAOffTopic = task === "Task 2" && (
+    hasWhollyUnrelatedEvidence ||
+    (hasSevereTask2OffTopicEvidence && (!task2Relevance?.directAnswerAttempt || task2Relevance?.hasUnpromptedDomainDrift || !task2Relevance?.strongTopicCoverage))
+  );
+  const task1FunctionalProtection = Boolean(task1Relevance?.functionalAttempt && !/not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated|no bullet point coverage|ignores? the bullet points/.test(snapshot));
+
+  if (task === "Task 2" && task2AnsweredPromptProtection) flags.push("Task 2 prompt answered but weak; use C-category boundary, not off-topic A-category");
+  if (task === "Task 2" && task2Relevance?.hasUnpromptedDomainDrift) flags.push("possible topic drift from prompt keywords");
+  if (task === "Task 1" && task1FunctionalProtection) flags.push("Task 1 functional letter attempt; avoid non-functional A-category unless major requirements are absent");
 
   if (task === "Task 2" && words < 180) flags.push(`Task 2 below 180 words (${words})`);
   else if (task === "Task 2" && words < 200) flags.push(`Task 2 below 200 words (${words})`);
@@ -5632,7 +5841,7 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   if (hasUnderdevelopmentEvidence) flags.push(task === "Task 1" ? "underdeveloped bullet details" : "underdeveloped ideas/details");
   if (hasUnclearPositionEvidence) flags.push(task === "Task 1" ? "unclear letter purpose" : "unclear or weak position");
   if (hasWeakCoherenceEvidence) flags.push("weak coherence/progression");
-  if (task === "Task 2" && hasSevereTask2OffTopicEvidence) flags.push(hasWhollyUnrelatedEvidence ? "wholly unrelated or no relevant Task 2 response" : "clear Task 2 task mismatch/off-topic content");
+  if (task === "Task 2" && task2AllowedAOffTopic) flags.push(hasWhollyUnrelatedEvidence ? "wholly unrelated or no relevant Task 2 response" : "clear Task 2 task mismatch/off-topic content");
   if (task === "Task 1" && hasTask1PurposeMismatchEvidence) flags.push("Task 1 purpose/bullet/letter-format mismatch");
   if (task === "Task 1" && hasTask1DetailWeaknessEvidence && !hasTask1PurposeMismatchEvidence) flags.push("Task 1 detail/tone/function weakness");
   if (hasFrequentLexicalEvidence) flags.push("frequent spelling/word-choice errors");
@@ -5648,7 +5857,7 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
   let boundaryCategory = "";
 
   if (task === "Task 2") {
-    if (hasSevereTask2OffTopicEvidence || hasWhollyUnrelatedEvidence) {
+    if (task2AllowedAOffTopic) {
       // A. Off-topic / misread prompt: task relevance is the main limiter.
       triggered = true;
       boundaryCategory = "task2_A_off_topic";
@@ -5693,7 +5902,7 @@ function buildStrictLowBandBoundaryAudit(result = {}, body = {}) {
       caps["Grammatical Range and Accuracy"] = Math.min(Number(caps["Grammatical Range and Accuracy"] ?? 9), hasFrequentGrammarEvidence ? 4.0 : 4.5);
     }
   } else {
-    if (hasTask1PurposeMismatchEvidence && (/not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated|no bullet point coverage|ignores? the bullet points/.test(snapshot))) {
+    if (hasTask1PurposeMismatchEvidence && !task1FunctionalProtection && (/not a letter|essay instead of a letter|wrong recipient|wrong purpose|largely unrelated|no bullet point coverage|ignores? the bullet points/.test(snapshot))) {
       // A. Not a functional response to the letter task.
       triggered = true;
       boundaryCategory = "task1_A_not_functional_letter";

@@ -1780,6 +1780,49 @@ function splitSourceLockClauses(text) {
     .filter(Boolean);
 }
 
+
+const SOURCE_LOCK_ALLOWED_META_TERMS = new Set([
+  "missing", "incorrect", "correct", "corrected", "correction", "error", "errors", "spelling", "misspelling", "grammar", "grammatical",
+  "word", "words", "choice", "form", "forms", "formation", "sentence", "structure", "clause", "phrase", "phrasing", "preposition", "article",
+  "plural", "singular", "noun", "nouns", "verb", "verbs", "tense", "agreement", "subject", "object", "pronoun", "adjective", "adverb",
+  "comparative", "superlative", "punctuation", "capitalization", "comma", "period", "space", "hyphen", "apostrophe", "collocation",
+  "natural", "idiomatic", "formal", "informal", "clear", "clarity", "precise", "precision", "better", "improve", "improved", "replace", "replaced",
+  "use", "uses", "using", "needed", "needs", "should", "requires", "require", "after", "before", "instead", "because", "meaning", "context",
+  "score", "band", "lexical", "resource", "coherence", "cohesion", "task", "response", "achievement", "range", "accuracy", "affect", "reduce",
+  "common", "basic", "frequent", "limited", "issue", "issues", "problem", "rule", "impact", "score-impacting", "score", "ielts"
+]);
+
+function sourceLockUnsupportedContentTerms(clause, sourceTexts = []) {
+  const sourceTokens = sourceLockTokenSet(sourceTexts);
+  const terms = normalizeSourceLockText(clause)
+    .split(" ")
+    .map((token) => token.replace(/^'+|'+$/g, ""))
+    .filter((token) => token.length >= 4)
+    .filter((token) => !SOURCE_LOCK_ALLOWED_META_TERMS.has(token))
+    .filter((token) => !sourceTokens.has(token));
+  const seen = new Set();
+  return terms.filter((token) => {
+    if (seen.has(token)) return false;
+    seen.add(token);
+    return true;
+  });
+}
+
+function sourceLockClauseDedupeKey(clause) {
+  if (typeof compactTranslationCompare === "function") return compactTranslationCompare(clause);
+  return normalizeSourceLockText(clause);
+}
+
+function sourceLockClauseLooksContaminated(clause, sourceTexts = [], options = {}) {
+  const quotedTerms = extractSourceLockQuotedTerms(clause);
+  if (quotedTerms.length && !quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts))) return true;
+  if (options.allowMetaClause) return false;
+  const unsupported = sourceLockUnsupportedContentTerms(clause, sourceTexts);
+  // Two or more unsupported specific content words usually means a note from a different sentence
+  // leaked into this card, e.g. mentioning shop/office/customers under a sentence about appearance.
+  return unsupported.length >= 2;
+}
+
 function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence, options = {}) {
   const raw = String(text || "").trim();
   if (!raw) return "";
@@ -1788,9 +1831,8 @@ function cleanIssueTextAgainstSentence(text, originalSentence, correctedSentence
   const seen = new Set();
   splitSourceLockClauses(raw).forEach((clause) => {
     if (!options.allowMetaClause && isBetterExpressionMetaClause(clause)) return;
-    const quotedTerms = extractSourceLockQuotedTerms(clause);
-    if (quotedTerms.length && !quotedTerms.every((term) => sourceLockTermAppears(term, sourceTexts))) return;
-    const key = compactTranslationCompare(clause);
+    if (sourceLockClauseLooksContaminated(clause, sourceTexts, options)) return;
+    const key = sourceLockClauseDedupeKey(clause);
     if (!key || seen.has(key)) return;
     seen.add(key);
     kept.push(clause);
