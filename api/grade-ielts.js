@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v5-anchor-calibrated";
+const SCORE_SYSTEM_VERSION = "score-core-v6-strict-anchor-boundary-engine";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -294,33 +294,64 @@ function taskRuleLabel(task) {
   return task === "Task 1" ? "GT Task 1 Letter anchor-calibrated rules" : "GT Task 2 Essay anchor-calibrated rules";
 }
 
+function independentFallbackAnchorBand(task, signals = {}) {
+  const words = Number(signals.wordCount) || 0;
+  if (signals.rateabilityStatus === "not_rateable_or_severely_limited") {
+    if (words === 0) return 0;
+    if (words < 50) return 2;
+    if (words < 80) return 3;
+  }
+  if (task === "Task 1") {
+    if (words < 50) return 2;
+    if (words < 80) return 3;
+    if (words < 120) return 4;
+    if (words < 150) return 5;
+    return 6;
+  }
+  if (words < 50) return 2;
+  if (words < 80) return 3;
+  if (words < 120) return 4;
+  if (words < 150) return 4;
+  if (words < 180) return 5;
+  return 6;
+}
+
 function defaultAnchorComparison(task, criteria = {}, signals = {}) {
-  const { finalBand } = averageBand(criteria);
-  const closest = Number.isFinite(finalBand) ? Math.max(0, Math.min(9, Math.round(finalBand))) : 0;
+  const closest = independentFallbackAnchorBand(task, signals);
   const lower = Math.max(0, closest - 1);
   const higher = Math.min(9, closest + 1);
   const anchor = anchorSetForTask(task).find((item) => item.band === closest) || anchorSetForTask(task)[0];
   return {
     task,
-    anchorSystem: taskRuleLabel(task),
+    anchorSystem: `${taskRuleLabel(task)} (local fallback only; AI independent anchor required)`,
     closestAnchorBand: closest,
     lowerAnchorBand: lower,
     higherAnchorBand: higher,
     closestAnchorProfile: anchor?.profile || "",
     closestAnchorProfileZh: anchor?.zh || "",
-    whyCloserToThisBand: `The four criterion bands average near Band ${Number.isFinite(finalBand) ? finalBand.toFixed(1) : closest.toFixed(1)}, so this response is closest to the Band ${closest} anchor unless the examiner evidence says otherwise.`,
-    whyCloserToThisBandZh: `四项分数平均接近 Band ${Number.isFinite(finalBand) ? finalBand.toFixed(1) : closest.toFixed(1)}，因此默认最接近 ${closest} 分锚点，除非评分证据显示需要调整。`,
-    whyNotLowerAnchor: `The response shows enough relevant performance to avoid the Band ${lower} anchor unless severe task or language limits are present.`,
-    whyNotLowerAnchorZh: `文章仍有足够相关表现，因此不直接归入 ${lower} 分锚点，除非存在严重任务或语言限制。`,
-    whyNotHigherAnchor: `The limiting evidence prevents a stable Band ${higher} anchor unless the response shows stronger task fulfilment, development, cohesion, lexical precision, and grammar control.`,
-    whyNotHigherAnchorZh: `限制性证据使文章还不能稳定达到 ${higher} 分锚点，除非任务完成、展开、衔接、词汇精准度和语法控制更强。`
+    anchorSource: "local_fallback_missing_ai_anchor",
+    anchorMissing: true,
+    whyCloserToThisBand: `AI did not return an independent anchor comparison. The server used only local task/length/rateability signals as a fallback and requires boundary review before freezing if this conflicts with criterion bands.`,
+    whyCloserToThisBandZh: `AI 没有返回独立锚点对比。本地仅根据任务类型、字数和可评分性做兜底判断；如果与四项分数冲突，必须进入边界复核后才能冻结。`,
+    whyNotLowerAnchor: `No lower-anchor decision was returned by AI; this must be supplied by the scoring/review model, not inferred from the final score.`,
+    whyNotLowerAnchorZh: `AI 没有返回低一档解释；这一项应由评分/复核模型给出，不能由最终分数反推。`,
+    whyNotHigherAnchor: `No higher-anchor decision was returned by AI; this must be supplied by the scoring/review model, not inferred from the final score.`,
+    whyNotHigherAnchorZh: `AI 没有返回高一档解释；这一项应由评分/复核模型给出，不能由最终分数反推。`
   };
+}
+
+function hasUsableAnchorComparison(raw) {
+  if (!raw || typeof raw !== "object") return false;
+  const closest = Number(raw.closestAnchorBand ?? raw.closestAnchor);
+  return Number.isFinite(closest) && String(raw.whyCloserToThisBand || raw.anchorComparison || raw.whyNotHigherAnchor || raw.whyNotLowerAnchor || "").trim().length > 0;
 }
 
 function normalizeAnchorComparison(raw, task, criteria, signals) {
   const fallback = defaultAnchorComparison(task, criteria, signals);
   const source = raw && typeof raw === "object" ? raw : {};
-  const closest = Number.isFinite(Number(source.closestAnchorBand)) ? Math.max(0, Math.min(9, Math.round(Number(source.closestAnchorBand)))) : fallback.closestAnchorBand;
+  const provided = hasUsableAnchorComparison(source);
+  const sourceClosest = Number(source.closestAnchorBand ?? source.closestAnchor);
+  const closest = provided && Number.isFinite(sourceClosest) ? Math.max(0, Math.min(9, Math.round(sourceClosest))) : fallback.closestAnchorBand;
   const lower = Number.isFinite(Number(source.lowerAnchorBand ?? source.lowerAnchor)) ? Math.max(0, Math.min(9, Math.round(Number(source.lowerAnchorBand ?? source.lowerAnchor)))) : Math.max(0, closest - 1);
   const higher = Number.isFinite(Number(source.higherAnchorBand ?? source.higherAnchor)) ? Math.max(0, Math.min(9, Math.round(Number(source.higherAnchorBand ?? source.higherAnchor)))) : Math.min(9, closest + 1);
   const anchor = anchorSetForTask(task).find((item) => item.band === closest) || {};
@@ -328,10 +359,12 @@ function normalizeAnchorComparison(raw, task, criteria, signals) {
     ...fallback,
     ...source,
     task,
-    anchorSystem: source.anchorSystem || fallback.anchorSystem,
+    anchorSystem: source.anchorSystem || (provided ? taskRuleLabel(task) : fallback.anchorSystem),
     closestAnchorBand: closest,
     lowerAnchorBand: lower,
     higherAnchorBand: higher,
+    anchorSource: provided ? "ai_independent_anchor" : "local_fallback_missing_ai_anchor",
+    anchorMissing: !provided,
     closestAnchorProfile: String(source.closestAnchorProfile || anchor.profile || fallback.closestAnchorProfile || "").trim(),
     closestAnchorProfileZh: String(source.closestAnchorProfileZh || anchor.zh || fallback.closestAnchorProfileZh || "").trim(),
     whyCloserToThisBand: String(source.whyCloserToThisBand || source.anchorComparison || fallback.whyCloserToThisBand).trim(),
@@ -345,36 +378,101 @@ function normalizeAnchorComparison(raw, task, criteria, signals) {
 
 function normalizeGate(raw, fallbackReason, triggered = false) {
   const source = raw && typeof raw === "object" ? raw : {};
+  const localTriggered = Boolean(triggered);
+  const aiStatus = source.status || source.result;
   return {
-    status: source.status || source.result || (triggered ? "triggered" : "passed"),
+    status: localTriggered ? "triggered" : (aiStatus || "passed"),
+    localTriggered,
+    aiStatus: aiStatus || "",
     reason: String(source.reason || source.explanation || source.note || fallbackReason || "Gate checked.").trim(),
     reasonZh: String(source.reasonZh || source.explanationZh || source.noteZh || "").trim(),
     evidence: Array.isArray(source.evidence) ? source.evidence : []
   };
 }
 
-function normalizeTaskSpecificGate(raw, signals, criteria = {}) {
+
+function getWordCountBoundaryProfile(task, words) {
+  const w = Number(words) || 0;
+  if (task === "Task 1") {
+    if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0-1", lower: 0, upper: 1, severity: "extreme", reason: "Task 1 is blank or has no countable words." };
+    if (w < 50) return { triggered: true, category: "minimal_letter", suggestedRange: "Band 1.0-2.5", lower: 1, upper: 2.5, severity: "extreme", reason: `Task 1 has only ${w} words; there is not enough letter content to cover purpose, bullets and tone.` };
+    if (w < 80) return { triggered: true, category: "very_short_letter", suggestedRange: "Band 2.5-3.5", lower: 2.5, upper: 3.5, severity: "severe", reason: `Task 1 has ${w} words; bullet coverage and letter completeness are likely severely limited.` };
+    if (w < 120) return { triggered: true, category: "short_letter_limited_detail", suggestedRange: "Band 3.5-5.0", lower: 3.5, upper: 5, severity: "high", reason: `Task 1 has ${w} words; it may be rateable but details and bullet development must be audited.` };
+    if (w < 150) return { triggered: true, category: "below_recommended_letter_length", suggestedRange: "Band 4.5-6.0 depending on bullet detail", lower: 4.5, upper: 6, severity: "moderate", reason: `Task 1 has ${w} words, below the recommended 150; check whether all bullets are still developed.` };
+    return { triggered: false, category: "normal_letter_length", suggestedRange: "No word-count low-band boundary", lower: 0, upper: 9, severity: "none", reason: `Task 1 word count ${w} is in or above the normal range.` };
+  }
+  if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0-1", lower: 0, upper: 1, severity: "extreme", reason: "Task 2 is blank or has no countable words." };
+  if (w < 50) return { triggered: true, category: "minimal_response", suggestedRange: "Band 1.0-2.5", lower: 1, upper: 2.5, severity: "extreme", reason: `Task 2 has only ${w} words; it cannot provide a developed essay response.` };
+  if (w < 80) return { triggered: true, category: "very_short_rateable", suggestedRange: "Band 2.5-3.5", lower: 2.5, upper: 3.5, severity: "severe", reason: `Task 2 has ${w} words; it is very short and development evidence is severely limited.` };
+  if (w < 120) return { triggered: true, category: "severe_underlength_but_rateable", suggestedRange: "Band 3.0-4.0", lower: 3, upper: 4, severity: "high", reason: `Task 2 has ${w} words; it may be rateable, but it is severely underlength and normally capped by lack of development evidence.` };
+  if (w < 150) return { triggered: true, category: "underlength_limited_development", suggestedRange: "Band 3.5-4.5", lower: 3.5, upper: 4.5, severity: "high", reason: `Task 2 has ${w} words; task response and development are likely limited.` };
+  if (w < 180) return { triggered: true, category: "short_response", suggestedRange: "Band 4.0-5.0", lower: 4, upper: 5, severity: "moderate", reason: `Task 2 has ${w} words; it is short, so 5.5+ needs unusually strong evidence.` };
+  if (w < 230) return { triggered: true, category: "development_risk", suggestedRange: "Band 4.5-5.5 unless development is strong", lower: 4.5, upper: 5.5, severity: "watch", reason: `Task 2 has ${w} words; not automatically low, but development depth must be checked before 6.0+.` };
+  return { triggered: false, category: "normal_essay_length", suggestedRange: "No word-count low-band boundary", lower: 0, upper: 9, severity: "none", reason: `Task 2 word count ${w} is in or near the normal IELTS range.` };
+}
+
+function scoreValues(criteria) {
+  return Object.values(criteria || {}).map(Number).filter(Number.isFinite);
+}
+
+function allCriteriaSame(criteria) {
+  const values = scoreValues(criteria);
+  return values.length === 4 && values.every((x) => x === values[0]);
+}
+
+function noWeakLocalLanguage(signals = {}) {
+  return signals.grammarErrorDensity !== "high" && signals.spellingErrorDensity !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
+}
+
+function detectHighBandCandidate(criteria, signals = {}, anchor = {}, calibration = {}) {
+  const values = scoreValues(criteria);
+  const avg = averageBand(criteria).finalBand;
+  const allSeven = values.length === 4 && values.every((x) => x === 7);
+  const allAtLeastSeven = values.length === 4 && values.every((x) => x >= 7);
+  const anchorBand = Number(anchor.closestAnchorBand);
+  const calibrationText = JSON.stringify(calibration || {});
+  const highSignalText = /fully|mature|natural|precise|flexible|rare errors|negligible errors|strong grammatical control|sophisticated|fluent/i.test(calibrationText);
+  const normalLength = signals.task === "Task 1" ? Number(signals.wordCount) >= 150 : Number(signals.wordCount) >= 230;
+  const triggered = Boolean((allSeven || (allAtLeastSeven && avg <= 7.5) || anchorBand >= 8 || highSignalText) && normalLength && noWeakLocalLanguage(signals));
+  return {
+    triggered,
+    allSeven,
+    allAtLeastSeven,
+    anchorBand,
+    highSignalText,
+    normalLength,
+    reason: triggered
+      ? "High-band boundary review required: the score profile may be capped around Band 7 despite high-band signals or all-four-7 pattern."
+      : "No forced high-band boundary review from local signals."
+  };
+}
+
+function normalizeTaskSpecificGate(raw, signals, criteria = {}, anchor = {}, calibration = {}) {
   const source = raw && typeof raw === "object" ? raw : {};
   const task = signals.task;
   const words = Number(signals.wordCount) || 0;
+  const wordBoundary = getWordCountBoundaryProfile(task, words);
+  const highCandidate = detectHighBandCandidate(criteria, signals, anchor, calibration);
   if (task === "Task 1") {
     const bullets = Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints : [];
+    const firstName = criterionNames(task)[0];
+    const ta = Number(criteria[firstName]);
     return {
-      bulletCoverageGate: normalizeGate(source.bulletCoverageGate || source.bulletCoverage, `Task 1 bullet coverage checked. Extracted bullets: ${bullets.length ? bullets.join(" | ") : "no explicit bullets extracted"}.`, false),
-      purposeClarityGate: normalizeGate(source.purposeClarityGate || source.purposeClarity, "Task 1 purpose clarity checked; the letter must make the reason for writing clear.", false),
-      toneRegisterGate: normalizeGate(source.toneRegisterGate || source.toneRegister, "Task 1 tone/register checked against recipient relationship and letter purpose.", false),
-      letterCompletenessGate: normalizeGate(source.letterCompletenessGate || source.letterCompleteness, "Letter completeness checked: opening, purpose, body details, closing/request/thanks and sign-off.", false),
-      wordCountGuard: normalizeGate(source.wordCountGuard, words < 150 ? `Task 1 has ${words} words, below the 150-word recommended minimum; judge whether detail is limited.` : `Task 1 word count ${words} is within or above the recommended minimum.`, words < 150),
-      highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, "High-band unlock checked: all bullets must be fully developed with natural tone and accurate flexible language for 7.5+.", Object.values(criteria).some((x) => Number(x) >= 7.5))
+      bulletCoverageGate: normalizeGate(source.bulletCoverageGate || source.bulletCoverage, `Task 1 bullet coverage must be explicit. Extracted bullets: ${bullets.length ? bullets.join(" | ") : "no explicit bullets extracted"}. Missing one or more bullets must constrain Task Achievement.`, Boolean(bullets.length && ta >= 6 && words < 150)),
+      purposeClarityGate: normalizeGate(source.purposeClarityGate || source.purposeClarity, "Task 1 purpose clarity checked; unclear purpose normally prevents a high Task Achievement score.", false),
+      toneRegisterGate: normalizeGate(source.toneRegisterGate || source.toneRegister, "Task 1 tone/register checked against recipient relationship and letter purpose; wrong tone constrains TA and LR.", false),
+      letterCompletenessGate: normalizeGate(source.letterCompletenessGate || source.letterCompleteness, "Letter completeness checked: greeting/opening purpose/body details/closing/request or thanks/sign-off.", false),
+      wordCountGuard: normalizeGate(source.wordCountGuard, `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.`, wordBoundary.triggered),
+      highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5))
     };
   }
   return {
     taskResponseDepthGate: normalizeGate(source.taskResponseDepthGate || source.taskResponseDepth, "Task 2 response depth checked: all prompt parts, position, reasons, examples and explanations must be present.", false),
-    band6AccessGate: normalizeGate(source.band6AccessGate || source.band6Access, "Band 6 access checked: real development is required; visible structure alone is not enough.", false),
-    lowBandGuard: normalizeGate(source.lowBandGuard, words < 150 ? `Task 2 has ${words} words; low-band guard checks whether response and development are severely limited.` : "Low-band guard checked against rateability, relevance and development.", words < 150 || signals.rateabilityStatus === "not_rateable_or_severely_limited"),
+    band6AccessGate: normalizeGate(source.band6AccessGate || source.band6Access, "Band 6 access checked: real development is required; visible structure alone is not enough.", Boolean(words < 230 && Object.values(criteria).some((x) => Number(x) >= 6))),
+    lowBandGuard: normalizeGate(source.lowBandGuard, `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.`, wordBoundary.triggered || signals.rateabilityStatus === "not_rateable_or_severely_limited"),
     midBandCheck: normalizeGate(source.midBandCheck || source.midBandGate, "Mid-band check applied: do not over-reward paragraphs, basic connectors, or a stated opinion without development.", false),
-    highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, "High-band unlock checked: mature response, full development, natural cohesion, precise lexis and strong grammar are needed for 7.5+.", Object.values(criteria).some((x) => Number(x) >= 7.5)),
-    scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", false)
+    highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5)),
+    scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", allCriteriaSame(criteria))
   };
 }
 
@@ -401,6 +499,11 @@ function buildScoreCorePrompt(body, signals) {
     `0-9 anchor benchmarks for this task:\n${anchorTable}`,
     `Task-specific gates for this task:\n${gateRules}`,
     "Anchor calibration requirement: before assigning final criterion bands, decide which 0-9 anchor the response is closest to. Explain why it is not the lower adjacent anchor and why it is not the higher adjacent anchor. This prevents low/mid writing being lifted by visible structure and prevents high-band writing being capped at 7.0.",
+    "Independent anchor rule: anchorComparison must be decided before and independently from the final criterion average. Never infer closestAnchorBand from the final score.",
+    "Hard local audit rule: the server will independently check underlength, all-four-same, all-four-7, anchor/final conflicts, Band 6 access, and high-band ceiling. If a conflict is found, your result may be sent to a second AI boundary review before freezing.",
+    "Fail-closed rule: every criterion must include evidence and half-band boundary reasoning. If all four criteria are identical, justify equality with evidence or differentiate the bands by 0.5 where appropriate.",
+    "High-band ceiling rule: Band 8/9 writing can have rare minor slips. Do not keep a mature, fully developed, precise and natural response at four Band 7s merely because it is not perfect.",
+    "Low-band boundary rule: severe underlength may be rateable but still belongs to a low-band boundary. Task 2 80-119 words is usually Band 3.0-4.0; Task 2 120-149 words is usually Band 3.5-4.5 unless exceptional evidence exists.",
     "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
     "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
     "Band 6 access rule: Band 6 requires real task fulfilment and development, not only paragraphing. If ideas are general, examples are brief, or frequent language errors reduce precision, stay at 5.0-5.5.",
@@ -534,11 +637,154 @@ function buildTaskProfile(body, signals) {
       };
 }
 
+
+function combineGate(localGate, aiGate) {
+  const localTriggered = Boolean(localGate?.status === "triggered" || localGate?.localTriggered);
+  const ai = aiGate && typeof aiGate === "object" ? aiGate : {};
+  const status = localTriggered ? "triggered" : (ai.status || localGate?.status || "passed");
+  return {
+    ...(ai || {}),
+    ...(localGate || {}),
+    status,
+    reason: String(localGate?.reason || ai.reason || ai.explanation || ai.note || "Gate checked.").trim(),
+    reasonZh: String(localGate?.reasonZh || ai.reasonZh || ai.explanationZh || ai.noteZh || "").trim(),
+    evidence: Array.isArray(ai.evidence) ? ai.evidence : (Array.isArray(localGate?.evidence) ? localGate.evidence : [])
+  };
+}
+
+function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criterionCalibration = {}, existing = {}) {
+  const { rawAverage, finalBand } = averageBand(criteria);
+  const wordBoundary = getWordCountBoundaryProfile(signals.task, signals.wordCount);
+  const highCandidate = detectHighBandCandidate(criteria, signals, anchorComparison, criterionCalibration);
+  const warnings = collectScoreWarnings(criteria, signals);
+  const anchorBand = Number(anchorComparison?.closestAnchorBand);
+  const anchorMissing = Boolean(anchorComparison?.anchorMissing || anchorComparison?.anchorSource === "local_fallback_missing_ai_anchor");
+  const anchorConflict = Number.isFinite(anchorBand) && Number.isFinite(finalBand) && Math.abs(anchorBand - finalBand) > 1;
+  const values = scoreValues(criteria);
+  const allSame = allCriteriaSame(criteria);
+  const allFourSeven = values.length === 4 && values.every((x) => x === 7);
+  const lowBandScoreTooHigh = Boolean(wordBoundary.triggered && Number.isFinite(finalBand) && Number.isFinite(wordBoundary.upper) && finalBand > wordBoundary.upper);
+  const band6AccessConflict = Boolean(signals.task === "Task 2" && signals.wordCount < 230 && values.some((x) => x >= 6) && (signals.rateabilityStatus !== "clearly_rateable" || wordBoundary.triggered));
+  const reviewReasons = [];
+  if (anchorMissing) reviewReasons.push("AI did not provide an independent anchor comparison.");
+  if (lowBandScoreTooHigh) reviewReasons.push(`Final Band ${finalBand.toFixed(1)} exceeds local word-count boundary ${wordBoundary.suggestedRange}.`);
+  if (allFourSeven) reviewReasons.push("All four criterion bands are exactly Band 7.0; this must be reviewed for possible 7.5/8.0+ or justified as true Band 7.");
+  if (highCandidate.triggered) reviewReasons.push(highCandidate.reason);
+  if (anchorConflict) reviewReasons.push(`Anchor Band ${anchorBand} differs from final Band ${finalBand.toFixed(1)} by more than 1.0.`);
+  if (allSame && finalBand >= 5) reviewReasons.push("All four criterion bands are identical; forced differentiation review is required.");
+  if (band6AccessConflict) reviewReasons.push("Band 6+ access conflict: short or weakly rateable Task 2 needs real development evidence.");
+  return {
+    version: "strict-boundary-audit-v6",
+    localScoringApplied: false,
+    localParticipation: "The server does not assign bands, but it performs hard local gate audit, boundary-trigger detection, structural validation, and AI re-review routing before score freeze.",
+    status: reviewReasons.length ? "review_required" : "passed",
+    reviewRequired: reviewReasons.length > 0,
+    reviewReasons,
+    wordCountBoundary: wordBoundary,
+    lowBandBoundary: {
+      status: wordBoundary.triggered ? "triggered" : "passed",
+      suggestedRange: wordBoundary.suggestedRange,
+      scoreTooHigh: lowBandScoreTooHigh,
+      reason: wordBoundary.reason
+    },
+    highBandBoundary: {
+      status: highCandidate.triggered || allFourSeven ? "triggered" : "passed",
+      allFourSeven,
+      highCandidate: highCandidate.triggered,
+      reason: highCandidate.reason
+    },
+    anchorAudit: {
+      status: anchorMissing || anchorConflict ? "triggered" : "passed",
+      anchorMissing,
+      anchorConflict,
+      closestAnchorBand: Number.isFinite(anchorBand) ? anchorBand : null,
+      finalBand
+    },
+    scoreProfileAudit: {
+      status: (warnings.length || allSame) ? "triggered" : "passed",
+      allCriteriaSame: allSame,
+      warnings
+    },
+    firstPass: existing.firstPass || null,
+    boundaryReview: existing.boundaryReview || null,
+    rawAverage,
+    finalBand
+  };
+}
+
+function boundaryAuditSummaryZh(audit = {}) {
+  const reasons = Array.isArray(audit.reviewReasons) ? audit.reviewReasons : [];
+  if (!reasons.length) return "本地硬性校准通过：未发现必须二次复核的低分、高分、锚点或分数组合冲突。";
+  return `本地硬性校准触发二次复核：${reasons.join("；")}`;
+}
+
+function buildBoundaryReviewPrompt(body, firstResult, audit) {
+  const signals = firstResult.localSignals || localSignals(body);
+  const task = signals.task;
+  const names = criterionNames(task);
+  return [
+    "You are the second-pass IELTS GT Writing boundary examiner. Return JSON only.",
+    `Score system: ${SCORE_SYSTEM_VERSION}. The server will not assign bands locally, but it will refuse to freeze unreviewed boundary conflicts.`,
+    `Task: ${task}. Criteria: ${names.join(", ")}.`,
+    "You must re-check only scoring boundaries: low-band underlength, Band 6 access, high-band unlock, all-four-same differentiation, and anchor/final-score conflicts.",
+    "If the first result is too high or too low, revise the four criterion bands yourself. If you keep the same bands, provide concrete evidence that justifies keeping them.",
+    "For all-four Band 7 cases, explicitly decide whether any criterion should be 7.5/8.0/8.5/9.0 or whether true Band 7 is justified. Do not default to 7.0 for safety.",
+    "For short responses, respect the local word-count boundary unless the text has exceptional evidence; explain any exception.",
+    `Local signals: ${JSON.stringify(signals)}`,
+    `Hard audit requiring review: ${JSON.stringify(audit)}`,
+    `First score result: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, scoreProfile: firstResult.scoreProfile, taskSpecificGate: firstResult.taskSpecificGate, criterionCalibration: firstResult.criterionCalibration, examinerSummary: firstResult.examinerSummary })}`,
+    `Prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    "Return the same scoring JSON shape as score-core, plus boundaryReview:{triggered:true,decision:'revised'|'kept_after_review',reviewReasons:[...],whyFinalCriteriaAreSafe:'...',whyFinalCriteriaAreSafeZh:'中文',firstCriteria:{...},finalCriteria:{...}}."
+  ].join("\n\n");
+}
+
+async function applyBoundaryReviewIfNeeded(body, firstResult) {
+  const signals = firstResult.localSignals || localSignals(body);
+  const initialAudit = firstResult.boundaryAudit || buildHardBoundaryAudit(firstResult.finalCriteria || firstResult.criteria, signals, firstResult.anchorComparison || {}, firstResult.criterionCalibration || {});
+  if (!initialAudit.reviewRequired) {
+    return { ...firstResult, boundaryAudit: { ...initialAudit, status: "passed", reviewRequired: false } };
+  }
+  const ai = await callDeepSeek([
+    { role: "system", content: "You are an IELTS GT Writing boundary-review scoring engine. You score only; no editing advice." },
+    { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, initialAudit) }
+  ], 6800, 0);
+  const reviewed = normalizeScoreCoreResult(ai, body, signals, { fromBoundaryReview: true });
+  const reviewedAuditRaw = buildHardBoundaryAudit(reviewed.finalCriteria || reviewed.criteria, signals, reviewed.anchorComparison || {}, reviewed.criterionCalibration || {}, {
+    firstPass: {
+      criteria: firstResult.finalCriteria || firstResult.criteria,
+      overallBand: firstResult.overallBand,
+      anchorComparison: firstResult.anchorComparison,
+      audit: initialAudit
+    },
+    boundaryReview: {
+      triggered: true,
+      decision: ai.boundaryReview?.decision || "reviewed",
+      reviewReasons: initialAudit.reviewReasons,
+      whyFinalCriteriaAreSafe: ai.boundaryReview?.whyFinalCriteriaAreSafe || ai.boundaryReview?.explanation || "Boundary review completed by AI.",
+      whyFinalCriteriaAreSafeZh: ai.boundaryReview?.whyFinalCriteriaAreSafeZh || "AI 已完成边界复核并返回最终四项分。"
+    }
+  });
+  return {
+    ...reviewed,
+    boundaryAudit: {
+      ...reviewedAuditRaw,
+      status: reviewedAuditRaw.reviewRequired ? "reviewed_with_remaining_warnings" : "reviewed_passed",
+      reviewRequired: false,
+      reviewedRemainingWarnings: reviewedAuditRaw.reviewReasons,
+      firstPass: reviewedAuditRaw.firstPass,
+      boundaryReview: reviewedAuditRaw.boundaryReview
+    },
+    stabilityWarnings: [...new Set([...(reviewed.stabilityWarnings || []), ...(reviewedAuditRaw.reviewReasons || []).map((x) => `Boundary review note: ${x}`)])],
+    scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), boundaryReviewed: true, boundaryReviewApplied: true, scoreFrozen: false }
+  };
+}
+
 function gateStatus(reason, triggered = false) {
   return { status: triggered ? "triggered" : "passed", reason };
 }
 
-function buildLocalGateReport(criteria, signals, existing = {}) {
+function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison = {}, calibration = {}) {
   const warnings = collectScoreWarnings(criteria, signals);
   const profile = existing && typeof existing === "object" ? existing : {};
   const names = criterionNames(signals.task);
@@ -546,20 +792,32 @@ function buildLocalGateReport(criteria, signals, existing = {}) {
   const cc = criteria["Coherence and Cohesion"];
   const lr = criteria["Lexical Resource"];
   const gra = criteria["Grammatical Range and Accuracy"];
+  const wordBoundary = getWordCountBoundaryProfile(signals.task, signals.wordCount);
+  const highCandidate = detectHighBandCandidate(criteria, signals, anchorComparison, calibration);
+  const localLow = gateStatus(wordBoundary.triggered ? `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.` : "No hard low-band word-count boundary detected.", wordBoundary.triggered || signals.rateabilityStatus === "not_rateable_or_severely_limited");
+  const localMid = gateStatus("Mid-band gate checked: visible structure alone must not over-reward TR/TA or CC, and LR/GRA are checked against language-control signals.", Boolean((first >= 5.5 || cc >= 5.5 || lr >= 5.5 || gra >= 5) && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak" || signals.sentenceControl === "weak")));
+  const localHigh = gateStatus(highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => x >= 7.5));
+  const localProfile = gateStatus(warnings.length ? warnings.join(" ") : "No major score-profile instability detected.", warnings.length > 0 || allCriteriaSame(criteria));
   return {
-    likelyOverallRange: profile.likelyOverallRange || (signals.rateabilityStatus === "clearly_rateable" ? "rateable; band depends on criterion evidence" : "limited or weakly rateable"),
-    lowBandGate: profile.lowBandGate || gateStatus(signals.rateabilityStatus === "not_rateable_or_severely_limited" ? "Low-band risk detected due to rateability signals." : "No severe low-band condition detected.", signals.rateabilityStatus === "not_rateable_or_severely_limited"),
-    midBandGate: profile.midBandGate || gateStatus("Mid-band gate checked: visible structure alone must not over-reward TR/TA or CC, and LR/GRA are checked against language-control signals.", Boolean((first >= 5.5 || cc >= 5.5 || lr >= 5.5 || gra >= 5) && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak" || signals.sentenceControl === "weak"))),
-    highBandGate: profile.highBandGate || gateStatus("High-band gate checked: no high band is accepted without strong evidence.", Object.values(criteria).some((x) => x >= 6.5)),
-    scoreProfileGate: profile.scoreProfileGate || gateStatus(warnings.length ? warnings.join(" ") : "No major score-profile instability detected.", warnings.length > 0)
+    likelyOverallRange: profile.likelyOverallRange || (wordBoundary.triggered ? wordBoundary.suggestedRange : (signals.rateabilityStatus === "clearly_rateable" ? "rateable; band depends on criterion evidence" : "limited or weakly rateable")),
+    lowBandGate: combineGate(localLow, profile.lowBandGate),
+    midBandGate: combineGate(localMid, profile.midBandGate),
+    highBandGate: combineGate(localHigh, profile.highBandGate),
+    scoreProfileGate: combineGate(localProfile, profile.scoreProfileGate)
   };
 }
-function normalizeScoreCoreResult(ai, body, signals) {
+function normalizeScoreCoreResult(ai, body, signals, options = {}) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
   const warnings = collectScoreWarnings(criteria, signals);
+  const rawAnchor = ai.anchorComparison || ai.anchorCalibration || {};
+  const anchorComparison = normalizeAnchorComparison(rawAnchor, task, criteria, signals);
+  const criterionCalibration = normalizeCriterionCalibration(ai.criterionCalibration || {}, criteria, task);
+  const scoreProfile = buildLocalGateReport(criteria, signals, ai.scoreProfile || {}, anchorComparison, criterionCalibration);
+  const taskSpecificGate = normalizeTaskSpecificGate(ai.taskSpecificGate || {}, signals, criteria, anchorComparison, criterionCalibration);
+  const boundaryAudit = buildHardBoundaryAudit(criteria, signals, anchorComparison, criterionCalibration, ai.boundaryAudit || {});
   return {
     ok: true,
     aiStage: "score-core",
@@ -571,28 +829,31 @@ function normalizeScoreCoreResult(ai, body, signals) {
     rawAverage,
     overallBand: finalBand,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_anchor_engine_v5" : "task2_essay_anchor_engine_v5",
-      formula: "Task-aware 0-9 anchor calibration first; AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
+      mode: task === "Task 1" ? "task1_gt_letter_strict_anchor_engine_v6" : "task2_essay_strict_anchor_engine_v6",
+      formula: "Task-aware independent 0-9 anchor calibration; local hard-gate audit; AI boundary review when triggered; final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and routes, but does not assign bands.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No. The server validates structure and averages the four AI-returned criterion bands."
+      localScoreChangeExplanation: "No local band assignment. The server performs hard validation/audit and may require AI boundary review, then mechanically averages AI-returned final criterion bands."
     },
     scoreCoreMeta: {
       scoreFirst: true,
-      scoreFrozen: true,
+      scoreFrozen: !boundaryAudit.reviewRequired,
       adviceSystemRemoved: true,
       anchorCalibrated: true,
+      strictBoundaryAudited: true,
       taskAware: true,
+      fromBoundaryReview: Boolean(options.fromBoundaryReview),
       generatedAt: new Date().toISOString()
     },
     localSignals: signals,
     taskProfile: buildTaskProfile(body, signals),
-    anchorComparison: normalizeAnchorComparison(ai.anchorComparison || ai.anchorCalibration || {}, task, criteria, signals),
-    criterionCalibration: normalizeCriterionCalibration(ai.criterionCalibration || {}, criteria, task),
-    scoreProfile: buildLocalGateReport(criteria, signals, ai.scoreProfile || {}),
-    taskSpecificGate: normalizeTaskSpecificGate(ai.taskSpecificGate || {}, signals, criteria),
+    anchorComparison,
+    criterionCalibration,
+    scoreProfile,
+    taskSpecificGate,
+    boundaryAudit,
     diagnosticSignals: ai.diagnosticSignals || {},
     examinerSummary: String(ai.examinerSummary || "").trim(),
     examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),
@@ -607,8 +868,10 @@ async function scoreCore(body) {
   const ai = await callDeepSeek([
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score; you do not provide editing advice." },
     { role: "user", content: prompt }
-  ], 5200, 0);
-  return normalizeScoreCoreResult(ai, body, signals);
+  ], 6200, 0);
+  const first = normalizeScoreCoreResult(ai, body, signals);
+  const reviewed = await applyBoundaryReviewIfNeeded(body, first);
+  return { ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "score-core" } };
 }
 
 
@@ -632,9 +895,10 @@ async function scoreCriteriaStage(body) {
   const ai = await callDeepSeek([
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score and explain the criterion bands; you do not provide full feedback sections." },
     { role: "user", content: prompt }
-  ], 6200, 0);
-  const normalized = normalizeScoreCoreResult(ai, body, signals);
-  return { ...normalized, aiStage: "score-criteria", scoreCoreMeta: { ...normalized.scoreCoreMeta, scoreFrozen: false, stage: "criteria" } };
+  ], 6600, 0);
+  const first = normalizeScoreCoreResult(ai, body, signals);
+  const normalized = await applyBoundaryReviewIfNeeded(body, first);
+  return { ...normalized, aiStage: "score-criteria", scoreCoreMeta: { ...normalized.scoreCoreMeta, scoreFrozen: false, stage: "criteria", boundaryAuditCompleted: true } };
 }
 
 function scoreGatesStage(body) {
@@ -642,7 +906,7 @@ function scoreGatesStage(body) {
   const signals = current.localSignals || localSignals(body);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const normalizedCalibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
-  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {});
+  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration);
   const warnings = collectScoreWarnings(criteria, signals);
   return {
     ...current,
@@ -657,7 +921,8 @@ function scoreGatesStage(body) {
     anchorComparison: normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals),
     criterionCalibration: normalizedCalibration,
     scoreProfile,
-    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria),
+    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration),
+    boundaryAudit: current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration),
     stabilityWarnings: warnings,
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFrozen: false, gatesChecked: true, stage: "gates" }
   };
@@ -668,8 +933,10 @@ function scoreFinalizeStage(body) {
   const signals = current.localSignals || localSignals(body);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const { rawAverage, finalBand } = averageBand(criteria);
-  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {});
   const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
+  const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
+  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, anchorComparison, calibration);
+  const boundaryAudit = current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration);
   return {
     ...current,
     ok: true,
@@ -683,21 +950,22 @@ function scoreFinalizeStage(body) {
     overallBand: finalBand,
     localSignals: signals,
     taskProfile: current.taskProfile || buildTaskProfile(body, signals),
-    anchorComparison: normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals),
+    anchorComparison,
     criterionCalibration: calibration,
     scoreProfile,
-    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria),
+    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria, anchorComparison, calibration),
+    boundaryAudit,
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
-      mode: signals.task === "Task 1" ? "task1_gt_letter_anchor_engine_v5" : "task2_essay_anchor_engine_v5",
-      formula: "Task-aware 0-9 anchor calibration first; AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_strict_anchor_engine_v6" : "task2_essay_strict_anchor_engine_v6",
+      formula: "Task-aware independent 0-9 anchor calibration; local hard-gate audit; AI boundary review when triggered; final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and routes, but does not assign bands.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No. The server validates structure and averages the four AI-returned criterion bands."
+      localScoreChangeExplanation: "No local band assignment. The server performs hard validation/audit and may require AI boundary review, then mechanically averages AI-returned final criterion bands."
     },
-    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
     localScoreChanged: false
   };
 }

@@ -977,6 +977,32 @@
     return `<div class="anchor-comparison-block">${body}</div>`;
   }
 
+
+  function renderBoundaryAudit(result = {}) {
+    const audit = result.boundaryAudit || result.boundaryReview || {};
+    if (!audit || typeof audit !== "object" || Object.keys(audit).length === 0) return "";
+    const review = audit.boundaryReview || {};
+    const reasons = arr(audit.reviewReasons || audit.reviewedRemainingWarnings);
+    const word = audit.wordCountBoundary || audit.lowBandBoundary || {};
+    const status = audit.status || (audit.reviewRequired ? "review_required" : "passed");
+    const zh = audit.reviewRequired
+      ? `本地硬性校准发现需要二次复核：${reasons.join("；") || "存在边界冲突。"}`
+      : review.triggered
+        ? `本地硬性校准已触发 AI 二次复核。复核结论：${review.whyFinalCriteriaAreSafeZh || review.decision || "已完成复核"}`
+        : "本地硬性校准通过：没有发现必须二次复核的低分、高分、锚点或分数组合冲突。";
+    const reasonHtml = reasons.length ? `<ul>${reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="muted">No forced boundary-review reason remained.</p>`;
+    return `<div class="boundary-audit-block">
+      <div class="score-gate-item boundary-audit-summary"><strong>Boundary audit / 边界强制校准：</strong>${escapeHtml(status)}${translationButton(zh)}<br><span class="muted">Local code does not assign bands, but it audits hard boundaries, routes AI re-review, and validates before score freeze.</span></div>
+      <div class="score-gate-grid">
+        <div class="score-gate-item"><strong>Low-band boundary:</strong> ${escapeHtml(audit.lowBandBoundary?.status || word.status || "checked")}<br><span class="muted">${escapeHtml(audit.lowBandBoundary?.reason || word.reason || "No low-band boundary detail returned.")} ${escapeHtml(audit.lowBandBoundary?.suggestedRange ? `Suggested range: ${audit.lowBandBoundary.suggestedRange}` : word.suggestedRange || "")}</span></div>
+        <div class="score-gate-item"><strong>High-band boundary:</strong> ${escapeHtml(audit.highBandBoundary?.status || "checked")}<br><span class="muted">${escapeHtml(audit.highBandBoundary?.reason || "High-band ceiling and all-four-7 pattern checked.")}</span></div>
+        <div class="score-gate-item"><strong>Anchor audit:</strong> ${escapeHtml(audit.anchorAudit?.status || "checked")}<br><span class="muted">Anchor: ${escapeHtml(audit.anchorAudit?.closestAnchorBand ?? "-")} ｜ Final: ${escapeHtml(audit.anchorAudit?.finalBand ?? result.overallBand ?? "-")}</span></div>
+        <div class="score-gate-item"><strong>Boundary review:</strong> ${escapeHtml(review.triggered ? (review.decision || "triggered") : "not required")}<br><span class="muted">${escapeHtml(review.whyFinalCriteriaAreSafe || "No AI second-pass review was required or returned.")}</span>${translationButton(review.whyFinalCriteriaAreSafeZh || "")}</div>
+      </div>
+      ${reasons.length ? `<div class="ai-warning"><strong>Boundary reasons:</strong>${reasonHtml}</div>` : ""}
+    </div>`;
+  }
+
   function renderTaskSpecificGateReport(result = {}) {
     const gates = result.taskSpecificGate || {};
     if (!gates || typeof gates !== "object" || Object.keys(gates).length === 0) return "";
@@ -1007,6 +1033,7 @@
         <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
         <div class="score-gate-item"><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</div>
       </div>
+      ${renderBoundaryAudit(result)}
       ${renderAnchorComparison(result)}
       ${renderTaskSpecificGateReport(result)}
       ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
