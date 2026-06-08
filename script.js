@@ -5,6 +5,13 @@
   let timerId = null;
   let remaining = 0;
   let latestScoreResult = null;
+  let latestScoringProgress = null;
+  const SCORING_STEPS = [
+    { stage: "score-precheck", title: "文本信号与任务类型检查", description: "检查词数、段落、句子、Task 1/Task 2 类型与可评分性。" },
+    { stage: "score-criteria", title: "四项评分与半分判断", description: "AI 返回四项小项分数，并解释相邻半分边界。" },
+    { stage: "score-gates", title: "低中高分与分数组合校准", description: "核查低分、中分、高分边界和分数组合是否合理。" },
+    { stage: "score-finalize", title: "机械平均并冻结分数", description: "四项平均后生成最终 Band，并冻结分数。" }
+  ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
   const $ = (id) => document.getElementById(id);
@@ -242,6 +249,93 @@
     return data;
   }
 
+  function createScoringProgress() {
+    return {
+      status: "waiting",
+      currentStep: 0,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      error: null,
+      steps: SCORING_STEPS.map((step, index) => ({
+        ...step,
+        index: index + 1,
+        status: "waiting",
+        message: step.description,
+        error: ""
+      }))
+    };
+  }
+
+  function ensureScoringProgress() {
+    if (!latestScoringProgress) latestScoringProgress = createScoringProgress();
+    return latestScoringProgress;
+  }
+
+  function updateScoringProgress(stepIndex, status, message = "", error = null) {
+    const progress = ensureScoringProgress();
+    progress.status = error ? "error" : (status === "running" ? "running" : progress.status);
+    progress.currentStep = Math.max(1, stepIndex + 1);
+    progress.updatedAt = new Date().toISOString();
+    const step = progress.steps[stepIndex];
+    if (step) {
+      step.status = status;
+      if (message) step.message = message;
+      if (error) step.error = String(error.message || error);
+    }
+    if (error) {
+      progress.status = "error";
+      progress.error = {
+        step: step ? step.index : stepIndex + 1,
+        title: step ? step.title : "未知阶段",
+        message: String(error.message || error),
+        stack: String(error.stack || error.message || error)
+      };
+    }
+    return progress;
+  }
+
+  function completeScoringProgress() {
+    const progress = ensureScoringProgress();
+    progress.status = "done";
+    progress.currentStep = SCORING_STEPS.length;
+    progress.updatedAt = new Date().toISOString();
+    progress.steps.forEach((step) => {
+      if (step.status !== "error") step.status = "done";
+    });
+    return progress;
+  }
+
+  function statusText(status) {
+    return ({ waiting: "等待", running: "进行中", done: "完成", error: "失败" })[status] || "等待";
+  }
+
+  function renderScoringProgressPanel(progress = latestScoringProgress, open = false) {
+    const p = progress || createScoringProgress();
+    const hasError = p.status === "error" || !!p.error;
+    const shouldOpen = open || hasError || p.status === "running";
+    const statusClass = hasError ? "error" : (p.status === "done" ? "done" : (p.status === "running" ? "running" : "waiting"));
+    const current = p.steps?.find((step) => step.status === "running") || p.steps?.find((step) => step.status === "error") || p.steps?.[Math.max(0, (p.currentStep || 1) - 1)];
+    const errorHtml = hasError ? `<div class="ai-warning"><strong>失败步骤：</strong>第 ${escapeHtml(p.error?.step || current?.index || "-")} 步/4 ${escapeHtml(p.error?.title || current?.title || "未知阶段")}<br><strong>错误原因：</strong>${escapeHtml(p.error?.message || "未知错误")}<br><strong>建议操作：</strong>请先重试一次；如果连续失败，再检查接口、Vercel runtime logs 或 AI provider 超时情况。</div><details class="score-technical-details"><summary>技术错误详情 / Technical details</summary><pre>${escapeHtml(p.error?.stack || p.error?.message || "No technical details returned.")}</pre></details>` : "";
+    return `<details class="score-accordion score-progress-accordion" ${shouldOpen ? "open" : ""}>
+      <summary>评分流程与错误反馈 / Scoring Progress &amp; Error Log</summary>
+      <div class="score-accordion-body">
+        <div class="score-progress-overview">
+          <span class="score-progress-chip ${escapeHtml(statusClass)}">当前状态：${escapeHtml(hasError ? "评分失败" : p.status === "done" ? "评分完成" : p.status === "running" ? "正在评分" : "等待评分")}</span>
+          <span class="score-progress-chip">当前步骤：第 ${escapeHtml(current?.index || p.currentStep || 1)} 步/4</span>
+          <span class="score-progress-chip">更新时间：${escapeHtml(p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-")}</span>
+        </div>
+        <ol class="score-step-list">
+          ${(p.steps || []).map((step) => `<li class="score-step-item"><div class="score-step-head"><span>第 ${escapeHtml(step.index)} 步/4：${escapeHtml(step.title)}</span><span class="score-step-status ${escapeHtml(step.status)}">${escapeHtml(statusText(step.status))}</span></div><p>${escapeHtml(step.error || step.message || step.description || "")}</p></li>`).join("")}
+        </ol>
+        ${errorHtml}
+      </div>
+    </details>`;
+  }
+
+  function renderScoreAccordion(title, bodyHtml, open = false, className = "") {
+    return `<details class="score-accordion ${escapeHtml(className)}" ${open ? "open" : ""}><summary>${escapeHtml(title)}</summary><div class="score-accordion-body">${bodyHtml}</div></details>`;
+  }
+
 
   function injectScoreStyles() {
     if ($("scoreUiStyles")) return;
@@ -275,6 +369,37 @@
       .quote-evidence { margin: 8px 0; padding: 9px 11px; border-left: 4px solid rgba(15,118,110,.55); background: rgba(15,118,110,.045); border-radius: 8px; }
       .score-gate-grid { display: grid; gap: 10px; margin-top: 10px; }
       .score-gate-item { border: 1px solid var(--border, #d7e2ea); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.62); }
+      .overall-card { border: 1px solid var(--border, #d7e2ea); border-radius: 16px; background: var(--card, #fff); padding: 16px 18px; }
+      .overall-card h4 { margin: 0 0 12px; }
+      .overall-score { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+      .overall-score span { display: inline-grid; place-items: center; min-width: 76px; min-height: 58px; border-radius: 12px; background: var(--teal, #0f766e); color: #fff; font-weight: 900; font-size: 2rem; line-height: 1; }
+      .overall-score strong { font-size: 1.15rem; }
+      .score-accordion { border: 1px solid var(--border, #d7e2ea); border-radius: 16px; background: var(--card, #fff); overflow: hidden; }
+      .score-accordion + .score-accordion { margin-top: 12px; }
+      .score-accordion summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; padding: 0 16px; cursor: pointer; list-style: none; font-weight: 900; color: var(--text, #122033); background: rgba(248,250,252,.72); }
+      .score-accordion summary::-webkit-details-marker { display: none; }
+      .score-accordion summary::after { content: "+"; display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--border, #bfd1de); color: var(--teal, #0f766e); font-weight: 900; }
+      .score-accordion[open] summary::after { content: "-"; }
+      .score-accordion-body { border-top: 1px solid var(--border, #d7e2ea); padding: 16px; line-height: 1.6; }
+      .score-progress-overview { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+      .score-progress-chip { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 1px solid var(--border, #bfd1de); padding: 5px 10px; font-weight: 850; font-size: .88rem; }
+      .score-progress-chip.running { color: var(--amber, #a45d00); background: rgba(164,93,0,.1); }
+      .score-progress-chip.done { color: var(--teal, #0f766e); background: rgba(15,118,110,.1); }
+      .score-progress-chip.error { color: var(--rose, #b9433b); background: rgba(185,67,59,.1); }
+      .score-step-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+      .score-step-item { border: 1px solid var(--border, #d7e2ea); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.62); }
+      .score-step-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-weight: 850; }
+      .score-step-status { border-radius: 999px; padding: 4px 9px; border: 1px solid var(--border, #bfd1de); font-size: .82rem; white-space: nowrap; }
+      .score-step-status.waiting { color: var(--muted, #5b7082); }
+      .score-step-status.running { color: var(--amber, #a45d00); background: rgba(164,93,0,.1); }
+      .score-step-status.done { color: var(--teal, #0f766e); background: rgba(15,118,110,.1); }
+      .score-step-status.error { color: var(--rose, #b9433b); background: rgba(185,67,59,.1); }
+      .score-step-item p { margin: 7px 0 0; color: var(--muted, #5b7082); }
+      .score-technical-details { margin-top: 12px; border: 1px solid var(--border, #d7e2ea); border-radius: 12px; overflow: hidden; }
+      .score-technical-details summary { min-height: 42px; padding: 0 12px; background: rgba(248,250,252,.72); font-weight: 850; }
+      .score-technical-details pre { max-height: 240px; overflow: auto; margin: 0; padding: 12px; background: var(--card, #fff); white-space: pre-wrap; word-break: break-word; }
+      @media (min-width: 980px) { .criterion-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 760px) { .criterion-card-header { align-items: flex-start; } .criterion-band-pill { margin-left: auto; } }
     `;
     document.head.appendChild(style);
   }
@@ -375,6 +500,19 @@
     return rows ? `<div class="score-calculation-grid">${rows}</div>` : `<p class="muted">AI 没有返回完整四项分。</p>`;
   }
 
+  function renderScoreCalculationAccordion(result = {}, rawAverage, finalBand) {
+    const body = `
+      <p><strong>评分系统：</strong>${escapeHtml(result.scoreCalculation?.mode || result.scoreSystemVersion || "clean_score_core")}</p>
+      <p><strong>计算方式：</strong>${escapeHtml(result.scoreCalculation?.formula || "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.")}</p>
+      <p><strong>本地是否介入评分：</strong>否</p>
+      <p><strong>本地是否 cap / 压分 / 提分：</strong>否</p>
+      ${renderCriteriaRows(result)}
+      ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
+      ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatBand(finalBand))}</p>` : ""}
+      <p class="muted">The server validates structure and averages the AI-returned criterion bands. It does not rewrite criterion bands locally.</p>`;
+    return renderScoreAccordion("评分计算说明 / Score Calculation Explanation", body, false, "score-calculation-card");
+  }
+
   function renderScoreCalibration(result = {}) {
     const profile = result.scoreProfile || {};
     const signals = result.localSignals || {};
@@ -385,8 +523,7 @@
       ["High-band check", profile.highBandGate],
       ["Score-profile check", profile.scoreProfileGate]
     ];
-    return `<section class="grading-section score-calibration-report">
-      <h4>评分校准报告 / Score Calibration Report</h4>
+    const body = `
       <div class="score-gate-grid">
         <div class="score-gate-item"><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v2")}</div>
         <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
@@ -396,8 +533,8 @@
       <div class="score-gate-grid">
         ${gates.map(([label, gate]) => `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "not_reported")}<br><span class="muted">${escapeHtml(gate?.reason || gate?.explanation || gate?.note || "No detailed gate explanation returned.")}</span></div>`).join("")}
       </div>
-      ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}
-    </section>`;
+      ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}`;
+    return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report");
   }
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
@@ -454,25 +591,17 @@
 
   function renderScoreResult(result = {}) {
     latestScoreResult = result;
+    if (!latestScoringProgress || latestScoringProgress.status === "running") completeScoringProgress();
     injectScoreStyles();
     bindScoreUiInteractions();
     const finalBand = Number(result.overallBand || result.scoreCalculation?.finalBand);
     const rawAverage = Number(result.rawAverage || result.scoreCalculation?.rawAverage);
     const disclaimer = result.disclaimer || "This is an AI-generated estimated score, not an official IELTS score.";
     const html = `
+      ${renderScoringProgressPanel(latestScoringProgress, false)}
       <section class="overall-card"><h4>Overall estimated band</h4><div class="overall-score"><span>${escapeHtml(formatBand(finalBand))}</span><strong>Band ${escapeHtml(formatBand(finalBand))}</strong></div></section>
       ${renderCriterionCards(result)}
-      <section class="grading-section score-calculation-card">
-        <h4>评分计算说明</h4>
-        <p><strong>评分系统：</strong>${escapeHtml(result.scoreCalculation?.mode || result.scoreSystemVersion || "clean_score_core")}</p>
-        <p><strong>计算方式：</strong>${escapeHtml(result.scoreCalculation?.formula || "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.")}</p>
-        <p><strong>本地是否介入评分：</strong>否</p>
-        <p><strong>本地是否 cap / 压分 / 提分：</strong>否</p>
-        ${renderCriteriaRows(result)}
-        ${Number.isFinite(rawAverage) ? `<p><strong>四项平均：</strong>${escapeHtml(rawAverage.toFixed(3).replace(/\.?0+$/, ""))}</p>` : ""}
-        ${Number.isFinite(finalBand) ? `<p><strong>最终估算：</strong>Band ${escapeHtml(formatBand(finalBand))}</p>` : ""}
-        <p class="muted">The server validates structure and averages the AI-returned criterion bands. It does not rewrite criterion bands locally.</p>
-      </section>
+      ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
       ${renderScoreCalibration(result)}
       <p class="ai-disclaimer">${escapeHtml(disclaimer)}</p>`;
     if (els.gradingResults) els.gradingResults.innerHTML = html;
@@ -532,24 +661,29 @@
     if (els.gradeBtn) { els.gradeBtn.disabled = true; els.gradeBtn.textContent = "Scoring..."; els.gradeBtn.setAttribute("aria-busy", "true"); }
     if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
+    let activeStageIndex = 0;
     try {
-      if (els.gradingResults) els.gradingResults.innerHTML = `<div class="score-flow-note">评分系统正在运行。反馈阶段已清除，当前只进行四步评分。</div>`;
-      const stages = [
-        ["score-precheck", "第 1 步/4：本地文本信号与任务类型检查"],
-        ["score-criteria", "第 2 步/4：AI 四项评分与半分判断"],
-        ["score-gates", "第 3 步/4：低/中/高分与分数组合校准"],
-        ["score-finalize", "第 4 步/4：机械平均并冻结最终分数"]
-      ];
+      latestScoringProgress = createScoringProgress();
+      latestScoringProgress.status = "running";
+      if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
       let currentResult = null;
-      for (const [aiStage, label] of stages) {
-        setGradingStatus(`${label}。`, "loading");
-        currentResult = await postStage(endpoint, gradingPayload({ aiStage, currentResult }));
+      for (let i = 0; i < SCORING_STEPS.length; i += 1) {
+        activeStageIndex = i;
+        const step = SCORING_STEPS[i];
+        updateScoringProgress(i, "running", `AI 正在执行：${step.description}`);
+        if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
+        setGradingStatus(`第 ${i + 1} 步/4：${step.title}。`, "loading");
+        currentResult = await postStage(endpoint, gradingPayload({ aiStage: step.stage, currentResult }));
+        updateScoringProgress(i, "done", `${step.title}已完成。`);
+        if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
       }
+      completeScoringProgress();
       renderScoreResult(currentResult);
       setGradingStatus("评分完成。四项分数已冻结。作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
-      setGradingStatus(`评分失败：${error.message}`, "error");
-      if (els.gradingResults) els.gradingResults.innerHTML = `<section class="grading-section error-details"><h4>错误</h4><pre>${escapeHtml(error.stack || error.message || error)}</pre></section>`;
+      updateScoringProgress(activeStageIndex, "error", "该阶段执行失败。", error);
+      setGradingStatus(`评分失败：第 ${activeStageIndex + 1} 步/4 ${SCORING_STEPS[activeStageIndex]?.title || "未知阶段"}失败。`, "error");
+      if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
     } finally {
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }
       if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = false;
