@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-6-micro-attempt-highband-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v7-7-zero-keyword-and-highband-floor";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -227,7 +227,8 @@ function detectHardZeroResponse(body = {}, signals = null) {
   const nonEnglishShort = Boolean(essay && englishTokens === 0 && words === 0);
   const finiteClause = /\b(i|we|they|he|she|it|people|children|students|parents|government|governments|company|manager|friend|council|residents|customers|someone|somebody|this|that)\s+(am|is|are|was|were|have|has|had|can|could|will|would|should|may|might|must|think|believe|want|need|buy|use|live|spend|write|ask|suggest|apologise|apologize|explain|prefer|choose|help|make|give|take|work|study|play|close|arrive|damage|move|meet)\b/i.test(lowered);
   const task1MicroAttempt = task === "Task 1" && words >= 4 && words <= 12 && /\b(dear|hi|hello|sorry|please|thank|thanks|refund|money\s+back|meet|watch|lamp|park|house|advice|move|city|product|bad|broken|send)\b/i.test(lowered);
-  const task2MicroAttempt = task === "Task 2" && words >= 4 && words <= 12 && /\b(i\s+think|i\s+agree|because|good|bad|people|school|online|shopping|transport|pollution|living|alone|ageing|society)\b/i.test(lowered);
+  const task2HasOpinionSignal = /\b(i\s+think|i\s+agree|i\s+disagree|because|should|must|can|could|is|are)\b/i.test(lowered);
+  const task2MicroAttempt = task === "Task 2" && words >= 4 && words <= 12 && task2HasOpinionSignal && /\b(good|bad|people|school|online|shopping|transport|pollution|living|alone|ageing|society|government|children)\b/i.test(lowered);
   const rateableMicroAttempt = task1MicroAttempt || task2MicroAttempt || finiteClause;
   const onlyKeywords = words > 0 && words <= 10 && distinctWordRatio(essay) <= 0.9 && !rateableMicroAttempt;
   const repeatedKeywordFragment = words > 0 && words <= 10 && !finiteClause && /([a-z]+(?:\s+[a-z]+)?)[.!?]?\s+\1/i.test(lowered);
@@ -480,10 +481,16 @@ function highBandFloorProfile(criteria = {}, signals = {}, anchorComparison = {}
   const enoughStructure = task === "Task 1" ? (Number(signals.sentenceCount) || 0) >= 4 : (Number(signals.paragraphCount) || 0) >= 4 && (Number(signals.sentenceCount) || 0) >= 9;
   const cleanLanguage = (Number(signals.spellingIssueCount) || 0) === 0 && (Number(signals.grammarIssueSignalCount) || 0) === 0 && signals.lexicalNaturalnessRisk !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
   const closestAnchor = Number(anchorComparison.closestAnchorBand);
-  const highFlag = Boolean(anchorComparison.highBandCandidate) || closestAnchor >= 8;
-  if (!enoughLength || !enoughStructure || !cleanLanguage) return null;
-  if ((highFlag || finalBand >= 7.5) && finalBand < 7.5) {
-    return { floor: 7.5, reason: `${task} is full-length, clean and high-band eligible; avoid capping a controlled response at Band 7.0.` };
+  const candidateRangeText = String(anchorComparison.candidateRange || "");
+  const highFlag = Boolean(anchorComparison.highBandCandidate) || closestAnchor >= 8 || finalBand >= 7.5;
+  const eliteFlag = closestAnchor >= 9 || /^\s*(8\.5|9)(?:\b|\s*-)/.test(candidateRangeText);
+  const notWeakLanguage = signals.lexicalNaturalnessRisk !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
+  if (!enoughLength || !enoughStructure || !notWeakLanguage) return null;
+  if (eliteFlag && finalBand >= 7.5 && finalBand < 8.5) {
+    return { floor: 8.5, reason: `${task} has elite-anchor signals with full length and controlled language; avoid compressing a Band 9 candidate into 7.5.` };
+  }
+  if ((highFlag || finalBand >= 7) && finalBand < 7.5) {
+    return { floor: 7.5, reason: `${task} is full-length and high-band eligible; avoid capping a controlled response at Band 7.0.` };
   }
   return null;
 }
@@ -898,7 +905,7 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
     "High-band unlock rule: if the response has full task fulfilment, developed ideas, natural progression, precise/flexible lexis, and strong grammar control, actively consider 7.5/8.0/8.5/9.0 rather than defaulting to 7.0.",
     "LR/GRA gates: high spelling/word-form density must limit LR unless strong evidence overrides it. High grammar density or weak sentence control must limit GRA unless strong evidence overrides it.",
     "Task-aware low-band AI action: if the response is complete but language is weak, lower LR/GRA rather than blindly lowering TR/TA or CC. If the response is short or missing task content, lower TR/TA and CC as well.",
-    "Task-aware high-band AI action: if the response meets high-band task fulfilment and language-control evidence, break the Band 7 ceiling with 7.5/8/8.5/9 where justified; Band 8/9 writing does not need to be perfect.",
+    "Task-aware high-band AI action: if the response meets high-band task fulfilment and language-control evidence, break the Band 7 ceiling with 7.5/8/8.5/9 where justified. Band 8/9 writing does not need literary native-speaker style; it needs complete task fulfilment, natural control, precision, and very few errors. Use anchorBand 9 when the script is fully responsive, fluent, controlled, and has negligible limitation.",
     "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
     "The server will average the four criterion bands and round to the nearest 0.5. Do not invent a separate overall band that conflicts with the four criteria.",
     `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
@@ -1535,7 +1542,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
-    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors.", 
+    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
@@ -1659,7 +1666,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v7.6 five-step pipeline: AI returns compact criterion bands; local boundary calibration may cap over-generous short responses and protect clean high-band responses from Band-7 caps; final bands are then frozen and averaged; feedback cannot change the score.",
+      formula: "v7.7 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, protects true micro-attempts from false Band 0, blocks keyword fragments, and prevents full-length high-band responses from being compressed at Band 7/7.5; feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
