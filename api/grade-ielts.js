@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v6-strict-anchor-boundary-engine-detailed-progress";
+const SCORE_SYSTEM_VERSION = "score-core-v6-independent-anchor-hard-freeze";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -60,7 +60,7 @@ const TASK2_GATE_RULES = [
 const DETAILED_SCORING_STEPS = [
   { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
   { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
-  { stage: "score-anchor", title: "独立 0–9 锚点准备", description: "准备 Task-aware 0–9 分锚点；AI 必须在初评中返回独立 anchor comparison。" },
+  { stage: "score-anchor", title: "AI 独立 0–9 锚点判断", description: "AI 单独判断最接近的 0–9 分锚点；这个结果会传入四项评分，不能由最终分数反推。" },
   { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
   { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
   { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
@@ -490,7 +490,29 @@ function stringifyAnchorTable(task) {
   return anchorSetForTask(task).map((item) => `Band ${item.band}: ${item.profile}`).join("\n");
 }
 
-function buildScoreCorePrompt(body, signals) {
+function buildIndependentAnchorPrompt(body, signals) {
+  const task = signals.task;
+  const anchorTable = stringifyAnchorTable(task);
+  const taskSpecific = task === "Task 1"
+    ? `GT Task 1 letter: judge purpose clarity, bullet coverage, tone/register, letter completeness and language control. Extracted bullets: ${JSON.stringify(signals.task1BulletPoints)}.`
+    : `GT Task 2 essay: judge prompt coverage, position, development, examples/reasons, logical progression and language control. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
+  return [
+    "You are an IELTS GT Writing anchor-classification examiner. Return JSON only. Do not assign criterion bands in this stage.",
+    `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}.`,
+    taskSpecific,
+    "Your only job is to classify the response against the 0-9 anchor benchmarks before criterion scoring.",
+    "This anchor must be independent from final criterion bands; do not infer it from a score because no criterion score exists yet.",
+    "High-band rule: if the response is mature, fully developed, naturally cohesive, precise and mostly error-free, you must consider Band 8 or Band 9 anchors. Do not default to Band 7 for safety.",
+    "Low-band rule: if the response is severely underlength or barely developed, the closest anchor must reflect that even if the response has paragraphs.",
+    `0-9 anchor benchmarks:\n${anchorTable}`,
+    `Local non-scoring signals for calibration: ${JSON.stringify(signals)}`,
+    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    "Return exactly: {\"ok\":true,\"aiStage\":\"score-anchor\",\"anchorComparison\":{\"anchorSystem\":\"Task-aware independent 0-9 anchor classification\",\"closestAnchorBand\":number,\"lowerAnchorBand\":number,\"higherAnchorBand\":number,\"candidateRange\":\"e.g. 7.5-8.5\",\"closestAnchorProfile\":\".\",\"closestAnchorProfileZh\":\"中文\",\"whyCloserToThisBand\":\".\",\"whyCloserToThisBandZh\":\"中文\",\"whyNotLowerAnchor\":\".\",\"whyNotLowerAnchorZh\":\"中文\",\"whyNotHigherAnchor\":\".\",\"whyNotHigherAnchorZh\":\"中文\",\"highBandCandidate\":boolean,\"lowBandCandidate\":boolean,\"evidence\":[\"short essay quote or feature\"]}}"
+  ].join("\n\n");
+}
+
+function buildScoreCorePrompt(body, signals, independentAnchor = null) {
   const task = signals.task;
   const names = criterionNames(task);
   const anchorTable = stringifyAnchorTable(task);
@@ -498,6 +520,9 @@ function buildScoreCorePrompt(body, signals) {
   const taskSpecific = task === "Task 1"
     ? `Task 1 GT letter checks: purpose clarity; all bullet points separately covered/partly/missing; functional detail; recipient relationship; tone/register; opening/closing/format. Extracted bullet points: ${JSON.stringify(signals.task1BulletPoints)}.`
     : `Task 2 essay checks: question type; all required parts; clear position when required; relevant development; reasons; examples; conclusion. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
+  const anchorInstruction = hasUsableAnchorComparison(independentAnchor)
+    ? `Independent anchor from Step 3: ${JSON.stringify(independentAnchor)}. Your criterion bands must be calibrated against this anchor. If you disagree, explain explicitly in anchorComparison, but do not silently fall back to Band 7.`
+    : "No valid independent anchor was passed from Step 3; you must return a full independent anchorComparison and the hard audit will force review if it is missing.";
 
   return [
     "You are a strict but fair IELTS General Training Writing examiner. Return JSON only.",
@@ -510,6 +535,7 @@ function buildScoreCorePrompt(body, signals) {
     `Task-specific gates for this task:\n${gateRules}`,
     "Anchor calibration requirement: before assigning final criterion bands, decide which 0-9 anchor the response is closest to. Explain why it is not the lower adjacent anchor and why it is not the higher adjacent anchor. This prevents low/mid writing being lifted by visible structure and prevents high-band writing being capped at 7.0.",
     "Independent anchor rule: anchorComparison must be decided before and independently from the final criterion average. Never infer closestAnchorBand from the final score.",
+    anchorInstruction,
     "Hard local audit rule: the server will independently check underlength, all-four-same, all-four-7, anchor/final conflicts, Band 6 access, and high-band ceiling. If a conflict is found, your result may be sent to a second AI boundary review before freezing.",
     "Fail-closed rule: every criterion must include evidence and half-band boundary reasoning. If all four criteria are identical, justify equality with evidence or differentiate the bands by 0.5 where appropriate.",
     "High-band ceiling rule: Band 8/9 writing can have rare minor slips. Do not keep a mature, fully developed, precise and natural response at four Band 7s merely because it is not perfect.",
@@ -736,8 +762,8 @@ function boundaryStepMessage(stage, result = {}) {
   if (stage === "score-anchor") {
     const anchor = result.anchorComparison || {};
     return anchor.anchorMissing
-      ? "锚点准备完成：等待 AI 初评返回独立 anchor comparison；若缺失将触发边界复核。"
-      : `独立锚点完成：closest anchor Band ${anchor.closestAnchorBand ?? "-"}。`;
+      ? "AI 独立锚点判断未返回有效结果；后续必须触发边界复核，不能直接冻结。"
+      : `AI 独立锚点完成：closest anchor Band ${anchor.closestAnchorBand ?? "-"}，候选区间 ${anchor.candidateRange || `${anchor.lowerAnchorBand ?? "-"}-${anchor.higherAnchorBand ?? "-"}`}。`;
   }
   if (stage === "score-criteria") {
     const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
@@ -797,6 +823,60 @@ function boundaryAuditSummaryZh(audit = {}) {
   return `本地硬性校准触发二次复核：${reasons.join("；")}`;
 }
 
+function boundaryReviewEvidenceText(reviewed = {}, review = {}, audit = {}) {
+  return [
+    review?.whyFinalCriteriaAreSafe,
+    review?.whyFinalCriteriaAreSafeZh,
+    review?.allFourSevenResolution ? JSON.stringify(review.allFourSevenResolution) : "",
+    reviewed?.examinerSummary,
+    reviewed?.examinerSummaryZh,
+    reviewed?.criterionCalibration ? JSON.stringify(reviewed.criterionCalibration) : "",
+    audit?.reviewReasons ? audit.reviewReasons.join(" ") : ""
+  ].filter(Boolean).join(" ");
+}
+
+function hasStrongBoundaryKeepEvidence(reviewed = {}, review = {}, audit = {}) {
+  const text = boundaryReviewEvidenceText(reviewed, review, audit);
+  const hasConcreteLimitation = /specific limitation|concrete limitation|not fully developed|not fully extended|minor imprecision|limited sophistication|some mechanical|not consistently|occasional error|rare error|lexical limitation|grammar limitation|cohesion limitation|prevents 7\.5|prevents 8|prevents 9|不能达到|限制|不足|不够|未能/i.test(text);
+  const hasResolution = Boolean(review?.allFourSevenResolution?.resolved || review?.allFourSevenResolution?.criteriaDecisions || review?.whyFinalCriteriaAreSafe);
+  return hasResolution && hasConcreteLimitation && String(text).length > 180;
+}
+
+function unresolvedCriticalBoundaryReasons(reviewed = {}, audit = {}) {
+  const criteria = reviewed.finalCriteria || reviewed.criteria || {};
+  const values = scoreValues(criteria);
+  const { finalBand } = averageBand(criteria);
+  const review = audit.boundaryReview || reviewed.boundaryReview || {};
+  const anchorBand = Number(audit.anchorAudit?.closestAnchorBand ?? reviewed.anchorComparison?.closestAnchorBand);
+  const allFourSeven = values.length === 4 && values.every((x) => x === 7);
+  const allSameHigh = allCriteriaSame(criteria) && Number.isFinite(finalBand) && finalBand >= 7;
+  const strongKeepEvidence = hasStrongBoundaryKeepEvidence(reviewed, review, audit);
+  const reasons = [];
+  if (audit.lowBandBoundary?.scoreTooHigh) reasons.push("Low-band word-count boundary still exceeded after boundary review.");
+  if (audit.anchorAudit?.anchorMissing) reasons.push("Independent anchor comparison is still missing after boundary review.");
+  if (Number.isFinite(anchorBand) && Number.isFinite(finalBand) && anchorBand >= 8 && finalBand <= 7 && !strongKeepEvidence) reasons.push("Independent anchor is Band 8/9 but final score remains Band 7.0 or below without strong evidence.");
+  if (allFourSeven && !strongKeepEvidence) reasons.push("All four criteria remain exactly Band 7.0 after review without strong all-four-7 resolution evidence.");
+  if (allSameHigh && !strongKeepEvidence) reasons.push("All four high-band criteria remain identical after review without strong differentiation evidence.");
+  return reasons;
+}
+
+function assertFinalCanFreeze(result = {}) {
+  const audit = result.boundaryAudit || {};
+  const unresolved = Array.isArray(audit.unresolvedCriticalReasons) ? audit.unresolvedCriticalReasons : [];
+  if (audit.freezeBlocked || unresolved.length) {
+    const error = new Error(`Final score freeze blocked by unresolved boundary audit: ${unresolved.join("; ") || audit.status || "boundary conflict"}`);
+    error.status = 502;
+    error.aiStage = "score-finalize";
+    throw error;
+  }
+  if (audit.reviewRequired && audit.status !== "passed" && audit.status !== "reviewed_passed" && audit.status !== "reviewed_passed_with_strong_evidence") {
+    const error = new Error(`Final score freeze blocked: boundary review is still required (${(audit.reviewReasons || []).join("; ") || "unknown reason"}).`);
+    error.status = 502;
+    error.aiStage = "score-finalize";
+    throw error;
+  }
+}
+
 function buildBoundaryReviewPrompt(body, firstResult, audit) {
   const signals = firstResult.localSignals || localSignals(body);
   const task = signals.task;
@@ -808,13 +888,16 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "You must re-check only scoring boundaries: low-band underlength, Band 6 access, high-band unlock, all-four-same differentiation, and anchor/final-score conflicts.",
     "If the first result is too high or too low, revise the four criterion bands yourself. If you keep the same bands, provide concrete evidence that justifies keeping them.",
     "For all-four Band 7 cases, explicitly decide whether any criterion should be 7.5/8.0/8.5/9.0 or whether true Band 7 is justified. Do not default to 7.0 for safety.",
+    "If the first result is all four Band 7.0, you must NOT return all four Band 7.0 again unless you provide at least two concrete textual limitations that prevent 7.5/8.0. Generic comments such as 'good but not excellent' are invalid.",
+    "For each criterion in an all-four-7 case, choose one decision: raise_to_7.5_or_above OR keep_at_7_with_exact_evidence_against_7.5. If you cannot provide exact evidence against 7.5, raise the criterion.",
+    "If the independent anchor is Band 8 or Band 9 and the final score remains Band 7.0 or below, give strong specific evidence against the high band; otherwise revise upward.",
     "For short responses, respect the local word-count boundary unless the text has exceptional evidence; explain any exception.",
     `Local signals: ${JSON.stringify(signals)}`,
     `Hard audit requiring review: ${JSON.stringify(audit)}`,
     `First score result: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, scoreProfile: firstResult.scoreProfile, taskSpecificGate: firstResult.taskSpecificGate, criterionCalibration: firstResult.criterionCalibration, examinerSummary: firstResult.examinerSummary })}`,
     `Prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    "Return the same scoring JSON shape as score-core, plus boundaryReview:{triggered:true,decision:'revised'|'kept_after_review',reviewReasons:[...],whyFinalCriteriaAreSafe:'...',whyFinalCriteriaAreSafeZh:'中文',firstCriteria:{...},finalCriteria:{...}}."
+    "Return the same scoring JSON shape as score-core, plus boundaryReview:{triggered:true,decision:'revised'|'kept_after_review',reviewReasons:[...],whyFinalCriteriaAreSafe:'...',whyFinalCriteriaAreSafeZh:'中文',firstCriteria:{...},finalCriteria:{...},allFourSevenResolution:{resolved:boolean,keptAllSeven:boolean,criteriaDecisions:{'Criterion Name':{decision:'raise_to_7.5_or_above'|'keep_at_7_with_exact_evidence_against_7.5',whyNot7_5Or8:'...',textEvidence:['...']}}}}."
   ].join("\n\n");
 }
 
@@ -844,18 +927,32 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
       whyFinalCriteriaAreSafeZh: ai.boundaryReview?.whyFinalCriteriaAreSafeZh || "AI 已完成边界复核并返回最终四项分。"
     }
   });
+  const boundaryReview = {
+    ...reviewedAuditRaw.boundaryReview,
+    allFourSevenResolution: ai.boundaryReview?.allFourSevenResolution || ai.allFourSevenResolution || null
+  };
+  const auditForResolution = { ...reviewedAuditRaw, boundaryReview };
+  const unresolvedCriticalReasons = unresolvedCriticalBoundaryReasons(reviewed, auditForResolution);
+  const freezeBlocked = unresolvedCriticalReasons.length > 0;
+  const reviewedStatus = freezeBlocked
+    ? "review_failed_unresolved"
+    : reviewedAuditRaw.reviewRequired
+      ? "reviewed_passed_with_strong_evidence"
+      : "reviewed_passed";
   return {
     ...reviewed,
     boundaryAudit: {
       ...reviewedAuditRaw,
-      status: reviewedAuditRaw.reviewRequired ? "reviewed_with_remaining_warnings" : "reviewed_passed",
-      reviewRequired: false,
+      status: reviewedStatus,
+      reviewRequired: freezeBlocked,
+      freezeBlocked,
+      unresolvedCriticalReasons,
       reviewedRemainingWarnings: reviewedAuditRaw.reviewReasons,
       firstPass: reviewedAuditRaw.firstPass,
-      boundaryReview: reviewedAuditRaw.boundaryReview
+      boundaryReview
     },
-    stabilityWarnings: [...new Set([...(reviewed.stabilityWarnings || []), ...(reviewedAuditRaw.reviewReasons || []).map((x) => `Boundary review note: ${x}`)])],
-    scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), boundaryReviewed: true, boundaryReviewApplied: true, scoreFrozen: false }
+    stabilityWarnings: [...new Set([...(reviewed.stabilityWarnings || []), ...(reviewedAuditRaw.reviewReasons || []).map((x) => `Boundary review note: ${x}`), ...unresolvedCriticalReasons.map((x) => `Boundary freeze block: ${x}`)])],
+    scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), boundaryReviewed: true, boundaryReviewApplied: true, freezeBlocked, scoreFrozen: false }
   };
 }
 
@@ -943,13 +1040,29 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
 
 async function scoreCore(body) {
   const signals = localSignals(body);
-  const prompt = buildScoreCorePrompt(body, signals);
+  const anchorAi = await callDeepSeek([
+    { role: "system", content: "You are an IELTS GT Writing independent anchor classifier. You do not assign criterion bands." },
+    { role: "user", content: buildIndependentAnchorPrompt(body, signals) }
+  ], 2600, 0);
+  const independentAnchor = normalizeAnchorComparison(anchorAi.anchorComparison || anchorAi.anchorCalibration || anchorAi, signals.task, {}, signals);
+  const prompt = buildScoreCorePrompt(body, signals, independentAnchor);
   const ai = await callDeepSeek([
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score; you do not provide editing advice." },
     { role: "user", content: prompt }
   ], 6200, 0);
-  const first = normalizeScoreCoreResult(ai, body, signals);
+  const firstRaw = normalizeScoreCoreResult(ai, body, signals);
+  const criteria = firstRaw.finalCriteria || firstRaw.criteria;
+  const calibration = normalizeCriterionCalibration(firstRaw.criterionCalibration || {}, criteria, signals.task);
+  const first = {
+    ...firstRaw,
+    anchorComparison: independentAnchor,
+    criterionCalibration: calibration,
+    scoreProfile: buildLocalGateReport(criteria, signals, firstRaw.scoreProfile || {}, independentAnchor, calibration),
+    taskSpecificGate: normalizeTaskSpecificGate(firstRaw.taskSpecificGate || {}, signals, criteria, independentAnchor, calibration),
+    boundaryAudit: buildHardBoundaryAudit(criteria, signals, independentAnchor, calibration, firstRaw.boundaryAudit || {})
+  };
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);
+  assertFinalCanFreeze(reviewed);
   return withDetailedProgress({ ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "score-core" } }, "score-finalize");
 }
 
@@ -983,11 +1096,15 @@ function scoreTaskRouterStage(body) {
   }, "score-task-router");
 }
 
-function scoreAnchorStage(body) {
+async function scoreAnchorStage(body) {
   const current = body.currentResult || {};
   const signals = current.localSignals || localSignals(body);
-  const criteria = current.finalCriteria || current.criteria || {};
-  const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
+  const ai = await callDeepSeek([
+    { role: "system", content: "You are an IELTS GT Writing independent anchor classifier. Return JSON only. Do not assign criterion bands." },
+    { role: "user", content: buildIndependentAnchorPrompt(body, signals) }
+  ], 2800, 0);
+  const anchorComparison = normalizeAnchorComparison(ai.anchorComparison || ai.anchorCalibration || ai, signals.task, {}, signals);
+  if (anchorComparison.anchorMissing) throw new Error("Independent anchor classification did not return a usable anchorComparison.");
   return withDetailedProgress({
     ...current,
     ok: true,
@@ -997,24 +1114,36 @@ function scoreAnchorStage(body) {
     localSignals: signals,
     taskProfile: current.taskProfile || buildTaskProfile(body, signals),
     anchorComparison,
-    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), anchorPrepared: true, independentAiAnchorRequired: true, stage: "anchor" },
-    note: "Anchor stage prepared. The AI scoring stage must return an independent anchor comparison; local fallback cannot decide the band."
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), anchorPrepared: true, independentAiAnchorReturned: true, stage: "anchor" },
+    note: "AI independent anchor classification completed and will be used to calibrate criterion scoring."
   }, "score-anchor");
 }
 
 async function scoreCriteriaStage(body) {
   const current = body.currentResult || {};
   const signals = current.localSignals || localSignals(body);
-  const prompt = buildScoreCorePrompt(body, signals);
+  const independentAnchor = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, {}, signals);
+  const prompt = buildScoreCorePrompt(body, signals, independentAnchor);
   const ai = await callDeepSeek([
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score and explain the criterion bands; you do not provide full feedback sections." },
     { role: "user", content: prompt }
   ], 6600, 0);
-  const first = normalizeScoreCoreResult(ai, body, signals);
+  const firstRaw = normalizeScoreCoreResult(ai, body, signals);
+  const criteria = firstRaw.finalCriteria || firstRaw.criteria;
+  const anchorForResult = !independentAnchor.anchorMissing ? independentAnchor : firstRaw.anchorComparison;
+  const calibration = normalizeCriterionCalibration(firstRaw.criterionCalibration || {}, criteria, signals.task);
+  const first = {
+    ...firstRaw,
+    anchorComparison: anchorForResult,
+    criterionCalibration: calibration,
+    scoreProfile: buildLocalGateReport(criteria, signals, firstRaw.scoreProfile || {}, anchorForResult, calibration),
+    taskSpecificGate: normalizeTaskSpecificGate(firstRaw.taskSpecificGate || {}, signals, criteria, anchorForResult, calibration),
+    boundaryAudit: buildHardBoundaryAudit(criteria, signals, anchorForResult, calibration, firstRaw.boundaryAudit || {})
+  };
   return withDetailedProgress({
     ...first,
     aiStage: "score-criteria",
-    scoreCoreMeta: { ...first.scoreCoreMeta, scoreFrozen: false, stage: "criteria", boundaryAuditCompleted: true, boundaryReviewApplied: false }
+    scoreCoreMeta: { ...first.scoreCoreMeta, scoreFrozen: false, stage: "criteria", boundaryAuditCompleted: false, boundaryReviewApplied: false, independentAnchorUsed: !anchorForResult.anchorMissing }
   }, "score-criteria");
 }
 
@@ -1072,6 +1201,7 @@ function scoreFinalizeStage(body) {
   const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
   const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, anchorComparison, calibration);
   const boundaryAudit = current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration);
+  assertFinalCanFreeze({ ...current, criteria, finalCriteria: criteria, boundaryAudit, anchorComparison, criterionCalibration: calibration, localSignals: signals });
   const result = {
     ...current,
     ok: true,
@@ -1143,7 +1273,7 @@ async function handleRequest(req, res) {
   if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));
   if (stage === "score-precheck") return sendJson(req, res, 200, scorePrecheck(body));
   if (stage === "score-task-router") return sendJson(req, res, 200, scoreTaskRouterStage(body));
-  if (stage === "score-anchor") return sendJson(req, res, 200, scoreAnchorStage(body));
+  if (stage === "score-anchor") return sendJson(req, res, 200, await scoreAnchorStage(body));
   if (stage === "score-criteria") return sendJson(req, res, 200, await scoreCriteriaStage(body));
   if (stage === "score-boundary-audit" || stage === "score-gates") return sendJson(req, res, 200, scoreGatesStage(body));
   if (stage === "score-boundary-review") return sendJson(req, res, 200, await scoreBoundaryReviewStage(body));

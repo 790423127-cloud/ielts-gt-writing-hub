@@ -13,7 +13,7 @@
   const SCORING_STEPS = [
     { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
     { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
-    { stage: "score-anchor", title: "独立 0–9 锚点准备", description: "准备 Task-aware 0–9 分锚点；AI 必须在初评中返回独立 anchor comparison。" },
+    { stage: "score-anchor", title: "AI 独立 0–9 锚点判断", description: "AI 单独判断最接近的 0–9 分锚点；这个结果会传入四项评分，不能由最终分数反推。" },
     { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
     { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
     { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
@@ -1003,12 +1003,17 @@
     const reasons = arr(audit.reviewReasons || audit.reviewedRemainingWarnings);
     const word = audit.wordCountBoundary || audit.lowBandBoundary || {};
     const status = audit.status || (audit.reviewRequired ? "review_required" : "passed");
-    const zh = audit.reviewRequired
-      ? `本地硬性校准发现需要二次复核：${reasons.join("；") || "存在边界冲突。"}`
-      : review.triggered
-        ? `本地硬性校准已触发 AI 二次复核。复核结论：${review.whyFinalCriteriaAreSafeZh || review.decision || "已完成复核"}`
-        : "本地硬性校准通过：没有发现必须二次复核的低分、高分、锚点或分数组合冲突。";
+    const unresolved = arr(audit.unresolvedCriticalReasons);
+    const blocked = Boolean(audit.freezeBlocked || unresolved.length);
+    const zh = blocked
+      ? `最终分数冻结被阻止：${unresolved.join("；") || reasons.join("；") || "二次复核后仍存在未解决边界冲突。"}`
+      : audit.reviewRequired
+        ? `本地硬性校准发现需要二次复核：${reasons.join("；") || "存在边界冲突。"}`
+        : review.triggered
+          ? `本地硬性校准已触发 AI 二次复核。复核结论：${review.whyFinalCriteriaAreSafeZh || review.decision || "已完成复核"}`
+          : "本地硬性校准通过：没有发现必须二次复核的低分、高分、锚点或分数组合冲突。";
     const reasonHtml = reasons.length ? `<ul>${reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="muted">No forced boundary-review reason remained.</p>`;
+    const unresolvedHtml = unresolved.length ? `<div class="ai-warning"><strong>Freeze blocked:</strong><ul>${unresolved.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : "";
     return `<div class="boundary-audit-block">
       <div class="score-gate-item boundary-audit-summary"><strong>Boundary audit / 边界强制校准：</strong>${escapeHtml(status)}${translationButton(zh)}<br><span class="muted">Local code does not assign bands, but it audits hard boundaries, routes AI re-review, and validates before score freeze.</span></div>
       <div class="score-gate-grid">
@@ -1018,6 +1023,7 @@
         <div class="score-gate-item"><strong>Boundary review:</strong> ${escapeHtml(review.triggered ? (review.decision || "triggered") : "not required")}<br><span class="muted">${escapeHtml(review.whyFinalCriteriaAreSafe || "No AI second-pass review was required or returned.")}</span>${translationButton(review.whyFinalCriteriaAreSafeZh || "")}</div>
       </div>
       ${reasons.length ? `<div class="ai-warning"><strong>Boundary reasons:</strong>${reasonHtml}</div>` : ""}
+      ${unresolvedHtml}
     </div>`;
   }
 
