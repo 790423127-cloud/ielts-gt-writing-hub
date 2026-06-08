@@ -513,6 +513,18 @@ function safeChineseHelper(value, englishText = "") {
   return isGenericChineseHelper(value, englishText) ? "" : value;
 }
 
+function fallbackAutoZh(englishText = "") {
+  const text = String(englishText || "").trim();
+  if (!text) return "中文解释暂缺。";
+  const lower = text.toLowerCase();
+  if (/clear position|addresses|positive|negative|purpose|bullet|covers/.test(lower)) return "这条反馈说明任务回应或任务完成方面已有可评分表现。";
+  if (/structure|paragraph|introduction|conclusion|coherence|progression|linking/.test(lower)) return "这条反馈说明文章结构、段落或衔接方面的表现。";
+  if (/spelling|word|vocabulary|lexical|collocation|phrase/.test(lower)) return "这条反馈说明词汇、拼写、词形或搭配对分数的影响。";
+  if (/grammar|sentence|verb|article|plural|accuracy|punctuation/.test(lower)) return "这条反馈说明语法、句子控制或准确性对分数的影响。";
+  if (/limited|vague|insufficient|frequent|error|problem|weak/.test(lower)) return "这条反馈指出当前最影响分数的限制，需要优先修复。";
+  return "这是该英文反馈的中文说明：请结合原文查看对应的优点或问题。";
+}
+
 function renderAdviceObject(item, zhFallback = "") {
   if (!item || typeof item !== "object") {
     return renderTextWithTranslation(item, zhFallback, { tag: "span" });
@@ -522,7 +534,7 @@ function renderAdviceObject(item, zhFallback = "") {
   const objectKeys = Object.keys(item || {});
   const isSimplePairedItem = simpleText && objectKeys.every((key) => ["text", "english", "en", "content", "statement", "zh", "chinese", "cn", "textZh", "explanationZh"].includes(key));
   if (isSimplePairedItem) {
-    return renderTextWithTranslation(simpleText, simpleZh || "AI 未返回这一项的中文解释；请重试对应阶段。", { tag: "span" });
+    return renderTextWithTranslation(simpleText, simpleZh || fallbackAutoZh(simpleText), { tag: "span" });
   }
   const title = firstNonEmpty(item.title, item.item, item.area, item.criterion, item.category, item.focus, item.point, item.issueType);
   const weakness = firstNonEmpty(item.currentWeakness, item.weakness, item.problem, item.issue, item.gap, item.currentProblem);
@@ -589,7 +601,7 @@ function renderListWithTranslations(items, translations, fallbackText) {
       return `<li>${rendered}</li>`;
     }
     const plain = typeof item === "object" ? firstNonEmpty(item.text, item.english, item.en, item.content, item.statement, flattenObjectText(item)) : item;
-    return `<li>${renderTextWithTranslation(plain, "AI 未返回这一项的中文解释；请重试对应阶段。", { tag: "span" })}</li>`;
+    return `<li>${renderTextWithTranslation(plain, fallbackAutoZh(plain), { tag: "span" })}</li>`;
   }).join("")}</ul>`;
 }
 
@@ -815,7 +827,7 @@ function mergeAiStageResult(base, incoming) {
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
   const isCoreScoreStage = incomingStage === "score-core" || incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
-  const isFinalScoreStage = incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
+  const isFinalScoreStage = incomingStage === "score-core" || incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
   const canUpdateScores = isCoreScoreStage || isFinalScoreStage;
   const lockScores = !canUpdateScores && Boolean(output.criteria || output.overallBand);
   const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"]);
@@ -830,10 +842,9 @@ function mergeAiStageResult(base, incoming) {
   const objectFields = [
     "errorAnalysis", "correctionPriority", "targetImprovementPlan", "task1LetterCorrections",
     "task2EssayCorrections", "revisedEssayMeta", "revisionTargetMeta", "taskRequirementAnalysis", "taskRequirementAnalysisZh",
-    "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
+    "scoreCalibration", "scoreCalibrationZh", "scoreCoreV2Calibration", "scoringDiagnosticSignals", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "rateabilityProfile", "criterionOutlierReview", "lowScoreOutlierReview", "finalStabilityCheck", "taskMatchCheck", "wordCountWarning",
     "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta", "sentenceCorrectionDisplayMeta",
-    "scoreCoreMeta", "scoreCoreV2Calibration", "scoringDiagnosticSignals", "criterionCalibration", "finalScoreSanityGate",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
@@ -923,10 +934,8 @@ function adviceTranslationsComplete(data = {}) {
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
-  if (aiStage === "score" || aiStage === "score-core") {
-    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
-    const criteriaCount = Object.values(criteria).filter((item) => Number.isFinite(Number(item?.band))).length;
-    return Boolean(criteriaCount >= 4 && Number(data.overallBand || data.scoreCalculation?.finalBand || data.mockWritingScore?.mockWritingBand) > 0);
+  if (aiStage === "score-core" || aiStage === "score") {
+    return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
   }
   if (aiStage === "prompt-analysis") {
     return Boolean(hasAnyText(data.taskRequirementAnalysis) || hasAnyText(data.taskMatchCheck));
@@ -1305,16 +1314,14 @@ async function startGrading() {
   if (els.gradingModeSelect) els.gradingModeSelect.disabled = true;
   if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
 
-  setGradingStatus("AI is scoring first, then generating feedback.", "loading");
+  setGradingStatus("AI is scoring and analysing the task.", "loading");
   els.gradingResults.innerHTML = isUnderMinimum
-    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数或作文可能未完成，AI 仍会先完成核心评分；分数冻结后再生成反馈。</p>`
+    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数或作文可能未完成，AI 仍会正常批改并在最终复核中判断完成度对分数的影响。</p>`
     : "";
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Score-first flow:
-  // 1) run score-core once and freeze the IELTS bands;
-  // 2) later feedback stages may enrich explanations but must not overwrite the frozen score.
+  // Score-first flow: freeze the four IELTS criterion bands first, then generate feedback without changing the score.
   const totalSteps = payload.mode === "revision" ? 12 : 11;
   let result = null;
   const stageWarnings = [];
@@ -1338,20 +1345,6 @@ async function startGrading() {
       const hasExpectedContent = stageResultHasExpectedContent(aiStage, stageResult);
       result = mergeAiStageResult(result || {}, stageResult);
 
-      if (aiStage === "score-core") {
-        result.scoreCoreMeta = {
-          ...(result.scoreCoreMeta || {}),
-          scoreFirst: true,
-          scoreFrozen: true,
-          scoreFrozenAfterThisStage: true,
-          feedbackStagesMayNotChangeScore: true,
-          scoringFlow: "score_first_then_feedback"
-        };
-        result.scoreFinalized = true;
-        result.scoreSource = result.scoreSource || "score-core";
-        result.finalScoreSource = result.finalScoreSource || "score-core";
-      }
-
       if (!hasExpectedContent) {
         const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的完整结构化内容。`;
         stageWarnings.push(warning);
@@ -1371,8 +1364,8 @@ async function startGrading() {
       return hasExpectedContent;
     } catch (stageError) {
       const rawStageMessage = String(stageError?.message || "");
-      const friendlyOptionalMessage = !options.required && /better[- ]expressions?|task is not defined|HTTP 502|AI grading failed|batching failed|timed out/i.test(rawStageMessage)
-        ? "这一可选阶段暂时没有返回可用内容；已冻结的核心评分仍会保留。"
+      const friendlyOptionalMessage = !options.required && /better[- ]expressions?|task is not defined|HTTP 502|AI grading failed|batching failed/i.test(rawStageMessage)
+        ? "这一可选阶段暂时没有返回可用内容，基础评分、逐句批改和最终复核仍会继续。"
         : rawStageMessage;
       const warning = `${warningPrefix}：${friendlyOptionalMessage}`;
       stageWarnings.push(warning);
@@ -1387,32 +1380,32 @@ async function startGrading() {
   }
 
   try {
-    await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
-    await runMergeStage("text-stats-completion", `第 2 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
-    await runMergeStage("rateability-profile", `第 3 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
-    await runMergeStage("score-core", `第 4 步/${totalSteps}：AI 正在进行核心评分、分档校准并冻结分数`, "核心评分与分档校准", { required: true });
-    markStage("分数冻结", "done", "核心评分已完成；后续反馈阶段只解释和修改，不再改变当前四项分。");
+    await runMergeStage("text-stats-completion", `第 1 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
+    await runMergeStage("rateability-profile", `第 2 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
+    await runMergeStage("prompt-analysis", `第 3 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
+    await runMergeStage("score-core", `第 4 步/${totalSteps}：AI 正在进行四项评分、分档校准并冻结分数`, "核心评分与分档校准", { required: true });
+    markStage("分数冻结", "done", "四项分数已先行确定；后续反馈阶段只解释和修改，不再改变分数。");
     syncStageMeta();
     if (result) renderGradingResult(result);
 
     await runMergeStage("spelling-wordform", `第 5 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
-    await runMergeStage("lexical-choice-collocation", `第 6 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
-    await runMergeStage("grammar-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("grammar-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("lexical-choice-collocation", `第 7 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
     await runMergeStage("sentence-corrections", `第 8 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
     await runMergeStage("better-expressions", `第 9 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
-    await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
-    await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
+    await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在根据已冻结分数解释任务回应问题`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在根据已冻结分数解释结构与衔接问题`, "结构与衔接诊断");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 12 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 12 步/${totalSteps}：AI 正在根据已冻结分数生成修改版/范文`, "范文/修改版生成");
     } else {
-      markStage("最终整理", "done", "结果已整理；评分保持第 4 步冻结结果。");
+      markStage("最终整理", "done", "结果已整理。评分已在前置核心评分阶段冻结。旧的独立分档校准、单项异常复核、低分复核、高分复核和 final-plan 评分链路已从本流程移除，以降低超时和分数漂移。 ");
       syncStageMeta();
       renderGradingResult(result);
     }
 
     if (stageWarnings.length) {
-      setGradingStatus("批改完成；部分反馈阶段有记录，请查看下方“AI 批改进度与错误日志”。", "warning");
+      setGradingStatus("批改完成；部分阶段有记录，请查看下方“AI 批改进度与错误日志”。", "warning");
     } else {
       setGradingStatus("批改完成", "done");
     }
@@ -1730,14 +1723,47 @@ function renderFinalStabilityCheck(check = {}) {
 }
 
 
+
+function renderScoreCoreV2Calibration(calibration = {}, diagnosticSignals = {}) {
+  if ((!calibration || typeof calibration !== "object" || !hasAnyText(calibration)) && (!diagnosticSignals || typeof diagnosticSignals !== "object" || !hasAnyText(diagnosticSignals))) return "";
+  const mid = calibration.midBandCalibration && typeof calibration.midBandCalibration === "object" ? calibration.midBandCalibration : {};
+  const low = calibration.lowBandCalibration && typeof calibration.lowBandCalibration === "object" ? calibration.lowBandCalibration : {};
+  const high = calibration.highBandCalibration && typeof calibration.highBandCalibration === "object" ? calibration.highBandCalibration : {};
+  const density = calibration.errorDensityCheck && typeof calibration.errorDensityCheck === "object" ? calibration.errorDensityCheck : diagnosticSignals;
+  const profile = calibration.scoreProfileCheck && typeof calibration.scoreProfileCheck === "object" ? calibration.scoreProfileCheck : {};
+  const anyTriggered = [mid, low, high, profile].some((item) => item && (item.triggered === true || item.suspicious === true || String(item.triggered || item.suspicious).toLowerCase() === "true"));
+  const summaryHtml = `<div class="high-band-review-head audit-review-head">
+      <p class="muted">Score Core v3 checks Task 1/Task 2 task gates, half-band boundaries, low/mid/high-band gates, LR/GRA error-density risks, and score-profile consistency before the score is frozen.</p>
+      <span class="high-band-status ${anyTriggered ? "is-triggered" : "is-skipped"}">${anyTriggered ? "Checked with warnings" : "Checked"}</span>
+    </div>
+    <div class="task-check-badges audit-summary-badges">
+      ${renderSafetyBadge("Low-band", low.triggered ? "Triggered" : "Checked", low.triggered ? "is-warning" : "is-ok")}
+      ${renderSafetyBadge("Mid-band", mid.triggered ? "Triggered" : "Checked", mid.triggered ? "is-warning" : "is-ok")}
+      ${renderSafetyBadge("High-band", high.triggered ? "Triggered" : "Checked", high.triggered ? "is-warning" : "is-ok")}
+      ${density.grammarErrorDensity ? renderSafetyBadge("Grammar density", density.grammarErrorDensity, /high|weak/i.test(String(density.grammarErrorDensity)) ? "is-warning" : "is-neutral") : ""}
+      ${density.spellingErrorDensity ? renderSafetyBadge("Spelling density", density.spellingErrorDensity, /high|weak/i.test(String(density.spellingErrorDensity)) ? "is-warning" : "is-neutral") : ""}
+      ${renderSafetyBadge("Local score change", "No")}
+    </div>`;
+  const bodyHtml = `
+    ${low.reason ? collapsibleSection("Low-band calibration", renderTextWithTranslation(low.reason, low.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${mid.reason ? collapsibleSection("Mid-band calibration", renderTextWithTranslation(mid.reason, mid.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${high.reason ? collapsibleSection("High-band calibration", renderTextWithTranslation(high.reason, high.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${profile.reason ? collapsibleSection("Score profile check", renderTextWithTranslation(profile.reason, profile.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
+    ${hasAnyText(density) ? collapsibleSection("Error-density signals", `<pre>${escapeHtml(JSON.stringify(density, null, 2))}</pre>`, { className: "high-band-compact-details" }) : ""}
+    <p class="muted">本地是否改分：否。这些是评分前的任务类型、半分边界、低中高分段和错误密度信号，用来防止安全默认分、偏宽中分和极端离群分。</p>`;
+  return renderAuditDetails("Score Core v3 综合评分校准 / Task + Half-band + Low-Mid-High Gates", summaryHtml, bodyHtml, `score-core-v2-card ${anyTriggered ? "is-triggered-card" : ""}`);
+}
+
 function renderCriterionCalibration(calibration = {}) {
   if (!calibration || typeof calibration !== "object" || !hasAnyText(calibration)) return "";
   const criteria = calibration.criteria && typeof calibration.criteria === "object" ? calibration.criteria : {};
   const rows = Object.entries(criteria).filter(([, item]) => item && typeof item === "object");
-  const pattern = calibration.scoreProfilePatternCheck && typeof calibration.scoreProfilePatternCheck === "object" ? calibration.scoreProfilePatternCheck : {};
-  const suspicious = pattern.suspiciousPattern === true || String(pattern.suspiciousPattern).toLowerCase() === "true";
+  const pattern = calibration.scoreProfileCheck && typeof calibration.scoreProfileCheck === "object"
+    ? calibration.scoreProfileCheck
+    : (calibration.scoreProfilePatternCheck && typeof calibration.scoreProfilePatternCheck === "object" ? calibration.scoreProfilePatternCheck : {});
+  const suspicious = pattern.suspicious === true || pattern.suspiciousPattern === true || String(pattern.suspicious || pattern.suspiciousPattern).toLowerCase() === "true";
   const summaryHtml = `<div class="high-band-review-head audit-review-head">
-      <p class="muted">Pre-final AI calibration matrix. Local code does not assign IELTS bands; this gives final-plan criterion-specific evidence.</p>
+      <p class="muted">Score-core calibration matrix. Local code does not assign IELTS bands; this records how AI compared adjacent bands before freezing the score.</p>
       <span class="high-band-status ${suspicious ? "is-triggered" : "is-skipped"}">${suspicious ? "Pattern flagged" : "Calibrated"}</span>
     </div>
     <div class="task-check-badges audit-summary-badges">
@@ -1773,7 +1799,7 @@ function renderCriterionCalibration(calibration = {}) {
     ${criteriaHtml}
     ${pattern.reason ? collapsibleSection("Score profile pattern check", renderTextWithTranslation(pattern.reason, pattern.reasonZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
     ${calibration.calibrationConclusion ? collapsibleSection("Calibration conclusion", renderTextWithTranslation(calibration.calibrationConclusion, calibration.calibrationConclusionZh, { tag: "p" }), { className: "high-band-compact-details" }) : ""}
-    <p class="muted">本地是否改分：否。这里是最终评分前的四项分档校准，最终四项分仍由 final-plan AI 决定。</p>`;
+    <p class="muted">本地是否改分：否。这里是核心评分阶段的四项分档校准，后续反馈不得改动已冻结分数。</p>`;
   return renderAuditDetails("四项分档校准 / Criterion Calibration Matrix", summaryHtml, bodyHtml, `criterion-calibration-card ${suspicious ? "is-triggered-card" : ""}`);
 }
 
@@ -1814,6 +1840,7 @@ function renderFinalScoreSanityGate(gate = {}) {
 function renderLowScoreSafetyAudit(result = {}) {
   const parts = [
     renderRateabilityProfile(result.rateabilityProfile),
+    renderScoreCoreV2Calibration(result.scoreCoreV3Calibration || result.scoreCoreV2Calibration, result.scoringDiagnosticSignals),
     renderCriterionCalibration(result.criterionCalibration),
     renderCriterionOutlierReview(result.criterionOutlierReview),
     renderLowScoreOutlierReview(result.lowScoreOutlierReview),
@@ -3569,7 +3596,7 @@ function renderFinalScoreArea(result = {}) {
   if (!hasFinalDisplayedScore(result)) {
     return `<section class="grading-section score-pending-card">
       <h4>最终评分</h4>
-      <p class="muted">最终分数会在第 13 步 AI 完成最终评分复核后显示。前面的步骤只收集评分证据、诊断问题和生成批改内容。</p>
+      <p class="muted">最终分数会在核心评分与分档校准阶段先显示并冻结；后续反馈阶段只解释、批改和给出练习建议，不再改变分数。</p>
     </section>`;
   }
   const changeNote = result.scoreChanged
@@ -3776,24 +3803,17 @@ function mockPayloadForPrompt(prompt, essay) {
 }
 
 const MOCK_FINAL_SCORING_STAGES = [
-  ["prompt-analysis", "题目要求分析"],
   ["text-stats-completion", "文本统计与完成度检查"],
   ["rateability-profile", "可评分性检查"],
-  ["score", "内部评分信号初筛/反馈分轨"],
+  ["prompt-analysis", "题目要求分析"],
+  ["score-core", "核心评分与分档校准"],
   ["spelling-wordform", "拼写和词形诊断"],
-  ["lexical-choice-collocation", "用词搭配诊断"],
   ["grammar-diagnosis", "语法诊断"],
+  ["lexical-choice-collocation", "用词搭配诊断"],
   ["sentence-corrections", "逐句批改"],
   ["better-expressions", "更好表达/高分表达优化"],
   ["task-diagnosis", "任务完成/回应诊断"],
-  ["coherence-diagnosis", "结构与衔接诊断"],
-  ["evidence-map", "评分证据地图"],
-  ["criterion-calibration", "四项分档校准"],
-  ["criterion-boundary", "半分边界判断"],
-  ["criterion-outlier-review", "单项异常分复核"],
-  ["low-score-outlier-review", "低分异常复核"],
-  ["high-band-boundary-review", "高分边界复核"],
-  ["final-plan", "最终评分复核"]
+  ["coherence-diagnosis", "结构与衔接诊断"]
 ];
 
 async function postMockStage(endpoint, payload, aiStage, label, stageLabel) {
@@ -3843,7 +3863,7 @@ async function postMockScore(endpoint, prompt, essay, label) {
     result = mergeAiStageResult(result || {}, stageResult);
   }
   if (!result?.scoreFinalized || !Number.isFinite(Number(result?.overallBand))) {
-    throw new Error(`${label}: final AI score reconciliation did not return a final score.`);
+    throw new Error(`${label}: score-first core stage did not return a frozen final score.`);
   }
   return result;
 }

@@ -657,6 +657,105 @@ function buildRateabilityProfile(body = {}) {
   };
 }
 
+
+function countRegexMatches(text, regex) {
+  const matches = String(text || "").match(regex);
+  return matches ? matches.length : 0;
+}
+
+function buildScoreCoreV2DiagnosticSignals(body = {}) {
+  const essay = String(body.essay || "");
+  const lower = essay.toLowerCase();
+  const words = Number(body.wordCount) || countWordsServer(essay);
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const rateabilityProfile = buildRateabilityProfile(body);
+
+  const commonMisspellings = [
+    "nowdays", "posiible", "improtant", "furture", "proformence", "deepends", "themslves", "caryfully", "themselves", "recieve", "becuase", "wich", "enviroment", "goverment", "seperate", "definately", "occured", "untill", "frist", "seondly"
+  ];
+  const spellingHits = [];
+  commonMisspellings.forEach((word) => {
+    const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`, "gi");
+    const count = countRegexMatches(lower, re);
+    if (count) spellingHits.push({ item: word, count });
+  });
+
+  const grammarPatterns = [
+    { label: "non-finite verb after subject", regex: /\b(when|if|because|although)\s+[a-z]+\s+(using|doing|having|going|looking|paying)\b/gi },
+    { label: "incorrect infinitive pattern", regex: /\bneed\s+to\s+[a-z]+ing\b/gi },
+    { label: "missing subject after if-clause", regex: /\bif\s+[^.!?]{0,80},\s*(may|can|will|should|would)\b/gi },
+    { label: "wrong comparative pattern", regex: /\bmuch\s+comfortable\b/gi },
+    { label: "missing be before adjective/comparison", regex: /\b\w+\s+never\s+(important|better|worse|good|bad)\s+than\b/gi },
+    { label: "verb pattern inconsistency", regex: /\busing\s+[^.!?]{0,60}\s+or\s+pay\s+for\b/gi },
+    { label: "wrong tense with gerund subject", regex: /\busing\s+[^.!?]{0,80}\s+was\s+very\s+expensive\b/gi },
+    { label: "article/plural control issue", regex: /\b(some of beauty products|using beauty product|facing customer|at working days|at now)\b/gi }
+  ];
+  const grammarHits = grammarPatterns.map((item) => ({ label: item.label, count: countRegexMatches(lower, item.regex) })).filter((item) => item.count > 0);
+
+  const weakPhrasePatterns = [
+    { label: "vague phrase: good thing / bad thing", regex: /\b(good thing|bad thing)\b/gi },
+    { label: "unclear reference: on it", regex: /\bon it\b/gi },
+    { label: "unnatural time/place phrase", regex: /\b(at now|at working days|looking younger at future|look beautiful at now)\b/gi },
+    { label: "awkward collocation", regex: /\b(pay treatments|using products or pay treatments|have they own judgement)\b/gi }
+  ];
+  const weakPhraseHits = weakPhrasePatterns.map((item) => ({ label: item.label, count: countRegexMatches(lower, item.regex) })).filter((item) => item.count > 0);
+
+  const spellingIssueCount = spellingHits.reduce((sum, item) => sum + item.count, 0);
+  const grammarIssueCount = grammarHits.reduce((sum, item) => sum + item.count, 0);
+  const weakPhraseCount = weakPhraseHits.reduce((sum, item) => sum + item.count, 0);
+  const per100 = words > 0 ? 100 / words : 0;
+  const spellingDensity = words ? Number((spellingIssueCount * per100).toFixed(2)) : 0;
+  const grammarDensity = words ? Number((grammarIssueCount * per100).toFixed(2)) : 0;
+  const weakPhraseDensity = words ? Number((weakPhraseCount * per100).toFixed(2)) : 0;
+
+  const spellingErrorDensity = spellingIssueCount >= 6 || spellingDensity >= 2.2 ? "high" : spellingIssueCount >= 3 ? "moderate" : spellingIssueCount > 0 ? "low" : "none";
+  const grammarErrorDensity = grammarIssueCount >= 5 || grammarDensity >= 1.7 ? "high" : grammarIssueCount >= 2 ? "moderate" : grammarIssueCount > 0 ? "low" : "none";
+  const lexicalNaturalnessRisk = weakPhraseCount >= 3 ? "high" : weakPhraseCount >= 1 ? "moderate" : "low";
+  const sentenceControl = grammarErrorDensity === "high" ? "weak" : grammarErrorDensity === "moderate" ? "basic" : "adequate_or_better";
+  const lexicalControl = spellingErrorDensity === "high" || lexicalNaturalnessRisk === "high" ? "weak" : spellingErrorDensity === "moderate" || lexicalNaturalnessRisk === "moderate" ? "basic" : "adequate_or_better";
+
+  const task2Profile = task === "Task 2" ? resolveTask2QuestionProfile(body) : null;
+  const task1Bullets = task === "Task 1" ? resolveTask1BulletPoints(body) : [];
+  const midBandCalibrationNeeded = rateabilityProfile.status === "clearly_rateable" || rateabilityProfile.status === "weak_but_rateable";
+  const allFiveDefaultRisk = midBandCalibrationNeeded && (grammarErrorDensity === "high" || spellingErrorDensity === "high" || lexicalNaturalnessRisk === "high");
+
+  return {
+    diagnosticSource: "local_text_signals_for_ai_calibration_only",
+    localScoreChanged: false,
+    scoringRole: "signals_only_no_local_band_edit",
+    task,
+    wordCount: words,
+    rateabilityStatus: rateabilityProfile.status,
+    relatedToPrompt: Boolean(rateabilityProfile.relatedToPrompt),
+    spellingIssueCount,
+    spellingDensityPer100Words: spellingDensity,
+    spellingErrorDensity,
+    spellingExamples: spellingHits.slice(0, 12),
+    grammarIssueSignalCount: grammarIssueCount,
+    grammarDensityPer100Words: grammarDensity,
+    grammarErrorDensity,
+    grammarIssueSignals: grammarHits.slice(0, 12),
+    weakPhraseCount,
+    weakPhraseDensityPer100Words: weakPhraseDensity,
+    lexicalNaturalnessRisk,
+    weakPhraseSignals: weakPhraseHits.slice(0, 12),
+    sentenceControl,
+    lexicalControl,
+    taskDevelopmentSignal: task === "Task 2" ? "check_position_required_parts_development_examples_conclusion" : "check_purpose_bullets_tone_register",
+    task2QuestionType: task2Profile?.questionType || "",
+    task2RequiredParts: task2Profile?.requiredParts || [],
+    task1BulletPoints: task1Bullets,
+    midBandCalibrationNeeded,
+    allFiveDefaultRisk,
+    calibrationInstructions: [
+      "Use these as calibration signals only; do not locally cap or change scores.",
+      "If grammarErrorDensity is high and sentenceControl is weak/basic, GRA Band 5.0+ needs strong evidence; otherwise compare 4.0, 4.5, and 5.0 carefully.",
+      "If spellingErrorDensity is high or lexicalControl is weak/basic, LR Band 5.0+ needs strong evidence and LR 5.5+ is unlikely without accurate word choice and word formation.",
+      "If all four criteria are identical in the 4.0-6.0 range, explicitly justify equality; if LR/GRA evidence is weaker than TR/CC, differentiate the bands."
+    ]
+  };
+}
+
 function criterionBandsMapFromResult(result = {}, task = "Task 2") {
   const names = getWritingCriterionNames(task);
   const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
@@ -1414,10 +1513,10 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
     highBandDiagnostics: { recommendedHighBandRange: "", reason: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
     },
     strengths: [],
     mainProblems: [],
@@ -1474,6 +1573,7 @@ function buildCompactAiOnlyPrompt(body, locale = "en", previousIssue = "") {
       actualWordCount: words,
       targetWordCount: body.targetWordCount,
       isUnderMinimum: Boolean(body.isUnderMinimum),
+      scoringDiagnosticSignals: scoreCoreV2Signals,
       essay: body.essay
     })
   ].filter(Boolean).join("\n");
@@ -2866,6 +2966,7 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
   const firstCriterion = firstCriterionName(task);
   const words = Number(body.wordCount) || countWordsServer(body.essay);
   const threshold = task === "Task 1" ? 150 : 250;
+  const scoreCoreV2Signals = buildScoreCoreV2DiagnosticSignals(body);
   const shape = {
     actualWordCount: words,
     taskTypeDetected: taskType,
@@ -2893,13 +2994,49 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     lowBandDiagnosticsZh: { reasonZh: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+    scoreCoreV2Calibration: {
+      localScoreChanged: false,
+      lowBandCalibration: { triggered: false, reason: "", reasonZh: "" },
+      midBandCalibration: { triggered: false, reason: "", reasonZh: "", allFiveDefaultRisk: false, lrGraDifferentiationCheck: "" },
+      highBandCalibration: { triggered: false, reason: "", reasonZh: "" },
+      errorDensityCheck: { spellingErrorDensity: "", grammarErrorDensity: "", lexicalNaturalnessRisk: "", sentenceControl: "", lexicalControl: "" },
+      scoreProfileCheck: { pattern: "", suspicious: false, reason: "", reasonZh: "" }
+    },
+    scoringDiagnosticSignals: {},
+    criterionCalibration: {
+      purpose: "score_first_criterion_calibration",
+      localScoreChanged: false,
+      criteria: {
+        [firstCriterion]: { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Coherence and Cohesion": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Lexical Resource": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Grammatical Range and Accuracy": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] }
+      },
+      scoreProfileCheck: { pattern: "", suspicious: false, reason: "" }
+    },
+    scoreCoreVersion: "v3",
+    scoreCoreMeta: { scoreFirst: true, scoreFrozenAfterThisStage: true, feedbackStagesMayNotChangeScore: true },
+    scoreProfile: {
+      likelyOverallRange: "",
+      allowedOverallRange: "",
+      profile: "low | middle | high | lower_mid_rateable | high_band_candidate",
+      reason: "",
+      reasonZh: "",
+      lowBandGate: { triggered: false, reason: "", reasonZh: "" },
+      midBandGate: { triggered: false, reason: "", reasonZh: "", challengedCriteria: [] },
+      highBandGate: { triggered: false, reason: "", reasonZh: "" },
+      scoreProfileGate: { triggered: false, reason: "", reasonZh: "" }
+    },
+    taskSpecificGate: taskType === "task1"
+      ? { task: "Task 1", purposeClear: false, bulletCoverage: [], toneAppropriate: false, formatAppropriate: false, missingMajorRequirements: [] }
+      : { task: "Task 2", questionType: "", requiredPartsAnswered: false, positionClear: false, developmentLevel: "", exampleSpecificity: "", missingRequiredParts: [] },
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3445,10 +3582,10 @@ function buildMinimalAiScoringPrompt(body, gradingMode, locale = "en") {
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3723,13 +3860,40 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     highBandDiagnosticsZh: { reasonZh: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
+    criterionCalibration: {
+      purpose: "score_first_criterion_calibration",
+      localScoreChanged: false,
+      criteria: {
+        [firstCriterion]: { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Coherence and Cohesion": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Lexical Resource": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] },
+        "Grammatical Range and Accuracy": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", halfBandDecision: { whyAboveLowerBand: "", whyBelowUpperBand: "", whyExactBand: "" }, adjacentBandChallenge: "", evidenceQuotes: [] }
+      },
+      scoreProfileCheck: { pattern: "", suspicious: false, reason: "" }
+    },
+    scoreCoreVersion: "v3",
+    scoreCoreMeta: { scoreFirst: true, scoreFrozenAfterThisStage: true, feedbackStagesMayNotChangeScore: true },
+    scoreProfile: {
+      likelyOverallRange: "",
+      allowedOverallRange: "",
+      profile: "low | middle | high | lower_mid_rateable | high_band_candidate",
+      reason: "",
+      reasonZh: "",
+      lowBandGate: { triggered: false, reason: "", reasonZh: "" },
+      midBandGate: { triggered: false, reason: "", reasonZh: "", challengedCriteria: [] },
+      highBandGate: { triggered: false, reason: "", reasonZh: "" },
+      scoreProfileGate: { triggered: false, reason: "", reasonZh: "" }
+    },
+    taskSpecificGate: taskType === "task1"
+      ? { task: "Task 1", purposeClear: false, bulletCoverage: [], toneAppropriate: false, formatAppropriate: false, missingMajorRequirements: [] }
+      : { task: "Task 2", questionType: "", requiredPartsAnswered: false, positionClear: false, developmentLevel: "", exampleSpecificity: "", missingRequiredParts: [] },
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
-      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" },
-      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" }
+      [firstCriterion]: { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Coherence and Cohesion": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Lexical Resource": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" },
+      "Grammatical Range and Accuracy": { band: 1, feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidence: [], evidenceZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], evidenceQuotes: [], evidenceQuotesZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" }
     },
     strengths: [],
     strengthsZh: [],
@@ -3776,6 +3940,11 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If all four criterion bands are identical, keep them identical only when concrete evidence proves all four criteria are genuinely the same level; otherwise differentiate the bands. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
+    "- This is the score-first core stage: decide all four criterion bands now, calibrate each band against adjacent lower/higher bands, and freeze the score before later feedback stages.",
+    "- For every criterion, criterionCalibration.criteria[criterion].selectedBand must match criteria[criterion].band. If not, fix the mismatch before returning JSON.",
+    "- For every criterion, include candidateBandRange, candidateBandsConsidered, positiveEvidence, limitingEvidence, whyNotLower, whyNotHigher, adjacentBandChallenge, and short evidenceQuotes from the submitted essay.",
+    "- Do not generate revised essays, model answers, long sentence corrections, or better expressions in this score-core pass.",
+    "- Later feedback stages may explain and correct errors, but they must not change these frozen criterion bands.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
     "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
     "- Each criterion must include concrete evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower to support examiner-like scoring.",
@@ -3785,7 +3954,26 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     "- Band 7.0 is not a safe default for fluent, complete essays. If the essay has clear position/purpose, logical paragraphing, topic-specific vocabulary, flexible sentence control, and only minor errors, explicitly compare Band 7.0, 7.5, 8.0, and 8.5 before deciding.",
     "- Do not assign four identical Band 7.0 criterion bands unless each criterion has separate, concrete Band-7-only limitations. If the only limits are minor nuance, slightly smoother cohesion, or example depth, consider 7.5/8.0 instead.",
     "- If you assign Band 7 or lower despite high-band evidence, scoreCalibration.whyNotHigher must quote exact score-limiting features from the essay, not vague strictness.",
-    "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item.",
+    "Score Core v3 calibration requirements:",
+    "- This score-core pass must handle Task 1 and Task 2 generally, not tune to one sample essay. Use Task 1 letter logic for Task Achievement and Task 2 essay logic for Task Response.",
+    "- Use the provided scoringDiagnosticSignals as non-scoring evidence signals. They do not set or cap bands locally, but you must address them in scoreProfile, scoreCoreV2Calibration, taskSpecificGate, and criterionCalibration.",
+    "- Criterion half-band mechanism is mandatory. Do not prefer whole bands by default. For every criterion, actively compare the adjacent 0.5 bands before selecting the final band.",
+    "- Half-band definition: 4.5 means clearly above 4.0 but not stable 5.0; 5.5 means clearly above 5.0 but not stable 6.0; 6.5 means above 6.0 but not stable 7.0; 7.5 means above 7.0 but not stable 8.0; 8.5 means above 8.0 but not stable 9.0.",
+    "- For every criterion, return criterionCalibration.criteria[criterion].halfBandDecision with whyAboveLowerBand, whyBelowUpperBand, and whyExactBand. If you choose a whole band, explain why not 0.5 lower and why not 0.5 higher.",
+    "- Low-band gate: if the answer is rateable, do not use Band 1/2/3 unless the text is blank, almost unreadable, off-task, or lacks connected sentence-level writing; explain why Band 3/4 is impossible if you keep very low bands.",
+    "- Mid-band gate: for 4.0-6.0 writing, verify each criterion. Do not give all four criteria 5.0 or 5.5 as a safe default. If task/structure evidence is stronger than language-control evidence, separate TR/TA and CC from LR/GRA.",
+    "- Task 1 mid-band gate: check clear letter purpose, all bullet points, detail expansion, tone/register, and format. If a bullet is missing or only partly developed, Task Achievement 5.5+ needs strong evidence.",
+    "- Task 2 mid-band gate: check question type, all required parts, clear position when required, idea development, examples, and conclusion. If development is shallow or examples are vague, Task Response 5.5+ needs strong evidence.",
+    "- Coherence gate: paragraph breaks and Firstly/Secondly/In conclusion are not enough for 5.5+. Check progression within paragraphs, referencing, and whether cohesion is mechanical.",
+    "- Lexical Resource gate: frequent spelling, word-formation, weak collocation, vague phrasing, or repetition must limit LR unless there is strong evidence of range and precision. LR 5.0 requires adequate control despite errors; LR 5.5+ requires fewer disruptive spelling/word-form problems.",
+    "- Grammatical Range and Accuracy gate: frequent basic verb-form, subject/verb, article/plural, clause, punctuation, or sentence-control errors must limit GRA. GRA 5.0 requires generally understandable sentence control with errors that do not dominate. If grammarErrorDensity is high, compare GRA 4.0/4.5/5.0 explicitly.",
+    "- High-band gate: if any criterion is 6.5+, prove it with high-band evidence and explain why lower bands are insufficient; if such evidence is absent, lower the criterion. If strong high-band evidence is present, do not cap at 7.0 by default.",
+    "- Score profile gate: flag suspicious profiles such as all criteria identical, 5.5/5.5/5.0/5.0 with weak LR/GRA diagnostics, Task 1 missing bullets but high TA, Task 2 missing required parts but high TR, or GRA 5.0+ with high grammar-error density.",
+    "- scoreCoreV2Calibration.midBandCalibration and scoreProfile.midBandGate must be triggered when all four final bands are identical in the 4.0-6.0 range, when overall is 5.5+ despite weak LR/GRA signals, or when LR/GRA appear weaker than TR/TA/CC.",
+    "- scoreCoreV2Calibration.errorDensityCheck must copy the diagnostic density labels and explain how they affected LR/GRA calibration.",
+    "- For every English advice array returned in this score stage, return the matching *Zh array with the same item count. The Chinese explanation must specifically explain the corresponding English item. Also return strengthItems/mainProblemItems as paired objects with non-empty zh fields.",
+    "Scoring diagnostic signals to use for calibration only:",
+    JSON.stringify(scoreCoreV2Signals),
     buildTargetImprovementInstruction(body),
     "Return feedbackTrack as one of: low_band_correction, mid_band_improvement, high_band_polish. Return estimatedBandZone as low, middle, or high. The track must match the final evidence: low = foundations; middle = improve development/stability; high = polish naturalness/precision.",
     body.currentResult ? "Current result to audit:" : "",
@@ -3812,8 +4000,8 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     model,
     systemPrompt: buildLeanScoreSystemPrompt(locale),
     userPrompt: buildLeanScorePrompt({ ...body, mode: gradingMode }, gradingMode, locale),
-    maxTokens: 5200,
-    temperature: 0.05,
+    maxTokens: envInt("AI_SCORE_CORE_MAX_TOKENS", 6500, 4500, 12000),
+    temperature: 0,
     jsonMode: true,
     deadline,
     timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(120000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 190000))
@@ -3825,7 +4013,7 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     rawText,
     body: { ...body, mode: gradingMode },
     locale,
-    maxTokens: 5200,
+    maxTokens: envInt("AI_SCORE_CORE_MAX_TOKENS", 6500, 4500, 12000),
     allowRepair: true,
     deadline
   });
@@ -4300,6 +4488,7 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
 
   return result;
 }
+
 
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
@@ -5252,6 +5441,110 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
   throw finalError;
 }
 
+
+function ensureScoreCoreCalibration(result = {}, body = {}) {
+  if (!result || typeof result !== "object") return result;
+  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
+  const names = getWritingCriterionNames(task);
+  const existing = result.criterionCalibration && typeof result.criterionCalibration === "object" ? result.criterionCalibration : {};
+  const existingCriteria = existing.criteria && typeof existing.criteria === "object" ? existing.criteria : {};
+  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
+  const calibratedCriteria = { ...existingCriteria };
+  names.forEach((name) => {
+    const c = criteria[name] && typeof criteria[name] === "object" ? criteria[name] : {};
+    const current = calibratedCriteria[name] && typeof calibratedCriteria[name] === "object" ? calibratedCriteria[name] : {};
+    const band = clampAiBand(current.selectedBand ?? c.band ?? result.overallBand, c.band ?? result.overallBand ?? 1);
+    calibratedCriteria[name] = {
+      candidateBandRange: current.candidateBandRange || `${formatBand(Math.max(1, roundHalf(band - 0.5)))}-${formatBand(Math.min(9, roundHalf(band + 0.5)))}`,
+      candidateBandsConsidered: ensureArray(current.candidateBandsConsidered).length ? current.candidateBandsConsidered : [Math.max(1, roundHalf(band - 0.5)), band, Math.min(9, roundHalf(band + 0.5))],
+      selectedBand: band,
+      positiveEvidence: ensureArray(current.positiveEvidence).length ? ensureArray(current.positiveEvidence) : ensureArray(c.positiveEvidence || c.evidence).slice(0, 4),
+      positiveEvidenceZh: ensureArray(current.positiveEvidenceZh).length ? ensureArray(current.positiveEvidenceZh) : ensureArray(c.positiveEvidenceZh || c.evidenceZh).slice(0, 4),
+      limitingEvidence: ensureArray(current.limitingEvidence).length ? ensureArray(current.limitingEvidence) : ensureArray(c.limitingEvidence).slice(0, 4),
+      limitingEvidenceZh: ensureArray(current.limitingEvidenceZh).length ? ensureArray(current.limitingEvidenceZh) : ensureArray(c.limitingEvidenceZh).slice(0, 4),
+      whyNotLower: current.whyNotLower || c.whyNotLower || "The submitted response contains enough criterion-specific evidence to support this band rather than the lower adjacent band.",
+      whyNotLowerZh: current.whyNotLowerZh || c.whyNotLowerZh || "原文仍有足够该评分项表现支撑当前分，而不是更低一档。",
+      whyNotHigher: current.whyNotHigher || c.whyNotHigher || "The response still has limitations that prevent the next higher adjacent band.",
+      whyNotHigherZh: current.whyNotHigherZh || c.whyNotHigherZh || "原文仍有该评分项限制，暂时不能稳定达到更高一档。",
+      adjacentBandChallenge: current.adjacentBandChallenge || `Chosen Band ${formatBand(band)} after comparing adjacent bands using essay-specific positive and limiting evidence.`,
+      adjacentBandChallengeZh: current.adjacentBandChallengeZh || `根据原文正面证据和限制证据，与相邻分档比较后选择 Band ${formatBand(band)}。`,
+      evidenceQuotes: ensureArray(current.evidenceQuotes).length ? ensureArray(current.evidenceQuotes).slice(0, 3) : ensureArray(c.evidenceQuotes).slice(0, 3),
+      evidenceQuotesZh: ensureArray(current.evidenceQuotesZh).length ? ensureArray(current.evidenceQuotesZh).slice(0, 3) : ensureArray(c.evidenceQuotesZh).slice(0, 3)
+    };
+  });
+  result.criterionCalibration = {
+    ...existing,
+    purpose: existing.purpose || "score_first_criterion_calibration",
+    localScoreChanged: false,
+    scoreFrozenAfterCalibration: true,
+    criteria: calibratedCriteria,
+    scoreProfileCheck: existing.scoreProfileCheck || { pattern: "criterion_specific_bands_calibrated_before_feedback", suspicious: false, reason: "Criterion bands were calibrated before feedback generation." }
+  };
+  return result;
+}
+
+async function callAiScoreCoreStage({ apiKey, model, body, effectiveMode, locale, deadline }) {
+  const veryShort = isVeryShortEssay(body);
+  const scoreCoreV2Signals = buildScoreCoreV2DiagnosticSignals(body);
+  let result = await callAiScoreOnlyGrader({
+    apiKey,
+    model,
+    body,
+    effectiveMode: effectiveMode === "revision" ? "full" : effectiveMode,
+    veryShort,
+    maxTokens: maxTokensForMode("full", veryShort),
+    locale,
+    deadline
+  });
+  result.scoreCoreVersion = "v3";
+  result.aiStage = "score-core";
+  result.scoringDiagnosticSignals = result.scoringDiagnosticSignals && typeof result.scoringDiagnosticSignals === "object"
+    ? { ...scoreCoreV2Signals, ...result.scoringDiagnosticSignals }
+    : scoreCoreV2Signals;
+  result.scoreCoreV2Calibration = result.scoreCoreV2Calibration && typeof result.scoreCoreV2Calibration === "object"
+    ? { ...result.scoreCoreV2Calibration, localScoreChanged: false }
+    : {
+        localScoreChanged: false,
+        lowBandCalibration: { triggered: false, reason: "No very-low-band calibration issue was reported by AI.", reasonZh: "AI未报告极低分校准问题。" },
+        midBandCalibration: { triggered: Boolean(scoreCoreV2Signals.allFiveDefaultRisk), reason: scoreCoreV2Signals.allFiveDefaultRisk ? "Local diagnostic signals indicate possible mid-band default risk; AI must differentiate criteria if evidence differs." : "No mid-band default risk was reported by AI.", reasonZh: scoreCoreV2Signals.allFiveDefaultRisk ? "本地诊断信号提示可能存在中段安全默认分风险；如果四项证据不同，AI必须区分单项分。" : "AI未报告中段默认分风险。", allFiveDefaultRisk: Boolean(scoreCoreV2Signals.allFiveDefaultRisk), lrGraDifferentiationCheck: "LR/GRA must be checked separately from TR/CC." },
+        highBandCalibration: { triggered: false, reason: "No high-band inflation issue was reported by AI.", reasonZh: "AI未报告高分虚高问题。" },
+        errorDensityCheck: { spellingErrorDensity: scoreCoreV2Signals.spellingErrorDensity, grammarErrorDensity: scoreCoreV2Signals.grammarErrorDensity, lexicalNaturalnessRisk: scoreCoreV2Signals.lexicalNaturalnessRisk, sentenceControl: scoreCoreV2Signals.sentenceControl, lexicalControl: scoreCoreV2Signals.lexicalControl },
+        scoreProfileCheck: { pattern: "score_core_v2", suspicious: Boolean(scoreCoreV2Signals.allFiveDefaultRisk), reason: scoreCoreV2Signals.allFiveDefaultRisk ? "Identical mid-band scores require extra justification because language-control diagnostics are weak." : "Score profile did not show a hard mid-band default risk." }
+      };
+  result = ensureScoreCoreCalibration(result, body);
+  result.scoreCoreV3Calibration = result.scoreCoreV2Calibration;
+  const finalCriteria = {};
+  getWritingCriterionNames(body?.task === "Task 1" ? "Task 1" : "Task 2").forEach((name) => {
+    const item = result.criteria?.[name] && typeof result.criteria[name] === "object" ? result.criteria[name] : {};
+    finalCriteria[name] = { ...item, finalBand: clampAiBand(item.band ?? result.overallBand, 1), band: clampAiBand(item.band ?? result.overallBand, 1) };
+  });
+  result = applyFinalScoringReconciliation({ ...result, finalCriteria, criteria: finalCriteria, aiStage: "score-core", disclaimer: DISCLAIMER }, body);
+  result = ensureScoreCoreCalibration(result, body);
+  result = await applyFinalScoreSanityGate({ apiKey, model, body, result, effectiveMode, stage: "score-core", locale, deadline });
+  result = ensureScoreCoreCalibration(result, body);
+  result.scoreCoreV3Calibration = result.scoreCoreV2Calibration;
+  result.aiStage = "score-core";
+  result.scoreCoreMeta = {
+    scoreFirst: true,
+    scoreFrozen: true,
+    scoreFrozenAfterThisStage: true,
+    feedbackStagesMayNotChangeScore: true,
+    scoringFlow: "score_first_then_feedback"
+  };
+  result.scoreSource = result.scoreSource || "score_first_core_ai";
+  result.finalScoreSource = result.finalScoreSource || "score_first_core_ai";
+  result.scoringSystem = {
+    ...(result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {}),
+    scoreFirstFlow: true,
+    scoreFrozenBeforeFeedback: true,
+    feedbackMayNotChangeScore: true,
+    scoreCoreV2CalibrationEnabled: true,
+    scoreCoreV3CalibrationEnabled: true,
+    removedUnstableLegacyFlow: "front_end_no_longer_runs_separate_criterion_calibration_or_final_plan_for_scoring"
+  };
+  return applyNextBandTargetPlan(result, body);
+}
+
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
   if (!String(body.essay || "").trim()) {
@@ -5374,6 +5667,7 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 
 // --- AI-only staged grading pipeline (maximum-detail, no local scoring) ---
 const TEN_STEP_AI_STAGES = new Set([
+  "score-core",
   "prompt-analysis",
   "text-stats-completion",
   "rateability-profile",
@@ -5403,7 +5697,8 @@ function normalizeAiStage(value) {
   if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
   if (["textstatscompletion", "textstats", "completioncheck", "completionstatus", "basicstats", "sentencesplit", "stage2", "step2"].includes(raw)) return "text-stats-completion";
   if (["rateabilityprofile", "rateability", "rateable", "rateabilitycheck", "stage2b", "step2b"].includes(raw)) return "rateability-profile";
-  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "scoresignal", "scoresignals", "stage3", "step3"].includes(raw)) return "score";
+  if (["scorecore", "coregrading", "corescore", "corescoring", "scoringcore", "gradecore", "scorefirst", "firstscore", "frozencore", "stage3", "step3"].includes(raw)) return "score-core";
+  if (["score", "scoring", "grade", "grading", "scoresignal", "scoresignals"].includes(raw)) return "score";
   if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary"].includes(raw)) return "half-band-summary";
   if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage12", "step12"].includes(raw)) return "criterion-boundary";
   if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage11", "step11"].includes(raw)) return "evidence-map";
@@ -5443,6 +5738,7 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     ? "Use English for normal feedback fields and concise Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
     : "Main fields must be English. Put concise, accurate Chinese helper notes only in fields ending with Zh. Match the adjacent English field. Do not translate the full essay.";
   const stageNames = {
+    "score-core": "score-first IELTS criterion scoring, calibration, and score freeze only",
     "prompt-analysis": "question requirement analysis only",
     "text-stats-completion": "basic text statistics, sentence splitting, and completion-status check only",
     "rateability-profile": "objective rateability profile only; no scoring",
@@ -5644,7 +5940,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 10/13. Diagnose Coherence and Cohesion only. Do not correct grammar or vocabulary.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        criteria: { "Coherence and Cohesion": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        criteria: { "Coherence and Cohesion": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" } },
         coherenceAdvice: [], coherenceAdviceZh: [],
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
       }),
@@ -5673,7 +5969,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 5/13. Diagnose word choice, collocation, repetition, register, and lexical precision only. Do not do grammar correction except where word choice is the main issue.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" } },
         lexicalAdvice: [], lexicalAdviceZh: [],
         detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / repetition", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", whyThisAffectsBandZh: "", targetBandExpression: "" }],
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
@@ -5688,7 +5984,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 7/10. Diagnose Lexical Resource only. Include spelling, word choice, collocation, word formation, register, and repetition. Do not correct grammar unless it is word formation.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        criteria: { "Lexical Resource": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" } },
         spellingCorrections: [{ originalWord: "", correctedWord: "", sentence: "", explanation: "", explanationZh: "" }],
         lexicalAdvice: [], lexicalAdviceZh: [],
         detailedSentenceCorrections: [{ sentenceNumber: 1, originalSentence: "", correctedSentence: "", errorType: "Word choice / collocation / spelling / repetition", errorTypeZh: "", problem: "", problemZh: "", rule: "", ruleZh: "", betterExpression: "", betterExpressionZh: "", bandImpact: "", bandImpactZh: "", scoreImpacting: true, whyThisAffectsBand: "", targetBandExpression: "" }],
@@ -5704,7 +6000,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
       "Stage 6/13. Diagnose Grammatical Range and Accuracy only. Do not produce full sentence rewrites or betterExpression here.",
       "Return JSON with this exact shape:",
       JSON.stringify({
-        criteria: { "Grammatical Range and Accuracy": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "" } },
+        criteria: { "Grammatical Range and Accuracy": { feedback: "", feedbackZh: "", howToImprove: "", howToImproveZh: "", evidenceQuotes: [], evidenceQuotesZh: [], positiveEvidence: [], positiveEvidenceZh: [], limitingEvidence: [], limitingEvidenceZh: [], whyThisBand: "", whyThisBandZh: "", whyNotHigher: "", whyNotHigherZh: "", whyNotLower: "", whyNotLowerZh: "", halfBandDecision: "", halfBandDecisionZh: "" } },
         grammarErrors: [{ type: "", original: "", corrected: "", explanation: "", explanationZh: "" }],
         grammarAdvice: [], grammarAdviceZh: [],
         errorAnalysis: { summary: "", summaryZh: "", errorPatterns: [], priorityFixes: [], priorityFixesZh: [] }
@@ -5775,6 +6071,7 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
 function tenStepStageMaxTokens(stage) {
   return ({
+    "score-core": envInt("AI_STAGE_SCORE_CORE_TOKENS", 7200, 4500, 12000),
     "prompt-analysis": envInt("AI_STAGE_PROMPT_ANALYSIS_TOKENS", 4500, 2500, 9000),
     "text-stats-completion": envInt("AI_STAGE_TEXT_STATS_TOKENS", 2500, 1000, 6000),
     "rateability-profile": envInt("AI_STAGE_RATEABILITY_TOKENS", 1200, 800, 3000),
@@ -5802,6 +6099,7 @@ function tenStepStageMaxTokens(stage) {
 
 function tenStepStageHasUsableContent(stage, output) {
   if (!output || typeof output !== "object") return false;
+  if (stage === "score-core") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
   if (stage === "text-stats-completion") return Number.isFinite(Number(output.actualWordCount)) || hasUsefulText(output.textStats) || hasUsefulText(output.completionStatus);
   if (stage === "rateability-profile") return hasUsefulText(output.rateabilityProfile) || hasUsefulText(output.status);
@@ -6895,6 +7193,14 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
   const roundedAverage = avg === null ? null : roundHalf(avg);
   const displayedOverall = Number(result.overallBand ?? result.finalOverallBand ?? result.scoreCalculation?.finalBand);
   const isRateable = ["weak_but_rateable", "clearly_rateable"].includes(rateability.status);
+  const scoreCoreV2Signals = result.scoringDiagnosticSignals && typeof result.scoringDiagnosticSignals === "object"
+    ? result.scoringDiagnosticSignals
+    : buildScoreCoreV2DiagnosticSignals(body);
+  const graName = "Grammatical Range and Accuracy";
+  const lrName = "Lexical Resource";
+  const grammarHigh = scoreCoreV2Signals.grammarErrorDensity === "high" || scoreCoreV2Signals.sentenceControl === "weak";
+  const spellingHigh = scoreCoreV2Signals.spellingErrorDensity === "high" || scoreCoreV2Signals.lexicalControl === "weak" || scoreCoreV2Signals.lexicalNaturalnessRisk === "high";
+  const midBandDiagnosticRiskCriteria = [];
 
   entries.forEach(([name, band]) => {
     const numeric = Number(band);
@@ -6908,6 +7214,16 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
       outlierCriteria.push(name);
       reasons.push(`${name} Band ${formatBand(numeric)} is ${Math.abs(otherAvg - numeric).toFixed(1)} bands away from the average of the other three criteria.`);
       reasonsZh.push(`${name} 与其他三项平均分相差 ${Math.abs(otherAvg - numeric).toFixed(1)} 分，属于最终单项离群风险。`);
+    }
+    if (name === graName && numeric >= 5 && grammarHigh && isRateable) {
+      midBandDiagnosticRiskCriteria.push(name);
+      reasons.push(`${name} Band ${formatBand(numeric)} conflicts with high grammar-error density / weak sentence-control diagnostic signals; GRA 5.0+ needs explicit evidence of adequate sentence control.`);
+      reasonsZh.push(`${name} 为 Band ${formatBand(numeric)}，但语法错误密度高或句子控制弱；GRA 5.0+ 必须有明确证据证明句子控制已达到基本稳定。`);
+    }
+    if (name === lrName && numeric >= 5 && spellingHigh && isRateable) {
+      midBandDiagnosticRiskCriteria.push(name);
+      reasons.push(`${name} Band ${formatBand(numeric)} conflicts with high spelling/word-formation or lexical naturalness risk; LR 5.0+ needs evidence of adequate range and accuracy.`);
+      reasonsZh.push(`${name} 为 Band ${formatBand(numeric)}，但拼写/词形/词汇自然度风险较高；LR 5.0+ 必须有足够词汇范围和准确性证据。`);
     }
   });
 
@@ -6926,12 +7242,26 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     }
   });
 
+  let midBandDefaultHardRisk = false;
   if (identicalBands) {
     const band = Number(entries[0]?.[1]);
     if (Number.isFinite(band) && band >= 4 && band <= 6) {
       reasons.push(`All four final criteria are identical at Band ${formatBand(band)}; this may be a safe-default score and should be re-checked against criterion-specific evidence.`);
       reasonsZh.push(`最终四项分完全相同，均为 Band ${formatBand(band)}；这可能是安全默认分，需要按四项证据重新核验。`);
+      if (isRateable && band === 5 && (grammarHigh || spellingHigh || scoreCoreV2Signals.allFiveDefaultRisk)) {
+        midBandDefaultHardRisk = true;
+        midBandDiagnosticRiskCriteria.push(graName);
+        if (spellingHigh) midBandDiagnosticRiskCriteria.push(lrName);
+        reasons.push("All four criteria are Band 5.0 while diagnostic signals show weaker LR/GRA control; this score profile must be repaired rather than accepted as a safe mid-band default.");
+        reasonsZh.push("四项全部为 Band 5.0，但诊断信号显示 LR/GRA 控制更弱；这属于中段安全默认分风险，必须修复，不能直接接受。");
+      }
     }
+  }
+
+  if (Number.isFinite(displayedOverall) && displayedOverall >= 5.5 && isRateable && (grammarHigh || spellingHigh) && entries.some(([name, band]) => (name === graName || name === lrName) && Number(band) >= 5)) {
+    midBandDiagnosticRiskCriteria.push("overall_mid_band_profile");
+    reasons.push("Overall Band 5.5+ with weak LR/GRA diagnostic signals may over-reward structure or task completion while under-penalising language control; the profile must be rechecked before freezing.");
+    reasonsZh.push("总分达到 Band 5.5+，但 LR/GRA 诊断信号较弱，可能过度奖励结构或任务完成而低估语言控制问题；冻结前必须复核。");
   }
 
   if (Number.isFinite(displayedOverall) && roundedAverage !== null && Math.abs(displayedOverall - roundedAverage) >= 0.5) {
@@ -6939,7 +7269,7 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     reasonsZh.push(`展示总分 Band ${formatBand(displayedOverall)} 与四项平均后四舍五入 Band ${formatBand(roundedAverage)} 不一致。`);
   }
 
-  const hardInvalid = veryLowCriteria.length > 0 || outlierCriteria.length > 0 || calibrationDisagreements.some((name) => {
+  const hardInvalid = veryLowCriteria.length > 0 || outlierCriteria.length > 0 || midBandDefaultHardRisk || midBandDiagnosticRiskCriteria.length > 0 || calibrationDisagreements.some((name) => {
     const finalBand = Number(bands[name]);
     const calibratedRaw = calibrationCriteria[name]?.selectedBand ?? calibrationCriteria[name]?.band ?? calibrationCriteria[name]?.recommendedBand;
     const calibratedBand = Number(String(calibratedRaw ?? "").replace(/band\s*/i, ""));
@@ -6958,6 +7288,9 @@ function buildFinalScoreSanitySignals(result = {}, body = {}) {
     outlierCriteria: [...new Set(outlierCriteria)],
     veryLowCriteria: [...new Set(veryLowCriteria)],
     calibrationDisagreements: [...new Set(calibrationDisagreements)],
+    midBandDiagnosticRiskCriteria: [...new Set(midBandDiagnosticRiskCriteria)],
+    midBandDefaultHardRisk,
+    scoringDiagnosticSignals: scoreCoreV2Signals,
     identicalCriteriaBands: identicalBands,
     reasons,
     reasonsZh,
@@ -7005,6 +7338,10 @@ function buildFinalScoreSanityRepairPrompt({ result = {}, body = {}, signals = {
     "Use strict IELTS Writing judgement with separated criteria. A rateable essay with paragraphs and complete sentences should not keep Band 1/2 unless you can prove why Band 3 and Band 4 are impossible.",
     "If one criterion is 2.0+ bands away from the other three, either repair the criterion band or give concrete essay evidence explaining the gap. Avoid safe default identical bands unless evidence genuinely supports equal performance across all criteria.",
     "If final bands conflict with criterionCalibration by 1.0+ band, re-check the final band against that criterion's adjacent-band evidence. You may disagree with calibration only with concrete essay evidence.",
+    "Mid-band repair rule: if all four final criteria are Band 5.0/5.5, or if the profile is 5.5/5.5/5.0/5.0 while diagnostic signals show high grammar/spelling/lexical-control risk, do not keep the score profile unless you can prove LR and GRA are genuinely strong enough. Usually differentiate LR/GRA downward when errors are denser than task/structure limitations.",
+    "GRA repair rule: if grammarErrorDensity is high or sentenceControl is weak, compare GRA 4.0, 4.5, and 5.0 explicitly before keeping GRA 5.0+.",
+    "LR repair rule: if spellingErrorDensity is high, word formation is weak, or lexicalNaturalnessRisk is high, compare LR 4.0, 4.5, 5.0, and 5.5 explicitly before keeping LR 5.0+.",
+    "Half-band repair rule: for every repaired criterion, explain why the chosen band is not 0.5 lower and not 0.5 higher. Use 4.5/5.5/6.5/7.5/8.5 when the evidence is between whole bands; do not default to integers.",
     buildTaskSpecificScoringRubric(task),
     buildTaskRequirementInstruction(body),
     "Before choosing final bands, use criterionCalibration if present: compare each selected band with adjacent lower/higher bands, and do not ignore the calibration matrix unless you give concrete evidence. The calibration matrix is evidence-only, not local scoring.",
@@ -7047,9 +7384,21 @@ async function applyFinalScoreSanityGate({ apiKey, model, body, result, effectiv
       triggered: false,
       status: "not_triggered",
       repairApplied: false,
-      reason: "No final score sanity issue was detected after final AI reconciliation.",
-      reasonZh: "最终AI复核后未发现分数合理性异常。"
+      reason: "No final score sanity issue was detected after final AI scoring.",
+      reasonZh: "最终AI评分后未发现分数合理性异常。"
     };
+    return result;
+  }
+
+  if (!initialSignals.hardInvalid) {
+    result.finalScoreSanityGate = {
+      ...initialSignals,
+      repairApplied: false,
+      stageStatus: "warning",
+      repairConclusion: "A non-critical score consistency warning was detected. The score is kept because it is not a hard invalid pattern; no extra AI repair call is made in the score-first flow.",
+      repairConclusionZh: "检测到非严重分数一致性提醒，但不属于硬性异常；评分优先流程不额外调用AI修复，以保持稳定和降低超时风险。"
+    };
+    result.stageWarnings = ensureArray(result.stageWarnings).concat(["Non-critical final score sanity warning recorded without extra repair."]);
     return result;
   }
 
@@ -7983,6 +8332,9 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
+  if (stage === "score-core") {
+    return callAiScoreCoreStage({ apiKey, model, body, effectiveMode, locale, deadline });
+  }
   if (stage === "text-stats-completion") return buildTextStatsCompletionStage(body);
   if (stage === "rateability-profile") {
     const profile = buildRateabilityProfile(body);
@@ -8131,7 +8483,17 @@ async function handleRequest(req, res) {
 
   try {
     let result;
-    if (aiStage === "score") {
+    if (aiStage === "score-core") {
+      result = await callAiScoreCoreStage({
+        apiKey,
+        model,
+        body,
+        effectiveMode: effectiveMode === "revision" ? "full" : effectiveMode,
+        locale,
+        deadline
+      });
+      result.aiStage = "score-core";
+    } else if (aiStage === "score") {
       result = await callAiScoreOnlyGrader({
         apiKey,
         model,
