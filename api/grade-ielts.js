@@ -259,7 +259,7 @@ function buildScoreCorePrompt(body, signals) {
     `Local scoring signals for calibration only, not local scoring: ${JSON.stringify(signals)}.` ,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"candidateBandsConsidered\":[...],\"selectedBand\":number,\"positiveEvidence\":[...],\"limitingEvidence\":[...],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{...},\"midBandGate\":{...},\"highBandGate\":{...},\"scoreProfileGate\":{...}},\"taskSpecificGate\":{...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
+    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[...],\"summary\":\"one-sentence reason for this band\",\"summaryZh\":\"中文一句话原因\",\"whyThisBand\":\"why this exact band was selected\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why not 0.5 lower\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not 0.5 higher\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"one specific way to move 0.5 higher\",\"howToImproveZh\":\"中文\",\"positiveEvidence\":[...],\"positiveEvidenceZh\":[...],\"limitingEvidence\":[...],\"limitingEvidenceZh\":[...],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what it proves\",\"meaningZh\":\"中文\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"中文\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"midBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"highBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"scoreProfileGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"}},\"taskSpecificGate\":{...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
   ].join("\n\n");
 }
 
@@ -296,6 +296,88 @@ function collectScoreWarnings(criteria, signals) {
   return warnings;
 }
 
+
+function defaultImproveForCriterion(criterion) {
+  if (/Task Response|Task Achievement/i.test(criterion)) return "Develop each main point with a clearer reason and one specific example that directly answers the task.";
+  if (/Coherence/i.test(criterion)) return "Improve paragraph-internal progression and make sentence links clearer, not just using basic linking words.";
+  if (/Lexical/i.test(criterion)) return "Reduce spelling and word-form errors and use more accurate topic vocabulary and collocations.";
+  if (/Grammatical/i.test(criterion)) return "Control basic verb forms, articles, plurals, punctuation, and sentence boundaries before adding more complex structures.";
+  return "Strengthen the limiting evidence for this criterion to move 0.5 band higher.";
+}
+
+function normalizeCriterionCalibration(rawCalibration, criteria, task) {
+  const names = criterionNames(task);
+  const source = rawCalibration && typeof rawCalibration === "object" ? rawCalibration : {};
+  const out = {};
+  names.forEach((name) => {
+    const alt = name.replace("Task Achievement", "Task Response").replace("Task Response", "Task Achievement");
+    const item = source[name] || source[alt] || {};
+    const band = criteria[name];
+    const lower = Math.max(1, band - 0.5);
+    const higher = Math.min(9, band + 0.5);
+    const half = item.halfBandDecision || {};
+    const whyThis = String(item.whyThisBand || item.summary || half.whyExactBand || `Band ${band.toFixed(1)} was selected based on the criterion evidence.`).trim();
+    const whyLower = String(item.whyNotLower || half.whyAboveLowerBand || `Not Band ${lower.toFixed(1)} because the response shows enough relevant control for Band ${band.toFixed(1)}.`).trim();
+    const whyHigher = String(item.whyNotHigher || half.whyBelowUpperBand || `Not Band ${higher.toFixed(1)} because the limiting evidence prevents a stronger band.`).trim();
+    out[name] = {
+      ...item,
+      band,
+      selectedBand: band,
+      candidateBandsConsidered: Array.isArray(item.candidateBandsConsidered) && item.candidateBandsConsidered.length ? item.candidateBandsConsidered : [lower, band, higher],
+      summary: String(item.summary || whyThis).trim(),
+      summaryZh: String(item.summaryZh || "").trim(),
+      whyThisBand: whyThis,
+      whyThisBandZh: String(item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "").trim(),
+      whyNotLower: whyLower,
+      whyNotLowerZh: String(item.whyNotLowerZh || half.whyAboveLowerBandZh || "").trim(),
+      whyNotHigher: whyHigher,
+      whyNotHigherZh: String(item.whyNotHigherZh || half.whyBelowUpperBandZh || "").trim(),
+      howToImprove: String(item.howToImprove || item.improvementFocus || defaultImproveForCriterion(name)).trim(),
+      howToImproveZh: String(item.howToImproveZh || item.improvementFocusZh || "").trim(),
+      positiveEvidence: Array.isArray(item.positiveEvidence) ? item.positiveEvidence : [],
+      positiveEvidenceZh: Array.isArray(item.positiveEvidenceZh) ? item.positiveEvidenceZh : [],
+      limitingEvidence: Array.isArray(item.limitingEvidence) ? item.limitingEvidence : [],
+      limitingEvidenceZh: Array.isArray(item.limitingEvidenceZh) ? item.limitingEvidenceZh : [],
+      essayEvidence: Array.isArray(item.essayEvidence) ? item.essayEvidence : (Array.isArray(item.evidenceQuotes) ? item.evidenceQuotes : []),
+      halfBandDecision: {
+        whyAboveLowerBand: String(half.whyAboveLowerBand || whyLower).trim(),
+        whyAboveLowerBandZh: String(half.whyAboveLowerBandZh || item.whyNotLowerZh || "").trim(),
+        whyBelowUpperBand: String(half.whyBelowUpperBand || whyHigher).trim(),
+        whyBelowUpperBandZh: String(half.whyBelowUpperBandZh || item.whyNotHigherZh || "").trim(),
+        whyExactBand: String(half.whyExactBand || whyThis).trim(),
+        whyExactBandZh: String(half.whyExactBandZh || item.whyThisBandZh || item.summaryZh || "").trim()
+      }
+    };
+  });
+  return out;
+}
+
+function buildTaskProfile(body, signals) {
+  return signals.task === "Task 1"
+    ? { task: "Task 1", criterion: "Task Achievement", bulletPoints: signals.task1BulletPoints, letterStyle: body.letterStyle || "", purposeRequired: true }
+    : { task: "Task 2", criterion: "Task Response", questionType: signals.task2QuestionProfile?.questionType || body.questionType || "general_essay", requiredParts: signals.task2QuestionProfile?.requiredParts || [], positionRequired: Boolean(signals.task2QuestionProfile?.positionRequired) };
+}
+
+function gateStatus(reason, triggered = false) {
+  return { status: triggered ? "triggered" : "passed", reason };
+}
+
+function buildLocalGateReport(criteria, signals, existing = {}) {
+  const warnings = collectScoreWarnings(criteria, signals);
+  const profile = existing && typeof existing === "object" ? existing : {};
+  const names = criterionNames(signals.task);
+  const first = criteria[names[0]];
+  const cc = criteria["Coherence and Cohesion"];
+  const lr = criteria["Lexical Resource"];
+  const gra = criteria["Grammatical Range and Accuracy"];
+  return {
+    likelyOverallRange: profile.likelyOverallRange || (signals.rateabilityStatus === "clearly_rateable" ? "rateable; band depends on criterion evidence" : "limited or weakly rateable"),
+    lowBandGate: profile.lowBandGate || gateStatus(signals.rateabilityStatus === "not_rateable_or_severely_limited" ? "Low-band risk detected due to rateability signals." : "No severe low-band condition detected.", signals.rateabilityStatus === "not_rateable_or_severely_limited"),
+    midBandGate: profile.midBandGate || gateStatus("Mid-band gate checked: visible structure alone must not over-reward TR/TA or CC, and LR/GRA are checked against language-control signals.", Boolean((first >= 5.5 || cc >= 5.5 || lr >= 5.5 || gra >= 5) && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak" || signals.sentenceControl === "weak"))),
+    highBandGate: profile.highBandGate || gateStatus("High-band gate checked: no high band is accepted without strong evidence.", Object.values(criteria).some((x) => x >= 6.5)),
+    scoreProfileGate: profile.scoreProfileGate || gateStatus(warnings.length ? warnings.join(" ") : "No major score-profile instability detected.", warnings.length > 0)
+  };
+}
 function normalizeScoreCoreResult(ai, body, signals) {
   const task = body.task === "Task 1" ? "Task 1" : "Task 2";
   const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
@@ -305,7 +387,7 @@ function normalizeScoreCoreResult(ai, body, signals) {
   return {
     ok: true,
     aiStage: "score-core",
-    scoreSystemVersion: "clean-score-core-v1",
+    scoreSystemVersion: "clean-score-core-v2",
     disclaimer: DISCLAIMER,
     task,
     criteria,
@@ -328,8 +410,9 @@ function normalizeScoreCoreResult(ai, body, signals) {
       generatedAt: new Date().toISOString()
     },
     localSignals: signals,
-    criterionCalibration: ai.criterionCalibration || {},
-    scoreProfile: ai.scoreProfile || {},
+    taskProfile: buildTaskProfile(body, signals),
+    criterionCalibration: normalizeCriterionCalibration(ai.criterionCalibration || {}, criteria, task),
+    scoreProfile: buildLocalGateReport(criteria, signals, ai.scoreProfile || {}),
     taskSpecificGate: ai.taskSpecificGate || {},
     diagnosticSignals: ai.diagnosticSignals || {},
     examinerSummary: String(ai.examinerSummary || "").trim(),
@@ -349,6 +432,92 @@ async function scoreCore(body) {
   return normalizeScoreCoreResult(ai, body, signals);
 }
 
+
+function scorePrecheck(body) {
+  const signals = localSignals(body);
+  return {
+    ok: true,
+    aiStage: "score-precheck",
+    scoreSystemVersion: "clean-score-core-v2",
+    task: signals.task,
+    localSignals: signals,
+    taskProfile: buildTaskProfile(body, signals),
+    note: "Precheck only. No criterion band is assigned in this stage."
+  };
+}
+
+async function scoreCriteriaStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const prompt = buildScoreCorePrompt(body, signals);
+  const ai = await callDeepSeek([
+    { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score and explain the criterion bands; you do not provide full feedback sections." },
+    { role: "user", content: prompt }
+  ], 6200, 0);
+  const normalized = normalizeScoreCoreResult(ai, body, signals);
+  return { ...normalized, aiStage: "score-criteria", scoreCoreMeta: { ...normalized.scoreCoreMeta, scoreFrozen: false, stage: "criteria" } };
+}
+
+function scoreGatesStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  const normalizedCalibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
+  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {});
+  const warnings = collectScoreWarnings(criteria, signals);
+  return {
+    ...current,
+    ok: true,
+    aiStage: "score-gates",
+    scoreSystemVersion: "clean-score-core-v2",
+    task: signals.task,
+    criteria,
+    finalCriteria: criteria,
+    localSignals: signals,
+    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    criterionCalibration: normalizedCalibration,
+    scoreProfile,
+    stabilityWarnings: warnings,
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFrozen: false, gatesChecked: true, stage: "gates" }
+  };
+}
+
+function scoreFinalizeStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  const { rawAverage, finalBand } = averageBand(criteria);
+  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {});
+  const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
+  return {
+    ...current,
+    ok: true,
+    aiStage: "score-finalize",
+    scoreSystemVersion: "clean-score-core-v2",
+    disclaimer: DISCLAIMER,
+    task: signals.task,
+    criteria,
+    finalCriteria: criteria,
+    rawAverage,
+    overallBand: finalBand,
+    localSignals: signals,
+    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    criterionCalibration: calibration,
+    scoreProfile,
+    stabilityWarnings: collectScoreWarnings(criteria, signals),
+    scoreCalculation: {
+      mode: signals.task === "Task 1" ? "task1_gt_letter_engine" : "task2_essay_practice_engine",
+      formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
+      criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
+      rawAverage,
+      finalBand,
+      localScoreChanged: false,
+      localScoreChangeExplanation: "No. The server validates structure and averages the four AI-returned criterion bands."
+    },
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
+    localScoreChanged: false
+  };
+}
 function buildRevisionPrompt(body) {
   const frozen = body.currentResult || body.frozenScore || {};
   return [
@@ -383,9 +552,14 @@ async function handleRequest(req, res) {
   if (req.method === "OPTIONS") return sendJson(req, res, 204, {});
   if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   const body = await readJsonBody(req);
-  const stage = String(body.aiStage || body.stage || "score-core").toLowerCase();
+  const stage = String(body.aiStage || body.stage || "score-precheck").toLowerCase();
   if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));
-  return sendJson(req, res, 200, await scoreCore(body));
+  if (stage === "score-precheck") return sendJson(req, res, 200, scorePrecheck(body));
+  if (stage === "score-criteria") return sendJson(req, res, 200, await scoreCriteriaStage(body));
+  if (stage === "score-gates") return sendJson(req, res, 200, scoreGatesStage(body));
+  if (stage === "score-finalize") return sendJson(req, res, 200, scoreFinalizeStage(body));
+  if (stage === "score-core") return sendJson(req, res, 200, await scoreCore(body));
+  return sendJson(req, res, 400, { ok: false, error: `Unsupported clean scoring stage: ${stage}` });
 }
 
 module.exports = async function handler(req, res) {

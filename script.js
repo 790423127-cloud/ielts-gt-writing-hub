@@ -242,6 +242,133 @@
     return data;
   }
 
+
+  function injectScoreStyles() {
+    if ($("scoreUiStyles")) return;
+    const style = document.createElement("style");
+    style.id = "scoreUiStyles";
+    style.textContent = `
+      .score-flow-note { border: 1px solid var(--border, #d7e2ea); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.65); margin: 12px 0; }
+      .criterion-card-grid { display: grid; gap: 14px; margin: 14px 0; }
+      .criterion-score-card { border: 1px solid var(--border, #d7e2ea); border-radius: 16px; background: var(--card, #fff); overflow: hidden; box-shadow: 0 1px 0 rgba(15,23,42,.03); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+      .criterion-score-card:hover { border-color: rgba(15,118,110,.35); box-shadow: 0 10px 24px rgba(15,23,42,.06); }
+      .criterion-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--border, #d7e2ea); background: rgba(248,250,252,.7); }
+      .criterion-title { font-weight: 800; font-size: 1.05rem; color: var(--text, #122033); }
+      .criterion-band-pill { font-weight: 900; border-radius: 999px; padding: 8px 13px; background: rgba(15,118,110,.12); color: var(--teal, #0f766e); white-space: nowrap; }
+      .criterion-toggle { width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--border, #bfd1de); background: transparent; font-weight: 900; font-size: 1.1rem; cursor: pointer; color: var(--teal, #0f766e); }
+      .criterion-card-body { padding: 16px 18px 18px; }
+      .criterion-card-body.hidden { display: none; }
+      .criterion-quick-grid { display: grid; gap: 12px; }
+      .criterion-quick-row { border-left: 4px solid rgba(15,118,110,.7); padding: 10px 12px; border-radius: 10px; background: rgba(15,118,110,.055); }
+      .criterion-quick-row h5 { margin: 0 0 6px; font-size: .96rem; color: var(--text, #122033); }
+      .criterion-quick-row p { margin: 0; line-height: 1.65; }
+      .score-translate-btn { margin-left: 8px; border: 1px solid var(--border, #bfd1de); border-radius: 999px; padding: 5px 11px; background: transparent; cursor: pointer; font-size: .88rem; white-space: nowrap; }
+      .score-translation { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(224,242,241,.7); color: var(--muted, #5b7082); line-height: 1.6; }
+      .hidden-score-translation { display: none; }
+      .score-detail-card { margin-top: 14px; border: 1px solid var(--border, #d7e2ea); border-radius: 14px; overflow: hidden; }
+      .score-detail-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 15px; border: 0; background: rgba(248,250,252,.7); cursor: pointer; text-align: left; font-weight: 800; color: var(--text, #122033); }
+      .score-detail-body { padding: 14px 16px; border-top: 1px solid var(--border, #d7e2ea); }
+      .score-detail-body.hidden { display: none; }
+      .evidence-grid { display: grid; gap: 12px; margin-top: 8px; }
+      .evidence-box { border: 1px solid var(--border, #d7e2ea); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.6); }
+      .evidence-box h5 { margin: 0 0 8px; }
+      .quote-evidence { margin: 8px 0; padding: 9px 11px; border-left: 4px solid rgba(15,118,110,.55); background: rgba(15,118,110,.045); border-radius: 8px; }
+      .score-gate-grid { display: grid; gap: 10px; margin-top: 10px; }
+      .score-gate-item { border: 1px solid var(--border, #d7e2ea); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.62); }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function translationButton(zh, label = "中文解释") {
+    const id = `scoreZh_${Math.random().toString(36).slice(2, 10)}`;
+    return `<button class="score-translate-btn" type="button" data-score-translation-target="${id}">${escapeHtml(label)}</button><div id="${id}" class="score-translation hidden-score-translation">${escapeHtml(zh || "中文解释暂缺。")}</div>`;
+  }
+
+  function arr(value) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (value === undefined || value === null || value === "") return [];
+    return [String(value)];
+  }
+
+  function nearestHalfBand(value, direction) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "-";
+    const out = direction === "lower" ? Math.max(1, n - 0.5) : Math.min(9, n + 0.5);
+    return formatBand(out);
+  }
+
+  function criterionItem(result, criterion) {
+    const cal = result.criterionCalibration || result.criterionExplanations || {};
+    const direct = cal[criterion] || {};
+    const altName = criterion.replace("Task Response", "Task Achievement").replace("Task Achievement", "Task Response");
+    return direct && Object.keys(direct).length ? direct : (cal[altName] || {});
+  }
+
+  function firstText(...items) {
+    for (const item of items) {
+      if (typeof item === "string" && item.trim()) return item.trim();
+      if (Array.isArray(item) && item.filter(Boolean).length) return String(item.filter(Boolean)[0]).trim();
+    }
+    return "";
+  }
+
+  function fallbackImprove(criterion, band) {
+    if (/Task Response|Task Achievement/i.test(criterion)) return "Develop each main point with a clearer reason and one specific example that directly answers the task.";
+    if (/Coherence/i.test(criterion)) return "Make each paragraph develop one clear idea and improve sentence-to-sentence progression, not only basic linking words.";
+    if (/Lexical/i.test(criterion)) return "Reduce spelling and word-form errors, use more accurate topic vocabulary, and avoid awkward collocations.";
+    if (/Grammatical/i.test(criterion)) return "Control basic verb forms, articles, plurals, and sentence boundaries before adding more complex structures.";
+    return `To move above Band ${formatBand(band)}, strengthen the limiting areas identified in this criterion.`;
+  }
+
+  function evidenceListHtml(items, zhItems = []) {
+    const list = arr(items);
+    if (!list.length) return `<p class="muted">未返回具体证据。</p>`;
+    return `<ul>${list.map((x, i) => `<li>${escapeHtml(x)}${translationButton(zhItems?.[i] || "")}</li>`).join("")}</ul>`;
+  }
+
+  function essayEvidenceHtml(items) {
+    const list = arr(items);
+    if (!list.length) return `<p class="muted">暂未返回原文证据。</p>`;
+    return list.map((item) => {
+      if (typeof item === "string") return `<div class="quote-evidence">${escapeHtml(item)}</div>`;
+      const quote = item.quote || item.text || item.original || "";
+      const meaning = item.meaning || item.explanation || item.evidence || "";
+      const zh = item.meaningZh || item.explanationZh || item.zh || "";
+      return `<div class="quote-evidence"><strong>${escapeHtml(quote || "原文片段")}</strong>${meaning ? ` → ${escapeHtml(meaning)}${translationButton(zh)}` : ""}</div>`;
+    }).join("");
+  }
+
+  function bindScoreUiInteractions() {
+    if (!els.gradingResults || els.gradingResults.dataset.scoreUiBound === "true") return;
+    els.gradingResults.dataset.scoreUiBound = "true";
+    els.gradingResults.addEventListener("click", (event) => {
+      const translateBtn = event.target.closest("[data-score-translation-target]");
+      if (translateBtn) {
+        const target = document.getElementById(translateBtn.dataset.scoreTranslationTarget);
+        if (target) {
+          const hidden = target.classList.toggle("hidden-score-translation");
+          translateBtn.textContent = hidden ? "中文解释" : "收起中文";
+        }
+      }
+      const cardToggle = event.target.closest("[data-criterion-toggle]");
+      if (cardToggle) {
+        const target = document.getElementById(cardToggle.dataset.criterionToggle);
+        if (target) {
+          const hidden = target.classList.toggle("hidden");
+          cardToggle.textContent = hidden ? "+" : "-";
+        }
+      }
+      const detailToggle = event.target.closest("[data-score-detail-toggle]");
+      if (detailToggle) {
+        const target = document.getElementById(detailToggle.dataset.scoreDetailToggle);
+        if (target) {
+          const hidden = target.classList.toggle("hidden");
+          detailToggle.querySelector("span:last-child").textContent = hidden ? "+" : "-";
+        }
+      }
+    });
+  }
+
   function renderCriteriaRows(result) {
     const criteria = result.finalCriteria || result.criteria || {};
     const rows = Object.entries(criteria).map(([criterion, band]) => `<div class="score-calculation-row"><span>${escapeHtml(criterion)}</span><strong>Band ${escapeHtml(formatBand(band))}</strong></div>`).join("");
@@ -249,41 +376,92 @@
   }
 
   function renderScoreCalibration(result = {}) {
-    const cal = result.criterionCalibration || {};
-    const entries = Object.entries(cal);
-    if (!entries.length && !result.scoreProfile && !result.localSignals) return "";
-    const criterionHtml = entries.map(([name, item]) => {
-      const half = item?.halfBandDecision || {};
-      return `<details class="score-collapse"><summary>${escapeHtml(name)} 半分判断</summary><div class="score-collapse-body">
-        <p><strong>候选分：</strong>${escapeHtml((item?.candidateBandsConsidered || []).join(" / ") || "未返回")}</p>
-        <p><strong>选择：</strong>Band ${escapeHtml(formatBand(item?.selectedBand))}</p>
-        <p><strong>为什么高于低一档：</strong>${escapeHtml(half.whyAboveLowerBand || "未返回")}</p>
-        <p><strong>为什么低于高一档：</strong>${escapeHtml(half.whyBelowUpperBand || "未返回")}</p>
-        <p><strong>为什么刚好这个分：</strong>${escapeHtml(half.whyExactBand || "未返回")}</p>
-        <div><strong>正面证据：</strong>${listHtml(item?.positiveEvidence || [])}</div>
-        <div><strong>限制证据：</strong>${listHtml(item?.limitingEvidence || [])}</div>
-      </div></details>`;
-    }).join("");
+    const profile = result.scoreProfile || {};
     const signals = result.localSignals || {};
-    return `<section class="grading-section">
-      <h4>评分校准报告 / Clean Score Core</h4>
-      <p><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v1")}</p>
-      <p><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</p>
-      <p><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</p>
-      ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}</p>` : ""}
-      ${result.examinerSummaryZh ? `<p><strong>中文摘要：</strong>${escapeHtml(result.examinerSummaryZh)}</p>` : ""}
-      ${result.stabilityWarnings?.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(result.stabilityWarnings)}</div>` : ""}
-      ${criterionHtml}
+    const warnings = arr(result.stabilityWarnings);
+    const gates = [
+      ["Low-band check", profile.lowBandGate],
+      ["Mid-band check", profile.midBandGate],
+      ["High-band check", profile.highBandGate],
+      ["Score-profile check", profile.scoreProfileGate]
+    ];
+    return `<section class="grading-section score-calibration-report">
+      <h4>评分校准报告 / Score Calibration Report</h4>
+      <div class="score-gate-grid">
+        <div class="score-gate-item"><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v2")}</div>
+        <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
+        <div class="score-gate-item"><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</div>
+      </div>
+      ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
+      <div class="score-gate-grid">
+        ${gates.map(([label, gate]) => `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "not_reported")}<br><span class="muted">${escapeHtml(gate?.reason || gate?.explanation || gate?.note || "No detailed gate explanation returned.")}</span></div>`).join("")}
+      </div>
+      ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}
+    </section>`;
+  }
+  function renderCriterionCards(result = {}) {
+    const criteria = result.finalCriteria || result.criteria || {};
+    const entries = Object.entries(criteria);
+    if (!entries.length) return `<section class="grading-section"><p class="muted">AI 没有返回完整四项分。</p></section>`;
+    return `<section class="criterion-card-grid" aria-label="四项评分说明">
+      ${entries.map(([criterion, band], index) => {
+        const item = criterionItem(result, criterion);
+        const half = item.halfBandDecision || {};
+        const cardId = `criterionCard_${index}_${Math.random().toString(36).slice(2, 8)}`;
+        const detailId = `criterionDetail_${index}_${Math.random().toString(36).slice(2, 8)}`;
+        const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `This criterion was estimated at Band ${formatBand(band)} based on the examiner evidence.`;
+        const whyThisZh = item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "";
+        const whyLower = firstText(item.whyNotLower, half.whyAboveLowerBand) || `Not Band ${nearestHalfBand(band, "lower")} because the response shows enough relevant control for Band ${formatBand(band)}.`;
+        const whyLowerZh = item.whyNotLowerZh || half.whyAboveLowerBandZh || "";
+        const whyHigher = firstText(item.whyNotHigher, half.whyBelowUpperBand) || `Not Band ${nearestHalfBand(band, "higher")} because the limiting evidence prevents a stronger band.`;
+        const whyHigherZh = item.whyNotHigherZh || half.whyBelowUpperBandZh || "";
+        const improve = firstText(item.howToImprove, item.improvementFocus) || fallbackImprove(criterion, band);
+        const improveZh = item.howToImproveZh || item.improvementFocusZh || "";
+        return `<article class="criterion-score-card">
+          <div class="criterion-card-header">
+            <div class="criterion-title">${escapeHtml(criterion)}</div>
+            <div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div>
+            <button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">-</button>
+          </div>
+          <div class="criterion-card-body" id="${cardId}">
+            <div class="criterion-quick-grid">
+              <div class="criterion-quick-row"><h5>为什么是这个分</h5><p>${escapeHtml(whyThis)}${translationButton(whyThisZh)}</p></div>
+              <div class="criterion-quick-row"><h5>为什么不是 Band ${escapeHtml(nearestHalfBand(band, "lower"))}</h5><p>${escapeHtml(whyLower)}${translationButton(whyLowerZh)}</p></div>
+              <div class="criterion-quick-row"><h5>为什么不是 Band ${escapeHtml(nearestHalfBand(band, "higher"))}</h5><p>${escapeHtml(whyHigher)}${translationButton(whyHigherZh)}</p></div>
+              <div class="criterion-quick-row"><h5>怎么提升</h5><p>${escapeHtml(improve)}${translationButton(improveZh)}</p></div>
+            </div>
+            <div class="score-detail-card">
+              <button class="score-detail-toggle" type="button" data-score-detail-toggle="${detailId}"><span>详细证据 / Evidence details</span><span>+</span></button>
+              <div id="${detailId}" class="score-detail-body hidden">
+                <div class="evidence-grid">
+                  <div class="evidence-box"><h5>支持这个分数的证据</h5>${evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh)}</div>
+                  <div class="evidence-box"><h5>限制更高分的证据</h5>${evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh)}</div>
+                  <div class="evidence-box"><h5>原文证据 / Evidence from the essay</h5>${essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes)}</div>
+                  <div class="evidence-box"><h5>完整半分判断</h5>
+                    <p><strong>Candidate bands:</strong> ${escapeHtml(arr(item.candidateBandsConsidered).join(" / ") || `${nearestHalfBand(band, "lower")} / ${formatBand(band)} / ${nearestHalfBand(band, "higher")}`)}</p>
+                    <p><strong>Why above lower band:</strong> ${escapeHtml(half.whyAboveLowerBand || whyLower)}${translationButton(half.whyAboveLowerBandZh || whyLowerZh)}</p>
+                    <p><strong>Why below higher band:</strong> ${escapeHtml(half.whyBelowUpperBand || whyHigher)}${translationButton(half.whyBelowUpperBandZh || whyHigherZh)}</p>
+                    <p><strong>Why exact band:</strong> ${escapeHtml(half.whyExactBand || whyThis)}${translationButton(half.whyExactBandZh || whyThisZh)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>`;
+      }).join("")}
     </section>`;
   }
 
   function renderScoreResult(result = {}) {
     latestScoreResult = result;
+    injectScoreStyles();
+    bindScoreUiInteractions();
     const finalBand = Number(result.overallBand || result.scoreCalculation?.finalBand);
     const rawAverage = Number(result.rawAverage || result.scoreCalculation?.rawAverage);
     const disclaimer = result.disclaimer || "This is an AI-generated estimated score, not an official IELTS score.";
     const html = `
       <section class="overall-card"><h4>Overall estimated band</h4><div class="overall-score"><span>${escapeHtml(formatBand(finalBand))}</span><strong>Band ${escapeHtml(formatBand(finalBand))}</strong></div></section>
+      ${renderCriterionCards(result)}
       <section class="grading-section score-calculation-card">
         <h4>评分计算说明</h4>
         <p><strong>评分系统：</strong>${escapeHtml(result.scoreCalculation?.mode || result.scoreSystemVersion || "clean_score_core")}</p>
@@ -298,8 +476,8 @@
       ${renderScoreCalibration(result)}
       <p class="ai-disclaimer">${escapeHtml(disclaimer)}</p>`;
     if (els.gradingResults) els.gradingResults.innerHTML = html;
+    bindScoreUiInteractions();
   }
-
   function renderRevisionResult(result = {}) {
     if (!els.gradingResults) return;
     const modelOutline = String(result.modelAnswerOutline || "").trim();
@@ -355,10 +533,19 @@
     if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
     try {
-      setGradingStatus("第 1 步/1：AI 正在完成纯评分系统。", "loading");
-      if (els.gradingResults) els.gradingResults.innerHTML = `<p class="ai-note">正在进行纯评分。旧的打分链路和反馈链路已经从前端流程移除。</p>`;
-      const scoreResult = await postStage(endpoint, gradingPayload({ aiStage: "score-core" }));
-      renderScoreResult(scoreResult);
+      if (els.gradingResults) els.gradingResults.innerHTML = `<div class="score-flow-note">评分系统正在运行。反馈阶段已清除，当前只进行四步评分。</div>`;
+      const stages = [
+        ["score-precheck", "第 1 步/4：本地文本信号与任务类型检查"],
+        ["score-criteria", "第 2 步/4：AI 四项评分与半分判断"],
+        ["score-gates", "第 3 步/4：低/中/高分与分数组合校准"],
+        ["score-finalize", "第 4 步/4：机械平均并冻结最终分数"]
+      ];
+      let currentResult = null;
+      for (const [aiStage, label] of stages) {
+        setGradingStatus(`${label}。`, "loading");
+        currentResult = await postStage(endpoint, gradingPayload({ aiStage, currentResult }));
+      }
+      renderScoreResult(currentResult);
       setGradingStatus("评分完成。四项分数已冻结。作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       setGradingStatus(`评分失败：${error.message}`, "error");
@@ -392,6 +579,7 @@
   }
 
   function init() {
+    injectScoreStyles();
     initFilters();
     setupGradingModes();
     bind();
