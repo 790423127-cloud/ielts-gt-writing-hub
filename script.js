@@ -932,7 +932,63 @@
     if (lower.includes("mid")) return `中分核查：${raw || "检查文章是否只具备基础结构和基础回应。"} 这一项用于防止文章因为有段落或连接词就被过度提高。`;
     if (lower.includes("high")) return `高分核查：${raw || "检查是否具备高分所需的任务完成度、逻辑推进、词汇灵活度和语法准确度。"} 如果没有 6.5 以上证据，高分门槛不适用。`;
     if (lower.includes("profile")) return `分数组合核查：${raw || "检查四项分数之间是否协调。"} 这一项用于判断 TR/CC/LR/GRA 的组合是否符合语言控制和任务完成情况。`;
+    if (lower.includes("bullet")) return `要点覆盖核查：${raw || "检查 Task 1 三个 bullet points 是否覆盖并展开。"}`;
+    if (lower.includes("purpose")) return `写信目的核查：${raw || "检查读者是否能清楚知道写信目的。"}`;
+    if (lower.includes("tone") || lower.includes("register")) return `语气核查：${raw || "检查 formal / semi-formal / informal 是否符合收信人和任务。"}`;
+    if (lower.includes("letter")) return `书信完整度核查：${raw || "检查开头、目的、主体信息、结尾和落款是否像完整信件。"}`;
+    if (lower.includes("word")) return `字数核查：${raw || "检查字数是否导致任务回应和展开证据不足。"}`;
+    if (lower.includes("band6")) return `6分准入核查：${raw || "检查是否有真实展开，而不只是有观点和段落。"}`;
+    if (lower.includes("depth")) return `回应深度核查：${raw || "检查是否回答所有题目要求，并有原因、解释和例子。"}`;
     return `评分校准说明：${raw || "AI 已完成这一项核查。"} `;
+  }
+
+
+  function taskSpecificGateLabel(key) {
+    const map = {
+      bulletCoverageGate: "Bullet coverage check",
+      purposeClarityGate: "Purpose clarity check",
+      toneRegisterGate: "Tone/register check",
+      letterCompletenessGate: "Letter completeness check",
+      wordCountGuard: "Word count guard",
+      highBandUnlockGate: "High-band unlock check",
+      taskResponseDepthGate: "Task response depth check",
+      band6AccessGate: "Band 6 access check",
+      lowBandGuard: "Low-band guard",
+      midBandCheck: "Mid-band check",
+      scoreProfileCheck: "Score-profile check"
+    };
+    return map[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+  }
+
+  function renderAnchorComparison(result = {}) {
+    const anchor = result.anchorComparison || result.anchorCalibration || {};
+    if (!anchor || typeof anchor !== "object" || Object.keys(anchor).length === 0) return "";
+    const body = `
+      <div class="score-gate-item anchor-comparison-card">
+        <strong>${escapeHtml(anchor.task || result.task || "Task")} Anchor Comparison</strong><br>
+        <span class="muted">${escapeHtml(anchor.anchorSystem || "0-9 anchor-calibrated scoring")}</span>
+      </div>
+      <div class="score-gate-grid">
+        <div class="score-gate-item"><strong>最接近分段：</strong>Band ${escapeHtml(anchor.closestAnchorBand ?? "-")}<br><span class="muted">${escapeHtml(anchor.closestAnchorProfile || "No anchor profile returned.")}</span>${translationButton(anchor.closestAnchorProfileZh || "")}</div>
+        <div class="score-gate-item"><strong>为什么接近这个分段：</strong><br><span class="muted">${escapeHtml(anchor.whyCloserToThisBand || "No explanation returned.")}</span>${translationButton(anchor.whyCloserToThisBandZh || "")}</div>
+        <div class="score-gate-item"><strong>为什么不是低一档 Band ${escapeHtml(anchor.lowerAnchorBand ?? "-")}：</strong><br><span class="muted">${escapeHtml(anchor.whyNotLowerAnchor || "No lower-anchor explanation returned.")}</span>${translationButton(anchor.whyNotLowerAnchorZh || "")}</div>
+        <div class="score-gate-item"><strong>为什么不是高一档 Band ${escapeHtml(anchor.higherAnchorBand ?? "-")}：</strong><br><span class="muted">${escapeHtml(anchor.whyNotHigherAnchor || "No higher-anchor explanation returned.")}</span>${translationButton(anchor.whyNotHigherAnchorZh || "")}</div>
+      </div>`;
+    return `<div class="anchor-comparison-block">${body}</div>`;
+  }
+
+  function renderTaskSpecificGateReport(result = {}) {
+    const gates = result.taskSpecificGate || {};
+    if (!gates || typeof gates !== "object" || Object.keys(gates).length === 0) return "";
+    const rows = Object.entries(gates).map(([key, gate]) => {
+      const item = gate && typeof gate === "object" ? gate : { status: gate };
+      const reason = item.reason || item.explanation || item.note || "Gate checked.";
+      const zh = item.reasonZh || item.explanationZh || item.noteZh || gateChineseExplanation(key, item);
+      const evidence = arr(item.evidence).length ? `<div class="muted"><strong>Evidence:</strong> ${escapeHtml(arr(item.evidence).join("; "))}</div>` : "";
+      return `<div class="score-gate-item"><strong>${escapeHtml(taskSpecificGateLabel(key))}:</strong> ${escapeHtml(item.status || item.result || item.triggered || "checked")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}${evidence}</div>`;
+    }).join("");
+    const title = result.task === "Task 1" ? "Task 1 专属核查" : "Task 2 专属核查";
+    return `<div class="score-gate-item"><strong>${escapeHtml(title)}</strong><br><span class="muted">Task-aware gates are checked before the score is frozen.</span></div><div class="score-gate-grid">${rows}</div>`;
   }
 
   function renderScoreCalibration(result = {}) {
@@ -951,6 +1007,8 @@
         <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
         <div class="score-gate-item"><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</div>
       </div>
+      ${renderAnchorComparison(result)}
+      ${renderTaskSpecificGateReport(result)}
       ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
       <div class="score-gate-grid">
         ${gates.map(([label, gate]) => {
@@ -1068,7 +1126,7 @@
 
   function renderScoreCalibrationPlaceholder() {
     const body = `<div class="score-placeholder">
-      <p>AI 正在进行低分、中分、高分和分数组合核查。评分返回后，这里会显示 Low-band / Mid-band / High-band / Score-profile check。</p>
+      <p>AI 正在进行 0-9 分锚点对比、Task 1/Task 2 专属核查、低分/中分/高分和分数组合核查。评分返回后，这里会显示 Anchor comparison、Task-specific gates、Low-band / Mid-band / High-band / Score-profile check。</p>
     </div>`;
     return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report score-skeleton-section");
   }

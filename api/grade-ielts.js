@@ -10,7 +10,52 @@ const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const VALID_BANDS = Array.from({ length: 17 }, (_, i) => 1 + i * 0.5);
+const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
+const SCORE_SYSTEM_VERSION = "score-core-v5-anchor-calibrated";
+
+const TASK1_BAND_ANCHORS_0_TO_9 = [
+  { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
+  { band: 1, profile: "Only isolated words or memorised fragments; the purpose of the letter is almost impossible to identify.", zh: "只有零散单词或背诵片段，几乎看不出写信目的。" },
+  { band: 2, profile: "Very little relevant message; not recognisably a complete letter; bullet points are largely missing.", zh: "相关信息极少，不像完整书信，题目要点基本缺失。" },
+  { band: 3, profile: "Weak or unclear purpose; only minimal bullet coverage; very short or confused message; frequent errors block clarity.", zh: "目的很弱或不清楚，只覆盖极少要点，内容短或混乱，错误严重影响理解。" },
+  { band: 4, profile: "Basically related but covers only part of the bullet points; details are thin; tone and format are unstable; errors are frequent.", zh: "基本相关但只覆盖部分要点，细节少，语气和格式不稳定，错误频繁。" },
+  { band: 5, profile: "Purpose is generally clear and most bullet points are addressed, but development is simple, tone may be uneven, and language is limited or error-prone.", zh: "写信目的基本清楚，大部分要点有回应，但展开简单，语气不够稳定，语言有限且错误较多。" },
+  { band: 6, profile: "Clear purpose; all bullet points are covered with basic detail; tone is generally appropriate; organisation is clear; errors do not seriously reduce understanding.", zh: "目的清楚，三个要点都有基本细节，语气大体合适，结构清楚，错误不严重影响理解。" },
+  { band: 7, profile: "All bullet points are developed well; tone/register is natural; information is logically organised; vocabulary and grammar are flexible with only some errors.", zh: "所有要点展开较充分，语气自然，信息组织清楚，词汇和语法较灵活，错误较少。" },
+  { band: 8, profile: "Task requirements are fulfilled fully and naturally; tone, format, and information selection are very appropriate; language is flexible and accurate with rare minor slips.", zh: "任务要求完成充分自然，语气、格式和信息选择很合适，语言灵活准确，只有少量小错。" },
+  { band: 9, profile: "A fully natural, mature, precise GT letter; all bullet points are completely and appropriately developed; register is exact and errors are negligible.", zh: "完全自然成熟精准的书信，所有要点充分且得体，语气精准，错误极少。" }
+];
+
+const TASK2_BAND_ANCHORS_0_TO_9 = [
+  { band: 0, profile: "No assessable essay: blank, fully copied, non-English, or wholly unrelated to the prompt.", zh: "没有可评分作文：空白、完全照抄、非英文或完全跑题。" },
+  { band: 1, profile: "Only isolated words or memorised fragments; almost no position, development, or organisation.", zh: "只有零散词语或背诵片段，几乎没有立场、展开或结构。" },
+  { band: 2, profile: "A few relevant sentences may appear, but the response does not form a coherent answer to the task.", zh: "可能有少量相关句子，但不能形成完整任务回应。" },
+  { band: 3, profile: "Very limited position and content; weak or confused organisation; frequent errors make meaning difficult.", zh: "观点和内容极少，结构弱或混乱，错误频繁导致理解困难。" },
+  { band: 4, profile: "Basically related but response is very limited; ideas are simple and barely developed; organisation is weak and errors are frequent.", zh: "基本相关但回应很有限，观点简单且几乎没有展开，结构弱，错误频繁。" },
+  { band: 5, profile: "Clear position and basic structure, but ideas are general, examples are brief, reasoning is shallow, and language is simple or error-prone.", zh: "有明确立场和基本结构，但观点笼统、例子短、论证浅，语言简单或错误较多。" },
+  { band: 6, profile: "Clear response with basic but real development; examples or explanations are relevant; progression is generally clear; errors do not seriously reduce clarity.", zh: "回应清楚，有基本但真实的展开，例子或解释相关，结构基本清楚，错误不严重影响理解。" },
+  { band: 7, profile: "Well-organised essay with clear position, developed ideas, logical progression, flexible vocabulary, varied grammar, and relatively few errors.", zh: "结构清楚，立场明确，观点发展充分，逻辑推进明显，词汇灵活，语法有变化，错误较少。" },
+  { band: 8, profile: "Fully developed response with mature reasoning, natural cohesion, precise flexible vocabulary, strong grammatical control, and rare minor errors.", zh: "回应充分，论证成熟，衔接自然，词汇精准灵活，语法控制强，错误很少。" },
+  { band: 9, profile: "A fully responsive, sophisticated essay with natural, fluent argumentation, precise language, and negligible errors.", zh: "完全回应题目，论证自然深入，语言精准流畅，错误极少。" }
+];
+
+const TASK1_GATE_RULES = [
+  "Bullet Coverage Gate: identify each bullet as covered, partly_covered, or missing. Missing two bullets normally keeps Task Achievement at Band 4.0 or below; missing one bullet normally keeps it at Band 5.0 or below; three mentioned but thinly developed is usually 5.0-5.5; clear development of all bullets unlocks 6.0+.",
+  "Purpose Clarity Gate: unclear purpose limits TA; clear but simple purpose supports 5.0-6.0; clear natural purpose supports 6.0+.",
+  "Tone/Register Gate: formal, semi-formal, or informal tone must match the recipient and task. A clearly wrong tone limits TA and LR.",
+  "Letter Completeness Gate: check greeting/opening purpose/body/closing/request or thanks/sign-off. If it does not read like a letter, TA and CC cannot be high.",
+  "Task 1 Word Count Guard: below 80 words is usually severely limited; 80-120 often falls around 3.5-5.0 if bullets are thin; 120-150 is rateable but must be checked for missing detail; 150-190 is normal; 220+ is not penalised automatically but check repetition or irrelevance.",
+  "High-band Unlock Gate: if all bullets are fully and naturally developed, tone is precise, organisation is natural, and language is accurate/flexible, actively consider 7.5/8.0/8.5/9.0 rather than capping at 7.0."
+];
+
+const TASK2_GATE_RULES = [
+  "Task Response Depth Gate: check all prompt parts, clear position when required, relevant reasons, examples, explanation, and avoidance of generic unsupported claims.",
+  "Band 6 Access Rule: Band 6 needs real development, not just a position plus paragraphs. The essay needs clear response, basic explanation, some specific support, clear progression, and errors that do not often block clarity.",
+  "Low-band Guard: short or weak essays must not be lifted because they have paragraph labels. Under 100 words is often 0-3.5; 100-150 with minimal development often 3.5-4.5; 150-220 can enter 4.5-5.5 depending on development and language.",
+  "Mid-band Check: visible structure, Firstly/Secondly/In conclusion, or a stated opinion is not by itself enough for 5.5/6.0+.",
+  "High-band Unlock Gate: if the essay is fully responsive, mature, logically developed, cohesive, lexically precise, and grammatically controlled, actively consider 7.5/8.0/8.5/9.0 instead of defaulting to 7.0.",
+  "Score-profile Check: challenge all-equal criterion bands and large gaps between task/organisation and LR/GRA; explain why each criterion is where it is."
+];
 
 function isAllowedOrigin(origin) {
   if (!origin) return false;
@@ -185,7 +230,7 @@ function bandNumber(value) {
   const n = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n)) return null;
   const rounded = Math.round(n * 2) / 2;
-  if (rounded < 1 || rounded > 9) return null;
+  if (rounded < 0 || rounded > 9) return null;
   return rounded;
 }
 
@@ -236,30 +281,138 @@ async function callDeepSeek(messages, maxTokens = 5000, temperature = 0) {
   }
 }
 
+
+function anchorSetForTask(task) {
+  return task === "Task 1" ? TASK1_BAND_ANCHORS_0_TO_9 : TASK2_BAND_ANCHORS_0_TO_9;
+}
+
+function gateRulesForTask(task) {
+  return task === "Task 1" ? TASK1_GATE_RULES : TASK2_GATE_RULES;
+}
+
+function taskRuleLabel(task) {
+  return task === "Task 1" ? "GT Task 1 Letter anchor-calibrated rules" : "GT Task 2 Essay anchor-calibrated rules";
+}
+
+function defaultAnchorComparison(task, criteria = {}, signals = {}) {
+  const { finalBand } = averageBand(criteria);
+  const closest = Number.isFinite(finalBand) ? Math.max(0, Math.min(9, Math.round(finalBand))) : 0;
+  const lower = Math.max(0, closest - 1);
+  const higher = Math.min(9, closest + 1);
+  const anchor = anchorSetForTask(task).find((item) => item.band === closest) || anchorSetForTask(task)[0];
+  return {
+    task,
+    anchorSystem: taskRuleLabel(task),
+    closestAnchorBand: closest,
+    lowerAnchorBand: lower,
+    higherAnchorBand: higher,
+    closestAnchorProfile: anchor?.profile || "",
+    closestAnchorProfileZh: anchor?.zh || "",
+    whyCloserToThisBand: `The four criterion bands average near Band ${Number.isFinite(finalBand) ? finalBand.toFixed(1) : closest.toFixed(1)}, so this response is closest to the Band ${closest} anchor unless the examiner evidence says otherwise.`,
+    whyCloserToThisBandZh: `四项分数平均接近 Band ${Number.isFinite(finalBand) ? finalBand.toFixed(1) : closest.toFixed(1)}，因此默认最接近 ${closest} 分锚点，除非评分证据显示需要调整。`,
+    whyNotLowerAnchor: `The response shows enough relevant performance to avoid the Band ${lower} anchor unless severe task or language limits are present.`,
+    whyNotLowerAnchorZh: `文章仍有足够相关表现，因此不直接归入 ${lower} 分锚点，除非存在严重任务或语言限制。`,
+    whyNotHigherAnchor: `The limiting evidence prevents a stable Band ${higher} anchor unless the response shows stronger task fulfilment, development, cohesion, lexical precision, and grammar control.`,
+    whyNotHigherAnchorZh: `限制性证据使文章还不能稳定达到 ${higher} 分锚点，除非任务完成、展开、衔接、词汇精准度和语法控制更强。`
+  };
+}
+
+function normalizeAnchorComparison(raw, task, criteria, signals) {
+  const fallback = defaultAnchorComparison(task, criteria, signals);
+  const source = raw && typeof raw === "object" ? raw : {};
+  const closest = Number.isFinite(Number(source.closestAnchorBand)) ? Math.max(0, Math.min(9, Math.round(Number(source.closestAnchorBand)))) : fallback.closestAnchorBand;
+  const lower = Number.isFinite(Number(source.lowerAnchorBand ?? source.lowerAnchor)) ? Math.max(0, Math.min(9, Math.round(Number(source.lowerAnchorBand ?? source.lowerAnchor)))) : Math.max(0, closest - 1);
+  const higher = Number.isFinite(Number(source.higherAnchorBand ?? source.higherAnchor)) ? Math.max(0, Math.min(9, Math.round(Number(source.higherAnchorBand ?? source.higherAnchor)))) : Math.min(9, closest + 1);
+  const anchor = anchorSetForTask(task).find((item) => item.band === closest) || {};
+  return {
+    ...fallback,
+    ...source,
+    task,
+    anchorSystem: source.anchorSystem || fallback.anchorSystem,
+    closestAnchorBand: closest,
+    lowerAnchorBand: lower,
+    higherAnchorBand: higher,
+    closestAnchorProfile: String(source.closestAnchorProfile || anchor.profile || fallback.closestAnchorProfile || "").trim(),
+    closestAnchorProfileZh: String(source.closestAnchorProfileZh || anchor.zh || fallback.closestAnchorProfileZh || "").trim(),
+    whyCloserToThisBand: String(source.whyCloserToThisBand || source.anchorComparison || fallback.whyCloserToThisBand).trim(),
+    whyCloserToThisBandZh: String(source.whyCloserToThisBandZh || fallback.whyCloserToThisBandZh || "").trim(),
+    whyNotLowerAnchor: String(source.whyNotLowerAnchor || fallback.whyNotLowerAnchor).trim(),
+    whyNotLowerAnchorZh: String(source.whyNotLowerAnchorZh || fallback.whyNotLowerAnchorZh || "").trim(),
+    whyNotHigherAnchor: String(source.whyNotHigherAnchor || fallback.whyNotHigherAnchor).trim(),
+    whyNotHigherAnchorZh: String(source.whyNotHigherAnchorZh || fallback.whyNotHigherAnchorZh || "").trim()
+  };
+}
+
+function normalizeGate(raw, fallbackReason, triggered = false) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  return {
+    status: source.status || source.result || (triggered ? "triggered" : "passed"),
+    reason: String(source.reason || source.explanation || source.note || fallbackReason || "Gate checked.").trim(),
+    reasonZh: String(source.reasonZh || source.explanationZh || source.noteZh || "").trim(),
+    evidence: Array.isArray(source.evidence) ? source.evidence : []
+  };
+}
+
+function normalizeTaskSpecificGate(raw, signals, criteria = {}) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const task = signals.task;
+  const words = Number(signals.wordCount) || 0;
+  if (task === "Task 1") {
+    const bullets = Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints : [];
+    return {
+      bulletCoverageGate: normalizeGate(source.bulletCoverageGate || source.bulletCoverage, `Task 1 bullet coverage checked. Extracted bullets: ${bullets.length ? bullets.join(" | ") : "no explicit bullets extracted"}.`, false),
+      purposeClarityGate: normalizeGate(source.purposeClarityGate || source.purposeClarity, "Task 1 purpose clarity checked; the letter must make the reason for writing clear.", false),
+      toneRegisterGate: normalizeGate(source.toneRegisterGate || source.toneRegister, "Task 1 tone/register checked against recipient relationship and letter purpose.", false),
+      letterCompletenessGate: normalizeGate(source.letterCompletenessGate || source.letterCompleteness, "Letter completeness checked: opening, purpose, body details, closing/request/thanks and sign-off.", false),
+      wordCountGuard: normalizeGate(source.wordCountGuard, words < 150 ? `Task 1 has ${words} words, below the 150-word recommended minimum; judge whether detail is limited.` : `Task 1 word count ${words} is within or above the recommended minimum.`, words < 150),
+      highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, "High-band unlock checked: all bullets must be fully developed with natural tone and accurate flexible language for 7.5+.", Object.values(criteria).some((x) => Number(x) >= 7.5))
+    };
+  }
+  return {
+    taskResponseDepthGate: normalizeGate(source.taskResponseDepthGate || source.taskResponseDepth, "Task 2 response depth checked: all prompt parts, position, reasons, examples and explanations must be present.", false),
+    band6AccessGate: normalizeGate(source.band6AccessGate || source.band6Access, "Band 6 access checked: real development is required; visible structure alone is not enough.", false),
+    lowBandGuard: normalizeGate(source.lowBandGuard, words < 150 ? `Task 2 has ${words} words; low-band guard checks whether response and development are severely limited.` : "Low-band guard checked against rateability, relevance and development.", words < 150 || signals.rateabilityStatus === "not_rateable_or_severely_limited"),
+    midBandCheck: normalizeGate(source.midBandCheck || source.midBandGate, "Mid-band check applied: do not over-reward paragraphs, basic connectors, or a stated opinion without development.", false),
+    highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, "High-band unlock checked: mature response, full development, natural cohesion, precise lexis and strong grammar are needed for 7.5+.", Object.values(criteria).some((x) => Number(x) >= 7.5)),
+    scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", false)
+  };
+}
+
+function stringifyAnchorTable(task) {
+  return anchorSetForTask(task).map((item) => `Band ${item.band}: ${item.profile}`).join("\n");
+}
+
 function buildScoreCorePrompt(body, signals) {
   const task = signals.task;
   const names = criterionNames(task);
+  const anchorTable = stringifyAnchorTable(task);
+  const gateRules = gateRulesForTask(task).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
   const taskSpecific = task === "Task 1"
     ? `Task 1 GT letter checks: purpose clarity; all bullet points separately covered/partly/missing; functional detail; recipient relationship; tone/register; opening/closing/format. Extracted bullet points: ${JSON.stringify(signals.task1BulletPoints)}.`
     : `Task 2 essay checks: question type; all required parts; clear position when required; relevant development; reasons; examples; conclusion. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
 
   return [
     "You are a strict but fair IELTS General Training Writing examiner. Return JSON only.",
-    "Grade the submitted response on IELTS criterion bands from 1.0 to 9.0 in 0.5 increments. Do not prefer whole bands by default.",
-    "For every criterion, actively compare adjacent half bands. Use X.5 when performance clearly exceeds X.0 but does not consistently reach X+1.0. Give 4.5/5.5/6.5/7.5/8.5 when the evidence is genuinely between whole-band descriptors.",
+    `Use ${SCORE_SYSTEM_VERSION}. First route the script as ${task}. Do not use Task 2 essay logic for Task 1 letters or Task 1 letter logic for Task 2 essays.`,
+    "Grade IELTS Writing from Band 0.0 to Band 9.0. Use 0 only for no assessable answer / wholly unrelated / non-English / fully copied. Otherwise use 1.0 to 9.0 in 0.5 increments.",
+    "For every criterion, actively compare adjacent half bands. Use X.5 when performance clearly exceeds X.0 but does not consistently reach X+1.0. Do not prefer whole bands by default.",
     "Do not generate editing, language diagnostics, learning notes, revisions, or model answers in this scoring pass. This endpoint is for scoring only.",
     taskSpecific,
-    "Low-band gate: validate blank, extreme underlength, non-English/unreadable, no complete sentences, severe off-topic, Task 1 not a letter, or Task 2 not answering the task.",
-    "Mid-band gate: for likely Band 4.0-6.0 writing, do not over-reward visible structure. A position plus paragraphs is not enough for TR/TA 5.5+; basic paragraphing with Firstly/Secondly/In conclusion is not enough for CC 5.5+; spelling/word-form density must limit LR; frequent basic grammar errors must limit GRA.",
-    "High-band gate: any criterion 6.5+ requires strong, criterion-specific evidence: complete task fulfilment, natural progression, accurate flexible lexis, and accurate varied grammar. Do not award high bands for neat structure alone.",
-    "LR/GRA gates: if local signals show high spelling/word-form or weak lexical control, LR 5.5+ needs strong evidence. If local signals show high grammar density or weak sentence control, GRA 5.0+ needs strong evidence.",
+    `0-9 anchor benchmarks for this task:\n${anchorTable}`,
+    `Task-specific gates for this task:\n${gateRules}`,
+    "Anchor calibration requirement: before assigning final criterion bands, decide which 0-9 anchor the response is closest to. Explain why it is not the lower adjacent anchor and why it is not the higher adjacent anchor. This prevents low/mid writing being lifted by visible structure and prevents high-band writing being capped at 7.0.",
+    "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
+    "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
+    "Band 6 access rule: Band 6 requires real task fulfilment and development, not only paragraphing. If ideas are general, examples are brief, or frequent language errors reduce precision, stay at 5.0-5.5.",
+    "High-band unlock rule: if the response has full task fulfilment, developed ideas, natural progression, precise/flexible lexis, and strong grammar control, actively consider 7.5/8.0/8.5/9.0 rather than defaulting to 7.0.",
+    "LR/GRA gates: high spelling/word-form density must limit LR unless strong evidence overrides it. High grammar density or weak sentence control must limit GRA unless strong evidence overrides it.",
     "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
     "The server will average the four criterion bands and round to the nearest 0.5. Do not invent a separate overall band that conflicts with the four criteria.",
     `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
     `Local scoring signals for calibration only, not local scoring: ${JSON.stringify(signals)}.` ,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[...],\"summary\":\"one-sentence reason for this band\",\"summaryZh\":\"中文一句话原因\",\"whyThisBand\":\"why this exact band was selected\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why not 0.5 lower\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not 0.5 higher\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"one specific way to move 0.5 higher\",\"howToImproveZh\":\"中文\",\"positiveEvidence\":[...],\"positiveEvidenceZh\":[...],\"limitingEvidence\":[...],\"limitingEvidenceZh\":[...],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what it proves\",\"meaningZh\":\"中文\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"中文\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"midBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"highBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"},\"scoreProfileGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\"}},\"taskSpecificGate\":{...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
+    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"anchorComparison\":{\"anchorSystem\":\"Task 1 Letter anchors or Task 2 Essay anchors\",\"closestAnchorBand\":number,\"lowerAnchorBand\":number,\"higherAnchorBand\":number,\"closestAnchorProfile\":\"...\",\"closestAnchorProfileZh\":\"中文\",\"whyCloserToThisBand\":\"...\",\"whyCloserToThisBandZh\":\"中文\",\"whyNotLowerAnchor\":\"...\",\"whyNotLowerAnchorZh\":\"中文\",\"whyNotHigherAnchor\":\"...\",\"whyNotHigherAnchorZh\":\"中文\"},\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[...],\"summary\":\"one-sentence reason for this band\",\"summaryZh\":\"中文一句话原因\",\"whyThisBand\":\"why this exact band was selected\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why not 0.5 lower\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not 0.5 higher\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"one specific way to move 0.5 higher\",\"howToImproveZh\":\"中文\",\"positiveEvidence\":[...],\"positiveEvidenceZh\":[...],\"limitingEvidence\":[...],\"limitingEvidenceZh\":[...],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what it proves\",\"meaningZh\":\"中文\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"中文\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"midBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"highBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"scoreProfileGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"}},\"taskSpecificGate\":{...Task 1 gates or Task 2 gates from the listed gate rules, each with status/reason/reasonZh/evidence...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
   ].join("\n\n");
 }
 
@@ -288,6 +441,9 @@ function collectScoreWarnings(criteria, signals) {
   const { finalBand } = averageBand(criteria);
   const allSame = Object.values(criteria).every((x) => x === Object.values(criteria)[0]);
   if (allSame) warnings.push("All four criterion bands are identical; examiner evidence must justify this equality.");
+  if (signals.task === "Task 1" && signals.task1BulletPoints?.length && first >= 6 && signals.wordCount < 120) warnings.push("Task 1 TA is 6.0+ with low word count; bullet detail and letter completeness must justify this.");
+  if (signals.task === "Task 2" && first >= 6 && signals.wordCount < 220) warnings.push("Task 2 TR is 6.0+ with relatively low word count; real development must justify this.");
+  if (Object.values(criteria).some((x) => x === 0) && signals.rateabilityStatus !== "not_rateable_or_severely_limited") warnings.push("Band 0 criterion returned for a rateable response; this requires extreme evidence.");
   if (signals.rateabilityStatus === "clearly_rateable" && Object.values(criteria).some((x) => x <= 2)) warnings.push("Clearly rateable response received a Band 1/2 criterion; this would require unusually strong evidence.");
   if (signals.grammarErrorDensity === "high" && gra >= 5) warnings.push("GRA is 5.0+ while grammar error density is high; the examiner must justify this carefully.");
   if ((signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak") && lr >= 5.5) warnings.push("LR is 5.5+ while lexical/spelling signals are weak; the examiner must justify this carefully.");
@@ -354,8 +510,28 @@ function normalizeCriterionCalibration(rawCalibration, criteria, task) {
 
 function buildTaskProfile(body, signals) {
   return signals.task === "Task 1"
-    ? { task: "Task 1", criterion: "Task Achievement", bulletPoints: signals.task1BulletPoints, letterStyle: body.letterStyle || "", purposeRequired: true }
-    : { task: "Task 2", criterion: "Task Response", questionType: signals.task2QuestionProfile?.questionType || body.questionType || "general_essay", requiredParts: signals.task2QuestionProfile?.requiredParts || [], positionRequired: Boolean(signals.task2QuestionProfile?.positionRequired) };
+    ? {
+        task: "Task 1",
+        criterion: "Task Achievement",
+        scoringProfile: taskRuleLabel("Task 1"),
+        anchorBands: TASK1_BAND_ANCHORS_0_TO_9,
+        gateRules: TASK1_GATE_RULES,
+        bulletPoints: signals.task1BulletPoints,
+        letterStyle: body.letterStyle || "",
+        purposeRequired: true,
+        requiredMinimumWords: 150
+      }
+    : {
+        task: "Task 2",
+        criterion: "Task Response",
+        scoringProfile: taskRuleLabel("Task 2"),
+        anchorBands: TASK2_BAND_ANCHORS_0_TO_9,
+        gateRules: TASK2_GATE_RULES,
+        questionType: signals.task2QuestionProfile?.questionType || body.questionType || "general_essay",
+        requiredParts: signals.task2QuestionProfile?.requiredParts || [],
+        positionRequired: Boolean(signals.task2QuestionProfile?.positionRequired),
+        requiredMinimumWords: 250
+      };
 }
 
 function gateStatus(reason, triggered = false) {
@@ -387,7 +563,7 @@ function normalizeScoreCoreResult(ai, body, signals) {
   return {
     ok: true,
     aiStage: "score-core",
-    scoreSystemVersion: "clean-score-core-v2",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
     disclaimer: DISCLAIMER,
     task,
     criteria,
@@ -395,8 +571,8 @@ function normalizeScoreCoreResult(ai, body, signals) {
     rawAverage,
     overallBand: finalBand,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_engine" : "task2_essay_practice_engine",
-      formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
+      mode: task === "Task 1" ? "task1_gt_letter_anchor_engine_v5" : "task2_essay_anchor_engine_v5",
+      formula: "Task-aware 0-9 anchor calibration first; AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -407,13 +583,16 @@ function normalizeScoreCoreResult(ai, body, signals) {
       scoreFirst: true,
       scoreFrozen: true,
       adviceSystemRemoved: true,
+      anchorCalibrated: true,
+      taskAware: true,
       generatedAt: new Date().toISOString()
     },
     localSignals: signals,
     taskProfile: buildTaskProfile(body, signals),
+    anchorComparison: normalizeAnchorComparison(ai.anchorComparison || ai.anchorCalibration || {}, task, criteria, signals),
     criterionCalibration: normalizeCriterionCalibration(ai.criterionCalibration || {}, criteria, task),
     scoreProfile: buildLocalGateReport(criteria, signals, ai.scoreProfile || {}),
-    taskSpecificGate: ai.taskSpecificGate || {},
+    taskSpecificGate: normalizeTaskSpecificGate(ai.taskSpecificGate || {}, signals, criteria),
     diagnosticSignals: ai.diagnosticSignals || {},
     examinerSummary: String(ai.examinerSummary || "").trim(),
     examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),
@@ -438,7 +617,7 @@ function scorePrecheck(body) {
   return {
     ok: true,
     aiStage: "score-precheck",
-    scoreSystemVersion: "clean-score-core-v2",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
     task: signals.task,
     localSignals: signals,
     taskProfile: buildTaskProfile(body, signals),
@@ -469,14 +648,16 @@ function scoreGatesStage(body) {
     ...current,
     ok: true,
     aiStage: "score-gates",
-    scoreSystemVersion: "clean-score-core-v2",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
     task: signals.task,
     criteria,
     finalCriteria: criteria,
     localSignals: signals,
     taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    anchorComparison: normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals),
     criterionCalibration: normalizedCalibration,
     scoreProfile,
+    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria),
     stabilityWarnings: warnings,
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFrozen: false, gatesChecked: true, stage: "gates" }
   };
@@ -493,7 +674,7 @@ function scoreFinalizeStage(body) {
     ...current,
     ok: true,
     aiStage: "score-finalize",
-    scoreSystemVersion: "clean-score-core-v2",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
     disclaimer: DISCLAIMER,
     task: signals.task,
     criteria,
@@ -502,12 +683,14 @@ function scoreFinalizeStage(body) {
     overallBand: finalBand,
     localSignals: signals,
     taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    anchorComparison: normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals),
     criterionCalibration: calibration,
     scoreProfile,
+    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria),
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
-      mode: signals.task === "Task 1" ? "task1_gt_letter_engine" : "task2_essay_practice_engine",
-      formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_anchor_engine_v5" : "task2_essay_anchor_engine_v5",
+      formula: "Task-aware 0-9 anchor calibration first; AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
