@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-3-five-step-score-kernel-pipeline";
+const SCORE_SYSTEM_VERSION = "score-core-v7-4-regression-boundary-stabilized";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -197,6 +197,119 @@ function sentenceUnits(text) {
   return (cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).map((x) => x.trim()).filter(Boolean);
 }
 
+function distinctWordRatio(text) {
+  const words = String(text || "").toLowerCase().match(/[a-z][a-z'’-]*/g) || [];
+  if (!words.length) return 0;
+  return new Set(words).size / words.length;
+}
+
+function copiedPromptOverlapRatio(essay, prompt) {
+  const stop = new Set(["the","a","an","to","of","and","or","in","on","for","with","is","are","was","were","be","been","being","you","your","write","letter","essay","some","people","this","that","it","as","at","by","from"]);
+  const ew = new Set((String(essay || "").toLowerCase().match(/[a-z][a-z'’-]*/g) || []).filter((w) => !stop.has(w) && w.length > 2));
+  const pw = new Set((String(prompt || "").toLowerCase().match(/[a-z][a-z'’-]*/g) || []).filter((w) => !stop.has(w) && w.length > 2));
+  if (!ew.size) return 0;
+  let shared = 0;
+  ew.forEach((w) => { if (pw.has(w)) shared += 1; });
+  return shared / ew.size;
+}
+
+function detectHardZeroResponse(body = {}, signals = null) {
+  const essay = String(body.essay || "").trim();
+  const prompt = String(body.questionPrompt || body.promptText || "");
+  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = signals?.wordCount ?? countWords(essay);
+  const sentences = sentenceUnits(essay);
+  const totalTokens = (essay.match(/\S+/g) || []).length;
+  const englishTokens = (essay.match(/[A-Za-z][A-Za-z'’-]*/g) || []).length;
+  const englishRatio = totalTokens ? englishTokens / totalTokens : 0;
+  const lowered = essay.toLowerCase();
+  const noAnswerPattern = /\b(no answer|no letter|cannot write|can't write|i cannot write|i can not write|copied prompt only)\b/i.test(essay);
+  const nonEnglishShort = Boolean(essay && englishTokens === 0 && words === 0);
+  const onlyKeywords = words > 0 && words <= 8 && sentences.length <= 1 && distinctWordRatio(essay) <= 0.85;
+  const ultraShortNoSentence = words > 0 && words <= 2 && sentences.length <= 1;
+  const copiedLike = words <= 14 && copiedPromptOverlapRatio(essay, prompt) >= 0.75;
+  const meaninglessFragments = words <= 8 && /^(?:[a-z]+\s*){1,8}[.!?]?\s*$/i.test(essay) && !/\b(i|we|they|he|she|it|people|government|company|manager|friend)\s+(am|is|are|was|were|have|has|had|can|could|will|would|should|think|believe|want|need|buy|use|live|spend|write|ask|suggest|apologise|apologize|explain)\b/i.test(lowered);
+  if (!essay) return { triggered: true, reason: "blank_response", task, words };
+  if (noAnswerPattern) return { triggered: true, reason: "explicit_no_answer_or_copied_prompt_marker", task, words };
+  if (nonEnglishShort || englishRatio < 0.2) return { triggered: true, reason: "non_english_or_no_assessable_english", task, words, englishRatio: Number(englishRatio.toFixed(2)) };
+  if (copiedLike) return { triggered: true, reason: "copied_prompt_or_prompt_keyword_recycling", task, words, overlapRatio: Number(copiedPromptOverlapRatio(essay, prompt).toFixed(2)) };
+  if (ultraShortNoSentence || onlyKeywords) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
+  return { triggered: false, reason: "assessable_or_rateable", task, words };
+}
+
+function makeCriteriaWithBand(task, band) {
+  const out = {};
+  criterionNames(task).forEach((name) => { out[name] = band; });
+  return out;
+}
+
+function buildHardZeroScore(body = {}, signals = null, gate = null) {
+  const local = signals || localSignals(body);
+  const hardZero = gate || detectHardZeroResponse(body, local);
+  const criteria = makeCriteriaWithBand(local.task, 0);
+  const anchorComparison = normalizeAnchorComparison({
+    anchorSystem: `${taskRuleLabel(local.task)} local hard-zero gate`,
+    closestAnchorBand: 0,
+    lowerAnchorBand: 0,
+    higherAnchorBand: 1,
+    candidateRange: "0",
+    closestAnchorProfile: local.task === "Task 1" ? TASK1_BAND_ANCHORS_0_TO_9[0].profile : TASK2_BAND_ANCHORS_0_TO_9[0].profile,
+    closestAnchorProfileZh: local.task === "Task 1" ? TASK1_BAND_ANCHORS_0_TO_9[0].zh : TASK2_BAND_ANCHORS_0_TO_9[0].zh,
+    whyCloserToThisBand: `Hard-zero gate: ${hardZero.reason}.`,
+    whyNotLowerAnchor: "Band 0 is the lowest possible IELTS band.",
+    whyNotHigherAnchor: "There is no assessable response beyond blank/copied/non-English/keyword fragments."
+  }, local.task, criteria, local);
+  const boundaryAudit = {
+    version: "strict-boundary-audit-v7-4-hard-zero",
+    localScoringApplied: true,
+    localParticipation: "Hard-zero only: the server assigns Band 0 only for blank, non-English, copied-prompt, no-answer, or keyword-fragment responses before AI scoring.",
+    status: "passed",
+    reviewRequired: false,
+    reviewReasons: [],
+    wordCountBoundary: getWordCountBoundaryProfile(local.task, local.wordCount),
+    lowBandBoundary: { status: "hard_zero", suggestedRange: "Band 0", scoreTooHigh: false, reason: hardZero.reason },
+    highBandBoundary: { status: "not_applicable", allFourSeven: false, highCandidate: false, reason: "Hard-zero response." },
+    anchorAudit: { status: "passed", anchorMissing: false, anchorConflict: false, closestAnchorBand: 0, finalBand: 0 },
+    scoreProfileAudit: { status: "passed", allCriteriaSame: true, warnings: [] },
+    hardZeroGate: hardZero,
+    rawAverage: 0,
+    finalBand: 0
+  };
+  const result = {
+    ok: true,
+    aiStage: "score-core",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
+    disclaimer: DISCLAIMER,
+    task: local.task,
+    criteria,
+    finalCriteria: criteria,
+    rawAverage: 0,
+    overallBand: 0,
+    localSignals: { ...local, hardZeroGate: hardZero, rateabilityStatus: "not_rateable_or_severely_limited" },
+    taskProfile: buildTaskProfile(body, local),
+    anchorComparison,
+    criterionCalibration: compactCriterionCalibration({ reasonCodes: {} }, criteria, local.task),
+    scoreProfile: {},
+    taskSpecificGate: normalizeTaskSpecificGate({}, local, criteria, anchorComparison, {}),
+    boundaryAudit,
+    stabilityWarnings: [],
+    scoreCalculation: {
+      mode: local.task === "Task 1" ? "task1_gt_letter_hard_zero_v7_4" : "task2_essay_hard_zero_v7_4",
+      formula: "Hard-zero gate before AI scoring for blank, copied, non-English, no-answer or keyword-fragment responses.",
+      criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
+      rawAverage: 0,
+      finalBand: 0,
+      localScoreChanged: true,
+      localScoreChangeExplanation: `Hard-zero gate triggered: ${hardZero.reason}.`
+    },
+    scoreCoreMeta: { scoreFirst: true, scoreFrozen: true, hardZeroGate: true, feedbackAfterFreeze: false, generatedAt: new Date().toISOString(), stage: "hard-zero" },
+    feedbackStatus: { status: "skipped_hard_zero", scoreChanged: false, note: "No detailed AI feedback generated for a non-assessable hard-zero response." },
+    localScoreChanged: true
+  };
+  return attachSinglePassProgress(result, "done");
+}
+
+
 function cleanRequirement(value) {
   return String(value || "")
     .replace(/^[-*•·]\s+/, "")
@@ -295,12 +408,13 @@ function localSignals(body) {
   const sentenceControl = grammarErrorDensity === "high" ? "weak" : grammarErrorDensity === "moderate" ? "basic" : "adequate_or_better";
   const lexicalControl = spellingErrorDensity === "high" || lexicalNaturalnessRisk === "high" ? "weak" : spellingErrorDensity === "moderate" || lexicalNaturalnessRisk === "moderate" ? "basic" : "adequate_or_better";
 
+  const hardZeroGate = detectHardZeroResponse(body, { task, wordCount: words });
   let rateabilityStatus = "weak_but_rateable";
-  if (!essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
+  if (hardZeroGate.triggered || !essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
   else if (words >= (task === "Task 1" ? 120 : 180) && paragraphs >= 2 && sentences.length >= 5) rateabilityStatus = "clearly_rateable";
 
   return {
-    task, wordCount: words, paragraphCount: paragraphs, sentenceCount: sentences.length, englishRatio: Number(englishRatio.toFixed(2)), rateabilityStatus,
+    task, wordCount: words, paragraphCount: paragraphs, sentenceCount: sentences.length, englishRatio: Number(englishRatio.toFixed(2)), rateabilityStatus, hardZeroGate,
     recommendedMinimum: task === "Task 1" ? 150 : 250,
     spellingIssueCount, spellingDensityPer100Words: spellingDensity, spellingErrorDensity, spellingExamples: spellingHits.slice(0, 10),
     grammarIssueSignalCount: grammarIssueCount, grammarDensityPer100Words: grammarDensity, grammarErrorDensity, grammarIssueSignals: grammarHits.slice(0, 10),
@@ -517,20 +631,22 @@ function normalizeGate(raw, fallbackReason, triggered = false) {
 function getWordCountBoundaryProfile(task, words) {
   const w = Number(words) || 0;
   if (task === "Task 1") {
-    if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0-1", lower: 0, upper: 1, severity: "extreme", reason: "Task 1 is blank or has no countable words." };
-    if (w < 50) return { triggered: true, category: "minimal_letter", suggestedRange: "Band 1.0-2.5", lower: 1, upper: 2.5, severity: "extreme", reason: `Task 1 has only ${w} words; there is not enough letter content to cover purpose, bullets and tone.` };
-    if (w < 80) return { triggered: true, category: "very_short_letter", suggestedRange: "Band 2.5-3.5", lower: 2.5, upper: 3.5, severity: "severe", reason: `Task 1 has ${w} words; bullet coverage and letter completeness are likely severely limited.` };
-    if (w < 120) return { triggered: true, category: "short_letter_limited_detail", suggestedRange: "Band 3.5-5.0", lower: 3.5, upper: 5, severity: "high", reason: `Task 1 has ${w} words; it may be rateable but details and bullet development must be audited.` };
-    if (w < 150) return { triggered: true, category: "below_recommended_letter_length", suggestedRange: "Band 4.5-6.0 depending on bullet detail", lower: 4.5, upper: 6, severity: "moderate", reason: `Task 1 has ${w} words, below the recommended 150; check whether all bullets are still developed.` };
+    if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0", lower: 0, upper: 0, severity: "extreme", reason: "Task 1 is blank or has no countable words." };
+    if (w < 20) return { triggered: true, category: "minimal_letter", suggestedRange: "Band 0-2.0", lower: 0, upper: 2, severity: "extreme", reason: `Task 1 has only ${w} words; only isolated words/fragments can normally be assessed.` };
+    if (w < 50) return { triggered: true, category: "very_short_letter", suggestedRange: "Band 1.5-3.5", lower: 1.5, upper: 3.5, severity: "severe", reason: `Task 1 has ${w} words; letter purpose and bullet coverage are likely severely limited.` };
+    if (w < 80) return { triggered: true, category: "short_letter_limited_detail", suggestedRange: "Band 3.0-4.5, or 5.0 only if most bullets are clear", lower: 3, upper: 5, severity: "high", reason: `Task 1 has ${w} words; it is short, but a concise letter may still be rateable if bullets are clear.` };
+    if (w < 120) return { triggered: true, category: "below_recommended_letter_length", suggestedRange: "Band 4.0-6.0 depending on bullet detail", lower: 4, upper: 6, severity: "moderate", reason: `Task 1 has ${w} words, below 150; check bullet development, not word count alone.` };
+    if (w < 150) return { triggered: true, category: "slightly_below_recommended_letter_length", suggestedRange: "Band 5.0-7.0 depending on task fulfilment", lower: 5, upper: 7, severity: "watch", reason: `Task 1 has ${w} words; it can still score well if all bullets are naturally covered.` };
     return { triggered: false, category: "normal_letter_length", suggestedRange: "No word-count low-band boundary", lower: 0, upper: 9, severity: "none", reason: `Task 1 word count ${w} is in or above the normal range.` };
   }
-  if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0-1", lower: 0, upper: 1, severity: "extreme", reason: "Task 2 is blank or has no countable words." };
-  if (w < 50) return { triggered: true, category: "minimal_response", suggestedRange: "Band 1.0-2.5", lower: 1, upper: 2.5, severity: "extreme", reason: `Task 2 has only ${w} words; it cannot provide a developed essay response.` };
-  if (w < 80) return { triggered: true, category: "very_short_rateable", suggestedRange: "Band 2.5-3.5", lower: 2.5, upper: 3.5, severity: "severe", reason: `Task 2 has ${w} words; it is very short and development evidence is severely limited.` };
-  if (w < 120) return { triggered: true, category: "severe_underlength_but_rateable", suggestedRange: "Band 3.0-4.0", lower: 3, upper: 4, severity: "high", reason: `Task 2 has ${w} words; it may be rateable, but it is severely underlength and normally capped by lack of development evidence.` };
-  if (w < 150) return { triggered: true, category: "underlength_limited_development", suggestedRange: "Band 3.5-4.5", lower: 3.5, upper: 4.5, severity: "high", reason: `Task 2 has ${w} words; task response and development are likely limited.` };
-  if (w < 180) return { triggered: true, category: "short_response", suggestedRange: "Band 4.0-5.0", lower: 4, upper: 5, severity: "moderate", reason: `Task 2 has ${w} words; it is short, so 5.5+ needs unusually strong evidence.` };
-  if (w < 230) return { triggered: true, category: "development_risk", suggestedRange: "Band 4.5-5.5 unless development is strong", lower: 4.5, upper: 5.5, severity: "watch", reason: `Task 2 has ${w} words; not automatically low, but development depth must be checked before 6.0+.` };
+  if (w === 0) return { triggered: true, category: "blank", suggestedRange: "Band 0", lower: 0, upper: 0, severity: "extreme", reason: "Task 2 is blank or has no countable words." };
+  if (w < 20) return { triggered: true, category: "minimal_response", suggestedRange: "Band 0-2.0", lower: 0, upper: 2, severity: "extreme", reason: `Task 2 has only ${w} words; only fragments can normally be assessed.` };
+  if (w < 50) return { triggered: true, category: "very_short_rateable", suggestedRange: "Band 1.5-3.0", lower: 1.5, upper: 3, severity: "severe", reason: `Task 2 has ${w} words; it is too short for developed essay response.` };
+  if (w < 80) return { triggered: true, category: "severe_underlength_but_rateable", suggestedRange: "Band 2.5-3.5", lower: 2.5, upper: 3.5, severity: "high", reason: `Task 2 has ${w} words; development evidence is severely limited.` };
+  if (w < 120) return { triggered: true, category: "underlength_limited_development", suggestedRange: "Band 3.0-4.0, or 4.5 only with unusually clear relevance", lower: 3, upper: 4.5, severity: "high", reason: `Task 2 has ${w} words; task response and development are likely limited.` };
+  if (w < 150) return { triggered: true, category: "short_response", suggestedRange: "Band 3.5-5.0 depending on development", lower: 3.5, upper: 5, severity: "moderate", reason: `Task 2 has ${w} words; 5.0+ needs clear development evidence.` };
+  if (w < 180) return { triggered: true, category: "below_recommended_essay_length", suggestedRange: "Band 4.0-5.5 depending on development", lower: 4, upper: 5.5, severity: "moderate", reason: `Task 2 has ${w} words; it is short, but a coherent answer can still be mid-band.` };
+  if (w < 230) return { triggered: true, category: "development_risk", suggestedRange: "Band 4.5-6.5 depending on response depth", lower: 4.5, upper: 6.5, severity: "watch", reason: `Task 2 has ${w} words; check development depth before 6.0+, but do not cap by word count alone.` };
   return { triggered: false, category: "normal_essay_length", suggestedRange: "No word-count low-band boundary", lower: 0, upper: 9, severity: "none", reason: `Task 2 word count ${w} is in or near the normal IELTS range.` };
 }
 
@@ -1073,37 +1189,38 @@ function hasStrongBoundaryKeepEvidence(reviewed = {}, review = {}, audit = {}) {
 
 function unresolvedCriticalBoundaryReasons(reviewed = {}, audit = {}) {
   const criteria = reviewed.finalCriteria || reviewed.criteria || {};
-  const values = scoreValues(criteria);
   const { finalBand } = averageBand(criteria);
-  const review = audit.boundaryReview || reviewed.boundaryReview || {};
-  const anchorBand = Number(audit.anchorAudit?.closestAnchorBand ?? reviewed.anchorComparison?.closestAnchorBand);
-  const allFourSeven = values.length === 4 && values.every((x) => x === 7);
-  const allSameHigh = allCriteriaSame(criteria) && Number.isFinite(finalBand) && finalBand >= 7;
-  const strongKeepEvidence = hasStrongBoundaryKeepEvidence(reviewed, review, audit);
   const reasons = [];
-  if (audit.lowBandBoundary?.scoreTooHigh) reasons.push("Low-band word-count boundary still exceeded after boundary review.");
-  if (audit.anchorAudit?.anchorMissing) reasons.push("Independent anchor comparison is still missing after boundary review.");
-  if (Number.isFinite(anchorBand) && Number.isFinite(finalBand) && anchorBand >= 8 && finalBand <= 7 && !strongKeepEvidence) reasons.push("Independent anchor is Band 8/9 but final score remains Band 7.0 or below without strong evidence.");
-  if (allFourSeven && !strongKeepEvidence) reasons.push("All four criteria remain exactly Band 7.0 after review without strong all-four-7 resolution evidence.");
-  if (allSameHigh && !strongKeepEvidence) reasons.push("All four high-band criteria remain identical after review without strong differentiation evidence.");
+  // v7.4: boundary audit is diagnostic, not a user-visible crash trigger.
+  // Low-word-count, all-four-7 and all-same-high profiles must trigger review/warnings,
+  // but after review they should freeze with warnings instead of returning HTTP 502.
+  if (audit.anchorAudit?.anchorMissing && !hasUsableAnchorComparison(reviewed.anchorComparison)) {
+    reasons.push("Independent anchor comparison is still missing after boundary review.");
+  }
+  if (!Number.isFinite(finalBand)) reasons.push("Final band is not numeric.");
   return reasons;
 }
 
 function assertFinalCanFreeze(result = {}) {
+  const criteria = result.finalCriteria || result.criteria || {};
+  const { finalBand } = averageBand(criteria);
+  if (!Number.isFinite(finalBand)) {
+    const error = new Error("Final score freeze blocked: final band is not numeric.");
+    error.status = 502;
+    error.aiStage = "score-finalize";
+    throw error;
+  }
   const audit = result.boundaryAudit || {};
   const unresolved = Array.isArray(audit.unresolvedCriticalReasons) ? audit.unresolvedCriticalReasons : [];
-  if (audit.freezeBlocked || unresolved.length) {
-    const error = new Error(`Final score freeze blocked by unresolved boundary audit: ${unresolved.join("; ") || audit.status || "boundary conflict"}`);
+  const critical = unresolved.filter((item) => /not numeric|missing.*anchor/i.test(String(item)));
+  if (critical.length) {
+    const error = new Error(`Final score freeze blocked by critical scoring integrity issue: ${critical.join("; ")}`);
     error.status = 502;
     error.aiStage = "score-finalize";
     throw error;
   }
-  if (audit.reviewRequired && audit.status !== "passed" && audit.status !== "reviewed_passed" && audit.status !== "reviewed_passed_with_strong_evidence") {
-    const error = new Error(`Final score freeze blocked: boundary review is still required (${(audit.reviewReasons || []).join("; ") || "unknown reason"}).`);
-    error.status = 502;
-    error.aiStage = "score-finalize";
-    throw error;
-  }
+  // v7.4: Do not crash for score-profile review warnings such as low-word-count boundary,
+  // all-four-7, or all-same-high. Those are preserved in boundaryAudit and stabilityWarnings.
 }
 
 function buildBoundaryReviewPrompt(body, firstResult, audit) {
@@ -1119,8 +1236,8 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     `Local boundary profile: ${JSON.stringify(localBoundaryProfile)}`,
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
-    "For all-four Band 7 cases, decide whether any criterion should be 7.5/8/8.5/9. Do not keep 7/7/7/7 without exact limiting evidence.",
-    "If the independent anchor is Band 8 or Band 9 and final score remains 7.0 or below, give strong evidence against high-band; otherwise revise upward.",
+    "For all-four Band 7 cases, actively check whether any criterion should be 7.5/8/8.5/9. If you keep 7/7/7/7, give a concise limitation; do not force a server error.",
+    "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
     "JSON safety: no markdown, no comments, no trailing prose, no unescaped double quotes inside strings. Use single quotes for student phrases.",
     `Local signals: ${JSON.stringify(signals)}`,
@@ -1313,7 +1430,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
-    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s.",
+    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional.", 
+    "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
     taskMini,
@@ -1527,7 +1645,7 @@ async function callScoreKernel(body, signals, boundaryProfile) {
     return await callDeepSeek([
       { role: "system", content: "You are an IELTS GT Writing score-kernel engine. Return one tiny valid JSON object only. No feedback, no Chinese, no quotes." },
       { role: "user", content: buildCompactScorePrompt(body, signals, null) }
-    ], 1400, 0);
+    ], 1900, 0);
   } catch (error) {
     if (!/MalformedAiJsonError|malformed JSON|valid JSON|JSON/i.test(String(error?.name || "") + " " + String(error?.message || ""))) throw error;
     const names = criterionNames(signals.task);
@@ -1558,6 +1676,10 @@ async function callScoreKernel(body, signals, boundaryProfile) {
 
 async function scoreCore(body) {
   const signals = localSignals(body);
+  const hardZeroGate = signals.hardZeroGate || detectHardZeroResponse(body, signals);
+  if (hardZeroGate.triggered) {
+    return buildHardZeroScore(body, signals, hardZeroGate);
+  }
   const boundaryProfile = getLocalBandBoundaryProfile(signals);
 
   // Step 2: one tiny AI score kernel call. No separate anchor call and no detailed feedback here.
