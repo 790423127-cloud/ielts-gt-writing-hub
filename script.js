@@ -70,11 +70,27 @@
     return btn;
   }
 
+  function typeOptionsForSelectedTask() {
+    const taskValue = els.taskFilter?.value || "all";
+    const filtered = taskValue === "all" ? prompts : prompts.filter((p) => p.task === taskValue);
+    return unique(filtered.map((p) => p.type)).sort();
+  }
+
+  function updateTypeFilterOptions() {
+    if (!els.typeFilter) return;
+    const previous = els.typeFilter.value || "all";
+    const taskValue = els.taskFilter?.value || "all";
+    const allText = taskValue === "Task 1" ? "全部书信类型" : taskValue === "Task 2" ? "全部作文题型" : "全部题型";
+    const options = typeOptionsForSelectedTask();
+    fillSelect(els.typeFilter, options, allText);
+    els.typeFilter.value = previous === "all" || options.includes(previous) ? previous : "all";
+  }
+
   function initFilters() {
     fillSelect(els.bookFilter, DATA.meta?.books || unique(prompts.map((p) => p.book)), "全部 Books");
     fillSelect(els.testFilter, ["Test 1", "Test 2", "Test 3", "Test 4"], "全部 Test");
     fillSelect(els.taskFilter, ["Task 1", "Task 2"], "Task 1 + Task 2");
-    fillSelect(els.typeFilter, unique(prompts.map((p) => p.type)).sort(), "全部题型");
+    updateTypeFilterOptions();
     if ($("booksStat")) $("booksStat").textContent = (DATA.meta?.books || unique(prompts.map((p) => p.book))).length;
     if ($("testsStat")) $("testsStat").textContent = ((DATA.meta?.books || unique(prompts.map((p) => p.book))).length || 0) * (DATA.meta?.testsPerBook || 4);
     if ($("task1Stat")) $("task1Stat").textContent = prompts.filter((p) => p.task === "Task 1").length;
@@ -176,6 +192,7 @@
     if (els.bandTips) els.bandTips.innerHTML = `<div class="band"><strong>Band 5 保底写法提示</strong>${escapeHtml(selected.notes?.band5 || "")}</div><div class="band"><strong>Band 6+ 提升提示</strong>${escapeHtml(selected.notes?.band6 || "")}</div>`;
     renderPhrases(selected);
     resetTimer(selected.timeLimit || 40);
+    ensureEssayTimerDock();
     updateWords();
     resetGradingPanel();
     renderList();
@@ -192,6 +209,40 @@
     remaining = Number(limit || 40) * 60;
     if (els.timerDisplay) els.timerDisplay.textContent = fmt(remaining);
   }
+
+  function ensureEssayTimerDock() {
+    if (!els.essayInput || !els.timerDisplay || !els.timerBtn || !els.resetTimerBtn) return;
+    const essayCard = els.essayInput.closest(".card") || els.essayInput.parentElement;
+    if (!essayCard) return;
+
+    const oldTimerCard = els.timerDisplay.closest(".card");
+    if (oldTimerCard && oldTimerCard !== essayCard) oldTimerCard.classList.add("timer-card-emptied");
+
+    let shell = $("essayWritingShell");
+    if (!shell || !essayCard.contains(shell)) {
+      shell = document.createElement("div");
+      shell.id = "essayWritingShell";
+      shell.className = "essay-writing-shell";
+      els.essayInput.insertAdjacentElement("beforebegin", shell);
+      shell.appendChild(els.essayInput);
+    }
+
+    let dock = $("essayTimerDock");
+    if (!dock) {
+      dock = document.createElement("aside");
+      dock.id = "essayTimerDock";
+      dock.className = "essay-timer-dock";
+      dock.innerHTML = `<div class="essay-timer-title"><span>写作计时</span><small>Writing timer</small></div><div class="essay-timer-controls"></div>`;
+    }
+    if (dock.parentElement !== shell) shell.appendChild(dock);
+
+    const controls = dock.querySelector(".essay-timer-controls");
+    if (!controls) return;
+    [els.timerDisplay, els.timerBtn, els.resetTimerBtn].forEach((node) => {
+      if (node && node.parentElement !== controls) controls.appendChild(node);
+    });
+  }
+
   function toggleTimer() {
     if (!selected) return;
     if (timerId) { stopTimer(); return; }
@@ -324,8 +375,8 @@
           <span class="score-progress-chip">当前步骤：第 ${escapeHtml(current?.index || p.currentStep || 1)} 步/4</span>
           <span class="score-progress-chip">更新时间：${escapeHtml(p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-")}</span>
         </div>
-        <ol class="score-step-list">
-          ${(p.steps || []).map((step) => `<li class="score-step-item"><div class="score-step-head"><span>第 ${escapeHtml(step.index)} 步/4：${escapeHtml(step.title)}</span><span class="score-step-status ${escapeHtml(step.status)}">${escapeHtml(statusText(step.status))}</span></div><p>${escapeHtml(step.error || step.message || step.description || "")}</p></li>`).join("")}
+        <ol class="score-step-list score-step-list-rows">
+          ${(p.steps || []).map((step) => `<li class="score-step-item score-step-row"><span class="score-step-label">第 ${escapeHtml(step.index)} 步/4：${escapeHtml(step.title)}</span><span class="score-step-status ${escapeHtml(step.status)}">${escapeHtml(statusText(step.status))}</span><span class="score-step-message">${escapeHtml(step.error || step.message || step.description || "")}</span></li>`).join("")}
         </ol>
         ${errorHtml}
       </div>
@@ -812,6 +863,17 @@
     return renderScoreAccordion("评分计算说明 / Score Calculation Explanation", body, false, "score-calculation-card");
   }
 
+
+  function gateChineseExplanation(label, gate = {}) {
+    const raw = [gate?.status, gate?.result, gate?.triggered, gate?.reason, gate?.explanation, gate?.note].filter(Boolean).join(" ");
+    const lower = String(label || "").toLowerCase();
+    if (lower.includes("low")) return `低分核查：${raw || "检查文章是否过短、严重跑题或不可评分。"} 这一项用于防止可评分文章被误判为极低分，也防止不可评分文本被误给中高分。`;
+    if (lower.includes("mid")) return `中分核查：${raw || "检查文章是否只具备基础结构和基础回应。"} 这一项用于防止文章因为有段落或连接词就被过度提高。`;
+    if (lower.includes("high")) return `高分核查：${raw || "检查是否具备高分所需的任务完成度、逻辑推进、词汇灵活度和语法准确度。"} 如果没有 6.5 以上证据，高分门槛不适用。`;
+    if (lower.includes("profile")) return `分数组合核查：${raw || "检查四项分数之间是否协调。"} 这一项用于判断 TR/CC/LR/GRA 的组合是否符合语言控制和任务完成情况。`;
+    return `评分校准说明：${raw || "AI 已完成这一项核查。"} `;
+  }
+
   function renderScoreCalibration(result = {}) {
     const profile = result.scoreProfile || {};
     const signals = result.localSignals || {};
@@ -830,7 +892,11 @@
       </div>
       ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
       <div class="score-gate-grid">
-        ${gates.map(([label, gate]) => `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "not_reported")}<br><span class="muted">${escapeHtml(gate?.reason || gate?.explanation || gate?.note || "No detailed gate explanation returned.")}</span></div>`).join("")}
+        ${gates.map(([label, gate]) => {
+          const reason = gate?.reason || gate?.explanation || gate?.note || "No detailed gate explanation returned.";
+          const zh = gate?.reasonZh || gate?.explanationZh || gate?.noteZh || gateChineseExplanation(label, gate);
+          return `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "not_reported")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}</div>`;
+        }).join("")}
       </div>
       ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}`;
     return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report");
@@ -886,6 +952,74 @@
         </article>`;
       }).join("")}
     </section>`;
+  }
+
+
+  function renderOverallSkeleton() {
+    const disclaimer = "This is an AI-generated estimated score, not an official IELTS score.";
+    return `<section class="overall-card overall-card-hero score-skeleton-section">
+      <h4>Overall estimated band</h4>
+      <div class="overall-card-main">
+        <div class="overall-score-panel">
+          <div class="overall-score"><span>...</span><strong>AI 正在计算最终分数</strong></div>
+        </div>
+        <aside class="overall-disclaimer-card" role="note" aria-label="Score disclaimer">
+          <div class="overall-disclaimer-badge">AI</div>
+          <div class="overall-disclaimer-copy">
+            <div class="overall-disclaimer-title">Estimated score / 估分说明</div>
+            <p class="overall-disclaimer-en">${escapeHtml(disclaimer)}</p>
+            <p class="overall-disclaimer-zh">AI 生成的估分，仅供参考，并非官方雅思成绩。</p>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+  }
+
+  function renderCriterionSkeletonCards() {
+    const names = selected?.task === "Task 1"
+      ? ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
+      : ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+    return `<section class="criterion-card-grid score-skeleton-section" aria-label="四项评分说明">
+      ${names.map((criterion, index) => {
+        const cardId = `criterionSkeleton_${index}`;
+        return `<article class="criterion-score-card is-waiting">
+          <div class="criterion-card-header">
+            <div class="criterion-title">${escapeHtml(criterion)}</div>
+            <div class="criterion-band-pill">等待评分</div>
+            <button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">+</button>
+          </div>
+          <div class="criterion-card-body hidden" id="${cardId}">
+            <div class="criterion-quick-row"><h5>AI 批改中</h5><p>AI 正在生成这一项的分数、半分判断、得分原因和提升建议。</p></div>
+          </div>
+        </article>`;
+      }).join("")}
+    </section>`;
+  }
+
+  function renderScoreCalculationPlaceholder() {
+    const body = `<div class="score-placeholder">
+      <p><strong>AI 批改中。</strong> 四项分数返回后，这里会显示评分系统、计算方式、四项平均和最终估算。</p>
+      <p><strong>本地是否介入评分：</strong>否</p>
+      <p><strong>本地是否 cap / 压分 / 提分：</strong>否</p>
+    </div>`;
+    return renderScoreAccordion("评分计算说明 / Score Calculation Explanation", body, true, "score-calculation-explanation score-skeleton-section");
+  }
+
+  function renderScoreCalibrationPlaceholder() {
+    const body = `<div class="score-placeholder">
+      <p>AI 正在进行低分、中分、高分和分数组合核查。评分返回后，这里会显示 Low-band / Mid-band / High-band / Score-profile check。</p>
+    </div>`;
+    return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report score-skeleton-section");
+  }
+
+  function renderScoreSkeleton(progress = latestScoringProgress) {
+    injectScoreStyles();
+    return `
+      ${renderScoringProgressPanel(progress || createScoringProgress(), true)}
+      ${renderOverallSkeleton()}
+      ${renderCriterionSkeletonCards()}
+      ${renderScoreCalculationPlaceholder()}
+      ${renderScoreCalibrationPlaceholder()}`;
   }
 
   function renderScoreResult(result = {}) {
@@ -979,17 +1113,17 @@
     try {
       latestScoringProgress = createScoringProgress();
       latestScoringProgress.status = "running";
-      if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
+      if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
       let currentResult = null;
       for (let i = 0; i < SCORING_STEPS.length; i += 1) {
         activeStageIndex = i;
         const step = SCORING_STEPS[i];
         updateScoringProgress(i, "running", `AI 正在执行：${step.description}`);
-        if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
+        if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
         setGradingStatus(`第 ${i + 1} 步/4：${step.title}。`, "loading");
         currentResult = await postStage(endpoint, gradingPayload({ aiStage: step.stage, currentResult }));
         updateScoringProgress(i, "done", `${step.title}已完成。`);
-        if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
+        if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
       }
       completeScoringProgress();
       renderScoreResult(currentResult);
@@ -1006,7 +1140,8 @@
   }
 
   function bind() {
-    [els.bookFilter, els.testFilter, els.taskFilter, els.typeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
+    [els.bookFilter, els.testFilter, els.typeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
+    els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); renderList(); });
     els.searchInput?.addEventListener("input", renderList);
     els.timerBtn?.addEventListener("click", toggleTimer);
     els.resetTimerBtn?.addEventListener("click", () => selected && resetTimer(selected.timeLimit || 40));
