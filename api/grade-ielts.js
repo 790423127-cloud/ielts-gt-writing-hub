@@ -11,6 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = Array.from({ length: 17 }, (_, i) => 1 + i * 0.5);
+const SUPPORTED_STAGES = new Set(["score-precheck", "score-criteria", "score-gates", "score-finalize", "score-core"]);
 
 function isAllowedOrigin(origin) {
   if (!origin) return false;
@@ -236,33 +237,6 @@ async function callDeepSeek(messages, maxTokens = 5000, temperature = 0) {
   }
 }
 
-function buildScoreCorePrompt(body, signals) {
-  const task = signals.task;
-  const names = criterionNames(task);
-  const taskSpecific = task === "Task 1"
-    ? `Task 1 GT letter checks: purpose clarity; all bullet points separately covered/partly/missing; functional detail; recipient relationship; tone/register; opening/closing/format. Extracted bullet points: ${JSON.stringify(signals.task1BulletPoints)}.`
-    : `Task 2 essay checks: question type; all required parts; clear position when required; relevant development; reasons; examples; conclusion. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
-
-  return [
-    "You are a strict but fair IELTS General Training Writing examiner. Return JSON only.",
-    "Grade the submitted response on IELTS criterion bands from 1.0 to 9.0 in 0.5 increments. Do not prefer whole bands by default.",
-    "For every criterion, actively compare adjacent half bands. Use X.5 when performance clearly exceeds X.0 but does not consistently reach X+1.0. Give 4.5/5.5/6.5/7.5/8.5 when the evidence is genuinely between whole-band descriptors.",
-    "Do not generate editing, language diagnostics, learning notes, revisions, or model answers in this scoring pass. This endpoint is for scoring only.",
-    taskSpecific,
-    "Low-band gate: validate blank, extreme underlength, non-English/unreadable, no complete sentences, severe off-topic, Task 1 not a letter, or Task 2 not answering the task.",
-    "Mid-band gate: for likely Band 4.0-6.0 writing, do not over-reward visible structure. A position plus paragraphs is not enough for TR/TA 5.5+; basic paragraphing with Firstly/Secondly/In conclusion is not enough for CC 5.5+; spelling/word-form density must limit LR; frequent basic grammar errors must limit GRA.",
-    "High-band gate: any criterion 6.5+ requires strong, criterion-specific evidence: complete task fulfilment, natural progression, accurate flexible lexis, and accurate varied grammar. Do not award high bands for neat structure alone.",
-    "LR/GRA gates: if local signals show high spelling/word-form or weak lexical control, LR 5.5+ needs strong evidence. If local signals show high grammar density or weak sentence control, GRA 5.0+ needs strong evidence.",
-    "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
-    "The server will average the four criterion bands and round to the nearest 0.5. Do not invent a separate overall band that conflicts with the four criteria.",
-    `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
-    `Local scoring signals for calibration only, not local scoring: ${JSON.stringify(signals)}.` ,
-    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
-    `Student response: ${body.essay || ""}`,
-    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"candidateBandsConsidered\":[...],\"selectedBand\":number,\"positiveEvidence\":[...],\"limitingEvidence\":[...],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{...},\"midBandGate\":{...},\"highBandGate\":{...},\"scoreProfileGate\":{...}},\"taskSpecificGate\":{...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
-  ].join("\n\n");
-}
-
 function normalizeCriteria(rawCriteria, task) {
   const names = criterionNames(task);
   const source = rawCriteria && typeof rawCriteria === "object" ? rawCriteria : {};
@@ -278,6 +252,86 @@ function normalizeCriteria(rawCriteria, task) {
   return out;
 }
 
+function buildTaskProfile(signals, body) {
+  return signals.task === "Task 1"
+    ? {
+        task: "Task 1",
+        firstCriterion: "Task Achievement",
+        letterStyle: body.letterStyle || "",
+        bulletPoints: signals.task1BulletPoints,
+        checks: ["purpose clarity", "bullet coverage", "functional detail", "tone/register", "opening/closing"]
+      }
+    : {
+        task: "Task 2",
+        firstCriterion: "Task Response",
+        questionType: signals.task2QuestionProfile?.questionType || "general_essay",
+        requiredParts: signals.task2QuestionProfile?.requiredParts || ["answer all parts of the prompt"],
+        checks: ["required parts", "position", "development", "examples", "conclusion", "relevance"]
+      };
+}
+
+function scorePrecheck(body) {
+  const signals = localSignals(body);
+  return {
+    ok: true,
+    aiStage: "score-precheck",
+    scoreSystemVersion: "clean-score-core-v2",
+    task: signals.task,
+    criterionNames: criterionNames(signals.task),
+    localSignals: signals,
+    taskProfile: buildTaskProfile(signals, body),
+    scoreCoreMeta: { step: 1, totalSteps: 4, scoringOnly: true }
+  };
+}
+
+function buildCriteriaPrompt(body, precheck) {
+  const signals = precheck?.localSignals || localSignals(body);
+  const task = signals.task;
+  const names = criterionNames(task);
+  const taskProfile = precheck?.taskProfile || buildTaskProfile(signals, body);
+  return [
+    "You are a strict but fair IELTS General Training Writing examiner. Return JSON only.",
+    "This is scoring step 2 of 4. Return criterion scores only. Do not return any non-scoring sections.",
+    "Grade each IELTS criterion from 1.0 to 9.0 in 0.5 increments. Do not prefer whole bands by default.",
+    "For each criterion, compare adjacent half bands. Use X.5 when performance clearly exceeds X.0 but does not consistently reach X+1.0.",
+    "Task 1 must use Task Achievement as the first criterion. Task 2 must use Task Response as the first criterion.",
+    "Apply these calibration principles: a visible position or basic paragraphs alone do not justify 5.5+; frequent spelling/word-form errors limit Lexical Resource; frequent basic grammar errors limit Grammatical Range and Accuracy; any 6.5+ score needs strong evidence.",
+    `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
+    `Local signals for calibration only: ${JSON.stringify(signals)}.` ,
+    `Task profile: ${JSON.stringify(taskProfile)}.` ,
+    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    "Return exact JSON: {\"ok\":true,\"aiStage\":\"score-criteria\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"candidateBandsConsidered\":[...],\"selectedBand\":number,\"positiveEvidence\":[...],\"limitingEvidence\":[...],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}},\"examinerSummary\":\"scoring-only summary\",\"examinerSummaryZh\":\"中文评分摘要\"}"
+  ].join("\n\n");
+}
+
+async function scoreCriteria(body) {
+  const precheck = body.currentResult?.localSignals ? body.currentResult : scorePrecheck(body);
+  const ai = await callDeepSeek([
+    { role: "system", content: "You are an IELTS scoring engine. You return scores only." },
+    { role: "user", content: buildCriteriaPrompt(body, precheck) }
+  ], 5200, 0);
+  const task = precheck.localSignals.task;
+  const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+  const { rawAverage, finalBand } = averageBand(criteria);
+  return {
+    ok: true,
+    aiStage: "score-criteria",
+    scoreSystemVersion: "clean-score-core-v2",
+    task,
+    criteria,
+    provisionalCriteria: criteria,
+    provisionalRawAverage: rawAverage,
+    provisionalBand: finalBand,
+    localSignals: precheck.localSignals,
+    taskProfile: precheck.taskProfile,
+    criterionCalibration: ai.criterionCalibration || {},
+    examinerSummary: String(ai.examinerSummary || "").trim(),
+    examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),
+    scoreCoreMeta: { step: 2, totalSteps: 4, scoringOnly: true }
+  };
+}
+
 function collectScoreWarnings(criteria, signals) {
   const warnings = [];
   const names = criterionNames(signals.task);
@@ -286,96 +340,118 @@ function collectScoreWarnings(criteria, signals) {
   const lr = criteria["Lexical Resource"];
   const gra = criteria["Grammatical Range and Accuracy"];
   const { finalBand } = averageBand(criteria);
-  const allSame = Object.values(criteria).every((x) => x === Object.values(criteria)[0]);
+  const values = Object.values(criteria);
+  const allSame = values.every((x) => x === values[0]);
   if (allSame) warnings.push("All four criterion bands are identical; examiner evidence must justify this equality.");
-  if (signals.rateabilityStatus === "clearly_rateable" && Object.values(criteria).some((x) => x <= 2)) warnings.push("Clearly rateable response received a Band 1/2 criterion; this would require unusually strong evidence.");
-  if (signals.grammarErrorDensity === "high" && gra >= 5) warnings.push("GRA is 5.0+ while grammar error density is high; the examiner must justify this carefully.");
-  if ((signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak") && lr >= 5.5) warnings.push("LR is 5.5+ while lexical/spelling signals are weak; the examiner must justify this carefully.");
-  if (finalBand >= 5.5 && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high") && (lr <= 5 || gra <= 5)) warnings.push("Overall 5.5+ with weak LR/GRA signals can be overgenerous; score-profile gate should be checked.");
-  if (first >= 5.5 && cc >= 5.5 && lr <= 4.5 && gra <= 4.5) warnings.push("TR/TA and CC are 5.5 while LR/GRA are weak; confirm that task development and cohesion evidence justify this gap.");
+  if (signals.rateabilityStatus === "clearly_rateable" && values.some((x) => x <= 2)) warnings.push("Clearly rateable response received a Band 1/2 criterion; this needs unusually strong evidence.");
+  if (signals.grammarErrorDensity === "high" && gra >= 5) warnings.push("GRA is 5.0+ while grammar error density is high; this should be challenged.");
+  if ((signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak") && lr >= 5.5) warnings.push("LR is 5.5+ while lexical/spelling signals are weak; this should be challenged.");
+  if (finalBand >= 5.5 && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high") && (lr <= 5 || gra <= 5)) warnings.push("Overall 5.5+ with weak LR/GRA signals may be overgenerous; check score profile.");
+  if (first >= 5.5 && cc >= 5.5 && lr <= 4.5 && gra <= 4.5) warnings.push("TR/TA and CC are 5.5 while LR/GRA are weak; confirm task development and cohesion evidence.");
   return warnings;
 }
 
-function normalizeScoreCoreResult(ai, body, signals) {
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
-  const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+function buildGatePrompt(body, current) {
+  const signals = current?.localSignals || localSignals(body);
+  const task = signals.task;
+  const names = criterionNames(task);
+  const criteria = normalizeCriteria(current?.criteria || current?.provisionalCriteria, task);
+  const warnings = collectScoreWarnings(criteria, signals);
+  return [
+    "You are an IELTS scoring quality controller. Return JSON only.",
+    "This is scoring step 3 of 4. Review only the score and return scoring review fields only.",
+    "Review the initial criterion bands against Low-band, Mid-band, High-band, Half-band, LR/GRA, and Score-profile gates.",
+    "Low-band gate: check blank, severe underlength, unreadable, off-topic, no complete sentences, Task 1 not a letter, or Task 2 not answering the task.",
+    "Mid-band gate: for 4.0-6.0 writing, do not over-reward visible structure. Position + paragraphs is not enough for TR/TA 5.5+. Firstly/Secondly/In conclusion is not enough for CC 5.5+. Frequent errors must limit LR/GRA.",
+    "High-band gate: any 6.5+ needs strong evidence in the relevant criterion.",
+    "Half-band gate: ensure every selected band is justified against the adjacent half bands.",
+    "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
+    "If the original bands are justified, return them unchanged. If not, return revisedCriteria. Do not cap mechanically; revise only with criterion evidence.",
+    `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
+    `Initial criteria: ${JSON.stringify(criteria)}.` ,
+    `Local signals: ${JSON.stringify(signals)}.` ,
+    `Initial calibration: ${JSON.stringify(current?.criterionCalibration || {})}.` ,
+    `Local warnings: ${JSON.stringify(warnings)}.` ,
+    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    "Return exact JSON: {\"ok\":true,\"aiStage\":\"score-gates\",\"gateDecision\":\"accepted or revised\",\"criteria\":{...final reviewed four bands...},\"scoreProfile\":{\"lowBandGate\":{},\"midBandGate\":{},\"highBandGate\":{},\"halfBandGate\":{},\"lrGraGate\":{},\"scoreProfileGate\":{}},\"gateSummary\":\"short scoring-only explanation\",\"gateSummaryZh\":\"中文评分复核摘要\"}"
+  ].join("\n\n");
+}
+
+async function scoreGates(body) {
+  const current = body.currentResult || {};
+  const base = current.criteria || current.provisionalCriteria;
+  if (!base) throw new Error("score-gates requires currentResult from score-criteria.");
+  const signals = current.localSignals || localSignals(body);
+  const ai = await callDeepSeek([
+    { role: "system", content: "You review IELTS scores only." },
+    { role: "user", content: buildGatePrompt(body, current) }
+  ], 5000, 0);
+  const criteria = normalizeCriteria(ai.criteria || ai.revisedCriteria || base, signals.task);
   const { rawAverage, finalBand } = averageBand(criteria);
-  if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
   const warnings = collectScoreWarnings(criteria, signals);
   return {
     ok: true,
-    aiStage: "score-core",
-    scoreSystemVersion: "clean-score-core-v1",
+    aiStage: "score-gates",
+    scoreSystemVersion: "clean-score-core-v2",
+    task: signals.task,
+    criteria,
+    reviewedCriteria: criteria,
+    reviewedRawAverage: rawAverage,
+    reviewedBand: finalBand,
+    localSignals: signals,
+    taskProfile: current.taskProfile || buildTaskProfile(signals, body),
+    criterionCalibration: current.criterionCalibration || {},
+    scoreProfile: ai.scoreProfile || {},
+    gateDecision: String(ai.gateDecision || "accepted").trim(),
+    gateSummary: String(ai.gateSummary || "").trim(),
+    gateSummaryZh: String(ai.gateSummaryZh || "").trim(),
+    stabilityWarnings: warnings,
+    scoreCoreMeta: { step: 3, totalSteps: 4, scoringOnly: true }
+  };
+}
+
+function scoreFinalize(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const criteria = normalizeCriteria(current.criteria || current.reviewedCriteria || current.provisionalCriteria, signals.task);
+  const { rawAverage, finalBand } = averageBand(criteria);
+  return {
+    ok: true,
+    aiStage: "score-finalize",
+    scoreSystemVersion: "clean-score-core-v2",
     disclaimer: DISCLAIMER,
-    task,
+    task: signals.task,
     criteria,
     finalCriteria: criteria,
     rawAverage,
     overallBand: finalBand,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_engine" : "task2_essay_practice_engine",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_engine" : "task2_essay_practice_engine",
       formula: "AI-returned four IELTS criterion bands averaged and rounded to nearest 0.5; no local cap, lift, or lowering is applied.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No. The server validates structure and averages the four AI-returned criterion bands."
+      localScoreChangeExplanation: "No. The server validates structure and averages the AI-returned criterion bands."
     },
     scoreCoreMeta: {
+      step: 4,
+      totalSteps: 4,
       scoreFirst: true,
       scoreFrozen: true,
-      adviceSystemRemoved: true,
+      scoringOnly: true,
+      nonScoringStagesRemoved: true,
       generatedAt: new Date().toISOString()
     },
     localSignals: signals,
-    criterionCalibration: ai.criterionCalibration || {},
-    scoreProfile: ai.scoreProfile || {},
-    taskSpecificGate: ai.taskSpecificGate || {},
-    diagnosticSignals: ai.diagnosticSignals || {},
-    examinerSummary: String(ai.examinerSummary || "").trim(),
-    examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),
-    stabilityWarnings: warnings,
+    taskProfile: current.taskProfile || buildTaskProfile(signals, body),
+    criterionCalibration: current.criterionCalibration || {},
+    scoreProfile: current.scoreProfile || {},
+    examinerSummary: String(current.examinerSummary || current.gateSummary || "").trim(),
+    examinerSummaryZh: String(current.examinerSummaryZh || current.gateSummaryZh || "").trim(),
+    stabilityWarnings: current.stabilityWarnings || collectScoreWarnings(criteria, signals),
     localScoreChanged: false
-  };
-}
-
-async function scoreCore(body) {
-  const signals = localSignals(body);
-  const prompt = buildScoreCorePrompt(body, signals);
-  const ai = await callDeepSeek([
-    { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score; you do not provide editing advice." },
-    { role: "user", content: prompt }
-  ], 5200, 0);
-  return normalizeScoreCoreResult(ai, body, signals);
-}
-
-function buildRevisionPrompt(body) {
-  const frozen = body.currentResult || body.frozenScore || {};
-  return [
-    "You are generating IELTS learning models only. Do not change or comment on the score.",
-    "Return JSON only. Generate optional model/revision content based on the already frozen score.",
-    `Frozen score: ${JSON.stringify({ criteria: frozen.criteria || frozen.finalCriteria, overallBand: frozen.overallBand || frozen.scoreCalculation?.finalBand })}`,
-    `Task: ${body.task || "Task 2"}`,
-    `Prompt: ${body.questionPrompt || body.promptText || ""}`,
-    `Student response: ${body.essay || ""}`,
-    "Return {\"ok\":true,\"aiStage\":\"revision-generator\",\"revisionMeta\":{\"scoreUnchanged\":true},\"modelAnswerOutline\":\"...\",\"modelAnswer\":\"...\",\"revisedEssay\":\"...\"}."
-  ].join("\n\n");
-}
-
-async function revisionGenerator(body) {
-  const ai = await callDeepSeek([
-    { role: "system", content: "You generate IELTS model answers and revised essays. You never change the frozen score." },
-    { role: "user", content: buildRevisionPrompt(body) }
-  ], 6500, 0.2);
-  return {
-    ok: true,
-    aiStage: "revision-generator",
-    disclaimer: DISCLAIMER,
-    scoreUnchanged: true,
-    revisionMeta: { ...(ai.revisionMeta || {}), scoreUnchanged: true },
-    modelAnswerOutline: String(ai.modelAnswerOutline || "").trim(),
-    modelAnswer: String(ai.modelAnswer || "").trim(),
-    revisedEssay: String(ai.revisedEssay || "").trim()
   };
 }
 
@@ -383,9 +459,16 @@ async function handleRequest(req, res) {
   if (req.method === "OPTIONS") return sendJson(req, res, 204, {});
   if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   const body = await readJsonBody(req);
-  const stage = String(body.aiStage || body.stage || "score-core").toLowerCase();
-  if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));
-  return sendJson(req, res, 200, await scoreCore(body));
+  const requested = String(body.aiStage || body.stage || "score-core").toLowerCase();
+  const stage = requested === "score-core" ? "score-criteria" : requested;
+  if (!SUPPORTED_STAGES.has(requested)) {
+    return sendJson(req, res, 400, { ok: false, error: "This endpoint only supports the clean 4-step scoring stages.", allowedStages: Array.from(SUPPORTED_STAGES).filter((x) => x !== "score-core") });
+  }
+  if (stage === "score-precheck") return sendJson(req, res, 200, scorePrecheck(body));
+  if (stage === "score-criteria") return sendJson(req, res, 200, await scoreCriteria(body));
+  if (stage === "score-gates") return sendJson(req, res, 200, await scoreGates(body));
+  if (stage === "score-finalize") return sendJson(req, res, 200, scoreFinalize(body));
+  return sendJson(req, res, 400, { ok: false, error: "Unsupported scoring stage." });
 }
 
 module.exports = async function handler(req, res) {

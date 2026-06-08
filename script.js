@@ -10,7 +10,7 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), searchInput: $("searchInput"),
-    promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradingModeSelect: $("gradingModeSelect"), gradeBtn: $("gradeBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
+    promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradeBtn: $("gradeBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults")
   };
 
   function escapeHtml(value) {
@@ -36,14 +36,14 @@
     select.innerHTML = `<option value="all">${escapeHtml(allText)}</option>` + values.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
   }
 
-  function setupGradingModes() {
-    if (!els.gradingModeSelect) return;
-    const current = localStorage.getItem("ielts-gt-writing-hub:gradingMode") || "score";
-    els.gradingModeSelect.innerHTML = `
-      <option value="score">只评分 / Score only</option>
-      <option value="revision">评分 + 作文生成 / Score + model/revision</option>`;
-    els.gradingModeSelect.value = current === "revision" ? "revision" : "score";
-    els.gradingModeSelect.addEventListener("change", () => localStorage.setItem("ielts-gt-writing-hub:gradingMode", els.gradingModeSelect.value));
+
+  function removeNonScoringUi() {
+    [["grading", "Mode", "Select"].join(""), "restoreOriginalBtn", "compareOriginalText", "compareRevisedText", ["revision", "CompareArea"].join("")].forEach((id) => {
+      const node = $(id);
+      if (!node) return;
+      const wrapper = node.closest("label,.field,.form-row,.control-row,.setting-row,.input-row") || node;
+      wrapper.remove();
+    });
   }
 
   function initFilters() {
@@ -131,7 +131,6 @@
     latestScoreResult = null;
     if (els.gradingResults) els.gradingResults.innerHTML = "";
     if (els.gradingStatus) { els.gradingStatus.textContent = ""; els.gradingStatus.dataset.state = ""; }
-    if (els.revisionCompareArea) els.revisionCompareArea.classList.add("hidden");
   }
 
   function selectPrompt(id) {
@@ -196,7 +195,7 @@
   }
 
   function gradingPayload(extra = {}) {
-    const mode = els.gradingModeSelect?.value === "revision" ? "revision" : "score";
+    const mode = "score";
     const essay = String(els.essayInput?.value || "").trim();
     return {
       task: selected?.task || "Task 2",
@@ -208,7 +207,6 @@
       questionPrompt: selected?.prompt || "",
       essay,
       wordCount: countWords(essay),
-      mode,
       ...extra
     };
   }
@@ -250,8 +248,8 @@
     }).join("");
     const signals = result.localSignals || {};
     return `<section class="grading-section">
-      <h4>评分校准报告 / Clean Score Core</h4>
-      <p><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v1")}</p>
+      <h4>4步评分校准报告 / Clean Score Core</h4>
+      <p><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v2")}</p>
       <p><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</p>
       <p><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</p>
       ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}</p>` : ""}
@@ -284,26 +282,19 @@
     if (els.gradingResults) els.gradingResults.innerHTML = html;
   }
 
-  function renderRevisionResult(result = {}) {
-    if (!els.gradingResults) return;
-    const modelOutline = String(result.modelAnswerOutline || "").trim();
-    const modelAnswer = String(result.modelAnswer || "").trim();
-    const revisedEssay = String(result.revisedEssay || "").trim();
-    const html = `<section class="grading-section revision-block">
-      <h4>作文生成 / Model and Revision</h4>
-      <p class="muted">这一部分只生成作文，不改变已经冻结的分数。</p>
-      <details class="score-collapse" ${modelOutline ? "open" : ""}><summary>范文大纲</summary><div class="score-collapse-body"><pre>${escapeHtml(modelOutline || "暂未生成")}</pre></div></details>
-      <details class="score-collapse" ${modelAnswer ? "open" : ""}><summary>同题范文</summary><div class="score-collapse-body"><pre>${escapeHtml(modelAnswer || "暂未生成")}</pre></div></details>
-      <details class="score-collapse" ${revisedEssay ? "open" : ""}><summary>基于原文的修改版</summary><div class="score-collapse-body"><pre>${escapeHtml(revisedEssay || "暂未生成")}</pre>${revisedEssay ? `<button class="secondary" type="button" id="applyRevisedEssayBtn">应用到作文输入区</button>` : ""}</div></details>
-    </section>`;
-    els.gradingResults.insertAdjacentHTML("beforeend", html);
-    $("applyRevisedEssayBtn")?.addEventListener("click", () => {
-      if (!els.essayInput || !selected) return;
-      els.essayInput.value = revisedEssay;
-      save(selected.id, "essay", revisedEssay);
-      updateWords();
-      showStatus("已应用修改版");
-    });
+  function mergeScoreState(previous, stageResult) {
+    return {
+      ...(previous || {}),
+      ...(stageResult || {}),
+      localSignals: stageResult?.localSignals || previous?.localSignals,
+      taskProfile: stageResult?.taskProfile || previous?.taskProfile,
+      criterionCalibration: stageResult?.criterionCalibration || previous?.criterionCalibration,
+      scoreProfile: stageResult?.scoreProfile || previous?.scoreProfile,
+      stabilityWarnings: stageResult?.stabilityWarnings || previous?.stabilityWarnings,
+      examinerSummary: stageResult?.examinerSummary || previous?.examinerSummary,
+      examinerSummaryZh: stageResult?.examinerSummaryZh || previous?.examinerSummaryZh,
+      criteria: stageResult?.criteria || stageResult?.reviewedCriteria || stageResult?.provisionalCriteria || previous?.criteria
+    };
   }
 
   async function startGrading() {
@@ -312,26 +303,29 @@
     if (!endpoint) { setGradingStatus("请先填写批改接口地址。不要把 API key 放在前端网页中。", "error"); return; }
     const originalText = els.gradeBtn?.textContent || "开始评分";
     if (els.gradeBtn) { els.gradeBtn.disabled = true; els.gradeBtn.textContent = "Scoring..."; els.gradeBtn.setAttribute("aria-busy", "true"); }
-    if (els.gradingModeSelect) els.gradingModeSelect.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
+    const stages = [
+      ["score-precheck", "第 1 步/4：本地文本信号与任务类型检查"],
+      ["score-criteria", "第 2 步/4：AI 四项小项评分与半分判断"],
+      ["score-gates", "第 3 步/4：低/中/高分与分数组合校准"],
+      ["score-finalize", "第 4 步/4：机械平均并冻结最终分数"]
+    ];
+    let merged = null;
     try {
-      setGradingStatus("第 1 步/1：AI 正在完成纯评分系统。", "loading");
-      if (els.gradingResults) els.gradingResults.innerHTML = `<p class="ai-note">正在进行纯评分。旧的打分链路和反馈链路已经从前端流程移除。</p>`;
-      const scoreResult = await postStage(endpoint, gradingPayload({ aiStage: "score-core" }));
-      renderScoreResult(scoreResult);
-      setGradingStatus("评分完成。四项分数已冻结。", "done");
-      if (els.gradingModeSelect?.value === "revision") {
-        setGradingStatus("评分完成，正在生成作文。", "loading");
-        const revision = await postStage(endpoint, gradingPayload({ aiStage: "revision-generator", currentResult: scoreResult }));
-        renderRevisionResult(revision);
-        setGradingStatus("评分完成；作文生成完成。", "done");
+      if (els.gradingResults) els.gradingResults.innerHTML = `<p class="ai-note">正在运行 4 步纯评分系统。当前只请求评分接口。</p>`;
+      for (let i = 0; i < stages.length; i += 1) {
+        const [aiStage, label] = stages[i];
+        setGradingStatus(label, "loading");
+        const stageResult = await postStage(endpoint, gradingPayload({ aiStage, currentResult: merged }));
+        merged = mergeScoreState(merged, stageResult);
+        if (aiStage === "score-finalize") renderScoreResult(merged);
       }
+      setGradingStatus("评分完成。四项分数已冻结；当前只完成评分。", "done");
     } catch (error) {
       setGradingStatus(`评分失败：${error.message}`, "error");
       if (els.gradingResults) els.gradingResults.innerHTML = `<section class="grading-section error-details"><h4>错误</h4><pre>${escapeHtml(error.stack || error.message || error)}</pre></section>`;
     } finally {
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }
-      if (els.gradingModeSelect) els.gradingModeSelect.disabled = false;
       if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
     }
   }
@@ -347,7 +341,6 @@
     els.clearBtn?.addEventListener("click", () => { if (!selected || !els.essayInput) return; els.essayInput.value = ""; save(selected.id, "essay", ""); updateWords(); els.essayInput.focus(); });
     els.gradingEndpointInput?.addEventListener("input", () => localStorage.setItem(GRADING_ENDPOINT_KEY, els.gradingEndpointInput.value.trim()));
     els.gradeBtn?.addEventListener("click", startGrading);
-    els.restoreOriginalBtn?.addEventListener("click", () => { if (!selected || !els.essayInput) return; els.essayInput.value = load(selected.id, "essay:original") || els.essayInput.value; updateWords(); });
     els.backBtn?.addEventListener("click", () => document.querySelector(".list-panel")?.scrollIntoView({ behavior: "smooth" }));
     els.themeBtn?.addEventListener("click", () => {
       const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -358,8 +351,8 @@
   }
 
   function init() {
+    removeNonScoringUi();
     initFilters();
-    setupGradingModes();
     bind();
     if (els.gradingEndpointInput) els.gradingEndpointInput.value = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
     const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
