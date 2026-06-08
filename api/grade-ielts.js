@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-4-regression-boundary-stabilized";
+const SCORE_SYSTEM_VERSION = "score-core-v7-5-lowband-highband-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -225,15 +225,17 @@ function detectHardZeroResponse(body = {}, signals = null) {
   const lowered = essay.toLowerCase();
   const noAnswerPattern = /\b(no answer|no letter|cannot write|can't write|i cannot write|i can not write|copied prompt only)\b/i.test(essay);
   const nonEnglishShort = Boolean(essay && englishTokens === 0 && words === 0);
-  const onlyKeywords = words > 0 && words <= 8 && sentences.length <= 1 && distinctWordRatio(essay) <= 0.85;
+  const finiteClause = /\b(i|we|they|he|she|it|people|children|students|parents|government|governments|company|manager|friend|council|residents|customers|someone|somebody|this|that)\s+(am|is|are|was|were|have|has|had|can|could|will|would|should|may|might|must|think|believe|want|need|buy|use|live|spend|write|ask|suggest|apologise|apologize|explain|prefer|choose|help|make|give|take|work|study|play|close|arrive|damage|move|meet)\b/i.test(lowered);
+  const onlyKeywords = words > 0 && words <= 10 && distinctWordRatio(essay) <= 0.9 && !finiteClause;
+  const repeatedKeywordFragment = words > 0 && words <= 10 && !finiteClause && /([a-z]+(?:\s+[a-z]+)?)[.!?]?\s+\1/i.test(lowered);
   const ultraShortNoSentence = words > 0 && words <= 2 && sentences.length <= 1;
   const copiedLike = words <= 14 && copiedPromptOverlapRatio(essay, prompt) >= 0.75;
-  const meaninglessFragments = words <= 8 && /^(?:[a-z]+\s*){1,8}[.!?]?\s*$/i.test(essay) && !/\b(i|we|they|he|she|it|people|government|company|manager|friend)\s+(am|is|are|was|were|have|has|had|can|could|will|would|should|think|believe|want|need|buy|use|live|spend|write|ask|suggest|apologise|apologize|explain)\b/i.test(lowered);
+  const meaninglessFragments = words <= 10 && /^(?:[a-z]+[.!?]?\s*){1,10}$/i.test(essay.replace(/\s+/g, " ").trim()) && !finiteClause;
   if (!essay) return { triggered: true, reason: "blank_response", task, words };
   if (noAnswerPattern) return { triggered: true, reason: "explicit_no_answer_or_copied_prompt_marker", task, words };
   if (nonEnglishShort || englishRatio < 0.2) return { triggered: true, reason: "non_english_or_no_assessable_english", task, words, englishRatio: Number(englishRatio.toFixed(2)) };
   if (copiedLike) return { triggered: true, reason: "copied_prompt_or_prompt_keyword_recycling", task, words, overlapRatio: Number(copiedPromptOverlapRatio(essay, prompt).toFixed(2)) };
-  if (ultraShortNoSentence || onlyKeywords) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
+  if (ultraShortNoSentence || onlyKeywords || repeatedKeywordFragment || meaninglessFragments) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
   return { triggered: false, reason: "assessable_or_rateable", task, words };
 }
 
@@ -447,6 +449,52 @@ function averageBand(criteria) {
   if (values.length !== 4) return { rawAverage: null, finalBand: null };
   const rawAverage = values.reduce((a, b) => a + b, 0) / 4;
   return { rawAverage, finalBand: roundHalf(rawAverage) };
+}
+
+function capCriteriaBands(criteria = {}, cap = 9) {
+  const capped = {};
+  Object.entries(criteria || {}).forEach(([key, value]) => {
+    const band = bandNumber(value);
+    capped[key] = Number.isFinite(band) ? Math.min(band, cap) : value;
+  });
+  return capped;
+}
+
+function task1ShortLetterCap(words) {
+  const w = Number(words) || 0;
+  if (w < 20) return null;
+  if (w < 30) return { cap: 2.5, reason: `Task 1 has only ${w} words; a few short sentences cannot normally exceed Band 2.5.` };
+  if (w < 60) return { cap: 3.5, reason: `Task 1 has only ${w} words; bullet coverage and letter development are severely limited.` };
+  if (w < 80) return { cap: 4.5, reason: `Task 1 has ${w} words; most responses at this length remain limited even if the purpose is visible.` };
+  if (w < 100) return { cap: 5.5, reason: `Task 1 has ${w} words; clear communication is possible, but fuller bullet development is unlikely.` };
+  if (w < 120) return { cap: 6.0, reason: `Task 1 has ${w} words; it can be clear but should not be over-rewarded without strong bullet detail.` };
+  if (w < 150) return { cap: 7.0, reason: `Task 1 is below the recommended length; high-band scores require exceptionally complete bullet coverage.` };
+  return null;
+}
+
+function task2ShortEssayCap(words) {
+  const w = Number(words) || 0;
+  if (w < 20) return null;
+  if (w < 50) return { cap: 2.5, reason: `Task 2 has only ${w} words; this is fragmentary essay development.` };
+  if (w < 100) return { cap: 3.5, reason: `Task 2 has ${w} words; the response is too short for developed Band 4+ reasoning.` };
+  if (w < 150) return { cap: 4.5, reason: `Task 2 has ${w} words; it can be relevant but usually remains underdeveloped.` };
+  if (w < 180) return { cap: 5.5, reason: `Task 2 has ${w} words; clear but limited development can reach mid band, not high band.` };
+  if (w < 230) return { cap: 6.5, reason: `Task 2 has ${w} words; Band 6 is possible, but higher scores need unusually strong development.` };
+  return null;
+}
+
+function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComparison = {}) {
+  let calibrated = { ...(criteria || {}) };
+  const notes = [];
+  const task = signals.task;
+  const words = Number(signals.wordCount) || 0;
+  const { finalBand } = averageBand(calibrated);
+  const shortCap = task === "Task 1" ? task1ShortLetterCap(words) : task2ShortEssayCap(words);
+  if (shortCap && Number.isFinite(finalBand) && finalBand > shortCap.cap) {
+    calibrated = capCriteriaBands(calibrated, shortCap.cap);
+    notes.push({ type: "short_response_cap", cap: shortCap.cap, reason: shortCap.reason });
+  }
+  return { criteria: calibrated, changed: notes.length > 0, notes };
 }
 
 function stableJsonParse(text) {
@@ -1237,7 +1285,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
     "For all-four Band 7 cases, actively check whether any criterion should be 7.5/8/8.5/9. If you keep 7/7/7/7, give a concise limitation; do not force a server error.",
-    "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. High-band same scores are allowed when justified.",
+    "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
     "JSON safety: no markdown, no comments, no trailing prose, no unescaped double quotes inside strings. Use single quotes for student phrases.",
     `Local signals: ${JSON.stringify(signals)}`,
@@ -1255,10 +1303,33 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
   if (!initialAudit.reviewRequired) {
     return { ...firstResult, boundaryAudit: { ...initialAudit, status: "passed", reviewRequired: false } };
   }
-  const ai = await callDeepSeek([
-    { role: "system", content: "You are an IELTS GT Writing boundary-review scoring engine. You score only; no editing advice." },
-    { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, initialAudit) }
-  ], 3600, 0);
+  let ai;
+  try {
+    ai = await callDeepSeek([
+      { role: "system", content: "You are an IELTS GT Writing boundary-review scoring engine. You score only; no editing advice." },
+      { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, initialAudit) }
+    ], 3600, 0);
+  } catch (error) {
+    return {
+      ...firstResult,
+      boundaryAudit: {
+        ...initialAudit,
+        status: "review_skipped_ai_error_freeze_first_pass",
+        reviewRequired: false,
+        freezeBlocked: false,
+        boundaryReview: {
+          triggered: true,
+          decision: "skipped_ai_error",
+          reviewReasons: initialAudit.reviewReasons || [],
+          error: String(error?.message || error),
+          whyFinalCriteriaAreSafe: "Boundary review call failed; first-pass score will be frozen with local calibration and warnings rather than returning HTTP 500.",
+          whyFinalCriteriaAreSafeZh: "边界复核调用失败；系统将冻结首轮分数并保留本地校准和警告，避免接口报错。"
+        }
+      },
+      stabilityWarnings: [...new Set([...(firstResult.stabilityWarnings || []), `Boundary review AI call failed: ${String(error?.message || error)}`])],
+      scoreCoreMeta: { ...(firstResult.scoreCoreMeta || {}), boundaryReviewed: false, boundaryReviewApplied: false, boundaryReviewErrorRecovered: true, scoreFrozen: false }
+    };
+  }
   const independentAnchor = hasUsableAnchorComparison(firstResult.anchorComparison) ? firstResult.anchorComparison : null;
   const reviewedBase = normalizeScoreCoreResult(ai, body, signals, { fromBoundaryReview: true, independentAnchor, skipFeedbackQualityAudit: true });
   const reviewed = {
@@ -1430,7 +1501,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
-    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional.", 
+    "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
@@ -1521,12 +1592,17 @@ async function generateCriterionFeedbackAfterFreeze(body, frozenResult, signals)
 }
 
 function freezeReviewedScore(result = {}, body = {}, signals = {}) {
-  const criteria = normalizeCriteria(result.finalCriteria || result.criteria, signals.task);
+  const initialCriteria = normalizeCriteria(result.finalCriteria || result.criteria, signals.task);
+  const initialAverage = averageBand(initialCriteria);
+  if (!Number.isFinite(initialAverage.finalBand)) throw new Error("AI returned incomplete criterion bands in compact score pass.");
+  const initialAnchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, initialCriteria, signals);
+  const localCalibration = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison);
+  const criteria = localCalibration.criteria;
   const { rawAverage, finalBand } = averageBand(criteria);
-  if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands in compact score pass.");
   const calibration = normalizeCriterionCalibration(result.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, criteria, signals);
-  const boundaryAudit = result.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration, { skipFeedbackQualityAudit: true });
+  const boundaryAuditBase = result.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration, { skipFeedbackQualityAudit: true });
+  const boundaryAudit = localCalibration.changed ? { ...boundaryAuditBase, localCalibrationApplied: true, localCalibrationNotes: localCalibration.notes } : boundaryAuditBase;
   assertFinalCanFreeze({ ...result, criteria, finalCriteria: criteria, boundaryAudit, anchorComparison, criterionCalibration: calibration, localSignals: signals });
   return {
     ...result,
@@ -1549,15 +1625,15 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v7.3 five-step score-kernel pipeline: AI returns a tiny score kernel first; local hard audit triggers AI boundary review only when needed; final AI-returned bands are frozen and averaged; detailed feedback is generated only after score freeze and cannot change the score.",
+      formula: "v7.5 five-step pipeline: AI returns compact criterion bands; local boundary calibration may cap clearly over-generous short/fragmentary responses; final bands are then frozen and averaged; feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
-      localScoreChanged: false,
-      localScoreChangeExplanation: "No local band assignment. The server audits, may require AI boundary review, freezes AI-returned bands, then optionally generates post-freeze feedback."
+      localScoreChanged: localCalibration.changed,
+      localScoreChangeExplanation: localCalibration.changed ? localCalibration.notes.map((n) => n.reason).join(" ") : "No local calibration changed the AI-returned criterion bands."
     },
-    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
-    localScoreChanged: false
+    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, localCalibrationApplied: localCalibration.changed, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
+    localScoreChanged: localCalibration.changed
   };
 }
 
