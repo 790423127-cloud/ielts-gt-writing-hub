@@ -814,7 +814,7 @@ function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
-  const isCoreScoreStage = incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
+  const isCoreScoreStage = incomingStage === "score-core" || incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
   const isFinalScoreStage = incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
   const canUpdateScores = isCoreScoreStage || isFinalScoreStage;
   const lockScores = !canUpdateScores && Boolean(output.criteria || output.overallBand);
@@ -833,6 +833,7 @@ function mergeAiStageResult(base, incoming) {
     "scoreCalibration", "scoreCalibrationZh", "halfBandBoundary", "lowBandDiagnostics", "lowBandDiagnosticsZh",
     "highBandDiagnostics", "highBandDiagnosticsZh", "highBandBoundaryReview", "rateabilityProfile", "criterionOutlierReview", "lowScoreOutlierReview", "finalStabilityCheck", "taskMatchCheck", "wordCountWarning",
     "completionStatus", "textStats", "revisionStudyGuide", "betterExpressionBatchMeta", "sentenceCorrectionDisplayMeta",
+    "scoreCoreMeta", "scoreCoreV2Calibration", "scoringDiagnosticSignals", "criterionCalibration", "finalScoreSanityGate",
     "scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"
   ];
   arrayFields.forEach((field) => {
@@ -922,8 +923,10 @@ function adviceTranslationsComplete(data = {}) {
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
-  if (aiStage === "score") {
-    return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
+  if (aiStage === "score" || aiStage === "score-core") {
+    const criteria = data.criteria && typeof data.criteria === "object" ? data.criteria : {};
+    const criteriaCount = Object.values(criteria).filter((item) => Number.isFinite(Number(item?.band))).length;
+    return Boolean(criteriaCount >= 4 && Number(data.overallBand || data.scoreCalculation?.finalBand || data.mockWritingScore?.mockWritingBand) > 0);
   }
   if (aiStage === "prompt-analysis") {
     return Boolean(hasAnyText(data.taskRequirementAnalysis) || hasAnyText(data.taskMatchCheck));
@@ -1302,15 +1305,17 @@ async function startGrading() {
   if (els.gradingModeSelect) els.gradingModeSelect.disabled = true;
   if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
 
-  setGradingStatus("AI is scoring and analysing the task.", "loading");
+  setGradingStatus("AI is scoring first, then generating feedback.", "loading");
   els.gradingResults.innerHTML = isUnderMinimum
-    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数或作文可能未完成，AI 仍会正常批改并在最终复核中判断完成度对分数的影响。</p>`
+    ? `<p class="ai-warning">当前字数低于 IELTS 建议字数或作文可能未完成，AI 仍会先完成核心评分；分数冻结后再生成反馈。</p>`
     : "";
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Full grading runs staged AI passes plus low/high boundary safety reviews. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 19 : 18;
+  // Score-first flow:
+  // 1) run score-core once and freeze the IELTS bands;
+  // 2) later feedback stages may enrich explanations but must not overwrite the frozen score.
+  const totalSteps = payload.mode === "revision" ? 12 : 11;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1333,6 +1338,20 @@ async function startGrading() {
       const hasExpectedContent = stageResultHasExpectedContent(aiStage, stageResult);
       result = mergeAiStageResult(result || {}, stageResult);
 
+      if (aiStage === "score-core") {
+        result.scoreCoreMeta = {
+          ...(result.scoreCoreMeta || {}),
+          scoreFirst: true,
+          scoreFrozen: true,
+          scoreFrozenAfterThisStage: true,
+          feedbackStagesMayNotChangeScore: true,
+          scoringFlow: "score_first_then_feedback"
+        };
+        result.scoreFinalized = true;
+        result.scoreSource = result.scoreSource || "score-core";
+        result.finalScoreSource = result.finalScoreSource || "score-core";
+      }
+
       if (!hasExpectedContent) {
         const warning = `${warningPrefix}：AI 已返回，但没有提供这一阶段的完整结构化内容。`;
         stageWarnings.push(warning);
@@ -1352,8 +1371,8 @@ async function startGrading() {
       return hasExpectedContent;
     } catch (stageError) {
       const rawStageMessage = String(stageError?.message || "");
-      const friendlyOptionalMessage = !options.required && /better[- ]expressions?|task is not defined|HTTP 502|AI grading failed|batching failed/i.test(rawStageMessage)
-        ? "这一可选阶段暂时没有返回可用内容，基础评分、逐句批改和最终复核仍会继续。"
+      const friendlyOptionalMessage = !options.required && /better[- ]expressions?|task is not defined|HTTP 502|AI grading failed|batching failed|timed out/i.test(rawStageMessage)
+        ? "这一可选阶段暂时没有返回可用内容；已冻结的核心评分仍会保留。"
         : rawStageMessage;
       const warning = `${warningPrefix}：${friendlyOptionalMessage}`;
       stageWarnings.push(warning);
@@ -1371,7 +1390,11 @@ async function startGrading() {
     await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
     await runMergeStage("text-stats-completion", `第 2 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
     await runMergeStage("rateability-profile", `第 3 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
-    await runMergeStage("score", `第 4 步/${totalSteps}：AI 正在进行内部评分信号初筛（暂不展示分数）`, "评分信号初筛", { required: true });
+    await runMergeStage("score-core", `第 4 步/${totalSteps}：AI 正在进行核心评分、分档校准并冻结分数`, "核心评分与分档校准", { required: true });
+    markStage("分数冻结", "done", "核心评分已完成；后续反馈阶段只解释和修改，不再改变当前四项分。");
+    syncStageMeta();
+    if (result) renderGradingResult(result);
+
     await runMergeStage("spelling-wordform", `第 5 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
     await runMergeStage("lexical-choice-collocation", `第 6 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
     await runMergeStage("grammar-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
@@ -1379,45 +1402,17 @@ async function startGrading() {
     await runMergeStage("better-expressions", `第 9 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
     await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
     await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
-    await runMergeStage("evidence-map", `第 12 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
-    await runMergeStage("criterion-calibration", `第 13 步/${totalSteps}：AI 正在进行四项分档校准`, "四项分档校准", { required: true });
-    await runMergeStage("criterion-boundary", `第 14 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
-    if (shouldRunCriterionOutlierReview(result, payload)) {
-      await runMergeStage("criterion-outlier-review", `第 15 步/${totalSteps}：AI 正在复核单项异常分`, "单项异常分复核");
-    } else {
-      const skipReason = criterionOutlierSkipReason(result || {});
-      markStage("单项异常分复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    if (shouldRunLowScoreOutlierReview(result, payload)) {
-      await runMergeStage("low-score-outlier-review", `第 16 步/${totalSteps}：AI 正在复核低分异常`, "低分异常复核");
-    } else {
-      const skipReason = lowScoreOutlierSkipReason(result || {});
-      markStage("低分异常复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    if (shouldRunHighBandBoundaryReview(result, payload)) {
-      await runMergeStage("high-band-boundary-review", `第 17 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
-    } else {
-      const skipReason = highBandReviewSkipReason(result || {});
-      markStage("高分边界复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    await runMergeStage("final-plan", `第 18 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 19 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 12 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
     } else {
-      markStage("最终整理", "done", "结果已整理。");
+      markStage("最终整理", "done", "结果已整理；评分保持第 4 步冻结结果。");
       syncStageMeta();
       renderGradingResult(result);
     }
 
     if (stageWarnings.length) {
-      setGradingStatus("批改完成；部分阶段有记录，请查看下方“AI 批改进度与错误日志”。", "warning");
+      setGradingStatus("批改完成；部分反馈阶段有记录，请查看下方“AI 批改进度与错误日志”。", "warning");
     } else {
       setGradingStatus("批改完成", "done");
     }
