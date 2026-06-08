@@ -2893,18 +2893,6 @@ function buildFastAiGradingPrompt(body, gradingMode, locale = "en") {
     lowBandDiagnosticsZh: { reasonZh: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
-    criterionCalibration: {
-      purpose: "score_first_criterion_calibration",
-      localScoreChanged: false,
-      criteria: {
-        [firstCriterion]: { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Coherence and Cohesion": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Lexical Resource": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Grammatical Range and Accuracy": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] }
-      },
-      scoreProfileCheck: { pattern: "", suspicious: false, reason: "" }
-    },
-    scoreCoreMeta: { scoreFirst: true, scoreFrozenAfterThisStage: true, feedbackStagesMayNotChangeScore: true },
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
@@ -3735,18 +3723,6 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     highBandDiagnosticsZh: { reasonZh: "" },
     scoreCalibration: { strictness: "strict", capApplied: false, capReason: "", whyNotHigher: "", whyNotLower: "", evidence: [] },
     scoreCalibrationZh: { capReasonZh: "", whyNotHigherZh: "", whyNotLowerZh: "", evidenceZh: [] },
-    criterionCalibration: {
-      purpose: "score_first_criterion_calibration",
-      localScoreChanged: false,
-      criteria: {
-        [firstCriterion]: { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Coherence and Cohesion": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Lexical Resource": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] },
-        "Grammatical Range and Accuracy": { candidateBandRange: "", candidateBandsConsidered: [], selectedBand: 1, positiveEvidence: [], limitingEvidence: [], whyNotLower: "", whyNotHigher: "", adjacentBandChallenge: "", evidenceQuotes: [] }
-      },
-      scoreProfileCheck: { pattern: "", suspicious: false, reason: "" }
-    },
-    scoreCoreMeta: { scoreFirst: true, scoreFrozenAfterThisStage: true, feedbackStagesMayNotChangeScore: true },
     overallBand: 1,
     estimatedLevel: "Band 1.0",
     criteria: {
@@ -3800,11 +3776,6 @@ function buildLeanScorePrompt(body, gradingMode, locale = "en") {
     body.currentResult ? "- This is a score-audit pass. Audit the current result for contradictions between bands, feedback, strengths, mainProblems, diagnostics, and scoreCalibration. If all four criterion bands are identical, keep them identical only when concrete evidence proves all four criteria are genuinely the same level; otherwise differentiate the bands. If Band 7.5+, feedback must sound high-band and suggestions must be minor polish/refinement. Remove strengths from mainProblems." : "",
     "- If under the recommended word count, reflect it in the relevant criterion, but still grade the writing actually submitted.",
     "- Do not do detailed error lists here; later stages handle all spelling, grammar, and sentence corrections.",
-    "- This is the score-first core stage: decide all four criterion bands now, calibrate each band against adjacent lower/higher bands, and freeze the score before later feedback stages.",
-    "- For every criterion, criterionCalibration.criteria[criterion].selectedBand must match criteria[criterion].band. If not, fix the mismatch before returning JSON.",
-    "- For every criterion, include candidateBandRange, candidateBandsConsidered, positiveEvidence, limitingEvidence, whyNotLower, whyNotHigher, adjacentBandChallenge, and short evidenceQuotes from the submitted essay.",
-    "- Do not generate revised essays, model answers, long sentence corrections, or better expressions in this score-core pass.",
-    "- Later feedback stages may explain and correct errors, but they must not change these frozen criterion bands.",
     "- Keep strengths/mainProblems/advice arrays specific and evidence-based, usually 3-6 items. Do not use generic template wording.",
     "- For each criterion, feedback should explain the exact evidence in the essay and howToImprove should give a concrete next action.",
     "- Each criterion must include concrete evidenceQuotes from the essay, positiveEvidence, limitingEvidence, whyThisBand, whyNotHigher, and whyNotLower to support examiner-like scoring.",
@@ -3841,8 +3812,8 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     model,
     systemPrompt: buildLeanScoreSystemPrompt(locale),
     userPrompt: buildLeanScorePrompt({ ...body, mode: gradingMode }, gradingMode, locale),
-    maxTokens: envInt("AI_SCORE_CORE_MAX_TOKENS", 6500, 4500, 12000),
-    temperature: 0,
+    maxTokens: 5200,
+    temperature: 0.05,
     jsonMode: true,
     deadline,
     timeoutMs: Math.min(AI_SINGLE_REQUEST_TIMEOUT_MS, Math.max(120000, Number(process.env.AI_SCORE_TIMEOUT_MS) || 190000))
@@ -3854,7 +3825,7 @@ async function callAiLeanScoringPass({ apiKey, model, body, gradingMode, locale,
     rawText,
     body: { ...body, mode: gradingMode },
     locale,
-    maxTokens: envInt("AI_SCORE_CORE_MAX_TOKENS", 6500, 4500, 12000),
+    maxTokens: 5200,
     allowRepair: true,
     deadline
   });
@@ -4329,7 +4300,6 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
 
   return result;
 }
-
 
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
@@ -5282,91 +5252,6 @@ async function callAiScoreOnlyGrader({ apiKey, model, body, effectiveMode, veryS
   throw finalError;
 }
 
-
-function ensureScoreCoreCalibration(result = {}, body = {}) {
-  if (!result || typeof result !== "object") return result;
-  const task = body?.task === "Task 1" ? "Task 1" : "Task 2";
-  const names = getWritingCriterionNames(task);
-  const existing = result.criterionCalibration && typeof result.criterionCalibration === "object" ? result.criterionCalibration : {};
-  const existingCriteria = existing.criteria && typeof existing.criteria === "object" ? existing.criteria : {};
-  const criteria = result.criteria && typeof result.criteria === "object" ? result.criteria : {};
-  const calibratedCriteria = { ...existingCriteria };
-  names.forEach((name) => {
-    const c = criteria[name] && typeof criteria[name] === "object" ? criteria[name] : {};
-    const current = calibratedCriteria[name] && typeof calibratedCriteria[name] === "object" ? calibratedCriteria[name] : {};
-    const band = clampAiBand(current.selectedBand ?? c.band ?? result.overallBand, c.band ?? result.overallBand ?? 1);
-    calibratedCriteria[name] = {
-      candidateBandRange: current.candidateBandRange || `${formatBand(Math.max(1, roundHalf(band - 0.5)))}-${formatBand(Math.min(9, roundHalf(band + 0.5)))}`,
-      candidateBandsConsidered: ensureArray(current.candidateBandsConsidered).length ? current.candidateBandsConsidered : [Math.max(1, roundHalf(band - 0.5)), band, Math.min(9, roundHalf(band + 0.5))],
-      selectedBand: band,
-      positiveEvidence: ensureArray(current.positiveEvidence).length ? ensureArray(current.positiveEvidence) : ensureArray(c.positiveEvidence || c.evidence).slice(0, 4),
-      positiveEvidenceZh: ensureArray(current.positiveEvidenceZh).length ? ensureArray(current.positiveEvidenceZh) : ensureArray(c.positiveEvidenceZh || c.evidenceZh).slice(0, 4),
-      limitingEvidence: ensureArray(current.limitingEvidence).length ? ensureArray(current.limitingEvidence) : ensureArray(c.limitingEvidence).slice(0, 4),
-      limitingEvidenceZh: ensureArray(current.limitingEvidenceZh).length ? ensureArray(current.limitingEvidenceZh) : ensureArray(c.limitingEvidenceZh).slice(0, 4),
-      whyNotLower: current.whyNotLower || c.whyNotLower || "The submitted response contains enough criterion-specific evidence to support this band rather than the lower adjacent band.",
-      whyNotLowerZh: current.whyNotLowerZh || c.whyNotLowerZh || "原文仍有足够该评分项表现支撑当前分，而不是更低一档。",
-      whyNotHigher: current.whyNotHigher || c.whyNotHigher || "The response still has limitations that prevent the next higher adjacent band.",
-      whyNotHigherZh: current.whyNotHigherZh || c.whyNotHigherZh || "原文仍有该评分项限制，暂时不能稳定达到更高一档。",
-      adjacentBandChallenge: current.adjacentBandChallenge || `Chosen Band ${formatBand(band)} after comparing adjacent bands using essay-specific positive and limiting evidence.`,
-      adjacentBandChallengeZh: current.adjacentBandChallengeZh || `根据原文正面证据和限制证据，与相邻分档比较后选择 Band ${formatBand(band)}。`,
-      evidenceQuotes: ensureArray(current.evidenceQuotes).length ? ensureArray(current.evidenceQuotes).slice(0, 3) : ensureArray(c.evidenceQuotes).slice(0, 3),
-      evidenceQuotesZh: ensureArray(current.evidenceQuotesZh).length ? ensureArray(current.evidenceQuotesZh).slice(0, 3) : ensureArray(c.evidenceQuotesZh).slice(0, 3)
-    };
-  });
-  result.criterionCalibration = {
-    ...existing,
-    purpose: existing.purpose || "score_first_criterion_calibration",
-    localScoreChanged: false,
-    scoreFrozenAfterCalibration: true,
-    criteria: calibratedCriteria,
-    scoreProfileCheck: existing.scoreProfileCheck || { pattern: "criterion_specific_bands_calibrated_before_feedback", suspicious: false, reason: "Criterion bands were calibrated before feedback generation." }
-  };
-  return result;
-}
-
-async function callAiScoreCoreStage({ apiKey, model, body, effectiveMode, locale, deadline }) {
-  const veryShort = isVeryShortEssay(body);
-  let result = await callAiScoreOnlyGrader({
-    apiKey,
-    model,
-    body,
-    effectiveMode: effectiveMode === "revision" ? "full" : effectiveMode,
-    veryShort,
-    maxTokens: maxTokensForMode("full", veryShort),
-    locale,
-    deadline
-  });
-  result.aiStage = "score-core";
-  result = ensureScoreCoreCalibration(result, body);
-  const finalCriteria = {};
-  getWritingCriterionNames(body?.task === "Task 1" ? "Task 1" : "Task 2").forEach((name) => {
-    const item = result.criteria?.[name] && typeof result.criteria[name] === "object" ? result.criteria[name] : {};
-    finalCriteria[name] = { ...item, finalBand: clampAiBand(item.band ?? result.overallBand, 1), band: clampAiBand(item.band ?? result.overallBand, 1) };
-  });
-  result = applyFinalScoringReconciliation({ ...result, finalCriteria, criteria: finalCriteria, aiStage: "score-core", disclaimer: DISCLAIMER }, body);
-  result = ensureScoreCoreCalibration(result, body);
-  result = await applyFinalScoreSanityGate({ apiKey, model, body, result, effectiveMode, stage: "score-core", locale, deadline });
-  result = ensureScoreCoreCalibration(result, body);
-  result.aiStage = "score-core";
-  result.scoreCoreMeta = {
-    scoreFirst: true,
-    scoreFrozen: true,
-    scoreFrozenAfterThisStage: true,
-    feedbackStagesMayNotChangeScore: true,
-    scoringFlow: "score_first_then_feedback"
-  };
-  result.scoreSource = result.scoreSource || "score_first_core_ai";
-  result.finalScoreSource = result.finalScoreSource || "score_first_core_ai";
-  result.scoringSystem = {
-    ...(result.scoringSystem && typeof result.scoringSystem === "object" ? result.scoringSystem : {}),
-    scoreFirstFlow: true,
-    scoreFrozenBeforeFeedback: true,
-    feedbackMayNotChangeScore: true,
-    removedUnstableLegacyFlow: "front_end_no_longer_runs_separate_criterion_calibration_or_final_plan_for_scoring"
-  };
-  return applyNextBandTargetPlan(result, body);
-}
-
 async function callAiCorrectionStageOnly({ apiKey, model, body, effectiveMode, locale, deadline }) {
   let output = { disclaimer: DISCLAIMER, aiStage: "language-correction" };
   if (!String(body.essay || "").trim()) {
@@ -5489,7 +5374,6 @@ async function callAiOnlyGrader({ apiKey, model, body, effectiveMode, veryShort,
 
 // --- AI-only staged grading pipeline (maximum-detail, no local scoring) ---
 const TEN_STEP_AI_STAGES = new Set([
-  "score-core",
   "prompt-analysis",
   "text-stats-completion",
   "rateability-profile",
@@ -5519,8 +5403,7 @@ function normalizeAiStage(value) {
   if (["promptanalysis", "requirementanalysis", "questionanalysis", "taskrequirementanalysis", "stage1", "step1"].includes(raw)) return "prompt-analysis";
   if (["textstatscompletion", "textstats", "completioncheck", "completionstatus", "basicstats", "sentencesplit", "stage2", "step2"].includes(raw)) return "text-stats-completion";
   if (["rateabilityprofile", "rateability", "rateable", "rateabilitycheck", "stage2b", "step2b"].includes(raw)) return "rateability-profile";
-  if (["scorecore", "coregrading", "corescore", "corescoring", "scoringcore", "gradecore", "scorefirst", "firstscore", "frozencore", "stage3", "step3"].includes(raw)) return "score-core";
-  if (["score", "scoring", "grade", "grading", "scoresignal", "scoresignals"].includes(raw)) return "score";
+  if (["score", "scoring", "grade", "grading", "corescore", "corescoring", "scoresignal", "scoresignals", "stage3", "step3"].includes(raw)) return "score";
   if (["halfbandsummary", "overallboundary", "overallscoreboundary", "scoreboundarysummary"].includes(raw)) return "half-band-summary";
   if (["criterionboundary", "criterionboundaries", "scoreboundary", "halfbandboundary", "halfband", "bandboundary", "boundary", "scoreexplanation", "stage12", "step12"].includes(raw)) return "criterion-boundary";
   if (["evidencemap", "evidencediagnostic", "diagnosticmap", "scoreevidence", "scoringevidence", "evidence", "stage11", "step11"].includes(raw)) return "evidence-map";
@@ -5560,7 +5443,6 @@ function buildTenStepSystemPrompt(stage, locale = "en") {
     ? "Use English for normal feedback fields and concise Chinese helper notes only in fields ending with Zh. Do not translate the full essay."
     : "Main fields must be English. Put concise, accurate Chinese helper notes only in fields ending with Zh. Match the adjacent English field. Do not translate the full essay.";
   const stageNames = {
-    "score-core": "score-first IELTS criterion scoring, calibration, and score freeze only",
     "prompt-analysis": "question requirement analysis only",
     "text-stats-completion": "basic text statistics, sentence splitting, and completion-status check only",
     "rateability-profile": "objective rateability profile only; no scoring",
@@ -5893,7 +5775,6 @@ function buildTenStepStagePrompt(body, mode, stage, locale = "en") {
 
 function tenStepStageMaxTokens(stage) {
   return ({
-    "score-core": envInt("AI_STAGE_SCORE_CORE_TOKENS", 7200, 4500, 12000),
     "prompt-analysis": envInt("AI_STAGE_PROMPT_ANALYSIS_TOKENS", 4500, 2500, 9000),
     "text-stats-completion": envInt("AI_STAGE_TEXT_STATS_TOKENS", 2500, 1000, 6000),
     "rateability-profile": envInt("AI_STAGE_RATEABILITY_TOKENS", 1200, 800, 3000),
@@ -5921,7 +5802,6 @@ function tenStepStageMaxTokens(stage) {
 
 function tenStepStageHasUsableContent(stage, output) {
   if (!output || typeof output !== "object") return false;
-  if (stage === "score-core") return Boolean(output.scoreFinalized || (output.criteria && Object.values(output.criteria || {}).filter((item) => Number.isFinite(Number(item?.band))).length >= 4));
   if (stage === "prompt-analysis") return hasUsefulText(output.taskRequirementAnalysis) || hasUsefulText(output.taskMatchCheck);
   if (stage === "text-stats-completion") return Number.isFinite(Number(output.actualWordCount)) || hasUsefulText(output.textStats) || hasUsefulText(output.completionStatus);
   if (stage === "rateability-profile") return hasUsefulText(output.rateabilityProfile) || hasUsefulText(output.status);
@@ -7167,21 +7047,9 @@ async function applyFinalScoreSanityGate({ apiKey, model, body, result, effectiv
       triggered: false,
       status: "not_triggered",
       repairApplied: false,
-      reason: "No final score sanity issue was detected after final AI scoring.",
-      reasonZh: "最终AI评分后未发现分数合理性异常。"
+      reason: "No final score sanity issue was detected after final AI reconciliation.",
+      reasonZh: "最终AI复核后未发现分数合理性异常。"
     };
-    return result;
-  }
-
-  if (!initialSignals.hardInvalid) {
-    result.finalScoreSanityGate = {
-      ...initialSignals,
-      repairApplied: false,
-      stageStatus: "warning",
-      repairConclusion: "A non-critical score consistency warning was detected. The score is kept because it is not a hard invalid pattern; no extra AI repair call is made in the score-first flow.",
-      repairConclusionZh: "检测到非严重分数一致性提醒，但不属于硬性异常；评分优先流程不额外调用AI修复，以保持稳定和降低超时风险。"
-    };
-    result.stageWarnings = ensureArray(result.stageWarnings).concat(["Non-critical final score sanity warning recorded without extra repair."]);
     return result;
   }
 
@@ -8115,9 +7983,6 @@ async function callAiFinalPlanOnly13({ apiKey, model, body, effectiveMode, stage
 }
 
 async function callAiTenStepStageOnly({ apiKey, model, body, effectiveMode, stage, locale, deadline }) {
-  if (stage === "score-core") {
-    return callAiScoreCoreStage({ apiKey, model, body, effectiveMode, locale, deadline });
-  }
   if (stage === "text-stats-completion") return buildTextStatsCompletionStage(body);
   if (stage === "rateability-profile") {
     const profile = buildRateabilityProfile(body);
@@ -8266,17 +8131,7 @@ async function handleRequest(req, res) {
 
   try {
     let result;
-    if (aiStage === "score-core") {
-      result = await callAiScoreCoreStage({
-        apiKey,
-        model,
-        body,
-        effectiveMode: effectiveMode === "revision" ? "full" : effectiveMode,
-        locale,
-        deadline
-      });
-      result.aiStage = "score-core";
-    } else if (aiStage === "score") {
+    if (aiStage === "score") {
       result = await callAiScoreOnlyGrader({
         apiKey,
         model,
