@@ -814,8 +814,8 @@ function mergeAiStageResult(base, incoming) {
   const output = base && typeof base === "object" ? { ...base } : {};
   const data = incoming && typeof incoming === "object" ? incoming : {};
   const incomingStage = data.aiStage || "";
-  const isCoreScoreStage = incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
-  const isFinalScoreStage = incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
+  const isCoreScoreStage = incomingStage === "score-core" || incomingStage === "score" || incomingStage === "all" || (!incomingStage && !output.criteria);
+  const isFinalScoreStage = incomingStage === "score-core" || incomingStage === "final-plan" || incomingStage === "final-score" || incomingStage === "final-reconciliation" || data.scoreFinalized === true;
   const canUpdateScores = isCoreScoreStage || isFinalScoreStage;
   const lockScores = !canUpdateScores && Boolean(output.criteria || output.overallBand);
   const scoreLockedObjectFields = new Set(["scoreCalculation", "scoringSystem", "mockWritingScore", "task1Result", "task2Result", "finalCriteria"]);
@@ -922,7 +922,7 @@ function adviceTranslationsComplete(data = {}) {
 
 function stageResultHasExpectedContent(aiStage, data = {}) {
   if (!data || typeof data !== "object") return false;
-  if (aiStage === "score") {
+  if (aiStage === "score-core" || aiStage === "score") {
     return Boolean(data.criteria && typeof data.criteria === "object" && Number(data.overallBand) > 0);
   }
   if (aiStage === "prompt-analysis") {
@@ -1309,8 +1309,8 @@ async function startGrading() {
   els.revisionCompareArea.classList.add("hidden");
 
   const payload = gradingPayload();
-  // Full grading runs staged AI passes plus low/high boundary safety reviews. Revision mode adds one optional AI stage for model/revised essays.
-  const totalSteps = payload.mode === "revision" ? 19 : 18;
+  // Score-first flow: freeze the four IELTS criterion bands first, then generate feedback without changing the score.
+  const totalSteps = payload.mode === "revision" ? 12 : 11;
   let result = null;
   const stageWarnings = [];
   const stageProgress = [];
@@ -1368,50 +1368,26 @@ async function startGrading() {
   }
 
   try {
-    await runMergeStage("prompt-analysis", `第 1 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
-    await runMergeStage("text-stats-completion", `第 2 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
-    await runMergeStage("rateability-profile", `第 3 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
-    await runMergeStage("score", `第 4 步/${totalSteps}：AI 正在进行内部评分信号初筛（暂不展示分数）`, "评分信号初筛", { required: true });
+    await runMergeStage("text-stats-completion", `第 1 步/${totalSteps}：系统正在统计字数、句子并检查完成度信号`, "文本统计与完成度检查", { required: true });
+    await runMergeStage("rateability-profile", `第 2 步/${totalSteps}：系统正在生成可评分性检查（不改分）`, "可评分性检查", { required: true });
+    await runMergeStage("prompt-analysis", `第 3 步/${totalSteps}：AI 正在分析题目要求`, "题目要求分析", { required: true });
+    await runMergeStage("score-core", `第 4 步/${totalSteps}：AI 正在进行四项评分、分档校准并冻结分数`, "核心评分与分档校准", { required: true });
+    markStage("分数冻结", "done", "四项分数已先行确定；后续反馈阶段只解释和修改，不再改变分数。");
+    syncStageMeta();
+    if (result) renderGradingResult(result);
+
     await runMergeStage("spelling-wordform", `第 5 步/${totalSteps}：AI 正在检查拼写和词形`, "拼写和词形诊断");
-    await runMergeStage("lexical-choice-collocation", `第 6 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
-    await runMergeStage("grammar-diagnosis", `第 7 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("grammar-diagnosis", `第 6 步/${totalSteps}：AI 正在诊断语法范围和准确性`, "语法诊断");
+    await runMergeStage("lexical-choice-collocation", `第 7 步/${totalSteps}：AI 正在检查用词、搭配和重复`, "词汇选择和搭配诊断");
     await runMergeStage("sentence-corrections", `第 8 步/${totalSteps}：AI 正在生成逐句批改`, "逐句批改");
     await runMergeStage("better-expressions", `第 9 步/${totalSteps}：AI 正在生成更好表达/高分表达优化`, "更好表达/高分表达优化");
-    await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在诊断任务回应/任务完成`, "任务回应诊断");
-    await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在诊断结构与衔接`, "结构与衔接诊断");
-    await runMergeStage("evidence-map", `第 12 步/${totalSteps}：AI 正在提取四项评分证据地图`, "评分证据地图");
-    await runMergeStage("criterion-calibration", `第 13 步/${totalSteps}：AI 正在进行四项分档校准`, "四项分档校准", { required: true });
-    await runMergeStage("criterion-boundary", `第 14 步/${totalSteps}：AI 正在进行半分边界判断`, "半分边界判断");
-    if (shouldRunCriterionOutlierReview(result, payload)) {
-      await runMergeStage("criterion-outlier-review", `第 15 步/${totalSteps}：AI 正在复核单项异常分`, "单项异常分复核");
-    } else {
-      const skipReason = criterionOutlierSkipReason(result || {});
-      markStage("单项异常分复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    if (shouldRunLowScoreOutlierReview(result, payload)) {
-      await runMergeStage("low-score-outlier-review", `第 16 步/${totalSteps}：AI 正在复核低分异常`, "低分异常复核");
-    } else {
-      const skipReason = lowScoreOutlierSkipReason(result || {});
-      markStage("低分异常复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    if (shouldRunHighBandBoundaryReview(result, payload)) {
-      await runMergeStage("high-band-boundary-review", `第 17 步/${totalSteps}：AI 正在进行高分边界复核`, "高分边界复核");
-    } else {
-      const skipReason = highBandReviewSkipReason(result || {});
-      markStage("高分边界复核", "skipped", skipReason);
-      syncStageMeta();
-      if (result) renderGradingResult(result);
-    }
-    await runMergeStage("final-plan", `第 18 步/${totalSteps}：AI 正在进行最终评分复核并生成提分计划`, "最终评分复核与提分计划", { required: true });
+    await runMergeStage("task-diagnosis", `第 10 步/${totalSteps}：AI 正在根据已冻结分数解释任务回应问题`, "任务回应诊断");
+    await runMergeStage("coherence-diagnosis", `第 11 步/${totalSteps}：AI 正在根据已冻结分数解释结构与衔接问题`, "结构与衔接诊断");
 
     if (payload.mode === "revision") {
-      await runMergeStage("revision", `第 19 步/${totalSteps}：AI 正在生成修改版/范文`, "范文/修改版生成");
+      await runMergeStage("revision", `第 12 步/${totalSteps}：AI 正在根据已冻结分数生成修改版/范文`, "范文/修改版生成");
     } else {
-      markStage("最终整理", "done", "结果已整理。");
+      markStage("最终整理", "done", "结果已整理。评分已在前置核心评分阶段冻结。旧的独立分档校准、单项异常复核、低分复核、高分复核和 final-plan 评分链路已从本流程移除，以降低超时和分数漂移。 ");
       syncStageMeta();
       renderGradingResult(result);
     }
@@ -3574,7 +3550,7 @@ function renderFinalScoreArea(result = {}) {
   if (!hasFinalDisplayedScore(result)) {
     return `<section class="grading-section score-pending-card">
       <h4>最终评分</h4>
-      <p class="muted">最终分数会在第 13 步 AI 完成最终评分复核后显示。前面的步骤只收集评分证据、诊断问题和生成批改内容。</p>
+      <p class="muted">最终分数会在核心评分与分档校准阶段先显示并冻结；后续反馈阶段只解释、批改和给出练习建议，不再改变分数。</p>
     </section>`;
   }
   const changeNote = result.scoreChanged
@@ -3781,24 +3757,17 @@ function mockPayloadForPrompt(prompt, essay) {
 }
 
 const MOCK_FINAL_SCORING_STAGES = [
-  ["prompt-analysis", "题目要求分析"],
   ["text-stats-completion", "文本统计与完成度检查"],
   ["rateability-profile", "可评分性检查"],
-  ["score", "内部评分信号初筛/反馈分轨"],
+  ["prompt-analysis", "题目要求分析"],
+  ["score-core", "核心评分与分档校准"],
   ["spelling-wordform", "拼写和词形诊断"],
-  ["lexical-choice-collocation", "用词搭配诊断"],
   ["grammar-diagnosis", "语法诊断"],
+  ["lexical-choice-collocation", "用词搭配诊断"],
   ["sentence-corrections", "逐句批改"],
   ["better-expressions", "更好表达/高分表达优化"],
   ["task-diagnosis", "任务完成/回应诊断"],
-  ["coherence-diagnosis", "结构与衔接诊断"],
-  ["evidence-map", "评分证据地图"],
-  ["criterion-calibration", "四项分档校准"],
-  ["criterion-boundary", "半分边界判断"],
-  ["criterion-outlier-review", "单项异常分复核"],
-  ["low-score-outlier-review", "低分异常复核"],
-  ["high-band-boundary-review", "高分边界复核"],
-  ["final-plan", "最终评分复核"]
+  ["coherence-diagnosis", "结构与衔接诊断"]
 ];
 
 async function postMockStage(endpoint, payload, aiStage, label, stageLabel) {
@@ -3848,7 +3817,7 @@ async function postMockScore(endpoint, prompt, essay, label) {
     result = mergeAiStageResult(result || {}, stageResult);
   }
   if (!result?.scoreFinalized || !Number.isFinite(Number(result?.overallBand))) {
-    throw new Error(`${label}: final AI score reconciliation did not return a final score.`);
+    throw new Error(`${label}: score-first core stage did not return a frozen final score.`);
   }
   return result;
 }
