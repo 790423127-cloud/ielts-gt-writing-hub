@@ -11,9 +11,11 @@
   let mockTimerId = null;
   let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
-    { stage: "score-input-check", title: "文本检查与任务识别", description: "检查词数、任务类型、可评分性和本地边界信号。" },
-    { stage: "score-ai-anchor-review", title: "AI 锚点评分与边界复核", description: "AI 独立判断 0–9 锚点，生成四项评分，并在需要时进行边界复核。" },
-    { stage: "score-final-output", title: "最终验证并生成结果", description: "验证评分结构、冻结最终分数，并生成评分报告。" }
+    { stage: "local-precheck", title: "本地预检与任务分流", description: "检查词数、任务类型、可评分性、语言风险和 Task 1 / Task 2 评分边界。" },
+    { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes，不生成中文、长解释、原文引用或详细反馈。" },
+    { stage: "boundary-audit", title: "本地边界审计", description: "检查低分抬高、高分卡 7、弱语言高分、四项同分和 anchor 冲突。" },
+    { stage: "boundary-review", title: "AI 边界复核", description: "只有审计触发时才二次复核；否则跳过。" },
+    { stage: "final-freeze-feedback", title: "冻结分数与后置反馈", description: "先冻结最终分数，再生成详细反馈；反馈失败不影响分数。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
@@ -333,7 +335,7 @@
   function friendlyScoringError(error) {
     const msg = String(error?.message || error || "");
     if (/malformed JSON|valid JSON|JSON at position|repair failed/i.test(msg)) {
-      return "评分格式修复失败：核心评分 JSON 结构损坏且自动修复未成功。系统没有展示不可信分数，请重试一次。";
+      return "AI 核心评分失败：短 JSON 评分内核损坏且自动重试未成功。系统没有展示不可信分数，请重试一次。";
     }
     if (/freeze blocked|boundary audit|boundary review|409/i.test(msg)) {
       return "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。请重试一次；如果连续出现，请检查高分/低分边界复核返回。";
@@ -1312,16 +1314,16 @@
     try {
       latestScoringProgress = createScoringProgress();
       latestScoringProgress.status = "running";
-      updateScoringProgress(0, "done", "文本已提交，后端将进行本地文本检查与任务识别。");
-      updateScoringProgress(1, "running", "AI 正在进行独立锚点判断、四项评分和必要的边界复核。");
+      updateScoringProgress(0, "done", "文本已提交，后端将进行本地预检与任务分流。");
+      updateScoringProgress(1, "running", "AI 正在生成短 JSON 核心评分：anchor、四项分和 reason codes。");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      setGradingStatus("第 2 步/3：AI 锚点评分与边界复核。", "loading");
+      setGradingStatus("第 2 步/5：AI 核心评分。", "loading");
       const result = await postStage(endpoint, gradingPayload({ mode: "score" }));
       latestScoreResult = result;
       syncScoringProgressFromResult(result);
       completeScoringProgress();
       renderScoreResult(result);
-      setGradingStatus("评分完成。四项分数已冻结。作文生成请使用旁边的单独按钮。", "done");
+      setGradingStatus("评分完成。五步流程已完成，四项分数已冻结；详细反馈若失败不会影响分数。作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       updateScoringProgress(1, "error", "评分流程执行失败。", error);
       setGradingStatus(friendlyScoringError(error), "error");
