@@ -332,8 +332,14 @@
 
   function friendlyScoringError(error) {
     const msg = String(error?.message || error || "");
+    if (/malformed JSON|valid JSON|JSON at position|repair failed/i.test(msg)) {
+      return "评分格式修复失败：AI 已返回内容，但 JSON 结构损坏且自动修复未成功。系统没有展示不可信分数，请重试一次。";
+    }
     if (/freeze blocked|boundary audit|boundary review|409/i.test(msg)) {
       return "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。请重试一次；如果连续出现，请检查高分/低分边界复核返回。";
+    }
+    if (/timed out|timeout/i.test(msg)) {
+      return "评分超时：AI provider 响应时间过长。请重试一次，或稍后再试。";
     }
     return `评分失败：${msg}`;
   }

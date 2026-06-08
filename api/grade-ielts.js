@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-single-pass-strict-anchor-pipeline";
+const SCORE_SYSTEM_VERSION = "score-core-v7-1-task-band-boundary-json-repair";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -56,6 +56,29 @@ const TASK2_GATE_RULES = [
   "High-band Unlock Gate: if the essay is fully responsive, mature, logically developed, cohesive, lexically precise, and grammatically controlled, actively consider 7.5/8.0/8.5/9.0 instead of defaulting to 7.0.",
   "Score-profile Check: challenge all-equal criterion bands and large gaps between task/organisation and LR/GRA; explain why each criterion is where it is."
 ];
+
+
+const TASK1_BAND_BOUNDARY_PROTOCOL = [
+  "Task 1 low-band 0-3: no assessable letter, extremely short message, unclear purpose, 0-1 bullet addressed, or errors blocking communication. Do not reward letter-looking layout if communicative purpose is missing.",
+  "Task 1 Band 4: basically related but bullet coverage is incomplete or details are very thin; tone/register or letter completeness may be unstable; frequent errors reduce clarity.",
+  "Task 1 Band 5/5.5: purpose is generally clear and most bullets are addressed, but one bullet may be thin, tone may be uneven, and language remains limited or error-prone.",
+  "Task 1 Band 6/6.5: all bullets are covered with useful detail; purpose and tone are generally appropriate; organisation is clear; language errors do not seriously reduce understanding.",
+  "Task 1 high-band 7-9: all bullets are developed naturally and proportionately; register is precise; the letter reads like a real response to the reader; vocabulary and grammar are flexible, accurate, and mostly error-free. Consider 7.5/8/8.5/9 when this evidence is present.",
+  "Task 1 hard checks: if a bullet is missing, Task Achievement normally cannot exceed 5.0; if two bullets are missing, TA normally cannot exceed 4.0; if tone/register is clearly wrong, TA and LR must be reviewed."
+];
+
+const TASK2_BAND_BOUNDARY_PROTOCOL = [
+  "Task 2 low-band 0-3: blank/irrelevant/non-English/very short, or only a few relevant sentences with no developed answer. Do not lift because of paragraph labels.",
+  "Task 2 Band 4: related but very limited response; ideas are simple and barely developed; organisation is weak; language errors are frequent.",
+  "Task 2 Band 5/5.5: clear position and basic structure, but ideas are general, examples are brief, reasoning is shallow, and LR/GRA are limited or error-prone. This is the normal range for complete but weak essays.",
+  "Task 2 Band 6/6.5: clear response with real development, relevant explanations/examples, generally clear progression, and errors that do not often block clarity. Paragraphing alone is not Band 6 evidence.",
+  "Task 2 high-band 7-9: developed or mature reasoning, natural cohesion, precise/flexible vocabulary, varied grammar, and few/rare errors. If the essay is fully responsive and controlled, consider 7.5/8/8.5/9 and do not default to 7.0.",
+  "Task 2 hard checks: 80-119 words usually 3.0-4.0; 120-149 usually 3.5-4.5; 150-179 usually 4.0-5.0; 180-229 needs strong development to justify 5.5/6.0+. High spelling/grammar density must constrain LR/GRA."
+];
+
+function bandBoundaryProtocolForTask(task) {
+  return (task === "Task 1" ? TASK1_BAND_BOUNDARY_PROTOCOL : TASK2_BAND_BOUNDARY_PROTOCOL).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+}
 
 const DETAILED_SCORING_STEPS = [
   { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
@@ -308,7 +331,7 @@ function stableJsonParse(text) {
   throw new Error("AI did not return valid JSON.");
 }
 
-async function callDeepSeek(messages, maxTokens = 5000, temperature = 0) {
+async function callDeepSeekContent(messages, maxTokens = 5000, temperature = 0) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY environment variable.");
   const controller = new AbortController();
@@ -324,12 +347,45 @@ async function callDeepSeek(messages, maxTokens = 5000, temperature = 0) {
     if (!response.ok) throw new Error(payload?.error?.message || `DeepSeek HTTP ${response.status}`);
     const content = payload?.choices?.[0]?.message?.content;
     if (!content) throw new Error("DeepSeek returned an empty response.");
-    return stableJsonParse(content);
+    return content;
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("DeepSeek request timed out.");
     throw error;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function buildJsonRepairPrompt(rawContent, parseError) {
+  return [
+    "You are a JSON repair engine. Return JSON only.",
+    "The previous IELTS scoring model returned malformed JSON. Repair the JSON syntax only.",
+    "Do not change any scores, bands, explanations, evidence, anchor decisions, boundary decisions, or meanings.",
+    "If a string contains quote marks from the essay, use single quotes inside the string or escape double quotes correctly.",
+    "Remove trailing prose, markdown fences, comments, invalid control characters, and dangling commas.",
+    `Parse error: ${String(parseError?.message || parseError || "unknown parse error")}`,
+    `Malformed content:\n${String(rawContent || "").slice(0, 60000)}`
+  ].join("\n\n");
+}
+
+async function callDeepSeek(messages, maxTokens = 5000, temperature = 0) {
+  const content = await callDeepSeekContent(messages, maxTokens, temperature);
+  try {
+    return stableJsonParse(content);
+  } catch (firstError) {
+    try {
+      const repairedContent = await callDeepSeekContent([
+        { role: "system", content: "You repair malformed JSON. Return valid JSON only and never alter the scoring meaning." },
+        { role: "user", content: buildJsonRepairPrompt(content, firstError) }
+      ], Math.min(5000, Math.max(1800, Math.floor(maxTokens * 0.65))), 0);
+      const repaired = stableJsonParse(repairedContent);
+      repaired.__jsonRepairApplied = true;
+      return repaired;
+    } catch (repairError) {
+      const error = new Error(`AI returned malformed JSON and repair failed. Original parse error: ${firstError.message}; repair error: ${repairError.message}`);
+      error.name = "MalformedAiJsonError";
+      throw error;
+    }
   }
 }
 
@@ -463,6 +519,39 @@ function getWordCountBoundaryProfile(task, words) {
   return { triggered: false, category: "normal_essay_length", suggestedRange: "No word-count low-band boundary", lower: 0, upper: 9, severity: "none", reason: `Task 2 word count ${w} is in or near the normal IELTS range.` };
 }
 
+
+function getLocalBandBoundaryProfile(signals = {}) {
+  const task = signals.task === "Task 1" ? "Task 1" : "Task 2";
+  const wordBoundary = getWordCountBoundaryProfile(task, signals.wordCount);
+  const languageWeak = signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak" || signals.sentenceControl === "weak";
+  const languageModerate = signals.grammarErrorDensity === "moderate" || signals.spellingErrorDensity === "moderate" || signals.lexicalControl === "basic" || signals.sentenceControl === "basic";
+  const highBandEligible = !wordBoundary.triggered && !languageWeak && signals.rateabilityStatus === "clearly_rateable";
+  const lowBandRisk = wordBoundary.triggered || signals.rateabilityStatus === "not_rateable_or_severely_limited";
+  const midBandRisk = !lowBandRisk && (languageWeak || languageModerate || signals.rateabilityStatus !== "clearly_rateable");
+  const likelyZone = lowBandRisk
+    ? (task === "Task 1" ? "Task 1 low-band or low-mid boundary; bullet/purpose/tone detail must justify any score above the suggested range." : "Task 2 low-band or low-mid boundary; development and language evidence must justify any score above the suggested range.")
+    : highBandEligible
+      ? (task === "Task 1" ? "Task 1 high-band can be considered if all bullets are fully developed and register is precise." : "Task 2 high-band can be considered if reasoning is mature, cohesive and language control is strong.")
+      : "Mid-band boundary: complete but limited writing needs criterion-specific evidence before 5.5/6.0+.";
+  return {
+    task,
+    wordBoundary,
+    languageWeak,
+    languageModerate,
+    highBandEligible,
+    lowBandRisk,
+    midBandRisk,
+    likelyZone,
+    languageProfile: {
+      spellingErrorDensity: signals.spellingErrorDensity,
+      grammarErrorDensity: signals.grammarErrorDensity,
+      lexicalControl: signals.lexicalControl,
+      sentenceControl: signals.sentenceControl,
+      weakPhraseCount: signals.weakPhraseCount
+    }
+  };
+}
+
 function scoreValues(criteria) {
   return Object.values(criteria || {}).map(Number).filter(Number.isFinite);
 }
@@ -538,6 +627,7 @@ function buildIndependentAnchorPrompt(body, signals) {
   const taskSpecific = task === "Task 1"
     ? `GT Task 1 letter: judge purpose clarity, bullet coverage, tone/register, letter completeness and language control. Extracted bullets: ${JSON.stringify(signals.task1BulletPoints)}.`
     : `GT Task 2 essay: judge prompt coverage, position, development, examples/reasons, logical progression and language control. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
+  const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
   return [
     "You are an IELTS GT Writing anchor-classification examiner. Return JSON only. Do not assign criterion bands in this stage.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}.`,
@@ -559,6 +649,9 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
   const names = criterionNames(task);
   const anchorTable = stringifyAnchorTable(task);
   const gateRules = gateRulesForTask(task).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+  const bandBoundaryProtocol = bandBoundaryProtocolForTask(task);
+  const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
+  const compactMode = localBoundaryProfile.lowBandRisk || localBoundaryProfile.languageWeak || signals.wordCount < (task === "Task 1" ? 150 : 230);
   const taskSpecific = task === "Task 1"
     ? `Task 1 GT letter checks: purpose clarity; all bullet points separately covered/partly/missing; functional detail; recipient relationship; tone/register; opening/closing/format. Extracted bullet points: ${JSON.stringify(signals.task1BulletPoints)}.`
     : `Task 2 essay checks: question type; all required parts; clear position when required; relevant development; reasons; examples; conclusion. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
@@ -584,12 +677,15 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
     "Criterion feedback evidence rule: criterionCalibration must be essay-specific, not templated. Every criterion must cite or paraphrase at least two concrete features or short quotes from the student's response in positiveEvidence, limitingEvidence, or essayEvidence.",
     "Invalid generic feedback rule: comments such as 'clear position but lacks depth', 'adequate vocabulary', 'some grammatical errors', 'coherence is generally clear', or any comment that could apply to any essay are invalid. Rewrite with exact evidence from this essay.",
     "Each criterion explanation must include: whyThisBand, whyNotLower, whyNotHigher, howToImprove, essayEvidence, and specific evidence for/against the next half band. Do not leave evidence arrays empty unless the answer is not assessable.",
+    "JSON safety rule: do not use unescaped double quotes inside JSON string values. Use single quotes around student phrases. Return no markdown, no comments, no trailing prose.",
     "Low-band boundary rule: severe underlength may be rateable but still belongs to a low-band boundary. Task 2 80-119 words is usually Band 3.0-4.0; Task 2 120-149 words is usually Band 3.5-4.5 unless exceptional evidence exists.",
     "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
     "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
     "Band 6 access rule: Band 6 requires real task fulfilment and development, not only paragraphing. If ideas are general, examples are brief, or frequent language errors reduce precision, stay at 5.0-5.5.",
     "High-band unlock rule: if the response has full task fulfilment, developed ideas, natural progression, precise/flexible lexis, and strong grammar control, actively consider 7.5/8.0/8.5/9.0 rather than defaulting to 7.0.",
     "LR/GRA gates: high spelling/word-form density must limit LR unless strong evidence overrides it. High grammar density or weak sentence control must limit GRA unless strong evidence overrides it.",
+    "Task-aware low-band AI action: if the response is complete but language is weak, lower LR/GRA rather than blindly lowering TR/TA or CC. If the response is short or missing task content, lower TR/TA and CC as well.",
+    "Task-aware high-band AI action: if the response meets high-band task fulfilment and language-control evidence, break the Band 7 ceiling with 7.5/8/8.5/9 where justified; Band 8/9 writing does not need to be perfect.",
     "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
     "The server will average the four criterion bands and round to the nearest 0.5. Do not invent a separate overall band that conflicts with the four criteria.",
     `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
@@ -643,6 +739,39 @@ function defaultImproveForCriterion(criterion) {
   if (/Lexical/i.test(criterion)) return "Reduce spelling and word-form errors and use more accurate topic vocabulary and collocations.";
   if (/Grammatical/i.test(criterion)) return "Control basic verb forms, articles, plurals, punctuation, and sentence boundaries before adding more complex structures.";
   return "Strengthen the limiting evidence for this criterion to move 0.5 band higher.";
+}
+
+
+function evidenceItemCount(item = {}) {
+  const arrays = [item.positiveEvidence, item.limitingEvidence, item.essayEvidence, item.textEvidence, item.evidenceQuotes].filter(Array.isArray);
+  return arrays.reduce((sum, arr) => sum + arr.filter(Boolean).length, 0);
+}
+
+function isGenericCriterionFeedbackText(text) {
+  const value = String(text || "").toLowerCase();
+  if (!value.trim()) return true;
+  const genericPatterns = [
+    /clear position but lacks depth/,
+    /adequate vocabulary/,
+    /some grammatical errors/,
+    /coherence is generally clear/,
+    /ideas are underdeveloped/,
+    /grammar is generally controlled/,
+    /vocabulary is limited/,
+    /needs more examples/,
+    /good but not excellent/
+  ];
+  return genericPatterns.some((pattern) => pattern.test(value));
+}
+
+function criterionFeedbackQualityIssues(calibration = {}) {
+  return Object.entries(calibration || {}).flatMap(([criterion, item]) => {
+    const text = [item.summary, item.whyThisBand, item.whyNotLower, item.whyNotHigher, item.howToImprove].filter(Boolean).join(" ");
+    const issues = [];
+    if (isGenericCriterionFeedbackText(text)) issues.push(`${criterion}: criterion feedback appears generic or under-specific.`);
+    if (evidenceItemCount(item) < 2) issues.push(`${criterion}: fewer than two concrete evidence items were returned.`);
+    return issues;
+  });
 }
 
 function normalizeCriterionCalibration(rawCalibration, criteria, task) {
@@ -738,6 +867,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   const wordBoundary = getWordCountBoundaryProfile(signals.task, signals.wordCount);
   const highCandidate = detectHighBandCandidate(criteria, signals, anchorComparison, criterionCalibration);
   const warnings = collectScoreWarnings(criteria, signals);
+  const feedbackQualityIssues = criterionFeedbackQualityIssues(criterionCalibration);
   const anchorBand = Number(anchorComparison?.closestAnchorBand);
   const anchorMissing = Boolean(anchorComparison?.anchorMissing || anchorComparison?.anchorSource === "local_fallback_missing_ai_anchor");
   const anchorConflict = Number.isFinite(anchorBand) && Number.isFinite(finalBand) && Math.abs(anchorBand - finalBand) > 1;
@@ -746,6 +876,13 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   const allFourSeven = values.length === 4 && values.every((x) => x === 7);
   const lowBandScoreTooHigh = Boolean(wordBoundary.triggered && Number.isFinite(finalBand) && Number.isFinite(wordBoundary.upper) && finalBand > wordBoundary.upper);
   const band6AccessConflict = Boolean(signals.task === "Task 2" && signals.wordCount < 230 && values.some((x) => x >= 6) && (signals.rateabilityStatus !== "clearly_rateable" || wordBoundary.triggered));
+  const names = criterionNames(signals.task);
+  const firstCriterionBand = Number(criteria[names[0]]);
+  const lrBand = Number(criteria["Lexical Resource"]);
+  const graBand = Number(criteria["Grammatical Range and Accuracy"]);
+  const weakLanguageHighScoreConflict = Boolean((signals.lexicalControl === "weak" || signals.spellingErrorDensity === "high") && lrBand >= 5.5) || Boolean((signals.sentenceControl === "weak" || signals.grammarErrorDensity === "high") && graBand >= 5.5);
+  const fullLengthWeakLanguageOverallConflict = Boolean(!wordBoundary.triggered && Number.isFinite(finalBand) && finalBand >= 6 && (signals.lexicalControl === "weak" || signals.sentenceControl === "weak" || signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high"));
+  const task1BelowLengthHighTAConflict = Boolean(signals.task === "Task 1" && Number(signals.wordCount) < 150 && Number.isFinite(firstCriterionBand) && firstCriterionBand >= 6);
   const reviewReasons = [];
   if (anchorMissing) reviewReasons.push("AI did not provide an independent anchor comparison.");
   if (lowBandScoreTooHigh) reviewReasons.push(`Final Band ${finalBand.toFixed(1)} exceeds local word-count boundary ${wordBoundary.suggestedRange}.`);
@@ -754,6 +891,10 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   if (anchorConflict) reviewReasons.push(`Anchor Band ${anchorBand} differs from final Band ${finalBand.toFixed(1)} by more than 1.0.`);
   if (allSame && finalBand >= 5) reviewReasons.push("All four criterion bands are identical; forced differentiation review is required.");
   if (band6AccessConflict) reviewReasons.push("Band 6+ access conflict: short or weakly rateable Task 2 needs real development evidence.");
+  if (weakLanguageHighScoreConflict) reviewReasons.push("Language-control conflict: weak spelling/lexical or grammar/sentence-control signals require LR/GRA boundary review.");
+  if (fullLengthWeakLanguageOverallConflict) reviewReasons.push("Full-length but weak-language conflict: overall 6.0+ requires strong evidence despite high local language-error signals.");
+  if (task1BelowLengthHighTAConflict) reviewReasons.push("Task 1 below recommended length but Task Achievement is 6.0+; bullet detail and purpose/tone must be reviewed.");
+  if (feedbackQualityIssues.length) reviewReasons.push(`Criterion feedback quality issue: ${feedbackQualityIssues.slice(0, 4).join(" | ")}`);
   return {
     version: "strict-boundary-audit-v6",
     localScoringApplied: false,
@@ -782,8 +923,12 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
       finalBand
     },
     scoreProfileAudit: {
-      status: (warnings.length || allSame) ? "triggered" : "passed",
+      status: (warnings.length || allSame || weakLanguageHighScoreConflict || fullLengthWeakLanguageOverallConflict || task1BelowLengthHighTAConflict) ? "triggered" : "passed",
       allCriteriaSame: allSame,
+      weakLanguageHighScoreConflict,
+      fullLengthWeakLanguageOverallConflict,
+      task1BelowLengthHighTAConflict,
+      feedbackQualityIssues,
       warnings
     },
     firstPass: existing.firstPass || null,
@@ -944,17 +1089,24 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
   const signals = firstResult.localSignals || localSignals(body);
   const task = signals.task;
   const names = criterionNames(task);
+  const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
   return [
     "You are the second-pass IELTS GT Writing boundary examiner. Return JSON only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. The server will not assign bands locally, but it will refuse to freeze unreviewed boundary conflicts.`,
     `Task: ${task}. Criteria: ${names.join(", ")}.`,
+    `Task-specific high/low band boundary protocol:
+${bandBoundaryProtocolForTask(task)}`,
+    `Local boundary profile: ${JSON.stringify(localBoundaryProfile)}`,
     "You must re-check only scoring boundaries: low-band underlength, Band 6 access, high-band unlock, all-four-same differentiation, and anchor/final-score conflicts.",
     "If the first result is too high or too low, revise the four criterion bands yourself. If you keep the same bands, provide concrete evidence that justifies keeping them.",
     "For all-four Band 7 cases, explicitly decide whether any criterion should be 7.5/8.0/8.5/9.0 or whether true Band 7 is justified. Do not default to 7.0 for safety.",
     "If the first result is all four Band 7.0, you must NOT return all four Band 7.0 again unless you provide at least two concrete textual limitations that prevent 7.5/8.0. Generic comments such as 'good but not excellent' are invalid.",
     "For each criterion in an all-four-7 case, choose one decision: raise_to_7.5_or_above OR keep_at_7_with_exact_evidence_against_7.5. If you cannot provide exact evidence against 7.5, raise the criterion.",
     "If the independent anchor is Band 8 or Band 9 and the final score remains Band 7.0 or below, give strong specific evidence against the high band; otherwise revise upward.",
+    "If the audit reports criterion feedback quality issues, rewrite criterionCalibration with concrete evidence from the essay. You may keep the same bands if the bands are justified, but the explanations must not be generic.",
     "For short responses, respect the local word-count boundary unless the text has exceptional evidence; explain any exception.",
+    "If the response is full-length but has high spelling/grammar density, lower LR/GRA specifically; do not reject the score and do not over-penalise task fulfilment unless content is also weak.",
+    "Keep the boundary-review JSON compact, valid, and evidence-based. Do not include unescaped double quotes inside strings; use single quotes for quoted student phrases.",
     `Local signals: ${JSON.stringify(signals)}`,
     `Hard audit requiring review: ${JSON.stringify(audit)}`,
     `First score result: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, scoreProfile: firstResult.scoreProfile, taskSpecificGate: firstResult.taskSpecificGate, criterionCalibration: firstResult.criterionCalibration, examinerSummary: firstResult.examinerSummary })}`,
@@ -974,7 +1126,12 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
     { role: "system", content: "You are an IELTS GT Writing boundary-review scoring engine. You score only; no editing advice." },
     { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, initialAudit) }
   ], 6800, 0);
-  const reviewed = normalizeScoreCoreResult(ai, body, signals, { fromBoundaryReview: true });
+  const independentAnchor = hasUsableAnchorComparison(firstResult.anchorComparison) ? firstResult.anchorComparison : null;
+  const reviewedBase = normalizeScoreCoreResult(ai, body, signals, { fromBoundaryReview: true, independentAnchor });
+  const reviewed = {
+    ...reviewedBase,
+    anchorComparison: (!reviewedBase.anchorComparison?.anchorMissing ? reviewedBase.anchorComparison : (independentAnchor || reviewedBase.anchorComparison))
+  };
   const reviewedAuditRaw = buildHardBoundaryAudit(reviewed.finalCriteria || reviewed.criteria, signals, reviewed.anchorComparison || {}, reviewed.criterionCalibration || {}, {
     firstPass: {
       criteria: firstResult.finalCriteria || firstResult.criteria,
@@ -1051,8 +1208,11 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
   const warnings = collectScoreWarnings(criteria, signals);
-  const rawAnchor = ai.anchorComparison || ai.anchorCalibration || {};
-  const anchorComparison = normalizeAnchorComparison(rawAnchor, task, criteria, signals);
+  const rawAnchor = ai.anchorComparison || ai.anchorCalibration || options.independentAnchor || {};
+  let anchorComparison = normalizeAnchorComparison(rawAnchor, task, criteria, signals);
+  if (anchorComparison.anchorMissing && hasUsableAnchorComparison(options.independentAnchor)) {
+    anchorComparison = normalizeAnchorComparison(options.independentAnchor, task, criteria, signals);
+  }
   const criterionCalibration = normalizeCriterionCalibration(ai.criterionCalibration || {}, criteria, task);
   const scoreProfile = buildLocalGateReport(criteria, signals, ai.scoreProfile || {}, anchorComparison, criterionCalibration);
   const taskSpecificGate = normalizeTaskSpecificGate(ai.taskSpecificGate || {}, signals, criteria, anchorComparison, criterionCalibration);
@@ -1113,7 +1273,7 @@ async function scoreCore(body) {
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score; you do not provide editing advice." },
     { role: "user", content: prompt }
   ], 6200, 0);
-  const firstRaw = normalizeScoreCoreResult(ai, body, signals);
+  const firstRaw = normalizeScoreCoreResult(ai, body, signals, { independentAnchor });
   const criteria = firstRaw.finalCriteria || firstRaw.criteria;
   const calibration = normalizeCriterionCalibration(firstRaw.criterionCalibration || {}, criteria, signals.task);
   const first = {
@@ -1191,7 +1351,7 @@ async function scoreCriteriaStage(body) {
     { role: "system", content: "You are an IELTS General Training Writing scoring engine. You only score and explain the criterion bands; you do not provide full feedback sections." },
     { role: "user", content: prompt }
   ], 6600, 0);
-  const firstRaw = normalizeScoreCoreResult(ai, body, signals);
+  const firstRaw = normalizeScoreCoreResult(ai, body, signals, { independentAnchor });
   const criteria = firstRaw.finalCriteria || firstRaw.criteria;
   const anchorForResult = !independentAnchor.anchorMissing ? independentAnchor : firstRaw.anchorComparison;
   const calibration = normalizeCriterionCalibration(firstRaw.criterionCalibration || {}, criteria, signals.task);
