@@ -333,7 +333,7 @@
   function friendlyScoringError(error) {
     const msg = String(error?.message || error || "");
     if (/malformed JSON|valid JSON|JSON at position|repair failed/i.test(msg)) {
-      return "评分格式修复失败：AI 已返回内容，但 JSON 结构损坏且自动修复未成功。系统没有展示不可信分数，请重试一次。";
+      return "评分格式修复失败：核心评分 JSON 结构损坏且自动修复未成功。系统没有展示不可信分数，请重试一次。";
     }
     if (/freeze blocked|boundary audit|boundary review|409/i.test(msg)) {
       return "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。请重试一次；如果连续出现，请检查高分/低分边界复核返回。";
@@ -1086,6 +1086,20 @@
       ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}`;
     return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report");
   }
+
+  function renderFeedbackStatusNotice(result = {}) {
+    const status = result.feedbackStatus || result.scoreCoreMeta?.feedbackStatus;
+    const statusValue = typeof status === "string" ? status : status?.status;
+    if (!statusValue) return "";
+    if (/failed/i.test(statusValue)) {
+      return `<div class="ai-warning feedback-status-warning"><strong>详细反馈暂时生成失败：</strong>核心评分已经冻结，分数不受影响。${escapeHtml(status?.note || status?.error || "可重新评分或后续重试生成反馈。")}</div>`;
+    }
+    if (/quality/i.test(statusValue)) {
+      return `<div class="ai-warning feedback-status-warning"><strong>反馈质量提醒：</strong>核心评分已经冻结；部分四项解释可能仍偏模板化。${escapeHtml(arr(status?.qualityIssues).join(" | "))}</div>`;
+    }
+    return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后生成，不会改变分数。")}</div>`;
+  }
+
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
     const entries = Object.entries(criteria);
@@ -1096,7 +1110,7 @@
         const half = item.halfBandDecision || {};
         const cardId = `criterionCard_${index}_${Math.random().toString(36).slice(2, 8)}`;
         const detailId = `criterionDetail_${index}_${Math.random().toString(36).slice(2, 8)}`;
-        const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `This criterion is Band ${formatBand(band)} because of the evidence shown below; if this explanation looks generic, rerun scoring so the AI returns essay-specific evidence.`;
+        const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `Core score is frozen at Band ${formatBand(band)}. Detailed feedback was not available for this criterion.`;
         const whyThisZh = item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "";
         const whyLower = firstText(item.whyNotLower, half.whyAboveLowerBand) || `Not Band ${nearestHalfBand(band, "lower")} because the essay-specific evidence supports Band ${formatBand(band)} rather than the lower half band.`;
         const whyLowerZh = item.whyNotLowerZh || half.whyAboveLowerBandZh || "";
@@ -1234,6 +1248,7 @@
           </aside>
         </div>
       </section>
+      ${renderFeedbackStatusNotice(result)}
       ${renderCriterionCards(result)}
       ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
       ${renderScoreCalibration(result)}`;
