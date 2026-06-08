@@ -848,16 +848,49 @@
 \n`;
     document.head.appendChild(style);
   }
-
   function translationButton(zh, label = "中文解释") {
+    if (!hasMeaningfulContent(zh)) return "";
     const id = `scoreZh_${Math.random().toString(36).slice(2, 10)}`;
-    return `<button class="score-translate-btn" type="button" data-score-translation-target="${id}">${escapeHtml(label)}</button><div id="${id}" class="score-translation hidden-score-translation">${escapeHtml(zh || "中文解释暂缺。")}</div>`;
+    return `<button class="score-translate-btn" type="button" data-score-translation-target="${id}">${escapeHtml(label)}</button><div id="${id}" class="score-translation hidden-score-translation">${escapeHtml(zh)}</div>`;
   }
 
   function arr(value) {
     if (Array.isArray(value)) return value.filter(Boolean);
     if (value === undefined || value === null || value === "") return [];
     return [String(value)];
+  }
+
+
+  function hasMeaningfulContent(value) {
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.some(hasMeaningfulContent);
+    if (typeof value === "object") return Object.values(value).some(hasMeaningfulContent);
+    const text = String(value).trim();
+    if (!text || text === "-" || text === "—") return false;
+    if (/^(no|not|none) .* returned\.?$/i.test(text)) return false;
+    if (/^(暂无|暂未|没有返回|未返回|中文解释暂缺)/.test(text)) return false;
+    return true;
+  }
+
+  function meaningfulArr(value, limit = Infinity) {
+    return arr(value).map((x) => String(x).trim()).filter(hasMeaningfulContent).slice(0, limit);
+  }
+
+  function isPassedLikeStatus(status) {
+    const s = String(status || "").toLowerCase().replace(/[\s_-]+/g, "_");
+    return ["passed", "checked", "done", "not_required", "not_triggered", "false", "ok"].includes(s);
+  }
+
+  function criterionZhSummary(item = {}, labels = {}) {
+    const direct = item.zhSummary || item.cardZh || item.overallZh || item.chineseSummary;
+    if (hasMeaningfulContent(direct)) return direct;
+    const parts = [
+      [labels.whyThis || "为什么是这个分", item.whyThisBandZh || item.summaryZh || item.halfBandDecision?.whyExactBandZh],
+      [labels.whyLower || "为什么高于低一档", item.whyNotLowerZh || item.halfBandDecision?.whyAboveLowerBandZh],
+      [labels.whyHigher || "为什么还不到高一档", item.whyNotHigherZh || item.halfBandDecision?.whyBelowUpperBandZh],
+      ["怎么提升", item.howToImproveZh || item.improvementFocusZh]
+    ].filter(([, text]) => hasMeaningfulContent(text));
+    return parts.map(([title, text]) => `${title}：${text}`).join("\n\n");
   }
 
   function nearestHalfBand(value, direction) {
@@ -889,23 +922,22 @@
     if (/Grammatical/i.test(criterion)) return "Control basic verb forms, articles, plurals, and sentence boundaries before adding more complex structures.";
     return `To move above Band ${formatBand(band)}, strengthen the limiting areas identified in this criterion.`;
   }
-
   function evidenceListHtml(items, zhItems = []) {
-    const list = arr(items);
-    if (!list.length) return `<p class="muted">未返回具体证据。</p>`;
-    return `<ul>${list.map((x, i) => `<li>${escapeHtml(x)}${translationButton(zhItems?.[i] || "")}</li>`).join("")}</ul>`;
+    const list = meaningfulArr(items, 3);
+    if (!list.length) return "";
+    return `<ul class="compact-evidence-list">${list.map((x, i) => `<li>${escapeHtml(x)}${translationButton(zhItems?.[i] || "")}</li>`).join("")}</ul>`;
   }
-
   function essayEvidenceHtml(items) {
-    const list = arr(items);
-    if (!list.length) return `<p class="muted">暂未返回原文证据。</p>`;
+    const list = arr(items).filter(hasMeaningfulContent).slice(0, 4);
+    if (!list.length) return "";
     return list.map((item) => {
       if (typeof item === "string") return `<div class="quote-evidence">${escapeHtml(item)}</div>`;
       const quote = item.quote || item.text || item.original || "";
       const meaning = item.meaning || item.explanation || item.evidence || "";
       const zh = item.meaningZh || item.explanationZh || item.zh || "";
+      if (!hasMeaningfulContent(quote) && !hasMeaningfulContent(meaning)) return "";
       return `<div class="quote-evidence"><strong>${escapeHtml(quote || "原文片段")}</strong>${meaning ? ` → ${escapeHtml(meaning)}${translationButton(zh)}` : ""}</div>`;
-    }).join("");
+    }).filter(Boolean).join("");
   }
 
   function bindScoreUiInteractions() {
@@ -993,100 +1025,94 @@
     };
     return map[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
   }
-
   function renderAnchorComparison(result = {}) {
     const anchor = result.anchorComparison || result.anchorCalibration || {};
     if (!anchor || typeof anchor !== "object" || Object.keys(anchor).length === 0) return "";
-    const body = `
+    const band = anchor.closestAnchorBand ?? result.overallBand ?? result.scoreCalculation?.finalBand ?? "-";
+    const range = anchor.candidateRange || (Number.isFinite(Number(band)) ? `${nearestHalfBand(band, "lower")}–${nearestHalfBand(band, "higher")}` : "-");
+    const reason = firstText(anchor.whyCloserToThisBand, anchor.closestAnchorProfile, result.examinerSummary) || "系统根据任务类型、字数、可评分性和四项分数组合完成锚点校准。";
+    const zh = firstText(anchor.whyCloserToThisBandZh, anchor.closestAnchorProfileZh, result.examinerSummaryZh) || "系统根据任务类型、字数、可评分性和四项分数组合完成锚点校准。";
+    return `<div class="anchor-comparison-block compact-calibration-card">
       <div class="score-gate-item anchor-comparison-card">
-        <strong>${escapeHtml(anchor.task || result.task || "Task")} Anchor Comparison</strong><br>
-        <span class="muted">${escapeHtml(anchor.anchorSystem || "0-9 anchor-calibrated scoring")}</span>
+        <strong>Anchor / 分段锚点：</strong>Band ${escapeHtml(band)}
+        <span class="score-chip-inline">候选区间：${escapeHtml(range)}</span>
+        <p class="muted">${escapeHtml(reason)}${translationButton(zh)}</p>
       </div>
-      <div class="score-gate-grid">
-        <div class="score-gate-item"><strong>最接近分段：</strong>Band ${escapeHtml(anchor.closestAnchorBand ?? "-")}<br><span class="muted">${escapeHtml(anchor.closestAnchorProfile || "No anchor profile returned.")}</span>${translationButton(anchor.closestAnchorProfileZh || "")}</div>
-        <div class="score-gate-item"><strong>为什么接近这个分段：</strong><br><span class="muted">${escapeHtml(anchor.whyCloserToThisBand || "No explanation returned.")}</span>${translationButton(anchor.whyCloserToThisBandZh || "")}</div>
-        <div class="score-gate-item"><strong>为什么不是低一档 Band ${escapeHtml(anchor.lowerAnchorBand ?? "-")}：</strong><br><span class="muted">${escapeHtml(anchor.whyNotLowerAnchor || "No lower-anchor explanation returned.")}</span>${translationButton(anchor.whyNotLowerAnchorZh || "")}</div>
-        <div class="score-gate-item"><strong>为什么不是高一档 Band ${escapeHtml(anchor.higherAnchorBand ?? "-")}：</strong><br><span class="muted">${escapeHtml(anchor.whyNotHigherAnchor || "No higher-anchor explanation returned.")}</span>${translationButton(anchor.whyNotHigherAnchorZh || "")}</div>
-      </div>`;
-    return `<div class="anchor-comparison-block">${body}</div>`;
+    </div>`;
   }
-
-
   function renderBoundaryAudit(result = {}) {
     const audit = result.boundaryAudit || result.boundaryReview || {};
     if (!audit || typeof audit !== "object" || Object.keys(audit).length === 0) return "";
     const review = audit.boundaryReview || {};
-    const reasons = arr(audit.reviewReasons || audit.reviewedRemainingWarnings);
-    const word = audit.wordCountBoundary || audit.lowBandBoundary || {};
-    const status = audit.status || (audit.reviewRequired ? "review_required" : "passed");
-    const unresolved = arr(audit.unresolvedCriticalReasons);
+    const reasons = meaningfulArr(audit.reviewReasons || audit.reviewedRemainingWarnings, 4);
+    const unresolved = meaningfulArr(audit.unresolvedCriticalReasons, 4);
     const blocked = Boolean(audit.freezeBlocked || unresolved.length);
-    const zh = blocked
-      ? `最终分数冻结被阻止：${unresolved.join("；") || reasons.join("；") || "二次复核后仍存在未解决边界冲突。"}`
-      : audit.reviewRequired
-        ? `本地硬性校准发现需要二次复核：${reasons.join("；") || "存在边界冲突。"}`
-        : review.triggered
-          ? `本地硬性校准已触发 AI 二次复核。复核结论：${review.whyFinalCriteriaAreSafeZh || review.decision || "已完成复核"}`
-          : "本地硬性校准通过：没有发现必须二次复核的低分、高分、锚点或分数组合冲突。";
-    const reasonHtml = reasons.length ? `<ul>${reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="muted">No forced boundary-review reason remained.</p>`;
-    const unresolvedHtml = unresolved.length ? `<div class="ai-warning"><strong>Freeze blocked:</strong><ul>${unresolved.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : "";
-    return `<div class="boundary-audit-block">
-      <div class="score-gate-item boundary-audit-summary"><strong>Boundary audit / 边界强制校准：</strong>${escapeHtml(status)}${translationButton(zh)}<br><span class="muted">Local code does not assign bands, but it audits hard boundaries, routes AI re-review, and validates before score freeze.</span></div>
-      <div class="score-gate-grid">
-        <div class="score-gate-item"><strong>Low-band boundary:</strong> ${escapeHtml(audit.lowBandBoundary?.status || word.status || "checked")}<br><span class="muted">${escapeHtml(audit.lowBandBoundary?.reason || word.reason || "No low-band boundary detail returned.")} ${escapeHtml(audit.lowBandBoundary?.suggestedRange ? `Suggested range: ${audit.lowBandBoundary.suggestedRange}` : word.suggestedRange || "")}</span></div>
-        <div class="score-gate-item"><strong>High-band boundary:</strong> ${escapeHtml(audit.highBandBoundary?.status || "checked")}<br><span class="muted">${escapeHtml(audit.highBandBoundary?.reason || "High-band ceiling and all-four-7 pattern checked.")}</span></div>
-        <div class="score-gate-item"><strong>Anchor audit:</strong> ${escapeHtml(audit.anchorAudit?.status || "checked")}<br><span class="muted">Anchor: ${escapeHtml(audit.anchorAudit?.closestAnchorBand ?? "-")} ｜ Final: ${escapeHtml(audit.anchorAudit?.finalBand ?? result.overallBand ?? "-")}</span></div>
-        <div class="score-gate-item"><strong>Boundary review:</strong> ${escapeHtml(review.triggered ? (review.decision || "triggered") : "not required")}<br><span class="muted">${escapeHtml(review.whyFinalCriteriaAreSafe || "No AI second-pass review was required or returned.")}</span>${translationButton(review.whyFinalCriteriaAreSafeZh || "")}</div>
+    const triggered = Boolean(blocked || audit.reviewRequired || review.triggered || reasons.length);
+    const status = blocked ? "blocked" : triggered ? "reviewed" : "passed";
+    const main = blocked
+      ? `冻结被阻止：${unresolved.join("；") || reasons.join("；") || "二次复核后仍存在未解决边界冲突。"}`
+      : triggered
+        ? `已触发边界复核：${reasons.join("；") || review.decision || "AI 已完成二次边界检查。"}`
+        : "边界审计通过：未发现低分抬高、高分压制、四项同分异常或 anchor 冲突。";
+    const detail = triggered ? `<ul>${[...reasons, ...unresolved].map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+    return `<div class="boundary-audit-block compact-calibration-card">
+      <div class="score-gate-item boundary-audit-summary ${escapeHtml(status)}">
+        <strong>边界审计 / Boundary audit：</strong>${escapeHtml(status)}
+        <p class="muted">${escapeHtml(main)}${translationButton(main)}</p>
+        ${detail ? `<div class="boundary-issue-list">${detail}</div>` : ""}
       </div>
-      ${reasons.length ? `<div class="ai-warning"><strong>Boundary reasons:</strong>${reasonHtml}</div>` : ""}
-      ${unresolvedHtml}
     </div>`;
   }
-
   function renderTaskSpecificGateReport(result = {}) {
     const gates = result.taskSpecificGate || {};
     if (!gates || typeof gates !== "object" || Object.keys(gates).length === 0) return "";
-    const rows = Object.entries(gates).map(([key, gate]) => {
+    const visible = Object.entries(gates).filter(([key, gate]) => {
       const item = gate && typeof gate === "object" ? gate : { status: gate };
-      const reason = item.reason || item.explanation || item.note || "Gate checked.";
-      const zh = item.reasonZh || item.explanationZh || item.noteZh || gateChineseExplanation(key, item);
-      const evidence = arr(item.evidence).length ? `<div class="muted"><strong>Evidence:</strong> ${escapeHtml(arr(item.evidence).join("; "))}</div>` : "";
-      return `<div class="score-gate-item"><strong>${escapeHtml(taskSpecificGateLabel(key))}:</strong> ${escapeHtml(item.status || item.result || item.triggered || "checked")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}${evidence}</div>`;
+      const status = item.status || item.result || item.triggered || "";
+      return !isPassedLikeStatus(status) || hasMeaningfulContent(item.warning) || hasMeaningfulContent(item.evidence);
+    });
+    const title = result.task === "Task 1" ? "Task 1 专项检查" : "Task 2 专项检查";
+    if (!visible.length) {
+      return `<div class="score-gate-item task-gate-summary"><strong>${escapeHtml(title)}：</strong>通过<br><span class="muted">任务专项检查通过；没有发现需要展开显示的异常 gate。</span></div>`;
+    }
+    const rows = visible.map(([key, gate]) => {
+      const item = gate && typeof gate === "object" ? gate : { status: gate };
+      const reason = firstText(item.reason, item.explanation, item.note, item.warning) || "Gate triggered and requires attention.";
+      const zh = firstText(item.reasonZh, item.explanationZh, item.noteZh) || gateChineseExplanation(key, item);
+      const evidence = meaningfulArr(item.evidence, 3).length ? `<div class="muted"><strong>Evidence:</strong> ${escapeHtml(meaningfulArr(item.evidence, 3).join("; "))}</div>` : "";
+      return `<div class="score-gate-item"><strong>${escapeHtml(taskSpecificGateLabel(key))}:</strong> ${escapeHtml(item.status || item.result || item.triggered || "triggered")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}${evidence}</div>`;
     }).join("");
-    const title = result.task === "Task 1" ? "Task 1 专属核查" : "Task 2 专属核查";
-    return `<div class="score-gate-item"><strong>${escapeHtml(title)}</strong><br><span class="muted">Task-aware gates are checked before the score is frozen.</span></div><div class="score-gate-grid">${rows}</div>`;
+    return `<div class="score-gate-item"><strong>${escapeHtml(title)}</strong><br><span class="muted">只显示触发、警告或失败的任务专项检查。</span></div><div class="score-gate-grid">${rows}</div>`;
   }
-
   function renderScoreCalibration(result = {}) {
     const profile = result.scoreProfile || {};
     const signals = result.localSignals || {};
-    const warnings = arr(result.stabilityWarnings);
+    const warnings = meaningfulArr(result.stabilityWarnings, 5);
     const gates = [
       ["Low-band check", profile.lowBandGate],
       ["Mid-band check", profile.midBandGate],
       ["High-band check", profile.highBandGate],
       ["Score-profile check", profile.scoreProfileGate]
-    ];
-    const body = `
-      <div class="score-gate-grid">
-        <div class="score-gate-item"><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core-v2")}</div>
+    ].filter(([, gate]) => gate && !isPassedLikeStatus(gate.status || gate.result || gate.triggered));
+    const meta = `<div class="score-gate-grid compact-meta-grid">
+        <div class="score-gate-item"><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core")}</div>
         <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
-        <div class="score-gate-item"><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</div>
-      </div>
+        <div class="score-gate-item"><strong>语言信号：</strong>拼写 ${escapeHtml(signals.spellingErrorDensity || "-")} ｜ 语法 ${escapeHtml(signals.grammarErrorDensity || "-")} ｜ 句子控制 ${escapeHtml(signals.sentenceControl || "-")} ｜ 词汇控制 ${escapeHtml(signals.lexicalControl || "-")}</div>
+      </div>`;
+    const gateHtml = gates.length ? `<div class="score-gate-grid">${gates.map(([label, gate]) => {
+      const reason = firstText(gate?.reason, gate?.explanation, gate?.note) || "Gate requires attention.";
+      const zh = firstText(gate?.reasonZh, gate?.explanationZh, gate?.noteZh) || gateChineseExplanation(label, gate);
+      return `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "triggered")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}</div>`;
+    }).join("")}</div>` : `<div class="score-gate-item"><strong>Low / Mid / High / Score-profile checks:</strong> passed<br><span class="muted">所有核心分数边界检查均通过。</span></div>`;
+    const body = `
+      ${meta}
       ${renderBoundaryAudit(result)}
-      ${result.internalAuditTrail ? `<details class="score-technical-details"><summary>内部 7 步审计 / Internal 7-step audit</summary><div class="score-gate-grid">${result.internalAuditTrail.map((step) => `<div class="score-gate-item"><strong>${escapeHtml(step.title || step.stage)}:</strong> ${escapeHtml(step.status || "-")}<br><span class="muted">${escapeHtml(step.message || "")}</span></div>`).join("")}</div></details>` : ""}
       ${renderAnchorComparison(result)}
       ${renderTaskSpecificGateReport(result)}
-      ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
-      <div class="score-gate-grid">
-        ${gates.map(([label, gate]) => {
-          const reason = gate?.reason || gate?.explanation || gate?.note || "No detailed gate explanation returned.";
-          const zh = gate?.reasonZh || gate?.explanationZh || gate?.noteZh || gateChineseExplanation(label, gate);
-          return `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "not_reported")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}</div>`;
-        }).join("")}
-      </div>
+      ${hasMeaningfulContent(result.examinerSummary) ? `<div class="score-gate-item"><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</div>` : ""}
+      ${gateHtml}
       ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}`;
-    return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report");
+    return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report compact-calibration-report");
   }
 
   function renderFeedbackStatusNotice(result = {}) {
@@ -1101,26 +1127,48 @@
     }
     return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后生成，不会改变分数。")}</div>`;
   }
-
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
     const entries = Object.entries(criteria);
     if (!entries.length) return `<section class="grading-section"><p class="muted">AI 没有返回完整四项分。</p></section>`;
+    const feedbackFailed = /failed/i.test(String(result.feedbackStatus?.status || result.scoreCoreMeta?.feedbackStatus?.status || ""));
     return `<section class="criterion-card-grid" aria-label="四项评分说明">
       ${entries.map(([criterion, band], index) => {
         const item = criterionItem(result, criterion);
         const half = item.halfBandDecision || {};
         const cardId = `criterionCard_${index}_${Math.random().toString(36).slice(2, 8)}`;
         const detailId = `criterionDetail_${index}_${Math.random().toString(36).slice(2, 8)}`;
+        const lowerBand = nearestHalfBand(band, "lower");
+        const higherBand = nearestHalfBand(band, "higher");
         const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `Core score is frozen at Band ${formatBand(band)}. Detailed feedback was not available for this criterion.`;
-        const whyThisZh = item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "";
-        const whyLower = firstText(item.whyNotLower, half.whyAboveLowerBand) || `Not Band ${nearestHalfBand(band, "lower")} because the essay-specific evidence supports Band ${formatBand(band)} rather than the lower half band.`;
-        const whyLowerZh = item.whyNotLowerZh || half.whyAboveLowerBandZh || "";
-        const whyHigher = firstText(item.whyNotHigher, half.whyBelowUpperBand) || `Not Band ${nearestHalfBand(band, "higher")} because the limiting evidence shown below prevents a stronger band.`;
-        const whyHigherZh = item.whyNotHigherZh || half.whyBelowUpperBandZh || "";
+        const whyLower = firstText(item.whyNotLower, item.whyAboveLowerBand, half.whyAboveLowerBand) || `This is above Band ${lowerBand} because the response shows enough criterion-specific control for Band ${formatBand(band)}.`;
+        const whyHigher = firstText(item.whyNotHigher, item.whyNotYetHigherBand, half.whyBelowUpperBand) || `This is not yet Band ${higherBand} because the limiting features still prevent a stronger band.`;
         const improve = firstText(item.howToImprove, item.improvementFocus) || fallbackImprove(criterion, band);
-        const improveZh = item.howToImproveZh || item.improvementFocusZh || "";
-        return `<article class="criterion-score-card">
+        const zh = criterionZhSummary(item, {
+          whyThis: "为什么是这个分",
+          whyLower: `为什么高于 Band ${lowerBand}`,
+          whyHigher: `为什么还不到 Band ${higherBand}`
+        });
+        const supportHtml = evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh);
+        const limitHtml = evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh);
+        const essayHtml = essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes);
+        const halfHasContent = hasMeaningfulContent(half.whyAboveLowerBand || half.whyBelowUpperBand || half.whyExactBand || item.candidateBandsConsidered);
+        const detailSections = [
+          supportHtml ? `<div class="evidence-box"><h5>支持这个分数的证据</h5>${supportHtml}</div>` : "",
+          limitHtml ? `<div class="evidence-box"><h5>限制更高分的证据</h5>${limitHtml}</div>` : "",
+          essayHtml ? `<div class="evidence-box"><h5>原文证据 / Evidence from the essay</h5>${essayHtml}</div>` : "",
+          halfHasContent ? `<div class="evidence-box"><h5>完整半分判断</h5>
+            <p><strong>Candidate bands:</strong> ${escapeHtml(meaningfulArr(item.candidateBandsConsidered).join(" / ") || `${lowerBand} / ${formatBand(band)} / ${higherBand}`)}</p>
+            ${hasMeaningfulContent(half.whyAboveLowerBand || whyLower) ? `<p><strong>Why above lower band:</strong> ${escapeHtml(half.whyAboveLowerBand || whyLower)}</p>` : ""}
+            ${hasMeaningfulContent(half.whyBelowUpperBand || whyHigher) ? `<p><strong>Why below higher band:</strong> ${escapeHtml(half.whyBelowUpperBand || whyHigher)}</p>` : ""}
+            ${hasMeaningfulContent(half.whyExactBand || whyThis) ? `<p><strong>Why exact band:</strong> ${escapeHtml(half.whyExactBand || whyThis)}</p>` : ""}
+          </div>` : ""
+        ].filter(Boolean);
+        const detailCard = !feedbackFailed && detailSections.length ? `<div class="score-detail-card compact-evidence-details">
+          <button class="score-detail-toggle" type="button" data-score-detail-toggle="${detailId}"><span>详细证据 / Evidence details</span><span>+</span></button>
+          <div id="${detailId}" class="score-detail-body hidden"><div class="evidence-grid">${detailSections.join("")}</div></div>
+        </div>` : "";
+        return `<article class="criterion-score-card refined-criterion-card">
           <div class="criterion-card-header">
             <div class="criterion-title">${escapeHtml(criterion)}</div>
             <div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div>
@@ -1128,27 +1176,14 @@
           </div>
           <div class="criterion-card-body" id="${cardId}">
             <div class="criterion-quick-grid">
-              <div class="criterion-quick-row"><h5>为什么是这个分</h5><p>${escapeHtml(whyThis)}${translationButton(whyThisZh)}</p></div>
-              <div class="criterion-quick-row"><h5>为什么不是 Band ${escapeHtml(nearestHalfBand(band, "lower"))}</h5><p>${escapeHtml(whyLower)}${translationButton(whyLowerZh)}</p></div>
-              <div class="criterion-quick-row"><h5>为什么不是 Band ${escapeHtml(nearestHalfBand(band, "higher"))}</h5><p>${escapeHtml(whyHigher)}${translationButton(whyHigherZh)}</p></div>
-              <div class="criterion-quick-row"><h5>怎么提升</h5><p>${escapeHtml(improve)}${translationButton(improveZh)}</p></div>
+              <div class="criterion-quick-row"><h5>为什么是这个分</h5><p>${escapeHtml(whyThis)}</p></div>
+              <div class="criterion-quick-row"><h5>为什么高于 Band ${escapeHtml(lowerBand)}</h5><p>${escapeHtml(whyLower)}</p></div>
+              <div class="criterion-quick-row"><h5>为什么还不到 Band ${escapeHtml(higherBand)}</h5><p>${escapeHtml(whyHigher)}</p></div>
+              <div class="criterion-quick-row"><h5>怎么提升</h5><p>${escapeHtml(improve)}</p></div>
             </div>
-            <div class="score-detail-card">
-              <button class="score-detail-toggle" type="button" data-score-detail-toggle="${detailId}"><span>详细证据 / Evidence details</span><span>+</span></button>
-              <div id="${detailId}" class="score-detail-body hidden">
-                <div class="evidence-grid">
-                  <div class="evidence-box"><h5>支持这个分数的证据</h5>${evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh)}</div>
-                  <div class="evidence-box"><h5>限制更高分的证据</h5>${evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh)}</div>
-                  <div class="evidence-box"><h5>原文证据 / Evidence from the essay</h5>${essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes)}</div>
-                  <div class="evidence-box"><h5>完整半分判断</h5>
-                    <p><strong>Candidate bands:</strong> ${escapeHtml(arr(item.candidateBandsConsidered).join(" / ") || `${nearestHalfBand(band, "lower")} / ${formatBand(band)} / ${nearestHalfBand(band, "higher")}`)}</p>
-                    <p><strong>Why above lower band:</strong> ${escapeHtml(half.whyAboveLowerBand || whyLower)}${translationButton(half.whyAboveLowerBandZh || whyLowerZh)}</p>
-                    <p><strong>Why below higher band:</strong> ${escapeHtml(half.whyBelowUpperBand || whyHigher)}${translationButton(half.whyBelowUpperBandZh || whyHigherZh)}</p>
-                    <p><strong>Why exact band:</strong> ${escapeHtml(half.whyExactBand || whyThis)}${translationButton(half.whyExactBandZh || whyThisZh)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            ${translationButton(zh, "显示中文解释")}
+            ${feedbackFailed ? `<div class="score-flow-note"><strong>详细反馈暂缺：</strong>核心评分已完成，详细证据反馈暂时未生成。</div>` : ""}
+            ${detailCard}
           </div>
         </article>`;
       }).join("")}

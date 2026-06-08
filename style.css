@@ -1800,3 +1800,23 @@ select#typeFilter{
 .score-progress-chip.done,.score-step-status.done{background:rgba(15,118,110,.12);color:var(--teal)}
 .score-progress-chip.running,.score-step-status.running{background:rgba(164,93,0,.14);color:var(--amber)}
 .score-progress-chip.error,.score-step-status.error{background:rgba(185,67,59,.13);color:var(--rose)}
+
+
+/* Score feedback UI refinement v1 */
+.criterion-card-translation{margin-top:12px}
+.refined-criterion-card .score-translate-btn{margin:12px 0 0 0}
+.refined-criterion-card .criterion-quick-row h5::before{content:"";display:inline-block;width:.48rem;height:.48rem;margin-right:.45rem;border-radius:999px;background:var(--teal);vertical-align:.12rem}
+.compact-evidence-details .score-detail-toggle{background:linear-gradient(135deg,rgba(49,95,167,.055),rgba(255,255,255,.75))}
+.compact-evidence-details .evidence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.compact-evidence-list{margin:0;padding-left:1.1rem;line-height:1.65}
+.compact-calibration-report .score-gate-grid,.compact-calibration-card .score-gate-grid{gap:10px}
+.compact-calibration-card .score-gate-item{background:linear-gradient(180deg,rgba(255,255,255,.86),rgba(248,250,252,.78))}
+.score-chip-inline{display:inline-flex;margin-left:10px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:.86rem;font-weight:750;background:rgba(255,255,255,.65)}
+.task-gate-summary{background:rgba(15,118,110,.045)!important}
+.boundary-audit-summary.passed{border-color:rgba(15,118,110,.18)!important;background:rgba(15,118,110,.045)!important}
+.boundary-audit-summary.reviewed{border-color:rgba(164,93,0,.22)!important;background:rgba(164,93,0,.06)!important}
+.boundary-audit-summary.blocked{border-color:rgba(185,67,59,.25)!important;background:rgba(185,67,59,.065)!important}
+.boundary-issue-list ul{margin:.5rem 0 0;padding-left:1.2rem}
+.compact-meta-grid{margin-bottom:12px}
+.score-detail-body .evidence-box:empty{display:none}
+@media(max-width:760px){.compact-evidence-details .evidence-grid{grid-template-columns:1fr}.score-chip-inline{display:flex;width:max-content;max-width:100%;margin:8px 0 0}}

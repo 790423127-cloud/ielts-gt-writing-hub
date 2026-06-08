@@ -773,6 +773,9 @@ function isGenericCriterionFeedbackText(text) {
     /ideas are underdeveloped/,
     /grammar is generally controlled/,
     /vocabulary is limited/,
+    /some relevant vocabulary avoids band/,
+    /some attempts at complex structures/,
+    /avoid band 4/,
     /needs more examples/,
     /good but not excellent/
   ];
@@ -813,11 +816,14 @@ function normalizeCriterionCalibration(rawCalibration, criteria, task) {
       whyThisBand: whyThis,
       whyThisBandZh: String(item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "").trim(),
       whyNotLower: whyLower,
-      whyNotLowerZh: String(item.whyNotLowerZh || half.whyAboveLowerBandZh || "").trim(),
+      whyAboveLowerBand: String(item.whyAboveLowerBand || item.whyNotLower || half.whyAboveLowerBand || whyLower).trim(),
+      whyNotLowerZh: String(item.whyNotLowerZh || item.whyAboveLowerBandZh || half.whyAboveLowerBandZh || "").trim(),
       whyNotHigher: whyHigher,
-      whyNotHigherZh: String(item.whyNotHigherZh || half.whyBelowUpperBandZh || "").trim(),
+      whyNotYetHigherBand: String(item.whyNotYetHigherBand || item.whyNotHigher || half.whyBelowUpperBand || whyHigher).trim(),
+      whyNotHigherZh: String(item.whyNotHigherZh || item.whyNotYetHigherBandZh || half.whyBelowUpperBandZh || "").trim(),
       howToImprove: String(item.howToImprove || item.improvementFocus || defaultImproveForCriterion(name)).trim(),
       howToImproveZh: String(item.howToImproveZh || item.improvementFocusZh || "").trim(),
+      zhSummary: String(item.zhSummary || item.cardZh || item.chineseSummary || "").trim(),
       positiveEvidence: Array.isArray(item.positiveEvidence) ? item.positiveEvidence : [],
       positiveEvidenceZh: Array.isArray(item.positiveEvidenceZh) ? item.positiveEvidenceZh : [],
       limitingEvidence: Array.isArray(item.limitingEvidence) ? item.limitingEvidence : [],
@@ -1343,16 +1349,17 @@ function compactCriterionCalibration(ai = {}, criteria = {}, task = "Task 2") {
   });
   return out;
 }
-
 function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
   const task = signals.task;
   const names = criterionNames(task);
   return [
     "You generate post-freeze IELTS criterion feedback. Return JSON only.",
     "The score is already frozen. Do not change any band, criterion score, anchor, boundary decision, or overall score.",
-    "Generate detailed but compact evidence-based feedback for the four criterion cards only.",
-    "Every criterion must include exact essay-specific evidence. Avoid generic template comments. If a comment could apply to any essay, it is invalid.",
-    "Length limits per criterion: whyThisBand max 55 words; whyNotLower max 35 words; whyNotHigher max 35 words; howToImprove max 40 words; max 3 evidence items; each evidence item max 16 words.",
+    "Write concise examiner-style feedback for the four criterion cards. Avoid robotic template wording.",
+    "Every comment must refer to concrete features from the student's response. If a sentence could apply to any essay, rewrite it.",
+    "Use natural boundary wording: whyThisBand, whyNotLower means why the score is above the lower adjacent half-band, and whyNotHigher means why it is not yet the higher adjacent half-band.",
+    "Do not write phrases like 'Some relevant vocabulary avoids Band 4' or 'some grammatical errors'. Be specific and plain.",
+    "Length limits per criterion: whyThisBand max 55 words; whyNotLower max 35 words; whyNotHigher max 35 words; howToImprove max 45 words; zhSummary max 90 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 16 words.",
     "Use single quotes around student phrases. Do not use unescaped double quotes inside JSON strings. No markdown and no trailing prose.",
     `Task: ${task}. Criteria: ${names.join(", ")}.`,
     `Frozen score: ${JSON.stringify({ criteria: frozenResult.finalCriteria || frozenResult.criteria, overallBand: frozenResult.overallBand, anchorComparison: frozenResult.anchorComparison, shortReasons: frozenResult.shortReasons })}`,
@@ -1360,9 +1367,10 @@ function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
     `Task-specific boundary protocol:\n${bandBoundaryProtocolForTask(task)}`,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    "Return exactly: {\"ok\":true,\"aiStage\":\"criterion-feedback-after-freeze\",\"feedbackStatus\":{\"status\":\"generated\",\"scoreChanged\":false},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[number,number,number],\"summary\":\"one sentence\",\"summaryZh\":\"中文\",\"whyThisBand\":\"...\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"...\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"...\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"...\",\"howToImproveZh\":\"中文\",\"positiveEvidence\":[\"...\"],\"positiveEvidenceZh\":[\"中文\"],\"limitingEvidence\":[\"...\"],\"limitingEvidenceZh\":[\"中文\"],\"essayEvidence\":[\"short quote or feature\"],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}}}."
+    "Return exactly: {\"ok\":true,\"aiStage\":\"criterion-feedback-after-freeze\",\"feedbackStatus\":{\"status\":\"generated\",\"scoreChanged\":false},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[number,number,number],\"summary\":\"one sentence\",\"whyThisBand\":\"...\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why above lower adjacent half-band\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not yet higher adjacent half-band\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"...\",\"howToImproveZh\":\"中文\",\"zhSummary\":\"整张卡片的中文总结\",\"positiveEvidence\":[\"...\"],\"positiveEvidenceZh\":[\"中文\"],\"limitingEvidence\":[\"...\"],\"limitingEvidenceZh\":[\"中文\"],\"essayEvidence\":[\"short quote or feature\"],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}}}."
   ].join("\n\n");
 }
+
 
 async function generateCriterionFeedbackAfterFreeze(body, frozenResult, signals) {
   try {
