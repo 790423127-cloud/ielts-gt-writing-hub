@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-5-lowband-highband-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v7-6-micro-attempt-highband-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -226,17 +226,20 @@ function detectHardZeroResponse(body = {}, signals = null) {
   const noAnswerPattern = /\b(no answer|no letter|cannot write|can't write|i cannot write|i can not write|copied prompt only)\b/i.test(essay);
   const nonEnglishShort = Boolean(essay && englishTokens === 0 && words === 0);
   const finiteClause = /\b(i|we|they|he|she|it|people|children|students|parents|government|governments|company|manager|friend|council|residents|customers|someone|somebody|this|that)\s+(am|is|are|was|were|have|has|had|can|could|will|would|should|may|might|must|think|believe|want|need|buy|use|live|spend|write|ask|suggest|apologise|apologize|explain|prefer|choose|help|make|give|take|work|study|play|close|arrive|damage|move|meet)\b/i.test(lowered);
-  const onlyKeywords = words > 0 && words <= 10 && distinctWordRatio(essay) <= 0.9 && !finiteClause;
+  const task1MicroAttempt = task === "Task 1" && words >= 4 && words <= 12 && /\b(dear|hi|hello|sorry|please|thank|thanks|refund|money\s+back|meet|watch|lamp|park|house|advice|move|city|product|bad|broken|send)\b/i.test(lowered);
+  const task2MicroAttempt = task === "Task 2" && words >= 4 && words <= 12 && /\b(i\s+think|i\s+agree|because|good|bad|people|school|online|shopping|transport|pollution|living|alone|ageing|society)\b/i.test(lowered);
+  const rateableMicroAttempt = task1MicroAttempt || task2MicroAttempt || finiteClause;
+  const onlyKeywords = words > 0 && words <= 10 && distinctWordRatio(essay) <= 0.9 && !rateableMicroAttempt;
   const repeatedKeywordFragment = words > 0 && words <= 10 && !finiteClause && /([a-z]+(?:\s+[a-z]+)?)[.!?]?\s+\1/i.test(lowered);
   const ultraShortNoSentence = words > 0 && words <= 2 && sentences.length <= 1;
   const copiedLike = words <= 14 && copiedPromptOverlapRatio(essay, prompt) >= 0.75;
-  const meaninglessFragments = words <= 10 && /^(?:[a-z]+[.!?]?\s*){1,10}$/i.test(essay.replace(/\s+/g, " ").trim()) && !finiteClause;
+  const meaninglessFragments = words <= 10 && /^(?:[a-z]+[.!?]?\s*){1,10}$/i.test(essay.replace(/\s+/g, " ").trim()) && !rateableMicroAttempt;
   if (!essay) return { triggered: true, reason: "blank_response", task, words };
   if (noAnswerPattern) return { triggered: true, reason: "explicit_no_answer_or_copied_prompt_marker", task, words };
   if (nonEnglishShort || englishRatio < 0.2) return { triggered: true, reason: "non_english_or_no_assessable_english", task, words, englishRatio: Number(englishRatio.toFixed(2)) };
-  if (copiedLike) return { triggered: true, reason: "copied_prompt_or_prompt_keyword_recycling", task, words, overlapRatio: Number(copiedPromptOverlapRatio(essay, prompt).toFixed(2)) };
-  if (ultraShortNoSentence || onlyKeywords || repeatedKeywordFragment || meaninglessFragments) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
-  return { triggered: false, reason: "assessable_or_rateable", task, words };
+  if (copiedLike && !rateableMicroAttempt) return { triggered: true, reason: "copied_prompt_or_prompt_keyword_recycling", task, words, overlapRatio: Number(copiedPromptOverlapRatio(essay, prompt).toFixed(2)) };
+  if ((ultraShortNoSentence || onlyKeywords || repeatedKeywordFragment || meaninglessFragments) && !rateableMicroAttempt) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
+  return { triggered: false, reason: rateableMicroAttempt && words <= 12 ? "minimal_but_rateable_micro_attempt" : "assessable_or_rateable", task, words, rateableMicroAttempt };
 }
 
 function makeCriteriaWithBand(task, band) {
@@ -459,6 +462,32 @@ function capCriteriaBands(criteria = {}, cap = 9) {
   });
   return capped;
 }
+function floorCriteriaBands(criteria = {}, floor = 0) {
+  const raised = {};
+  Object.entries(criteria || {}).forEach(([key, value]) => {
+    const band = bandNumber(value);
+    raised[key] = Number.isFinite(band) ? Math.max(band, floor) : value;
+  });
+  return raised;
+}
+
+function highBandFloorProfile(criteria = {}, signals = {}, anchorComparison = {}) {
+  const task = signals.task;
+  const words = Number(signals.wordCount) || 0;
+  const { finalBand } = averageBand(criteria);
+  if (!Number.isFinite(finalBand) || finalBand < 7) return null;
+  const enoughLength = task === "Task 1" ? words >= 150 : words >= 250;
+  const enoughStructure = task === "Task 1" ? (Number(signals.sentenceCount) || 0) >= 4 : (Number(signals.paragraphCount) || 0) >= 4 && (Number(signals.sentenceCount) || 0) >= 9;
+  const cleanLanguage = (Number(signals.spellingIssueCount) || 0) === 0 && (Number(signals.grammarIssueSignalCount) || 0) === 0 && signals.lexicalNaturalnessRisk !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
+  const closestAnchor = Number(anchorComparison.closestAnchorBand);
+  const highFlag = Boolean(anchorComparison.highBandCandidate) || closestAnchor >= 8;
+  if (!enoughLength || !enoughStructure || !cleanLanguage) return null;
+  if ((highFlag || finalBand >= 7.5) && finalBand < 7.5) {
+    return { floor: 7.5, reason: `${task} is full-length, clean and high-band eligible; avoid capping a controlled response at Band 7.0.` };
+  }
+  return null;
+}
+
 
 function task1ShortLetterCap(words) {
   const w = Number(words) || 0;
@@ -493,6 +522,11 @@ function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComp
   if (shortCap && Number.isFinite(finalBand) && finalBand > shortCap.cap) {
     calibrated = capCriteriaBands(calibrated, shortCap.cap);
     notes.push({ type: "short_response_cap", cap: shortCap.cap, reason: shortCap.reason });
+  }
+  const highFloor = highBandFloorProfile(calibrated, signals, anchorComparison);
+  if (highFloor) {
+    calibrated = floorCriteriaBands(calibrated, highFloor.floor);
+    notes.push({ type: "high_band_floor", floor: highFloor.floor, reason: highFloor.reason });
   }
   return { criteria: calibrated, changed: notes.length > 0, notes };
 }
@@ -1625,7 +1659,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v7.5 five-step pipeline: AI returns compact criterion bands; local boundary calibration may cap clearly over-generous short/fragmentary responses; final bands are then frozen and averaged; feedback cannot change the score.",
+      formula: "v7.6 five-step pipeline: AI returns compact criterion bands; local boundary calibration may cap over-generous short responses and protect clean high-band responses from Band-7 caps; final bands are then frozen and averaged; feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
