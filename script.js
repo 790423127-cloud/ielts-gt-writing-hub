@@ -11,13 +11,9 @@
   let mockTimerId = null;
   let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
-    { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
-    { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
-    { stage: "score-anchor", title: "AI 独立 0–9 锚点判断", description: "AI 单独判断最接近的 0–9 分锚点；这个结果会传入四项评分，不能由最终分数反推。" },
-    { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
-    { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
-    { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
-    { stage: "score-finalize", title: "最终验证并冻结分数", description: "验证结构完整后，机械平均 AI 返回的四项最终分并冻结；本地不直接改分。" }
+    { stage: "score-input-check", title: "文本检查与任务识别", description: "检查词数、任务类型、可评分性和本地边界信号。" },
+    { stage: "score-ai-anchor-review", title: "AI 锚点评分与边界复核", description: "AI 独立判断 0–9 锚点，生成四项评分，并在需要时进行边界复核。" },
+    { stage: "score-final-output", title: "最终验证并生成结果", description: "验证评分结构、冻结最终分数，并生成评分报告。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
@@ -334,6 +330,14 @@
     els.gradingStatus.dataset.state = state;
   }
 
+  function friendlyScoringError(error) {
+    const msg = String(error?.message || error || "");
+    if (/freeze blocked|boundary audit|boundary review|409/i.test(msg)) {
+      return "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。请重试一次；如果连续出现，请检查高分/低分边界复核返回。";
+    }
+    return `评分失败：${msg}`;
+  }
+
   function gradingPayload(extra = {}) {
     const essay = String(els.essayInput?.value || "").trim();
     return {
@@ -410,12 +414,16 @@
   }
 
   function syncScoringProgressFromResult(result = {}) {
-    const backendProgress = result.detailedScoringProgress || result.scoringProgress;
+    const backendProgress = result.visibleProgress || result.scoringProgress || result.detailedScoringProgress;
     if (!backendProgress || !Array.isArray(backendProgress.steps)) return latestScoringProgress;
     const progress = ensureScoringProgress();
     progress.status = backendProgress.status || progress.status || "running";
     progress.currentStep = backendProgress.currentStep || progress.currentStep;
     progress.updatedAt = backendProgress.updatedAt || new Date().toISOString();
+    if (backendProgress.totalSteps === SCORING_STEPS.length) {
+      progress.steps = backendProgress.steps.map((step, index) => ({ ...SCORING_STEPS[index], ...step, index: index + 1 }));
+      return progress;
+    }
     const byStage = new Map(backendProgress.steps.map((step) => [step.stage, step]));
     progress.steps = progress.steps.map((step) => {
       const incoming = byStage.get(step.stage);
@@ -1058,6 +1066,7 @@
         <div class="score-gate-item"><strong>拼写密度：</strong>${escapeHtml(signals.spellingErrorDensity || "-")} ｜ <strong>语法密度：</strong>${escapeHtml(signals.grammarErrorDensity || "-")} ｜ <strong>句子控制：</strong>${escapeHtml(signals.sentenceControl || "-")} ｜ <strong>词汇控制：</strong>${escapeHtml(signals.lexicalControl || "-")}</div>
       </div>
       ${renderBoundaryAudit(result)}
+      ${result.internalAuditTrail ? `<details class="score-technical-details"><summary>内部 7 步审计 / Internal 7-step audit</summary><div class="score-gate-grid">${result.internalAuditTrail.map((step) => `<div class="score-gate-item"><strong>${escapeHtml(step.title || step.stage)}:</strong> ${escapeHtml(step.status || "-")}<br><span class="muted">${escapeHtml(step.message || "")}</span></div>`).join("")}</div></details>` : ""}
       ${renderAnchorComparison(result)}
       ${renderTaskSpecificGateReport(result)}
       ${result.examinerSummary ? `<p><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</p>` : ""}
@@ -1081,11 +1090,11 @@
         const half = item.halfBandDecision || {};
         const cardId = `criterionCard_${index}_${Math.random().toString(36).slice(2, 8)}`;
         const detailId = `criterionDetail_${index}_${Math.random().toString(36).slice(2, 8)}`;
-        const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `This criterion was estimated at Band ${formatBand(band)} based on the examiner evidence.`;
+        const whyThis = firstText(item.whyThisBand, item.summary, half.whyExactBand, item.positiveEvidence) || `This criterion is Band ${formatBand(band)} because of the evidence shown below; if this explanation looks generic, rerun scoring so the AI returns essay-specific evidence.`;
         const whyThisZh = item.whyThisBandZh || item.summaryZh || half.whyExactBandZh || "";
-        const whyLower = firstText(item.whyNotLower, half.whyAboveLowerBand) || `Not Band ${nearestHalfBand(band, "lower")} because the response shows enough relevant control for Band ${formatBand(band)}.`;
+        const whyLower = firstText(item.whyNotLower, half.whyAboveLowerBand) || `Not Band ${nearestHalfBand(band, "lower")} because the essay-specific evidence supports Band ${formatBand(band)} rather than the lower half band.`;
         const whyLowerZh = item.whyNotLowerZh || half.whyAboveLowerBandZh || "";
-        const whyHigher = firstText(item.whyNotHigher, half.whyBelowUpperBand) || `Not Band ${nearestHalfBand(band, "higher")} because the limiting evidence prevents a stronger band.`;
+        const whyHigher = firstText(item.whyNotHigher, half.whyBelowUpperBand) || `Not Band ${nearestHalfBand(band, "higher")} because the limiting evidence shown below prevents a stronger band.`;
         const whyHigherZh = item.whyNotHigherZh || half.whyBelowUpperBandZh || "";
         const improve = firstText(item.howToImprove, item.improvementFocus) || fallbackImprove(criterion, band);
         const improveZh = item.howToImproveZh || item.improvementFocusZh || "";
@@ -1279,29 +1288,22 @@
     if (els.gradeBtn) { els.gradeBtn.disabled = true; els.gradeBtn.textContent = "Scoring..."; els.gradeBtn.setAttribute("aria-busy", "true"); }
     if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
-    let activeStageIndex = 0;
     try {
       latestScoringProgress = createScoringProgress();
       latestScoringProgress.status = "running";
+      updateScoringProgress(0, "done", "文本已提交，后端将进行本地文本检查与任务识别。");
+      updateScoringProgress(1, "running", "AI 正在进行独立锚点判断、四项评分和必要的边界复核。");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      let currentResult = null;
-      for (let i = 0; i < SCORING_STEPS.length; i += 1) {
-        activeStageIndex = i;
-        const step = SCORING_STEPS[i];
-        updateScoringProgress(i, "running", `AI 正在执行：${step.description}`);
-        if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-        setGradingStatus(`第 ${i + 1} 步/${SCORING_STEPS.length}：${step.title}。`, "loading");
-        currentResult = await postStage(endpoint, gradingPayload({ aiStage: step.stage, currentResult }));
-        syncScoringProgressFromResult(currentResult);
-        updateScoringProgress(i, "done", currentResult?.detailedScoringProgress?.steps?.[i]?.message || `${step.title}已完成。`);
-        if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      }
+      setGradingStatus("第 2 步/3：AI 锚点评分与边界复核。", "loading");
+      const result = await postStage(endpoint, gradingPayload({ mode: "score" }));
+      latestScoreResult = result;
+      syncScoringProgressFromResult(result);
       completeScoringProgress();
-      renderScoreResult(currentResult);
+      renderScoreResult(result);
       setGradingStatus("评分完成。四项分数已冻结。作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
-      updateScoringProgress(activeStageIndex, "error", "该阶段执行失败。", error);
-      setGradingStatus(`评分失败：第 ${activeStageIndex + 1} 步/${SCORING_STEPS.length} ${SCORING_STEPS[activeStageIndex]?.title || "未知阶段"}失败。`, "error");
+      updateScoringProgress(1, "error", "评分流程执行失败。", error);
+      setGradingStatus(friendlyScoringError(error), "error");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
     } finally {
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }
@@ -1371,12 +1373,8 @@
   }
 
   async function postMockScore(endpoint, prompt, essay, label) {
-    let currentResult = null;
-    for (let i = 0; i < SCORING_STEPS.length; i += 1) {
-      const step = SCORING_STEPS[i];
-      setMockStatus(`${label}：第 ${i + 1}/${SCORING_STEPS.length} 步，${step.title}...`, "loading");
-      currentResult = await postStage(endpoint, mockPayloadForPrompt(prompt, essay, { aiStage: step.stage, currentResult }));
-    }
+    setMockStatus(`${label}：AI 锚点评分与边界复核中...`, "loading");
+    const currentResult = await postStage(endpoint, mockPayloadForPrompt(prompt, essay, { mode: "score" }));
     if (!Number.isFinite(Number(currentResult?.overallBand || currentResult?.scoreCalculation?.finalBand))) {
       throw new Error(`${label}: final score was not returned.`);
     }

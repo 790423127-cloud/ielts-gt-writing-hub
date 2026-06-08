@@ -1790,3 +1790,13 @@ select#typeFilter{
   .mock-submit-row .primary{width:100%}
   .mock-task-card textarea{min-height:260px}
 }
+
+/* Score Core v7 single-pass UI additions */
+.score-technical-details{border:1px solid var(--line);border-radius:14px;background:var(--soft);overflow:hidden;margin-top:12px}
+.score-technical-details summary{min-height:44px;display:flex;align-items:center;padding:0 14px;font-weight:850;cursor:pointer;color:var(--ink)}
+.score-technical-details .score-gate-grid{padding:12px;border-top:1px solid var(--line)}
+.criterion-quick-row h5{display:flex;align-items:center;gap:6px}
+.criterion-quick-row h5::before{content:"";width:8px;height:8px;border-radius:999px;background:var(--teal);display:inline-block}
+.score-progress-chip.done,.score-step-status.done{background:rgba(15,118,110,.12);color:var(--teal)}
+.score-progress-chip.running,.score-step-status.running{background:rgba(164,93,0,.14);color:var(--amber)}
+.score-progress-chip.error,.score-step-status.error{background:rgba(185,67,59,.13);color:var(--rose)}

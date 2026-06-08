@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v6-independent-anchor-hard-freeze";
+const SCORE_SYSTEM_VERSION = "score-core-v7-single-pass-strict-anchor-pipeline";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -66,6 +66,48 @@ const DETAILED_SCORING_STEPS = [
   { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
   { stage: "score-finalize", title: "最终验证并冻结分数", description: "验证结构完整后，机械平均 AI 返回的四项最终分并冻结；本地不直接改分。" }
 ];
+const VISIBLE_SCORING_STEPS = [
+  { stage: "score-input-check", title: "文本检查与任务识别", description: "检查词数、任务类型、可评分性和本地边界信号。" },
+  { stage: "score-ai-anchor-review", title: "AI 锚点评分与边界复核", description: "AI 独立判断 0–9 锚点，生成四项评分，并在需要时进行边界复核。" },
+  { stage: "score-final-output", title: "最终验证并生成结果", description: "验证评分结构、冻结最终分数，并生成评分报告。" }
+];
+
+function visibleStepMessage(stage, result = {}) {
+  const signals = result.localSignals || {};
+  const anchor = result.anchorComparison || {};
+  const audit = result.boundaryAudit || {};
+  if (stage === "score-input-check") {
+    return `文本检查完成：${signals.wordCount ?? "-"} words，任务 ${signals.task || result.task || "-"}，可评分性 ${signals.rateabilityStatus || "-"}。`;
+  }
+  if (stage === "score-ai-anchor-review") {
+    const reviewState = audit.boundaryReview?.triggered || result.scoreCoreMeta?.boundaryReviewApplied ? "已执行边界复核" : (audit.reviewRequired ? "需要边界复核" : "未触发边界复核");
+    return `AI 锚点与四项评分完成：closest anchor Band ${anchor.closestAnchorBand ?? "-"}，${reviewState}。`;
+  }
+  if (stage === "score-final-output") {
+    const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
+    return `最终验证完成：分数已冻结，Overall Band ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}。`;
+  }
+  return "阶段状态已更新。";
+}
+
+function buildVisibleProgress(result = {}, status = "done") {
+  return {
+    version: SCORE_SYSTEM_VERSION,
+    totalSteps: VISIBLE_SCORING_STEPS.length,
+    currentStep: status === "done" ? VISIBLE_SCORING_STEPS.length : 2,
+    currentStage: status === "done" ? "score-final-output" : "score-ai-anchor-review",
+    status,
+    updatedAt: new Date().toISOString(),
+    steps: VISIBLE_SCORING_STEPS.map((step, index) => ({
+      ...step,
+      index: index + 1,
+      status: status === "done" ? "done" : (index === 1 ? "running" : index === 0 ? "done" : "waiting"),
+      message: status === "done" ? visibleStepMessage(step.stage, result) : step.description,
+      detail: step.stage === "score-ai-anchor-review" ? { anchorComparison: result.anchorComparison || null, boundaryAudit: result.boundaryAudit || null } : null
+    }))
+  };
+}
+
 
 function isAllowedOrigin(origin) {
   if (!origin) return false;
@@ -539,6 +581,9 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
     "Hard local audit rule: the server will independently check underlength, all-four-same, all-four-7, anchor/final conflicts, Band 6 access, and high-band ceiling. If a conflict is found, your result may be sent to a second AI boundary review before freezing.",
     "Fail-closed rule: every criterion must include evidence and half-band boundary reasoning. If all four criteria are identical, justify equality with evidence or differentiate the bands by 0.5 where appropriate.",
     "High-band ceiling rule: Band 8/9 writing can have rare minor slips. Do not keep a mature, fully developed, precise and natural response at four Band 7s merely because it is not perfect.",
+    "Criterion feedback evidence rule: criterionCalibration must be essay-specific, not templated. Every criterion must cite or paraphrase at least two concrete features or short quotes from the student's response in positiveEvidence, limitingEvidence, or essayEvidence.",
+    "Invalid generic feedback rule: comments such as 'clear position but lacks depth', 'adequate vocabulary', 'some grammatical errors', 'coherence is generally clear', or any comment that could apply to any essay are invalid. Rewrite with exact evidence from this essay.",
+    "Each criterion explanation must include: whyThisBand, whyNotLower, whyNotHigher, howToImprove, essayEvidence, and specific evidence for/against the next half band. Do not leave evidence arrays empty unless the answer is not assessable.",
     "Low-band boundary rule: severe underlength may be rateable but still belongs to a low-band boundary. Task 2 80-119 words is usually Band 3.0-4.0; Task 2 120-149 words is usually Band 3.5-4.5 unless exceptional evidence exists.",
     "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
     "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
@@ -817,6 +862,24 @@ function withDetailedProgress(result, stageKey, status = "done") {
   return { ...result, detailedScoringProgress: progress, scoringProgress: progress };
 }
 
+function attachSinglePassProgress(result, status = "done") {
+  const internal = buildDetailedScoringProgress("score-finalize", result, status);
+  const visible = buildVisibleProgress(result, status);
+  return {
+    ...result,
+    visibleProgress: visible,
+    scoringProgress: visible,
+    detailedScoringProgress: internal,
+    internalAuditTrail: internal.steps.map((step) => ({
+      stage: step.stage,
+      title: step.title,
+      status: step.status,
+      message: step.message,
+      detail: step.detail || null
+    }))
+  };
+}
+
 function boundaryAuditSummaryZh(audit = {}) {
   const reasons = Array.isArray(audit.reviewReasons) ? audit.reviewReasons : [];
   if (!reasons.length) return "本地硬性校准通过：未发现必须二次复核的低分、高分、锚点或分数组合冲突。";
@@ -1005,8 +1068,8 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
     rawAverage,
     overallBand: finalBand,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_strict_anchor_engine_v6" : "task2_essay_strict_anchor_engine_v6",
-      formula: "Task-aware independent 0-9 anchor calibration; local hard-gate audit; AI boundary review when triggered; final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and routes, but does not assign bands.",
+      mode: task === "Task 1" ? "task1_gt_letter_single_pass_strict_anchor_v7" : "task2_essay_single_pass_strict_anchor_v7",
+      formula: "Single-pass task-aware 0-9 anchor pipeline: AI independent anchor, AI criterion scoring, local hard audit, AI boundary review when triggered, final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and freezes, but does not assign bands.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -1063,7 +1126,7 @@ async function scoreCore(body) {
   };
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);
   assertFinalCanFreeze(reviewed);
-  return withDetailedProgress({ ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "score-core" } }, "score-finalize");
+  return attachSinglePassProgress({ ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "single-pass-score-core", singlePassPipeline: true } }, "done");
 }
 
 
@@ -1222,8 +1285,8 @@ function scoreFinalizeStage(body) {
     boundaryAudit,
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
-      mode: signals.task === "Task 1" ? "task1_gt_letter_strict_anchor_engine_v6" : "task2_essay_strict_anchor_engine_v6",
-      formula: "Task-aware independent 0-9 anchor calibration; local hard-gate audit; AI boundary review when triggered; final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and routes, but does not assign bands.",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_single_pass_strict_anchor_v7" : "task2_essay_single_pass_strict_anchor_v7",
+      formula: "Single-pass task-aware 0-9 anchor pipeline: AI independent anchor, AI criterion scoring, local hard audit, AI boundary review when triggered, final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and freezes, but does not assign bands.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -1269,7 +1332,8 @@ async function handleRequest(req, res) {
   if (req.method === "OPTIONS") return sendJson(req, res, 204, {});
   if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   const body = await readJsonBody(req);
-  const stage = String(body.aiStage || body.stage || "score-precheck").toLowerCase();
+  const requestedStage = body.aiStage || body.stage || (String(body.mode || "").toLowerCase() === "score" ? "score-core" : "score-core");
+  const stage = String(requestedStage).toLowerCase();
   if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));
   if (stage === "score-precheck") return sendJson(req, res, 200, scorePrecheck(body));
   if (stage === "score-task-router") return sendJson(req, res, 200, scoreTaskRouterStage(body));
@@ -1286,12 +1350,15 @@ module.exports = async function handler(req, res) {
   try {
     await handleRequest(req, res);
   } catch (error) {
-    sendJson(req, res, 502, {
+    const detail = error?.message || String(error);
+    const freezeBlocked = /freeze blocked|boundary audit|boundary review/i.test(detail);
+    sendJson(req, res, Number(error?.status) || (freezeBlocked ? 409 : 502), {
       ok: false,
-      error: "AI scoring failed. No non-AI score was generated.",
+      error: freezeBlocked ? "Score freeze blocked by unresolved boundary audit." : "AI scoring failed. No non-AI score was generated.",
       provider: DEFAULT_PROVIDER,
-      detail: error?.message || String(error),
-      suggestion: "Retry once. If it repeats, check Vercel logs and the DeepSeek API key/runtime."
+      detail,
+      businessError: freezeBlocked ? "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。" : "评分失败：AI 没有返回可冻结的评分结果。",
+      suggestion: freezeBlocked ? "请重试一次；如果连续出现，请检查独立锚点、四项全7复核和 boundaryAudit 返回内容。" : "Retry once. If it repeats, check Vercel logs and the DeepSeek API key/runtime."
     });
   }
 };
