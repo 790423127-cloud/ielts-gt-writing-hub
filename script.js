@@ -6,6 +6,10 @@
   let remaining = 0;
   let latestScoreResult = null;
   let latestScoringProgress = null;
+  let mockTask1Prompt = null;
+  let mockTask2Prompt = null;
+  let mockTimerId = null;
+  let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
     { stage: "score-precheck", title: "文本信号与任务类型检查", description: "检查词数、段落、句子、Task 1/Task 2 类型与可评分性。" },
     { stage: "score-criteria", title: "四项评分与半分判断", description: "AI 返回四项小项分数，并解释相邻半分边界。" },
@@ -41,6 +45,63 @@
   function fillSelect(select, values, allText) {
     if (!select) return;
     select.innerHTML = `<option value="all">${escapeHtml(allText)}</option>` + values.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  }
+
+  function targetWordsForPrompt(prompt) {
+    return prompt?.task === "Task 1" ? 150 : 250;
+  }
+
+  function taskTypeForPrompt(prompt) {
+    return prompt?.task === "Task 1" ? "task1" : "task2";
+  }
+
+  function extractBulletPointsFromPrompt(text) {
+    const source = String(text || "");
+    const clean = (value) => String(value || "")
+      .replace(/^[-*•·]\s+/, "")
+      .replace(/^(\d+)[.)]\s+/, "")
+      .replace(/^and\s+/i, "")
+      .replace(/[.;:,\s]+$/g, "")
+      .trim();
+    const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const direct = lines
+      .filter((line) => /^[-*•·]\s+/.test(line) || /^(\d+)[.)]\s+/.test(line))
+      .map(clean)
+      .filter(Boolean);
+    if (direct.length) return direct.slice(0, 5);
+    const afterInYourLetter = source.split(/In your letter[:,]?/i)[1] || source.split(/You should/i)[1] || "";
+    const candidateSource = afterInYourLetter || source;
+    const candidates = candidateSource
+      .split(/\r?\n|;/)
+      .map(clean)
+      .filter((part) => /^(give|explain|describe|say|tell|ask|suggest|apologise|apologize|thank|invite|offer|request|remind|include|state|mention|why|what|how)/i.test(part));
+    return candidates.filter(Boolean).slice(0, 5);
+  }
+
+  function buildTask2QuestionProfile(text) {
+    const prompt = String(text || "");
+    const requiredParts = [];
+    const add = (label) => { if (!requiredParts.includes(label)) requiredParts.push(label); };
+    const asksOpinion = /\b(your opinion|what is your opinion|give your opinion|to what extent do you agree|agree or disagree|do you agree|disagree)\b/i.test(prompt);
+    const asksBothViews = /\b(discuss both views|both views)\b/i.test(prompt);
+    const asksAdvantage = /\b(advantage|advantages|benefit|benefits)\b/i.test(prompt);
+    const asksDisadvantage = /\b(disadvantage|disadvantages|drawback|drawbacks)\b/i.test(prompt);
+    const asksOutweigh = /\boutweigh\b/i.test(prompt);
+    const asksCause = /\b(cause|causes|reason|reasons|why)\b/i.test(prompt);
+    const asksProblem = /\b(problem|problems|issue|issues)\b/i.test(prompt);
+    const asksSolution = /\b(solution|solutions|solve|measures|what can be done|how can this be)\b/i.test(prompt);
+    const asksPositiveNegative = /\b(positive or negative|positive development|negative development|good thing or bad thing|is this a positive|is this a negative)\b/i.test(prompt);
+    let questionType = "general_essay";
+    if (asksBothViews) { questionType = "discuss_both_views_with_opinion"; add("discuss view 1"); add("discuss view 2"); if (asksOpinion) add("give your own opinion"); }
+    else if (asksOutweigh || (asksAdvantage && asksDisadvantage)) { questionType = asksOutweigh ? "advantages_disadvantages_outweigh" : "advantages_and_disadvantages"; if (asksAdvantage) add("advantages"); if (asksDisadvantage) add("disadvantages"); if (asksOutweigh) add("state whether advantages outweigh disadvantages"); }
+    else if (asksCause && asksSolution) { questionType = "causes_and_solutions"; add("causes or reasons"); add("solutions or measures"); }
+    else if (asksProblem && asksSolution) { questionType = "problems_and_solutions"; add("problems"); add("solutions"); }
+    else if (asksPositiveNegative) { questionType = "positive_negative_development"; add("state whether it is mainly positive or negative"); add("support the judgement with reasons"); }
+    else if (asksOpinion) { questionType = "opinion_agree_disagree"; add("clear position"); add("reasons supporting the position"); }
+    const questions = (prompt.match(/[^?]+\?/g) || []).map((item) => item.trim()).filter(Boolean);
+    if (questions.length >= 2) questions.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
+    if (!requiredParts.length) add("answer all parts of the prompt");
+    return { questionType, requiredParts, positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative, questionCount: questions.length, inferredFromPrompt: true };
   }
 
   function setupGradingModes() {
@@ -1139,6 +1200,285 @@
     }
   }
 
+
+  function roundToHalfBand(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(9, Math.round(numeric * 2) / 2));
+  }
+
+  function formatMockBand(value) {
+    const rounded = roundToHalfBand(value);
+    return Number.isInteger(rounded) ? `${rounded}.0` : String(rounded);
+  }
+
+  function calculateMockWritingBand(task1Band, task2Band) {
+    const raw = (Number(task1Band || 0) + Number(task2Band || 0) * 2) / 3;
+    return roundToHalfBand(raw);
+  }
+
+  function chooseRandomPrompt(task) {
+    const pool = prompts.filter((p) => p.task === task);
+    return pool[Math.floor(Math.random() * pool.length)] || null;
+  }
+
+  function mockPayloadForPrompt(prompt, essay, extra = {}) {
+    const wordCount = countWords(essay);
+    const targetWordCount = targetWordsForPrompt(prompt);
+    return {
+      task: prompt?.task || "Task 2",
+      taskType: taskTypeForPrompt(prompt),
+      promptId: prompt?.id || "",
+      book: prompt?.book || "",
+      test: prompt?.test || "",
+      title: prompt?.title || "",
+      questionTitle: prompt?.title || "",
+      questionType: prompt?.type || "",
+      letterStyle: prompt?.letterStyle || "",
+      questionPrompt: prompt?.prompt || "",
+      promptText: prompt?.prompt || "",
+      task1BulletPoints: prompt?.task === "Task 1" ? extractBulletPointsFromPrompt(prompt?.prompt) : [],
+      task2QuestionProfile: prompt?.task === "Task 2" ? buildTask2QuestionProfile(prompt?.prompt) : null,
+      task2Instruction: prompt?.task === "Task 2" ? prompt?.prompt || "" : "",
+      essay,
+      wordCount,
+      actualWordCount: wordCount,
+      targetWordCount,
+      isUnderMinimum: wordCount < targetWordCount,
+      mode: "score",
+      gradingMode: "mock_exam",
+      outputLanguage: "en",
+      locale: "en",
+      includeRevision: false,
+      revisionTargets: [],
+      mockExam: true,
+      rubric: {
+        task1: ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"],
+        task2: ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
+      },
+      ...extra
+    };
+  }
+
+  async function postMockScore(endpoint, prompt, essay, label) {
+    let currentResult = null;
+    for (let i = 0; i < SCORING_STEPS.length; i += 1) {
+      const step = SCORING_STEPS[i];
+      setMockStatus(`${label}：第 ${i + 1}/${SCORING_STEPS.length} 步，${step.title}...`, "loading");
+      currentResult = await postStage(endpoint, mockPayloadForPrompt(prompt, essay, { aiStage: step.stage, currentResult }));
+    }
+    if (!Number.isFinite(Number(currentResult?.overallBand || currentResult?.scoreCalculation?.finalBand))) {
+      throw new Error(`${label}: final score was not returned.`);
+    }
+    return currentResult;
+  }
+
+  function renderMockPrompt(targetId, prompt) {
+    const node = $(targetId);
+    if (!node || !prompt) return;
+    node.innerHTML = `
+      <div class="tags">${tag(prompt.book, "book")}${tag(prompt.test, "book")}${tag(prompt.task, prompt.task === "Task 1" ? "task1" : "task2")}${tag(prompt.type, "type")}</div>
+      <h4>${escapeHtml(prompt.title)}</h4>
+      <p class="prompt-text">${escapeHtml(prompt.prompt)}</p>`;
+  }
+
+  function setMockStatus(text, state = "") {
+    const node = $("mockExamStatus");
+    if (!node) return;
+    node.textContent = text;
+    node.dataset.state = state;
+  }
+
+  function updateMockWordCounts() {
+    const t1 = $("mockTask1Essay");
+    const t2 = $("mockTask2Essay");
+    const w1 = $("mockTask1Words");
+    const w2 = $("mockTask2Words");
+    if (w1 && t1) w1.textContent = countWords(t1.value);
+    if (w2 && t2) w2.textContent = countWords(t2.value);
+  }
+
+  function renderMockTimer() {
+    const node = $("mockTimerDisplay");
+    if (node) node.textContent = fmt(mockRemaining);
+  }
+
+  function startMockTimer() {
+    if (mockTimerId) { clearInterval(mockTimerId); mockTimerId = null; const btn = $("mockStartTimerBtn"); if (btn) btn.textContent = "继续计时"; return; }
+    const btn = $("mockStartTimerBtn");
+    if (btn) btn.textContent = "暂停计时";
+    mockTimerId = setInterval(() => {
+      mockRemaining = Math.max(0, mockRemaining - 1);
+      renderMockTimer();
+      if (mockRemaining === 40 * 60) setMockStatus("建议开始 Task 2。", "loading");
+      if (mockRemaining === 10 * 60) setMockStatus("剩余 10 分钟。", "loading");
+      if (mockRemaining === 0) {
+        clearInterval(mockTimerId);
+        mockTimerId = null;
+        if (btn) btn.textContent = "开始计时";
+        setMockStatus("时间结束，可以提交两篇作文评分。", "warning");
+      }
+    }, 1000);
+  }
+
+  function resetMockExam(pickNew = true) {
+    if (pickNew || !mockTask1Prompt) mockTask1Prompt = chooseRandomPrompt("Task 1");
+    if (pickNew || !mockTask2Prompt) mockTask2Prompt = chooseRandomPrompt("Task 2");
+    renderMockPrompt("mockTask1Prompt", mockTask1Prompt);
+    renderMockPrompt("mockTask2Prompt", mockTask2Prompt);
+    const t1 = $("mockTask1Essay");
+    const t2 = $("mockTask2Essay");
+    if (pickNew) {
+      if (t1) t1.value = "";
+      if (t2) t2.value = "";
+      const results = $("mockExamResults");
+      if (results) results.innerHTML = "";
+    }
+    mockRemaining = 60 * 60;
+    if (mockTimerId) { clearInterval(mockTimerId); mockTimerId = null; }
+    const btn = $("mockStartTimerBtn");
+    if (btn) btn.textContent = "开始计时";
+    renderMockTimer();
+    updateMockWordCounts();
+    setMockStatus("模拟考试准备就绪。", "");
+  }
+
+  function renderMockTaskScore(label, result = {}, band) {
+    const rawAverage = Number(result.rawAverage || result.scoreCalculation?.rawAverage);
+    const finalBand = Number(result.overallBand || result.scoreCalculation?.finalBand || band);
+    return renderScoreAccordion(`${label} 模拟考试评分`, `
+      <p><strong>Estimated band:</strong> Band ${escapeHtml(formatMockBand(finalBand))}</p>
+      ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
+      ${renderScoreCalibration(result)}
+    `, false, "mock-task-result-accordion");
+  }
+
+  function renderMockResults(task1Result, task2Result) {
+    const t1Band = roundToHalfBand(task1Result?.overallBand || task1Result?.scoreCalculation?.finalBand);
+    const t2Band = roundToHalfBand(task2Result?.overallBand || task2Result?.scoreCalculation?.finalBand);
+    const finalBand = calculateMockWritingBand(t1Band, t2Band);
+    const rawWeightedAverage = (t1Band + t2Band * 2) / 3;
+    const node = $("mockExamResults");
+    if (!node) return;
+    node.innerHTML = `
+      <section class="mock-score-card mock-score-card-hero">
+        <div>
+          <p class="kicker">Mock Writing Result</p>
+          <h3>Final Writing estimated band</h3>
+          <p class="muted">Task 1 和 Task 2 分开评分；Task 2 权重更高。本结果为 AI 估算，不是官方 IELTS 成绩。</p>
+        </div>
+        <div class="mock-final-band">${escapeHtml(formatMockBand(finalBand))}</div>
+        <div class="mock-score-formula">
+          <p><strong>Task 1:</strong> Band ${escapeHtml(formatMockBand(t1Band))}</p>
+          <p><strong>Task 2:</strong> Band ${escapeHtml(formatMockBand(t2Band))}</p>
+          <p><strong>综合计算：</strong>(${escapeHtml(formatMockBand(t1Band))} + ${escapeHtml(formatMockBand(t2Band))} × 2) ÷ 3 = ${escapeHtml(rawWeightedAverage.toFixed(3).replace(/\.?0+$/, ""))} → Band ${escapeHtml(formatMockBand(finalBand))}</p>
+        </div>
+      </section>
+      ${renderMockTaskScore("Task 1", task1Result, t1Band)}
+      ${renderMockTaskScore("Task 2", task2Result, t2Band)}`;
+  }
+
+  async function submitMockExam() {
+    const endpoint = String(els.gradingEndpointInput?.value || "").trim();
+    if (!endpoint) { setMockStatus("请先填写批改接口地址。", "error"); return; }
+    if (!mockTask1Prompt || !mockTask2Prompt) resetMockExam(true);
+    const t1Essay = String($("mockTask1Essay")?.value || "").trim();
+    const t2Essay = String($("mockTask2Essay")?.value || "").trim();
+    if (!t1Essay && !t2Essay) setMockStatus("两篇都为空也可以提交，AI 会按无有效作答评分；建议至少保留真实考试中写下的内容。", "warning");
+    const btn = $("mockSubmitBtn");
+    const resetBtn = $("mockResetBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "评分中..."; }
+    if (resetBtn) resetBtn.disabled = true;
+    try {
+      setMockStatus("正在评分 Task 1...", "loading");
+      const task1Result = await postMockScore(endpoint, mockTask1Prompt, t1Essay, "Task 1");
+      setMockStatus("正在评分 Task 2...", "loading");
+      const task2Result = await postMockScore(endpoint, mockTask2Prompt, t2Essay, "Task 2");
+      renderMockResults(task1Result, task2Result);
+      setMockStatus("模拟考试最终评分完成。", "done");
+    } catch (error) {
+      setMockStatus(`模拟考试评分失败：${error.message}`, "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "提交两篇作文并综合评分"; }
+      if (resetBtn) resetBtn.disabled = false;
+    }
+  }
+
+  function bindMockExamInteractions(card) {
+    if (!card || card.dataset.mockBound === "true") return;
+    card.dataset.mockBound = "true";
+    card.addEventListener("click", (event) => {
+      const translateBtn = event.target.closest("[data-score-translation-target]");
+      if (translateBtn) {
+        const target = document.getElementById(translateBtn.dataset.scoreTranslationTarget);
+        if (target) {
+          const hidden = target.classList.toggle("hidden-score-translation");
+          translateBtn.textContent = hidden ? "中文解释" : "收起中文";
+        }
+      }
+    });
+  }
+
+  function ensureMockExamPanel() {
+    if ($("mockExamCard")) return;
+    const filters = document.querySelector(".filters");
+    if (!filters || !filters.parentNode) return;
+    const card = document.createElement("section");
+    card.id = "mockExamCard";
+    card.className = "card mock-exam-card mock-exam-card-modern";
+    card.innerHTML = `
+      <div class="mock-exam-hero">
+        <div>
+          <p class="kicker">IELTS GT Writing Mock Test</p>
+          <h3>考试模式：Task 1 + Task 2</h3>
+          <p class="muted">60 分钟完成两篇作文。Task 1 建议 20 分钟，Task 2 建议 40 分钟；提交后按 Task 2 双倍权重计算模拟 Writing 总分。</p>
+        </div>
+        <div class="mock-exam-hero-actions">
+          <strong id="mockTimerDisplay" class="mock-main-timer">60:00</strong>
+          <button class="primary" type="button" id="mockToggleBtn">打开考试模式</button>
+        </div>
+      </div>
+      <div id="mockExamBody" class="mock-exam-body hidden">
+        <div class="mock-toolbar actions">
+          <button class="secondary" type="button" id="mockStartTimerBtn">开始计时</button>
+          <button class="secondary" type="button" id="mockResetBtn">换一套题 / 重置</button>
+          <span id="mockExamStatus" class="muted"></span>
+        </div>
+        <div class="mock-exam-grid">
+          <div class="mock-task-card">
+            <div class="mock-task-card-head"><h4>Task 1 Letter</h4><span class="tag task1">20 min · 150+ words</span></div>
+            <div id="mockTask1Prompt" class="question-card"></div>
+            <textarea id="mockTask1Essay" class="essay" placeholder="Write your Task 1 letter here..."></textarea>
+            <p class="wordbox"><strong id="mockTask1Words">0</strong><span>/ 150 words</span></p>
+          </div>
+          <div class="mock-task-card">
+            <div class="mock-task-card-head"><h4>Task 2 Essay</h4><span class="tag task2">40 min · 250+ words</span></div>
+            <div id="mockTask2Prompt" class="question-card"></div>
+            <textarea id="mockTask2Essay" class="essay" placeholder="Write your Task 2 essay here..."></textarea>
+            <p class="wordbox"><strong id="mockTask2Words">0</strong><span>/ 250 words</span></p>
+          </div>
+        </div>
+        <div class="mock-submit-row"><button class="primary" type="button" id="mockSubmitBtn">提交两篇作文并综合评分</button></div>
+        <div id="mockExamResults" class="grading-results"></div>
+      </div>`;
+    filters.parentNode.insertBefore(card, filters.nextSibling);
+    bindMockExamInteractions(card);
+    $("mockToggleBtn")?.addEventListener("click", () => {
+      const body = $("mockExamBody");
+      if (!body) return;
+      const opening = body.classList.contains("hidden");
+      body.classList.toggle("hidden", !opening);
+      $("mockToggleBtn").textContent = opening ? "收起考试模式" : "打开考试模式";
+      if (opening) resetMockExam(false);
+    });
+    $("mockStartTimerBtn")?.addEventListener("click", startMockTimer);
+    $("mockResetBtn")?.addEventListener("click", () => resetMockExam(true));
+    $("mockSubmitBtn")?.addEventListener("click", submitMockExam);
+    $("mockTask1Essay")?.addEventListener("input", updateMockWordCounts);
+    $("mockTask2Essay")?.addEventListener("input", updateMockWordCounts);
+    resetMockExam(true);
+  }
+
   function bind() {
     [els.bookFilter, els.testFilter, els.typeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
     els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); renderList(); });
@@ -1165,6 +1505,7 @@
     injectScoreStyles();
     initFilters();
     setupGradingModes();
+    ensureMockExamPanel();
     bind();
     if (els.gradingEndpointInput) els.gradingEndpointInput.value = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
     const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
