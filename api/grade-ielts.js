@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-7-zero-keyword-and-highband-floor";
+const SCORE_SYSTEM_VERSION = "score-core-v7-9-complete-bilingual-feedback";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -1586,10 +1586,14 @@ function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
     "You generate post-freeze IELTS criterion feedback. Return JSON only.",
     "The score is already frozen. Do not change any band, criterion score, anchor, boundary decision, or overall score.",
     "Write concise examiner-style feedback for the four criterion cards. Avoid robotic template wording.",
+    "Bilingual requirement: every English feedback string must have a matching natural Simplified Chinese meaning field. Do not leave any Chinese field blank. Chinese must explain the exact English sentence, not only give a vague summary.",
+    "For arrays, the Chinese array must have the same number of items and the same order as the English array, e.g. positiveEvidence[0] must match positiveEvidenceZh[0].",
+    "For essayEvidence, use objects only: {quote, meaning, meaningZh}. Do not return plain strings for essayEvidence.",
+    "For halfBandDecision, include whyAboveLowerBandZh, whyBelowUpperBandZh, and whyExactBandZh. These are required.",
     "Every comment must refer to concrete features from the student's response. If a sentence could apply to any essay, rewrite it.",
     "Use natural boundary wording: whyThisBand, whyNotLower means why the score is above the lower adjacent half-band, and whyNotHigher means why it is not yet the higher adjacent half-band.",
     "Do not write phrases like 'Some relevant vocabulary avoids Band 4' or 'some grammatical errors'. Be specific and plain.",
-    "Length limits per criterion: whyThisBand max 55 words; whyNotLower max 35 words; whyNotHigher max 35 words; howToImprove max 45 words; zhSummary max 90 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 16 words.",
+    "Length limits per criterion: whyThisBand max 55 words; whyNotLower max 35 words; whyNotHigher max 35 words; howToImprove max 45 words; each Chinese translation should be concise but complete; zhSummary max 140 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 16 words.",
     "Use single quotes around student phrases. Do not use unescaped double quotes inside JSON strings. No markdown and no trailing prose.",
     `Task: ${task}. Criteria: ${names.join(", ")}.`,
     `Frozen score: ${JSON.stringify({ criteria: frozenResult.finalCriteria || frozenResult.criteria, overallBand: frozenResult.overallBand, anchorComparison: frozenResult.anchorComparison, shortReasons: frozenResult.shortReasons })}`,
@@ -1597,7 +1601,7 @@ function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
     `Task-specific boundary protocol:\n${bandBoundaryProtocolForTask(task)}`,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    "Return exactly: {\"ok\":true,\"aiStage\":\"criterion-feedback-after-freeze\",\"feedbackStatus\":{\"status\":\"generated\",\"scoreChanged\":false},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[number,number,number],\"summary\":\"one sentence\",\"whyThisBand\":\"...\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why above lower adjacent half-band\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not yet higher adjacent half-band\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"...\",\"howToImproveZh\":\"中文\",\"zhSummary\":\"整张卡片的中文总结\",\"positiveEvidence\":[\"...\"],\"positiveEvidenceZh\":[\"中文\"],\"limitingEvidence\":[\"...\"],\"limitingEvidenceZh\":[\"中文\"],\"essayEvidence\":[\"short quote or feature\"],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyBelowUpperBand\":\"...\",\"whyExactBand\":\"...\"}}}}."
+    "Return exactly: {\"ok\":true,\"aiStage\":\"criterion-feedback-after-freeze\",\"feedbackStatus\":{\"status\":\"generated\",\"scoreChanged\":false},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[number,number,number],\"summary\":\"one sentence\",\"summaryZh\":\"对应 summary 的中文释义\",\"whyThisBand\":\"...\",\"whyThisBandZh\":\"对应 whyThisBand 的中文释义\",\"whyNotLower\":\"why above lower adjacent half-band\",\"whyNotLowerZh\":\"对应 whyNotLower 的中文释义\",\"whyNotHigher\":\"why not yet higher adjacent half-band\",\"whyNotHigherZh\":\"对应 whyNotHigher 的中文释义\",\"howToImprove\":\"...\",\"howToImproveZh\":\"对应 howToImprove 的中文释义\",\"zhSummary\":\"整张卡片的中文总结\",\"positiveEvidence\":[\"...\"],\"positiveEvidenceZh\":[\"逐条对应 positiveEvidence 的中文释义\"],\"limitingEvidence\":[\"...\"],\"limitingEvidenceZh\":[\"逐条对应 limitingEvidence 的中文释义\"],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what this quote proves\",\"meaningZh\":\"对应 meaning 的中文释义，并说明原文片段体现什么\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"对应中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"对应中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"对应中文\"}}}}."
   ].join("\n\n");
 }
 

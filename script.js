@@ -845,6 +845,87 @@
     padding:0 16px !important;
   }
 }
+
+
+/* Score UI v7.8 display refinement: cleaner evidence cards and quieter calibration report */
+.grading-results .refined-criterion-card .evidence-grid{
+  grid-template-columns:1fr !important;
+  gap:12px !important;
+}
+.grading-results .compact-evidence-details .score-detail-body{
+  padding:14px 16px !important;
+}
+.grading-results .evidence-box{
+  min-width:0;
+  overflow-wrap:break-word;
+}
+.grading-results .evidence-box h5{
+  font-size:.95rem;
+  line-height:1.35;
+}
+.grading-results .compact-evidence-list{
+  margin:0;
+  padding-left:1.1rem;
+  line-height:1.6;
+}
+.grading-results .compact-evidence-list li+li{
+  margin-top:8px;
+}
+.grading-results .quote-evidence{
+  line-height:1.55;
+  word-break:normal;
+  overflow-wrap:anywhere;
+}
+.grading-results .score-calibration-report .score-accordion-body{
+  padding:16px 18px !important;
+}
+.grading-results .calibration-user-summary{
+  display:grid;
+  gap:12px;
+}
+.grading-results .calibration-summary-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.grading-results .calibration-summary-card{
+  border:1px solid var(--border, #d7e2ea);
+  border-radius:14px;
+  padding:12px 14px;
+  background:rgba(255,255,255,.70);
+  line-height:1.55;
+}
+.grading-results .calibration-summary-card strong{
+  display:block;
+  margin-bottom:4px;
+}
+.grading-results .calibration-dev-details{
+  margin-top:12px;
+  border:1px dashed rgba(100,116,132,.35);
+  border-radius:14px;
+  overflow:hidden;
+}
+.grading-results .calibration-dev-details>summary{
+  min-height:46px !important;
+  padding:0 14px !important;
+  background:rgba(248,250,252,.72) !important;
+  font-size:.95rem !important;
+}
+.grading-results .calibration-dev-body{
+  padding:14px;
+  border-top:1px solid var(--border, #d7e2ea);
+}
+.grading-results .calibration-dev-body .score-gate-grid{
+  grid-template-columns:1fr !important;
+}
+.grading-results .score-gate-item .muted{
+  overflow-wrap:anywhere;
+}
+@media (max-width:760px){
+  .grading-results .calibration-summary-grid{
+    grid-template-columns:1fr;
+  }
+}
 \n`;
     document.head.appendChild(style);
   }
@@ -852,6 +933,95 @@
     if (!hasMeaningfulContent(zh)) return "";
     const id = `scoreZh_${Math.random().toString(36).slice(2, 10)}`;
     return `<button class="score-translate-btn" type="button" data-score-translation-target="${id}">${escapeHtml(label)}</button><div id="${id}" class="score-translation hidden-score-translation">${escapeHtml(zh)}</div>`;
+  }
+
+  function autoZhText(en, context = {}) {
+    const raw = String(en || "").trim();
+    if (!raw) return "";
+    const criterion = String(context.criterion || "");
+    const heading = String(context.heading || "");
+    const band = Number(context.band);
+    const lowerHeading = heading.toLowerCase();
+    const lowerText = raw.toLowerCase();
+    const names = [];
+    if (/task response|task achievement/i.test(criterion)) names.push("任务回应");
+    if (/coherence/i.test(criterion)) names.push("连贯与衔接");
+    if (/lexical/i.test(criterion)) names.push("词汇资源");
+    if (/grammatical/i.test(criterion)) names.push("语法范围与准确性");
+    const field = names[0] || "这一项";
+    if (/why this|为什么是这个分/.test(lowerHeading)) {
+      return `${field}得分依据：英文说明认为文章在该项表现达到 Band ${Number.isFinite(band) ? formatBand(band) : "当前"} 水平，主要证据是：${simpleZhGloss(raw)}`;
+    }
+    if (/above lower|高于/.test(lowerHeading)) {
+      return `${field}高于低一档的原因：${simpleZhGloss(raw)}`;
+    }
+    if (/below higher|还不到|not yet/.test(lowerHeading)) {
+      return `${field}还没有达到更高一档的原因：${simpleZhGloss(raw)}`;
+    }
+    if (/improve|提升/.test(lowerHeading)) {
+      return `提升建议：${simpleZhGloss(raw)}`;
+    }
+    if (/evidence|证据/.test(lowerHeading)) {
+      return `证据释义：${simpleZhGloss(raw)}`;
+    }
+    return `中文释义：${simpleZhGloss(raw)}`;
+  }
+
+  function simpleZhGloss(text) {
+    let out = String(text || "").trim();
+    const replacements = [
+      [/presents? a clear position/ig, "提出清晰立场"],
+      [/clear position/ig, "清晰立场"],
+      [/develops? arguments?/ig, "展开论点"],
+      [/developed reasoning/ig, "论证有展开"],
+      [/specific examples?/ig, "具体例子"],
+      [/balanced view/ig, "平衡观点"],
+      [/logical progression/ig, "逻辑推进"],
+      [/clear introduction/ig, "清楚的引言"],
+      [/body paragraphs?/ig, "主体段"],
+      [/conclusion/ig, "结论"],
+      [/cohesive devices?/ig, "衔接手段"],
+      [/paragraphing/ig, "分段"],
+      [/formulaic/ig, "公式化"],
+      [/transitions?/ig, "过渡表达"],
+      [/seamless flow/ig, "自然流畅的衔接"],
+      [/vocabulary range/ig, "词汇范围"],
+      [/precise terms?/ig, "准确用词"],
+      [/some repetition/ig, "有一些重复"],
+      [/common collocations?/ig, "常见搭配"],
+      [/complex structures?/ig, "复杂句式"],
+      [/minor errors?/ig, "小错误"],
+      [/rare and minor/ig, "少且轻微"],
+      [/grammatical control/ig, "语法控制"],
+      [/relative clauses?/ig, "定语从句"],
+      [/conditionals?/ig, "条件句"],
+      [/passive voice/ig, "被动语态"],
+      [/counterarguments?/ig, "反方论点"],
+      [/societal implications?/ig, "社会层面影响"],
+      [/social pressure/ig, "社会压力"],
+      [/personal freedom/ig, "个人自由"],
+      [/healthy appearance/ig, "健康外貌"],
+      [/regulation/ig, "监管"],
+      [/supports? this score/ig, "支持这个分数"],
+      [/limits? higher bands?/ig, "限制更高分"],
+      [/candidate bands?/ig, "候选分数"],
+      [/why above lower band/ig, "为什么高于低一档"],
+      [/why below higher band/ig, "为什么低于高一档"],
+      [/why exact band/ig, "为什么是这个准确分数"]
+    ];
+    replacements.forEach(([pattern, zh]) => { out = out.replace(pattern, zh); });
+    return out;
+  }
+
+  function bilingualTextHtml(en, zh, context = {}) {
+    const english = String(en || "").trim();
+    if (!hasMeaningfulContent(english) && !hasMeaningfulContent(zh)) return "";
+    const chinese = hasMeaningfulContent(zh) ? String(zh).trim() : autoZhText(english, context);
+    return `<div class="bilingual-feedback-pair"><p class="bilingual-en">${escapeHtml(english)}</p><p class="bilingual-zh">${escapeHtml(chinese)}</p></div>`;
+  }
+
+  function zhAt(list, index) {
+    return Array.isArray(list) && hasMeaningfulContent(list[index]) ? list[index] : "";
   }
 
   function arr(value) {
@@ -915,6 +1085,34 @@
     return "";
   }
 
+  function cleanCalibrationText(value, fallback = "系统已完成评分边界校准。") {
+    const raw = String(value || "").trim();
+    if (!raw) return fallback;
+    if (/reason codes|reasonCodes|"Task Response"|"Task Achievement"|"Coherence and Cohesion"|"Lexical Resource"|"Grammatical Range/i.test(raw)) return fallback;
+    return raw.length > 220 ? `${raw.slice(0, 217)}...` : raw;
+  }
+
+  function simpleBoundaryStatus(result = {}) {
+    const audit = result.boundaryAudit || result.boundaryReview || {};
+    const review = audit.boundaryReview || {};
+    const reasons = meaningfulArr(audit.reviewReasons || audit.reviewedRemainingWarnings, 3);
+    const unresolved = meaningfulArr(audit.unresolvedCriticalReasons, 3);
+    const blocked = Boolean(audit.freezeBlocked || unresolved.length);
+    if (blocked) return { status: "needs_attention", label: "需要注意", text: unresolved.join("；") || reasons.join("；") || "边界审计发现未解决冲突。" };
+    if (audit.reviewRequired || review.triggered || reasons.length) return { status: "reviewed", label: "已复核", text: reasons.join("；") || review.decision || "边界审计触发后已完成复核。" };
+    return { status: "passed", label: "通过", text: "未发现低分抬高、高分压制、四项同分异常或 anchor 冲突。" };
+  }
+
+  function fallbackCriterionZhSummary(labels = {}, texts = {}) {
+    const rows = [
+      [labels.whyThis || "为什么是这个分", texts.whyThis],
+      [labels.whyLower || "为什么高于低一档", texts.whyLower],
+      [labels.whyHigher || "为什么还不到高一档", texts.whyHigher],
+      ["怎么提升", texts.improve]
+    ].filter(([, text]) => hasMeaningfulContent(text));
+    return rows.map(([title, text]) => `${title}：${text}`).join("\n\n");
+  }
+
   function fallbackImprove(criterion, band) {
     if (/Task Response|Task Achievement/i.test(criterion)) return "Develop each main point with a clearer reason and one specific example that directly answers the task.";
     if (/Coherence/i.test(criterion)) return "Make each paragraph develop one clear idea and improve sentence-to-sentence progression, not only basic linking words.";
@@ -922,21 +1120,21 @@
     if (/Grammatical/i.test(criterion)) return "Control basic verb forms, articles, plurals, and sentence boundaries before adding more complex structures.";
     return `To move above Band ${formatBand(band)}, strengthen the limiting areas identified in this criterion.`;
   }
-  function evidenceListHtml(items, zhItems = []) {
+  function evidenceListHtml(items, zhItems = [], context = {}) {
     const list = meaningfulArr(items, 3);
     if (!list.length) return "";
-    return `<ul class="compact-evidence-list">${list.map((x, i) => `<li>${escapeHtml(x)}${translationButton(zhItems?.[i] || "")}</li>`).join("")}</ul>`;
+    return `<ul class="compact-evidence-list bilingual-evidence-list">${list.map((x, index) => `<li>${bilingualTextHtml(x, zhAt(zhItems, index), { ...context, heading: context.heading || "证据 / Evidence" })}</li>`).join("")}</ul>`;
   }
   function essayEvidenceHtml(items) {
     const list = arr(items).filter(hasMeaningfulContent).slice(0, 4);
     if (!list.length) return "";
     return list.map((item) => {
-      if (typeof item === "string") return `<div class="quote-evidence">${escapeHtml(item)}</div>`;
+      if (typeof item === "string") return `<div class="quote-evidence bilingual-quote-evidence"><strong>${escapeHtml(item)}</strong>${bilingualTextHtml(item, "", { heading: "原文证据 / Evidence" })}</div>`;
       const quote = item.quote || item.text || item.original || "";
       const meaning = item.meaning || item.explanation || item.evidence || "";
-      const zh = item.meaningZh || item.explanationZh || item.zh || "";
-      if (!hasMeaningfulContent(quote) && !hasMeaningfulContent(meaning)) return "";
-      return `<div class="quote-evidence"><strong>${escapeHtml(quote || "原文片段")}</strong>${meaning ? ` → ${escapeHtml(meaning)}${translationButton(zh)}` : ""}</div>`;
+      const zh = item.meaningZh || item.explanationZh || item.evidenceZh || item.translationZh || "";
+      if (!hasMeaningfulContent(quote) && !hasMeaningfulContent(meaning) && !hasMeaningfulContent(zh)) return "";
+      return `<div class="quote-evidence bilingual-quote-evidence"><strong>${escapeHtml(quote || "原文片段")}</strong>${bilingualTextHtml(meaning || quote, zh, { heading: "原文证据 / Evidence" })}</div>`;
     }).filter(Boolean).join("");
   }
 
@@ -1030,36 +1228,22 @@
     if (!anchor || typeof anchor !== "object" || Object.keys(anchor).length === 0) return "";
     const band = anchor.closestAnchorBand ?? result.overallBand ?? result.scoreCalculation?.finalBand ?? "-";
     const range = anchor.candidateRange || (Number.isFinite(Number(band)) ? `${nearestHalfBand(band, "lower")}–${nearestHalfBand(band, "higher")}` : "-");
-    const reason = firstText(anchor.whyCloserToThisBand, anchor.closestAnchorProfile, result.examinerSummary) || "系统根据任务类型、字数、可评分性和四项分数组合完成锚点校准。";
-    const zh = firstText(anchor.whyCloserToThisBandZh, anchor.closestAnchorProfileZh, result.examinerSummaryZh) || "系统根据任务类型、字数、可评分性和四项分数组合完成锚点校准。";
+    const rawReason = firstText(anchor.whyCloserToThisBand, anchor.closestAnchorProfile, result.examinerSummary);
+    const reason = cleanCalibrationText(rawReason, "系统根据任务回应、结构、词汇和语法控制完成分段锚点判断。");
     return `<div class="anchor-comparison-block compact-calibration-card">
       <div class="score-gate-item anchor-comparison-card">
         <strong>Anchor / 分段锚点：</strong>Band ${escapeHtml(band)}
         <span class="score-chip-inline">候选区间：${escapeHtml(range)}</span>
-        <p class="muted">${escapeHtml(reason)}${translationButton(zh)}</p>
+        <p class="muted">${escapeHtml(reason)}</p>
       </div>
     </div>`;
   }
   function renderBoundaryAudit(result = {}) {
-    const audit = result.boundaryAudit || result.boundaryReview || {};
-    if (!audit || typeof audit !== "object" || Object.keys(audit).length === 0) return "";
-    const review = audit.boundaryReview || {};
-    const reasons = meaningfulArr(audit.reviewReasons || audit.reviewedRemainingWarnings, 4);
-    const unresolved = meaningfulArr(audit.unresolvedCriticalReasons, 4);
-    const blocked = Boolean(audit.freezeBlocked || unresolved.length);
-    const triggered = Boolean(blocked || audit.reviewRequired || review.triggered || reasons.length);
-    const status = blocked ? "blocked" : triggered ? "reviewed" : "passed";
-    const main = blocked
-      ? `冻结被阻止：${unresolved.join("；") || reasons.join("；") || "二次复核后仍存在未解决边界冲突。"}`
-      : triggered
-        ? `已触发边界复核：${reasons.join("；") || review.decision || "AI 已完成二次边界检查。"}`
-        : "边界审计通过：未发现低分抬高、高分压制、四项同分异常或 anchor 冲突。";
-    const detail = triggered ? `<ul>${[...reasons, ...unresolved].map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+    const summary = simpleBoundaryStatus(result);
     return `<div class="boundary-audit-block compact-calibration-card">
-      <div class="score-gate-item boundary-audit-summary ${escapeHtml(status)}">
-        <strong>边界审计 / Boundary audit：</strong>${escapeHtml(status)}
-        <p class="muted">${escapeHtml(main)}${translationButton(main)}</p>
-        ${detail ? `<div class="boundary-issue-list">${detail}</div>` : ""}
+      <div class="score-gate-item boundary-audit-summary ${escapeHtml(summary.status)}">
+        <strong>边界审计 / Boundary audit：</strong>${escapeHtml(summary.label)}
+        <p class="muted">${escapeHtml(cleanCalibrationText(summary.text, "边界审计已完成。"))}</p>
       </div>
     </div>`;
   }
@@ -1088,33 +1272,42 @@
     const profile = result.scoreProfile || {};
     const signals = result.localSignals || {};
     const warnings = meaningfulArr(result.stabilityWarnings, 5);
+    const anchor = result.anchorComparison || result.anchorCalibration || {};
+    const anchorBand = anchor.closestAnchorBand ?? result.overallBand ?? result.scoreCalculation?.finalBand ?? "-";
+    const anchorRange = anchor.candidateRange || (Number.isFinite(Number(anchorBand)) ? `${nearestHalfBand(anchorBand, "lower")}–${nearestHalfBand(anchorBand, "higher")}` : "-");
+    const boundary = simpleBoundaryStatus(result);
     const gates = [
       ["Low-band check", profile.lowBandGate],
       ["Mid-band check", profile.midBandGate],
       ["High-band check", profile.highBandGate],
       ["Score-profile check", profile.scoreProfileGate]
     ].filter(([, gate]) => gate && !isPassedLikeStatus(gate.status || gate.result || gate.triggered));
-    const meta = `<div class="score-gate-grid compact-meta-grid">
-        <div class="score-gate-item"><strong>版本：</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core")}</div>
-        <div class="score-gate-item"><strong>可评分性：</strong>${escapeHtml(signals.rateabilityStatus || "未返回")} ｜ <strong>词数：</strong>${escapeHtml(signals.wordCount ?? "-")} ｜ <strong>段落：</strong>${escapeHtml(signals.paragraphCount ?? "-")} ｜ <strong>句子：</strong>${escapeHtml(signals.sentenceCount ?? "-")}</div>
-        <div class="score-gate-item"><strong>语言信号：</strong>拼写 ${escapeHtml(signals.spellingErrorDensity || "-")} ｜ 语法 ${escapeHtml(signals.grammarErrorDensity || "-")} ｜ 句子控制 ${escapeHtml(signals.sentenceControl || "-")} ｜ 词汇控制 ${escapeHtml(signals.lexicalControl || "-")}</div>
-      </div>`;
-    const gateHtml = gates.length ? `<div class="score-gate-grid">${gates.map(([label, gate]) => {
-      const reason = firstText(gate?.reason, gate?.explanation, gate?.note) || "Gate requires attention.";
+    const userSummary = `<div class="calibration-user-summary">
+      <div class="calibration-summary-grid">
+        <div class="calibration-summary-card"><strong>评分版本</strong>${escapeHtml(result.scoreSystemVersion || "clean-score-core")}</div>
+        <div class="calibration-summary-card"><strong>文本信号</strong>${escapeHtml(signals.wordCount ?? "-")} words ｜ ${escapeHtml(signals.paragraphCount ?? "-")} 段 ｜ ${escapeHtml(signals.sentenceCount ?? "-")} 句</div>
+        <div class="calibration-summary-card"><strong>可评分性</strong>${escapeHtml(signals.rateabilityStatus || "未返回")}</div>
+        <div class="calibration-summary-card"><strong>边界审计</strong>${escapeHtml(boundary.label)}：${escapeHtml(cleanCalibrationText(boundary.text, "边界审计已完成。"))}</div>
+        <div class="calibration-summary-card"><strong>Anchor / 分段锚点</strong>Band ${escapeHtml(anchorBand)} ｜ 候选区间 ${escapeHtml(anchorRange)}</div>
+        <div class="calibration-summary-card"><strong>语言信号</strong>拼写 ${escapeHtml(signals.spellingErrorDensity || "-")} ｜ 语法 ${escapeHtml(signals.grammarErrorDensity || "-")} ｜ 句子 ${escapeHtml(signals.sentenceControl || "-")}</div>
+      </div>
+      ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}
+      <p class="muted">这里保留用户需要理解的校准摘要；开发调试信息已折叠，避免页面被技术细节占满。</p>
+    </div>`;
+    const devGateHtml = gates.length ? `<div class="score-gate-grid">${gates.map(([label, gate]) => {
+      const reason = cleanCalibrationText(firstText(gate?.reason, gate?.explanation, gate?.note), "Gate requires attention.");
       const zh = firstText(gate?.reasonZh, gate?.explanationZh, gate?.noteZh) || gateChineseExplanation(label, gate);
       return `<div class="score-gate-item"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(gate?.status || gate?.result || gate?.triggered || "triggered")}<br><span class="muted">${escapeHtml(reason)}</span>${translationButton(zh)}</div>`;
     }).join("")}</div>` : `<div class="score-gate-item"><strong>Low / Mid / High / Score-profile checks:</strong> passed<br><span class="muted">所有核心分数边界检查均通过。</span></div>`;
-    const body = `
-      ${meta}
+    const devDetails = `<details class="calibration-dev-details"><summary>开发调试信息 / Developer diagnostics</summary><div class="calibration-dev-body">
       ${renderBoundaryAudit(result)}
       ${renderAnchorComparison(result)}
       ${renderTaskSpecificGateReport(result)}
-      ${hasMeaningfulContent(result.examinerSummary) ? `<div class="score-gate-item"><strong>Examiner summary:</strong> ${escapeHtml(result.examinerSummary)}${translationButton(result.examinerSummaryZh || "")}</div>` : ""}
-      ${gateHtml}
-      ${warnings.length ? `<div class="ai-warning"><strong>稳定性提醒：</strong>${listHtml(warnings)}</div>` : ""}`;
-    return renderScoreAccordion("评分校准报告 / Score Calibration Report", body, false, "score-calibration-report compact-calibration-report");
+      ${hasMeaningfulContent(result.examinerSummary) ? `<div class="score-gate-item"><strong>Examiner summary:</strong> ${escapeHtml(cleanCalibrationText(result.examinerSummary, "Core score kernel completed."))}${translationButton(result.examinerSummaryZh || "")}</div>` : ""}
+      ${devGateHtml}
+    </div></details>`;
+    return renderScoreAccordion("评分校准摘要 / Score Calibration Summary", `${userSummary}${devDetails}`, false, "score-calibration-report compact-calibration-report");
   }
-
   function renderFeedbackStatusNotice(result = {}) {
     const status = result.feedbackStatus || result.scoreCoreMeta?.feedbackStatus;
     const statusValue = typeof status === "string" ? status : status?.status;
@@ -1149,8 +1342,8 @@
           whyLower: `为什么高于 Band ${lowerBand}`,
           whyHigher: `为什么还不到 Band ${higherBand}`
         });
-        const supportHtml = evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh);
-        const limitHtml = evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh);
+        const supportHtml = evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh, { criterion, band, heading: "支持这个分数的证据" });
+        const limitHtml = evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh, { criterion, band, heading: "限制更高分的证据" });
         const essayHtml = essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes);
         const halfHasContent = hasMeaningfulContent(half.whyAboveLowerBand || half.whyBelowUpperBand || half.whyExactBand || item.candidateBandsConsidered);
         const detailSections = [
@@ -1158,10 +1351,10 @@
           limitHtml ? `<div class="evidence-box"><h5>限制更高分的证据</h5>${limitHtml}</div>` : "",
           essayHtml ? `<div class="evidence-box"><h5>原文证据 / Evidence from the essay</h5>${essayHtml}</div>` : "",
           halfHasContent ? `<div class="evidence-box"><h5>完整半分判断</h5>
-            <p><strong>Candidate bands:</strong> ${escapeHtml(meaningfulArr(item.candidateBandsConsidered).join(" / ") || `${lowerBand} / ${formatBand(band)} / ${higherBand}`)}</p>
-            ${hasMeaningfulContent(half.whyAboveLowerBand || whyLower) ? `<p><strong>Why above lower band:</strong> ${escapeHtml(half.whyAboveLowerBand || whyLower)}</p>` : ""}
-            ${hasMeaningfulContent(half.whyBelowUpperBand || whyHigher) ? `<p><strong>Why below higher band:</strong> ${escapeHtml(half.whyBelowUpperBand || whyHigher)}</p>` : ""}
-            ${hasMeaningfulContent(half.whyExactBand || whyThis) ? `<p><strong>Why exact band:</strong> ${escapeHtml(half.whyExactBand || whyThis)}</p>` : ""}
+            <p><strong>Candidate bands / 候选分数:</strong> ${escapeHtml(meaningfulArr(item.candidateBandsConsidered).join(" / ") || `${lowerBand} / ${formatBand(band)} / ${higherBand}`)}</p>
+            ${hasMeaningfulContent(half.whyAboveLowerBand || whyLower) ? `<div class="halfband-bilingual"><strong>Why above lower band / 为什么高于低一档</strong>${bilingualTextHtml(half.whyAboveLowerBand || whyLower, half.whyAboveLowerBandZh || item.whyNotLowerZh, { criterion, band, heading: "why above lower band" })}</div>` : ""}
+            ${hasMeaningfulContent(half.whyBelowUpperBand || whyHigher) ? `<div class="halfband-bilingual"><strong>Why below higher band / 为什么还不到高一档</strong>${bilingualTextHtml(half.whyBelowUpperBand || whyHigher, half.whyBelowUpperBandZh || item.whyNotHigherZh, { criterion, band, heading: "why below higher band" })}</div>` : ""}
+            ${hasMeaningfulContent(half.whyExactBand || whyThis) ? `<div class="halfband-bilingual"><strong>Why exact band / 为什么是这个准确分数</strong>${bilingualTextHtml(half.whyExactBand || whyThis, half.whyExactBandZh || item.whyThisBandZh || item.summaryZh, { criterion, band, heading: "why exact band" })}</div>` : ""}
           </div>` : ""
         ].filter(Boolean);
         const detailCard = !feedbackFailed && detailSections.length ? `<div class="score-detail-card compact-evidence-details">
@@ -1175,13 +1368,13 @@
             <button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">-</button>
           </div>
           <div class="criterion-card-body" id="${cardId}">
-            <div class="criterion-quick-grid">
-              <div class="criterion-quick-row"><h5>为什么是这个分</h5><p>${escapeHtml(whyThis)}</p></div>
-              <div class="criterion-quick-row"><h5>为什么高于 Band ${escapeHtml(lowerBand)}</h5><p>${escapeHtml(whyLower)}</p></div>
-              <div class="criterion-quick-row"><h5>为什么还不到 Band ${escapeHtml(higherBand)}</h5><p>${escapeHtml(whyHigher)}</p></div>
-              <div class="criterion-quick-row"><h5>怎么提升</h5><p>${escapeHtml(improve)}</p></div>
+            <div class="criterion-quick-grid bilingual-criterion-grid">
+              <div class="criterion-quick-row"><h5>为什么是这个分</h5>${bilingualTextHtml(whyThis, item.whyThisBandZh || item.summaryZh || half.whyExactBandZh, { criterion, band, heading: "为什么是这个分" })}</div>
+              <div class="criterion-quick-row"><h5>为什么高于 Band ${escapeHtml(lowerBand)}</h5>${bilingualTextHtml(whyLower, item.whyNotLowerZh || item.whyAboveLowerBandZh || half.whyAboveLowerBandZh, { criterion, band, heading: "为什么高于低一档" })}</div>
+              <div class="criterion-quick-row"><h5>为什么还不到 Band ${escapeHtml(higherBand)}</h5>${bilingualTextHtml(whyHigher, item.whyNotHigherZh || item.whyNotYetHigherBandZh || half.whyBelowUpperBandZh, { criterion, band, heading: "为什么还不到高一档" })}</div>
+              <div class="criterion-quick-row"><h5>怎么提升</h5>${bilingualTextHtml(improve, item.howToImproveZh || item.improvementFocusZh, { criterion, band, heading: "怎么提升" })}</div>
             </div>
-            ${translationButton(zh, "显示中文解释")}
+            ${hasMeaningfulContent(zh) ? `<details class="criterion-zh-summary"><summary>整项中文总结</summary><div>${escapeHtml(zh)}</div></details>` : ""}
             ${feedbackFailed ? `<div class="score-flow-note"><strong>详细反馈暂缺：</strong>核心评分已完成，详细证据反馈暂时未生成。</div>` : ""}
             ${detailCard}
           </div>
