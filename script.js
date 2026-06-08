@@ -11,10 +11,13 @@
   let mockTimerId = null;
   let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
-    { stage: "score-precheck", title: "文本信号与任务类型检查", description: "检查词数、段落、句子、Task 1/Task 2 类型与可评分性。" },
-    { stage: "score-criteria", title: "四项评分与半分判断", description: "AI 返回四项小项分数，并解释相邻半分边界。" },
-    { stage: "score-gates", title: "低中高分与分数组合校准", description: "核查低分、中分、高分边界和分数组合是否合理。" },
-    { stage: "score-finalize", title: "机械平均并冻结分数", description: "四项平均后生成最终 Band，并冻结分数。" }
+    { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
+    { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
+    { stage: "score-anchor", title: "独立 0–9 锚点准备", description: "准备 Task-aware 0–9 分锚点；AI 必须在初评中返回独立 anchor comparison。" },
+    { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
+    { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
+    { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
+    { stage: "score-finalize", title: "最终验证并冻结分数", description: "验证结构完整后，机械平均 AI 返回的四项最终分并冻结；本地不直接改分。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
@@ -406,6 +409,21 @@
     return progress;
   }
 
+  function syncScoringProgressFromResult(result = {}) {
+    const backendProgress = result.detailedScoringProgress || result.scoringProgress;
+    if (!backendProgress || !Array.isArray(backendProgress.steps)) return latestScoringProgress;
+    const progress = ensureScoringProgress();
+    progress.status = backendProgress.status || progress.status || "running";
+    progress.currentStep = backendProgress.currentStep || progress.currentStep;
+    progress.updatedAt = backendProgress.updatedAt || new Date().toISOString();
+    const byStage = new Map(backendProgress.steps.map((step) => [step.stage, step]));
+    progress.steps = progress.steps.map((step) => {
+      const incoming = byStage.get(step.stage);
+      return incoming ? { ...step, ...incoming, index: step.index || incoming.index } : step;
+    });
+    return progress;
+  }
+
   function completeScoringProgress() {
     const progress = ensureScoringProgress();
     progress.status = "done";
@@ -418,7 +436,7 @@
   }
 
   function statusText(status) {
-    return ({ waiting: "等待", running: "进行中", done: "完成", error: "失败" })[status] || "等待";
+    return ({ waiting: "等待", running: "进行中", done: "完成", skipped: "跳过", reviewed: "已复核", error: "失败" })[status] || "等待";
   }
 
   function renderScoringProgressPanel(progress = latestScoringProgress, open = false) {
@@ -427,17 +445,17 @@
     const shouldOpen = open || hasError || p.status === "running";
     const statusClass = hasError ? "error" : (p.status === "done" ? "done" : (p.status === "running" ? "running" : "waiting"));
     const current = p.steps?.find((step) => step.status === "running") || p.steps?.find((step) => step.status === "error") || p.steps?.[Math.max(0, (p.currentStep || 1) - 1)];
-    const errorHtml = hasError ? `<div class="ai-warning"><strong>失败步骤：</strong>第 ${escapeHtml(p.error?.step || current?.index || "-")} 步/4 ${escapeHtml(p.error?.title || current?.title || "未知阶段")}<br><strong>错误原因：</strong>${escapeHtml(p.error?.message || "未知错误")}<br><strong>建议操作：</strong>请先重试一次；如果连续失败，再检查接口、Vercel runtime logs 或 AI provider 超时情况。</div><details class="score-technical-details"><summary>技术错误详情 / Technical details</summary><pre>${escapeHtml(p.error?.stack || p.error?.message || "No technical details returned.")}</pre></details>` : "";
+    const errorHtml = hasError ? `<div class="ai-warning"><strong>失败步骤：</strong>第 ${escapeHtml(p.error?.step || current?.index || "-")} 步/${escapeHtml((p.steps || SCORING_STEPS).length)} ${escapeHtml(p.error?.title || current?.title || "未知阶段")}<br><strong>错误原因：</strong>${escapeHtml(p.error?.message || "未知错误")}<br><strong>建议操作：</strong>请先重试一次；如果连续失败，再检查接口、Vercel runtime logs 或 AI provider 超时情况。</div><details class="score-technical-details"><summary>技术错误详情 / Technical details</summary><pre>${escapeHtml(p.error?.stack || p.error?.message || "No technical details returned.")}</pre></details>` : "";
     return `<details class="score-accordion score-progress-accordion" ${shouldOpen ? "open" : ""}>
       <summary>评分流程与错误反馈 / Scoring Progress &amp; Error Log</summary>
       <div class="score-accordion-body">
         <div class="score-progress-overview">
           <span class="score-progress-chip ${escapeHtml(statusClass)}">当前状态：${escapeHtml(hasError ? "评分失败" : p.status === "done" ? "评分完成" : p.status === "running" ? "正在评分" : "等待评分")}</span>
-          <span class="score-progress-chip">当前步骤：第 ${escapeHtml(current?.index || p.currentStep || 1)} 步/4</span>
+          <span class="score-progress-chip">当前步骤：第 ${escapeHtml(current?.index || p.currentStep || 1)} 步/${escapeHtml((p.steps || SCORING_STEPS).length)}</span>
           <span class="score-progress-chip">更新时间：${escapeHtml(p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-")}</span>
         </div>
         <ol class="score-step-list score-step-list-rows">
-          ${(p.steps || []).map((step) => `<li class="score-step-item score-step-row"><span class="score-step-label">第 ${escapeHtml(step.index)} 步/4：${escapeHtml(step.title)}</span><span class="score-step-status ${escapeHtml(step.status)}">${escapeHtml(statusText(step.status))}</span><span class="score-step-message">${escapeHtml(step.error || step.message || step.description || "")}</span></li>`).join("")}
+          ${(p.steps || []).map((step) => `<li class="score-step-item score-step-row"><span class="score-step-label">第 ${escapeHtml(step.index)} 步/${escapeHtml((p.steps || SCORING_STEPS).length)}：${escapeHtml(step.title)}</span><span class="score-step-status ${escapeHtml(step.status)}">${escapeHtml(statusText(step.status))}</span><span class="score-step-message">${escapeHtml(step.error || step.message || step.description || "")}</span></li>`).join("")}
         </ol>
         ${errorHtml}
       </div>
@@ -1266,9 +1284,10 @@
         const step = SCORING_STEPS[i];
         updateScoringProgress(i, "running", `AI 正在执行：${step.description}`);
         if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-        setGradingStatus(`第 ${i + 1} 步/4：${step.title}。`, "loading");
+        setGradingStatus(`第 ${i + 1} 步/${SCORING_STEPS.length}：${step.title}。`, "loading");
         currentResult = await postStage(endpoint, gradingPayload({ aiStage: step.stage, currentResult }));
-        updateScoringProgress(i, "done", `${step.title}已完成。`);
+        syncScoringProgressFromResult(currentResult);
+        updateScoringProgress(i, "done", currentResult?.detailedScoringProgress?.steps?.[i]?.message || `${step.title}已完成。`);
         if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
       }
       completeScoringProgress();
@@ -1276,7 +1295,7 @@
       setGradingStatus("评分完成。四项分数已冻结。作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       updateScoringProgress(activeStageIndex, "error", "该阶段执行失败。", error);
-      setGradingStatus(`评分失败：第 ${activeStageIndex + 1} 步/4 ${SCORING_STEPS[activeStageIndex]?.title || "未知阶段"}失败。`, "error");
+      setGradingStatus(`评分失败：第 ${activeStageIndex + 1} 步/${SCORING_STEPS.length} ${SCORING_STEPS[activeStageIndex]?.title || "未知阶段"}失败。`, "error");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
     } finally {
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }

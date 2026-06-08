@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v6-strict-anchor-boundary-engine";
+const SCORE_SYSTEM_VERSION = "score-core-v6-strict-anchor-boundary-engine-detailed-progress";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -55,6 +55,16 @@ const TASK2_GATE_RULES = [
   "Mid-band Check: visible structure, Firstly/Secondly/In conclusion, or a stated opinion is not by itself enough for 5.5/6.0+.",
   "High-band Unlock Gate: if the essay is fully responsive, mature, logically developed, cohesive, lexically precise, and grammatically controlled, actively consider 7.5/8.0/8.5/9.0 instead of defaulting to 7.0.",
   "Score-profile Check: challenge all-equal criterion bands and large gaps between task/organisation and LR/GRA; explain why each criterion is where it is."
+];
+
+const DETAILED_SCORING_STEPS = [
+  { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
+  { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
+  { stage: "score-anchor", title: "独立 0–9 锚点准备", description: "准备 Task-aware 0–9 分锚点；AI 必须在初评中返回独立 anchor comparison。" },
+  { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
+  { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
+  { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
+  { stage: "score-finalize", title: "最终验证并冻结分数", description: "验证结构完整后，机械平均 AI 返回的四项最终分并冻结；本地不直接改分。" }
 ];
 
 function isAllowedOrigin(origin) {
@@ -712,6 +722,75 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   };
 }
 
+
+function boundaryStepMessage(stage, result = {}) {
+  const audit = result.boundaryAudit || {};
+  const meta = result.scoreCoreMeta || {};
+  const signals = result.localSignals || {};
+  if (stage === "score-precheck") {
+    return `本地文本检查完成：${signals.wordCount ?? "-"} words，${signals.paragraphCount ?? "-"} 段，${signals.sentenceCount ?? "-"} 句，可评分性：${signals.rateabilityStatus || "pending"}。`;
+  }
+  if (stage === "score-task-router") {
+    return `任务分流完成：${result.task || signals.task || "unknown"}，已选择 ${result.task === "Task 1" || signals.task === "Task 1" ? "GT Task 1 Letter" : "GT Task 2 Essay"} 评分规则。`;
+  }
+  if (stage === "score-anchor") {
+    const anchor = result.anchorComparison || {};
+    return anchor.anchorMissing
+      ? "锚点准备完成：等待 AI 初评返回独立 anchor comparison；若缺失将触发边界复核。"
+      : `独立锚点完成：closest anchor Band ${anchor.closestAnchorBand ?? "-"}。`;
+  }
+  if (stage === "score-criteria") {
+    const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
+    return `AI 四项初评完成：初始 Overall Band ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}；半分理由、证据和 anchor 已返回。`;
+  }
+  if (stage === "score-boundary-audit") {
+    const reasons = Array.isArray(audit.reviewReasons) ? audit.reviewReasons : [];
+    return audit.reviewRequired
+      ? `本地 hard audit 触发 ${reasons.length || 1} 项复核：${reasons.slice(0, 3).join("；")}${reasons.length > 3 ? "..." : ""}`
+      : "本地 hard audit 通过：没有发现必须二次复核的低分、高分、锚点或分数组合冲突。";
+  }
+  if (stage === "score-boundary-review") {
+    if (audit.boundaryReview?.triggered || meta.boundaryReviewApplied) {
+      return `AI 二次边界复核完成：${audit.boundaryReview?.decision || "reviewed"}。${audit.boundaryReview?.whyFinalCriteriaAreSafe || "AI 已重新确认最终四项分。"}`;
+    }
+    return "AI 二次边界复核跳过：本地 hard audit 未发现必须二次复核的风险。";
+  }
+  if (stage === "score-finalize") {
+    const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
+    return `最终验证完成：四项最终分已冻结，机械平均后的 Overall Band 为 ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}。`;
+  }
+  return "阶段状态已更新。";
+}
+
+function buildDetailedScoringProgress(stageKey, result = {}, status = "done") {
+  const idx = Math.max(0, DETAILED_SCORING_STEPS.findIndex((step) => step.stage === stageKey));
+  const currentIndex = idx >= 0 ? idx : 0;
+  const steps = DETAILED_SCORING_STEPS.map((step, index) => {
+    const done = index <= currentIndex;
+    return {
+      ...step,
+      index: index + 1,
+      status: done ? "done" : "waiting",
+      message: done ? boundaryStepMessage(step.stage, result) : step.description,
+      detail: step.stage === "score-boundary-audit" ? result.boundaryAudit || null : step.stage === "score-boundary-review" ? result.boundaryAudit?.boundaryReview || null : null
+    };
+  });
+  return {
+    version: SCORE_SYSTEM_VERSION,
+    totalSteps: DETAILED_SCORING_STEPS.length,
+    currentStep: currentIndex + 1,
+    currentStage: stageKey,
+    status,
+    updatedAt: new Date().toISOString(),
+    steps
+  };
+}
+
+function withDetailedProgress(result, stageKey, status = "done") {
+  const progress = buildDetailedScoringProgress(stageKey, result, status);
+  return { ...result, detailedScoringProgress: progress, scoringProgress: progress };
+}
+
 function boundaryAuditSummaryZh(audit = {}) {
   const reasons = Array.isArray(audit.reviewReasons) ? audit.reviewReasons : [];
   if (!reasons.length) return "本地硬性校准通过：未发现必须二次复核的低分、高分、锚点或分数组合冲突。";
@@ -871,13 +950,13 @@ async function scoreCore(body) {
   ], 6200, 0);
   const first = normalizeScoreCoreResult(ai, body, signals);
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);
-  return { ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "score-core" } };
+  return withDetailedProgress({ ...reviewed, aiStage: "score-core", scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: true, stage: "score-core" } }, "score-finalize");
 }
 
 
 function scorePrecheck(body) {
   const signals = localSignals(body);
-  return {
+  return withDetailedProgress({
     ok: true,
     aiStage: "score-precheck",
     scoreSystemVersion: SCORE_SYSTEM_VERSION,
@@ -885,7 +964,42 @@ function scorePrecheck(body) {
     localSignals: signals,
     taskProfile: buildTaskProfile(body, signals),
     note: "Precheck only. No criterion band is assigned in this stage."
-  };
+  }, "score-precheck");
+}
+
+function scoreTaskRouterStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  return withDetailedProgress({
+    ...current,
+    ok: true,
+    aiStage: "score-task-router",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
+    task: signals.task,
+    localSignals: signals,
+    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), taskRouted: true, stage: "task-router" },
+    note: "Task routed. No criterion band is assigned in this stage."
+  }, "score-task-router");
+}
+
+function scoreAnchorStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const criteria = current.finalCriteria || current.criteria || {};
+  const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
+  return withDetailedProgress({
+    ...current,
+    ok: true,
+    aiStage: "score-anchor",
+    scoreSystemVersion: SCORE_SYSTEM_VERSION,
+    task: signals.task,
+    localSignals: signals,
+    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    anchorComparison,
+    scoreCoreMeta: { ...(current.scoreCoreMeta || {}), anchorPrepared: true, independentAiAnchorRequired: true, stage: "anchor" },
+    note: "Anchor stage prepared. The AI scoring stage must return an independent anchor comparison; local fallback cannot decide the band."
+  }, "score-anchor");
 }
 
 async function scoreCriteriaStage(body) {
@@ -897,8 +1011,11 @@ async function scoreCriteriaStage(body) {
     { role: "user", content: prompt }
   ], 6600, 0);
   const first = normalizeScoreCoreResult(ai, body, signals);
-  const normalized = await applyBoundaryReviewIfNeeded(body, first);
-  return { ...normalized, aiStage: "score-criteria", scoreCoreMeta: { ...normalized.scoreCoreMeta, scoreFrozen: false, stage: "criteria", boundaryAuditCompleted: true } };
+  return withDetailedProgress({
+    ...first,
+    aiStage: "score-criteria",
+    scoreCoreMeta: { ...first.scoreCoreMeta, scoreFrozen: false, stage: "criteria", boundaryAuditCompleted: true, boundaryReviewApplied: false }
+  }, "score-criteria");
 }
 
 function scoreGatesStage(body) {
@@ -906,26 +1023,44 @@ function scoreGatesStage(body) {
   const signals = current.localSignals || localSignals(body);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const normalizedCalibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
-  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration);
+  const anchorComparisonForGates = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
+  const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, anchorComparisonForGates, normalizedCalibration);
   const warnings = collectScoreWarnings(criteria, signals);
-  return {
+  const result = {
     ...current,
     ok: true,
-    aiStage: "score-gates",
+    aiStage: "score-boundary-audit",
     scoreSystemVersion: SCORE_SYSTEM_VERSION,
     task: signals.task,
     criteria,
     finalCriteria: criteria,
     localSignals: signals,
     taskProfile: current.taskProfile || buildTaskProfile(body, signals),
-    anchorComparison: normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals),
+    anchorComparison: anchorComparisonForGates,
     criterionCalibration: normalizedCalibration,
     scoreProfile,
-    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration),
-    boundaryAudit: current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals), normalizedCalibration),
+    taskSpecificGate: normalizeTaskSpecificGate(current.taskSpecificGate || {}, signals, criteria, anchorComparisonForGates, normalizedCalibration),
+    boundaryAudit: buildHardBoundaryAudit(criteria, signals, anchorComparisonForGates, normalizedCalibration, current.boundaryAudit || {}),
     stabilityWarnings: warnings,
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFrozen: false, gatesChecked: true, stage: "gates" }
   };
+  return withDetailedProgress(result, "score-boundary-audit");
+}
+
+async function scoreBoundaryReviewStage(body) {
+  const current = body.currentResult || {};
+  const signals = current.localSignals || localSignals(body);
+  const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
+  const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
+  const boundaryAudit = current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration);
+  const staged = { ...current, localSignals: signals, finalCriteria: criteria, criteria, criterionCalibration: calibration, anchorComparison, boundaryAudit };
+  const reviewed = await applyBoundaryReviewIfNeeded(body, staged);
+  return withDetailedProgress({
+    ...reviewed,
+    aiStage: "score-boundary-review",
+    scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), scoreFrozen: false, stage: "boundary-review" }
+  }, "score-boundary-review");
 }
 
 function scoreFinalizeStage(body) {
@@ -937,7 +1072,7 @@ function scoreFinalizeStage(body) {
   const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
   const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, anchorComparison, calibration);
   const boundaryAudit = current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration);
-  return {
+  const result = {
     ...current,
     ok: true,
     aiStage: "score-finalize",
@@ -968,6 +1103,7 @@ function scoreFinalizeStage(body) {
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
     localScoreChanged: false
   };
+  return withDetailedProgress(result, "score-finalize");
 }
 function buildRevisionPrompt(body) {
   const frozen = body.currentResult || body.frozenScore || {};
@@ -1006,8 +1142,11 @@ async function handleRequest(req, res) {
   const stage = String(body.aiStage || body.stage || "score-precheck").toLowerCase();
   if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));
   if (stage === "score-precheck") return sendJson(req, res, 200, scorePrecheck(body));
+  if (stage === "score-task-router") return sendJson(req, res, 200, scoreTaskRouterStage(body));
+  if (stage === "score-anchor") return sendJson(req, res, 200, scoreAnchorStage(body));
   if (stage === "score-criteria") return sendJson(req, res, 200, await scoreCriteriaStage(body));
-  if (stage === "score-gates") return sendJson(req, res, 200, scoreGatesStage(body));
+  if (stage === "score-boundary-audit" || stage === "score-gates") return sendJson(req, res, 200, scoreGatesStage(body));
+  if (stage === "score-boundary-review") return sendJson(req, res, 200, await scoreBoundaryReviewStage(body));
   if (stage === "score-finalize") return sendJson(req, res, 200, scoreFinalizeStage(body));
   if (stage === "score-core") return sendJson(req, res, 200, await scoreCore(body));
   return sendJson(req, res, 400, { ok: false, error: `Unsupported clean scoring stage: ${stage}` });
