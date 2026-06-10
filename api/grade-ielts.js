@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-4-1-score-only-core-external-feedback";
+const SCORE_SYSTEM_VERSION = "score-core-v8-4-5-exam-realistic-band-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -75,6 +75,27 @@ const TASK2_BAND_BOUNDARY_PROTOCOL = [
   "Task 2 high-band 7-9: developed or mature reasoning, natural cohesion, precise/flexible vocabulary, varied grammar, and few/rare errors. If the essay is fully responsive and controlled, consider 7.5/8/8.5/9 and do not default to 7.0.",
   "Task 2 hard checks: 80-119 words usually 3.0-4.0; 120-149 usually 3.5-4.5; 150-179 usually 4.0-5.0; 180-229 needs strong development to justify 5.5/6.0+. High spelling/grammar density must constrain LR/GRA."
 ];
+
+const EXAM_REALISM_CALIBRATION_RULES = {
+  "Task 1": [
+    "Task 1 Band 5/5.5 is for a generally understandable but limited or error-prone letter: one bullet may be thin, details may be mechanical, tone may be uneven, or LR/GRA errors are noticeable.",
+    "Task 1 Band 6/6.5 is for a clear, complete letter with all bullets covered and generally appropriate tone, but with limited flexibility, some awkwardness, or noticeable but non-blocking errors.",
+    "Task 1 Band 7/7.5 is normal for a natural GT letter that clearly covers all three bullets with relevant detail, appropriate register, logical organisation, and mostly accurate language. It does not require native-like sophistication.",
+    "Task 1 Band 8+ is appropriate when the letter is fully developed, reader-focused, naturally organised, and language is flexible and accurate with rare slips.",
+    "Do not keep a clean, complete, well-organised Task 1 letter at 5.5 merely because the ideas are not elaborate. GT Task 1 rewards successful communicative completion, not essay-style argument depth."
+  ],
+  "Task 2": [
+    "Task 2 Band 5/5.5 is for a complete but weak essay: clear position/basic structure but shallow development, generic examples, frequent language issues, or limited progression.",
+    "Task 2 Band 6/6.5 is for a clear answer with real explanation and relevant support, even if ideas are not sophisticated and some language errors remain.",
+    "Task 2 Band 7/7.5 is normal for a fully relevant, well-organised essay with developed ideas, clear progression, flexible vocabulary, and generally accurate grammar.",
+    "Task 2 Band 8+ requires mature, well-developed reasoning, precise lexis, natural cohesion, and strong grammatical control with rare errors.",
+    "Do not compress a strong essay into 5.5 just because it is simple; simplicity is a Band 5 issue only when development, precision, or language control is clearly limited."
+  ]
+};
+
+function examRealismCalibrationRulesForTask(task) {
+  return (EXAM_REALISM_CALIBRATION_RULES[task === "Task 1" ? "Task 1" : "Task 2"] || []).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+}
 
 function bandBoundaryProtocolForTask(task) {
   return (task === "Task 1" ? TASK1_BAND_BOUNDARY_PROTOCOL : TASK2_BAND_BOUNDARY_PROTOCOL).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
@@ -1575,6 +1596,45 @@ function combineGate(localGate, aiGate) {
   };
 }
 
+function detectExamRealismUnderScoreRisk(criteria = {}, signals = {}, body = {}) {
+  const { finalBand } = averageBand(criteria);
+  if (!Number.isFinite(finalBand)) return { triggered: false, reason: "" };
+  const task = signals.task === "Task 1" ? "Task 1" : "Task 2";
+  const words = Number(signals.wordCount) || countWords(body.essay || "");
+  const audit = signals.taskRequirementAudit || buildTaskRequirementAudit(body, signals) || {};
+  const missing = Number(audit.missingCount);
+  const partly = Number(audit.partlyCount);
+  const spelling = Number(signals.spellingIssueCount) || 0;
+  const grammar = Number(signals.grammarIssueSignalCount) || 0;
+  const spellingDensity = Number(signals.spellingDensityPer100Words) || 0;
+  const grammarDensity = Number(signals.grammarDensityPer100Words) || 0;
+  const languageNotWeak = signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak" && signals.spellingErrorDensity !== "high" && signals.grammarErrorDensity !== "high";
+  const lowErrorSignal = spelling <= 3 && grammar <= 3 && spellingDensity <= 2.2 && grammarDensity <= 1.8;
+  if (task === "Task 1") {
+    const firstBand = Number(criteria["Task Achievement"]);
+    const completeBullets = missing === 0 && partly === 0;
+    const enoughLength = words >= 145;
+    const letterText = String(body.essay || "");
+    const letterForm = /dear/i.test(letterText) && /(regards|sincerely|yours|best wishes)/i.test(letterText);
+    if (completeBullets && enoughLength && letterForm && languageNotWeak && finalBand < 6.5) {
+      return { triggered: true, reason: `Exam-realism under-score risk: Task 1 has all bullets covered, normal length, clear letter form, and no high weak-language signal, but final Band is ${finalBand.toFixed(1)}. Re-check whether 6.5/7.0+ is more realistic.` };
+    }
+    if (completeBullets && enoughLength && lowErrorSignal && Number.isFinite(firstBand) && firstBand < 6.5) {
+      return { triggered: true, reason: `Task Achievement under-score risk: all Task 1 bullets appear covered with normal length and low error signals, but TA is ${firstBand.toFixed(1)}. Re-check against real GT Task 1 standards.` };
+    }
+  } else {
+    const firstBand = Number(criteria["Task Response"]);
+    const completeTask = (missing === 0 || !Number.isFinite(missing)) && words >= 240 && Number(signals.paragraphCount) >= 4;
+    if (completeTask && languageNotWeak && finalBand < 5.5) {
+      return { triggered: true, reason: `Exam-realism under-score risk: Task 2 is full length with paragraphing and no high weak-language signal, but final Band is ${finalBand.toFixed(1)}. Re-check whether a mid-band score is more realistic.` };
+    }
+    if (completeTask && lowErrorSignal && Number.isFinite(firstBand) && firstBand < 5.5) {
+      return { triggered: true, reason: `Task Response under-score risk: full-length Task 2 response has low error signals but TR is ${firstBand.toFixed(1)}. Re-check against real Task 2 standards.` };
+    }
+  }
+  return { triggered: false, reason: "" };
+}
+
 function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criterionCalibration = {}, existing = {}) {
   const { rawAverage, finalBand } = averageBand(criteria);
   const wordBoundary = getWordCountBoundaryProfile(signals.task, signals.wordCount);
@@ -1599,6 +1659,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   const requirementAudit = signals.taskRequirementAudit || {};
   const requirementCap = signals.task === "Task 1" ? Number(requirementAudit.taskAchievementCap) : Number(requirementAudit.taskResponseCap);
   const taskRequirementScoreConflict = Number.isFinite(requirementCap) && Number.isFinite(firstCriterionBand) && firstCriterionBand > requirementCap;
+  const examRealismUnderScoreRisk = detectExamRealismUnderScoreRisk(criteria, signals);
   const reviewReasons = [];
   if (anchorMissing) reviewReasons.push("AI did not provide an independent anchor comparison.");
   if (lowBandScoreTooHigh) reviewReasons.push(`Final Band ${finalBand.toFixed(1)} exceeds local word-count boundary ${wordBoundary.suggestedRange}.`);
@@ -1611,6 +1672,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   if (fullLengthWeakLanguageOverallConflict) reviewReasons.push("Full-length but weak-language conflict: overall 6.0+ requires strong evidence despite high local language-error signals.");
   if (task1BelowLengthHighTAConflict) reviewReasons.push("Task 1 below recommended length but Task Achievement is 6.0+; bullet detail and purpose/tone must be reviewed.");
   if (taskRequirementScoreConflict) reviewReasons.push(`${signals.task} task-specific requirement conflict: ${names[0]} ${firstCriterionBand.toFixed(1)} exceeds the requirement-audit ceiling ${requirementCap.toFixed(1)}; AI boundary review must justify or revise it.`);
+  if (examRealismUnderScoreRisk.triggered) reviewReasons.push(examRealismUnderScoreRisk.reason);
   return {
     version: "strict-boundary-audit-v6",
     localScoringApplied: false,
@@ -1645,6 +1707,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
       fullLengthWeakLanguageOverallConflict,
       task1BelowLengthHighTAConflict,
       taskRequirementScoreConflict,
+      examRealismUnderScoreRisk,
       requirementCap: Number.isFinite(requirementCap) ? requirementCap : null,
       feedbackQualityIssues,
       warnings
@@ -1758,7 +1821,7 @@ function boundaryReviewEvidenceText(reviewed = {}, review = {}, audit = {}) {
     reviewed?.examinerSummaryZh,
     reviewed?.criterionCalibration ? JSON.stringify(reviewed.criterionCalibration) : "",
     audit?.reviewReasons ? audit.reviewReasons.join(" ") : ""
-  ].filter(Boolean).join(" ");
+  ].filter(Boolean).join("\n");
 }
 
 function hasStrongBoundaryKeepEvidence(reviewed = {}, review = {}, audit = {}) {
@@ -1817,6 +1880,8 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     `Local boundary profile: ${JSON.stringify(localBoundaryProfile)}`,
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
+    `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
+    "If the audit flags under-score risk, you must actively consider whether the first-pass score is too low. Revise upward when the response clearly meets higher-band descriptors; do not keep a low score for vague reasons such as 'not sophisticated enough'.",
     "For all-four Band 7 cases, actively check whether any criterion should be 7.5/8/8.5/9. If you keep 7/7/7/7, give a concise limitation; do not force a server error.",
     "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
@@ -2053,7 +2118,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
-    "Sub-7 strict rule: below Band 7, be closer to real exam strictness. Do not award 5.5/6.0/6.5 just because the response is organised; require actual task completion, development, and language control.",
+    `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
+    "Sub-7 strict rule: below Band 7, be strict only when there is concrete evidence of weak task completion, thin development, frequent language errors, or poor control. Do not use 'strictness' to push a clean complete response down to 5.5/6.0.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
@@ -2130,7 +2196,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.9 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
+      formula: "v8.4.5 score-only core with exam-realism calibration: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,

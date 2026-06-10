@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SYSTEM_VERSION = "criterion-feedback-v8-4-1-required-per-criterion-external-only";
+const SYSTEM_VERSION = "criterion-feedback-v8-4-5-exam-realistic-explanations";
 
 function setCors(req, res) {
   const origin = req.headers.origin;
@@ -189,6 +189,7 @@ function buildPrompt(body, criterion, band, attempt) {
   return [
     "You generate REQUIRED post-score IELTS General Training criterion feedback. Return JSON only.",
     "The score is already frozen. You must NOT change, estimate, lift, lower, or recalculate any band.",
+    "Explain the frozen band using real IELTS GT standards. Do not exaggerate weaknesses to justify an overly low interpretation; if the band is high-mid, explain the positive evidence clearly.",
     `System version: ${SYSTEM_VERSION}`,
     `Task: ${task}`,
     `Criterion to explain: ${criterion}`,
