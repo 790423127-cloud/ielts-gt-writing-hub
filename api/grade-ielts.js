@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-4-5-exam-realistic-band-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-4-8-task1-high-completion-recalibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -1596,6 +1596,37 @@ function combineGate(localGate, aiGate) {
   };
 }
 
+function detectTask1HighCompletionEvidence(body = {}, signals = {}) {
+  const essay = String(body.essay || "");
+  const lower = essay.toLowerCase();
+  const words = Number(signals.wordCount) || countWords(essay);
+  const audit = signals.taskRequirementAudit || buildTaskRequirementAudit(body, signals) || {};
+  const items = Array.isArray(audit.items) ? audit.items : [];
+  const missing = Number(audit.missingCount);
+  const partly = Number(audit.partlyCount);
+  const extractedCount = Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints.length : 0;
+  const coveredCount = items.filter((item) => item.status === "covered" || item.status === "partly_covered").length;
+  const allExtractedCovered = extractedCount >= 3 && coveredCount >= extractedCount && (!Number.isFinite(missing) || missing === 0) && (!Number.isFinite(partly) || partly <= 1);
+
+  const hasGreeting = /\b(dear|hello|hi)\b/i.test(essay);
+  const hasClosing = /\b(best regards|kind regards|regards|yours sincerely|yours faithfully|sincerely|best wishes|yours)\b/i.test(essay);
+  const hasPurpose = /\b(i am writing|i'm writing|i would like|i would be happy|i am happy to|i can|i will|let you know|please let me know|could you|would you)\b/i.test(lower);
+  const offerSignal = /\b(offer|prepare|make|cook|bring|contribute|provide|help|volunteer|would be happy to|would like to|i can|i will)\b/i.test(lower);
+  const describeSignal = /\b(is|are|called|known|made|filled|contains?|ingredients?|dish|food|usually|traditional|popular|well[- ]known|boiled|steamed|fried|served|version)\b/i.test(lower);
+  const explainSignal = /\b(because|since|reason|should be included|should include|suitable|fit|fits|spirit|meaningful|culture|cultural|chance|opportunity|experience|not only|also|therefore)\b/i.test(lower);
+  const requirementSignalCount = [offerSignal, describeSignal, explainSignal].filter(Boolean).length;
+  const paragraphCount = Number(signals.paragraphCount) || countParagraphs(essay);
+  const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(essay).length;
+
+  const enoughLength = words >= 145;
+  const coherentLetterShape = hasGreeting && hasClosing && hasPurpose && paragraphCount >= 3 && sentenceCount >= 6;
+  const contentComplete = allExtractedCovered || requirementSignalCount >= 3;
+  return {
+    triggered: enoughLength && coherentLetterShape && contentComplete,
+    reason: `Task 1 high-completion evidence: ${words} words, greeting/closing/purpose present, ${requirementSignalCount}/3 key bullet-signal groups detected, and ${coveredCount}/${extractedCount || 3} extracted bullets covered or inferably covered.`
+  };
+}
+
 function detectExamRealismUnderScoreRisk(criteria = {}, signals = {}, body = {}) {
   const { finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) return { triggered: false, reason: "" };
@@ -1614,10 +1645,12 @@ function detectExamRealismUnderScoreRisk(criteria = {}, signals = {}, body = {})
     const firstBand = Number(criteria["Task Achievement"]);
     const completeBullets = missing === 0 && partly === 0;
     const enoughLength = words >= 145;
-    const letterText = String(body.essay || "");
-    const letterForm = /dear/i.test(letterText) && /(regards|sincerely|yours|best wishes)/i.test(letterText);
-    if (completeBullets && enoughLength && letterForm && languageNotWeak && finalBand < 6.5) {
-      return { triggered: true, reason: `Exam-realism under-score risk: Task 1 has all bullets covered, normal length, clear letter form, and no high weak-language signal, but final Band is ${finalBand.toFixed(1)}. Re-check whether 6.5/7.0+ is more realistic.` };
+    const highCompletion = detectTask1HighCompletionEvidence(body, signals);
+    if (highCompletion.triggered && languageNotWeak && finalBand < 6.5) {
+      return { triggered: true, reason: `${highCompletion.reason} Current final Band ${finalBand.toFixed(1)} is likely under-calibrated; re-check whether 6.5/7.0+ is more realistic under GT Task 1 standards.` };
+    }
+    if (highCompletion.triggered && lowErrorSignal && finalBand < 7.0) {
+      return { triggered: true, reason: `${highCompletion.reason} Low local error signals plus complete communicative task response make Band ${finalBand.toFixed(1)} suspiciously low; re-check against Band 7 Task 1 descriptors.` };
     }
     if (completeBullets && enoughLength && lowErrorSignal && Number.isFinite(firstBand) && firstBand < 6.5) {
       return { triggered: true, reason: `Task Achievement under-score risk: all Task 1 bullets appear covered with normal length and low error signals, but TA is ${firstBand.toFixed(1)}. Re-check against real GT Task 1 standards.` };
@@ -1882,6 +1915,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     "If the audit flags under-score risk, you must actively consider whether the first-pass score is too low. Revise upward when the response clearly meets higher-band descriptors; do not keep a low score for vague reasons such as 'not sophisticated enough'.",
+    "Task 1 under-score review: if the response is a full-length GT letter with greeting, closing, clear purpose, all three bullet requirements covered, logical paragraphs, and mostly accurate language, do not keep it at Band 5.5/6.0 unless you can cite a serious missing requirement or frequent language breakdown. 6.5-7.5 should be actively considered.",
     "For all-four Band 7 cases, actively check whether any criterion should be 7.5/8/8.5/9. If you keep 7/7/7/7, give a concise limitation; do not force a server error.",
     "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
@@ -2119,6 +2153,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
+    "Task 1 high-completion calibration: a polished GT letter that covers all three bullets, uses appropriate register, has clear paragraphing, and has only minor slips is normally around Band 6.5-7.5. Do not score it as 5.5 merely because vocabulary is not highly sophisticated or ideas are concise.",
+    "Task 1 Band 5/5.5 should be reserved for clearly limited letters: missing/thin bullet coverage, uneven tone, noticeable communication problems, or frequent language errors. If these are not present, consider Band 6.5+.",
     "Sub-7 strict rule: below Band 7, be strict only when there is concrete evidence of weak task completion, thin development, frequent language errors, or poor control. Do not use 'strictness' to push a clean complete response down to 5.5/6.0.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
