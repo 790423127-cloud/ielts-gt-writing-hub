@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-9-fixed-highband-band9-unlock-clean";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-10-highband-exact9-review-pass";
 const DISCLAIMER = "This is an AI-generated estimated IELTS high-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -136,7 +136,7 @@ function highBandPrompt(task, questionPrompt, essay) {
     `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
     "Use IELTS bands 0-9 in 0.5 increments. Focus on accurate separation of 7.5, 8.0, 8.5 and 9.0.",
     "AI-only rule: choose all bands yourself from the prompt and response. Do not apply a local cap, floor, lift, or penalty. The server will only validate and mechanically average your four criterion bands.",
-    "Main correction for v8.5.9 fixed: do not automatically cap excellent writing at Band 8. Band 9 is rare, but it is allowed when the criteria are met.",
+    "Do not automatically cap excellent writing at Band 8. Band 9 is rare, but it is allowed when the criteria are met.",
     "Band 9 does not mean superhuman writing. It means fully effective, natural, precise, fluent, and virtually error-free IELTS writing for the task.",
     "If all four criteria are clearly at 8.5-9 descriptor level, award 8.5 or 9 instead of defaulting to 8.",
     "If a response is excellent but has only minor limitations, use 8.5. If it is fully effective with no meaningful language limitation, use 9.",
@@ -147,11 +147,50 @@ function highBandPrompt(task, questionPrompt, essay) {
     `Word count: ${wc}. Remember: word count alone does not justify a high band.`,
     `Question prompt:\n${questionPrompt || ""}`,
     `Student response:\n${essay || ""}`,
-    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"highband-band9-unlock-score\",\"task\":\"Task 1 or Task 2\",\"highBandDecision\":\"band_7_or_7_5_or_8_or_8_5_or_9\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"highBandAudit\":{\"wordCountRewarded\":false,\"templateInflated\":false,\"matureControl\":boolean,\"preciseLexis\":boolean,\"developmentDepth\":boolean,\"naturalCohesion\":boolean,\"band9Considered\":true,\"whyNotHigher\":[\"short_code\"],\"whyNotLower\":[\"short_code\"]}}"
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"highband-main-score\",\"task\":\"Task 1 or Task 2\",\"highBandDecision\":\"band_7_or_7_5_or_8_or_8_5_or_9\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"highBandAudit\":{\"wordCountRewarded\":false,\"templateInflated\":false,\"matureControl\":boolean,\"preciseLexis\":boolean,\"developmentDepth\":boolean,\"naturalCohesion\":boolean,\"band9Considered\":true,\"whyNotHigher\":[\"short_code\"],\"whyNotLower\":[\"short_code\"]}}"
   ].join("\n\n");
 }
 
-async function callDeepSeek(messages) {
+function exact9ReviewPrompt(task, questionPrompt, essay, firstResult) {
+  const names = criterionNames(task);
+  const wc = wordCount(essay);
+  const firstCriteria = firstResult.criteria || {};
+  const firstAudit = firstResult.parsed?.highBandAudit || {};
+  const firstBand = firstResult.finalBand;
+
+  const taskSpecific = task === "Task 1" ? [
+    "Task 1 exact-9 review: Ask whether this is a completely effective letter for the stated purpose, with natural register, precise detail, and virtually no language limitation.",
+    "A Task 1 letter can be Band 9 without being long or literary if it is fully effective, naturally phrased, precise, and essentially error-free.",
+    "Do not require unnecessary complexity. Penalise visible template feel, stiff phrasing, vague detail, or any noticeable unnaturalness."
+  ] : [
+    "Task 2 exact-9 review: Ask whether this is a fully effective essay with seamless progression, precise reasoning, mature qualification, and virtually no language limitation.",
+    "A Task 2 essay can be Band 9 without being a published academic article if it completely answers the question with natural, precise, controlled argument.",
+    "Do not require rare vocabulary or excessive complexity. Penalise generic argument, predictable development, repetition, or visible strain."
+  ];
+
+  return [
+    "You are the EXACT-9 REVIEW examiner for IELTS General Training Writing.",
+    "This is a second-pass AI-only review. The first high-band pass already rated this response highly.",
+    "Your job is not to be generous. Your job is to decide whether the first-pass 8.5-type result should remain 8.5 or become a genuine 9.",
+    `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
+    `First-pass final band: ${firstBand}.`,
+    `First-pass criteria: ${JSON.stringify(firstCriteria)}.`,
+    `First-pass highBandAudit: ${JSON.stringify(firstAudit)}.`,
+    "Band 9 does NOT mean superhuman, literary, or impossibly perfect writing.",
+    "Band 9 DOES mean fully effective task fulfilment, natural and precise progression, highly flexible language, and virtually no meaningful limitation for IELTS purposes.",
+    "If there are only negligible slips that do not affect naturalness or control, Band 9 may still be justified.",
+    "If the response is excellent but has any visible limitation in detail, naturalness, precision, sophistication, or development, keep it at 8.5.",
+    "Do NOT promote to 9 because of length, formality, paragraphing, or advanced-looking vocabulary.",
+    "Do promote to 9 if all four criteria genuinely meet 9-level performance and the response is fully effective for the task.",
+    ...taskSpecific,
+    `Word count: ${wc}.`,
+    `Question prompt:\n${questionPrompt || ""}`,
+    `Student response:\n${essay || ""}`,
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"exact9-review\",\"task\":\"Task 1 or Task 2\",\"exact9Decision\":\"promote_to_9 or keep_8_5\",\"criteria\":{...four numeric criterion bands...},\"exact9Audit\":{\"promoted\":boolean,\"fullyEffective\":boolean,\"virtuallyNoLimitation\":boolean,\"naturalPrecision\":boolean,\"seamlessProgression\":boolean,\"negligibleSlipsOnly\":boolean,\"whyPromote\":[\"short_code\"],\"whyKeepAt85\":[\"short_code\"]}}"
+  ].join("\n\n");
+}
+
+async function callDeepSeek(messages, temperature = 0.12) {
   const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const error = new Error("Missing DEEPSEEK_API_KEY environment variable");
@@ -170,7 +209,7 @@ async function callDeepSeek(messages) {
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        temperature: 0.12,
+        temperature,
         response_format: { type: "json_object" },
         messages
       }),
@@ -196,18 +235,79 @@ async function callDeepSeek(messages) {
   }
 }
 
-async function scoreHighBand(task, questionPrompt, essay) {
+async function runMainHighBandPass(task, questionPrompt, essay) {
   const prompt = highBandPrompt(task, questionPrompt, essay);
   const content = await callDeepSeek([
     { role: "system", content: "You are a strict IELTS General Training Writing high-band and Band 9 calibration examiner. Return JSON only." },
     { role: "user", content: prompt }
-  ]);
+  ], 0.12);
 
   const parsed = extractJson(content);
   const criteria = validateCriteria(parsed.criteria, task);
   const finalBand = averageBand(criteria, task);
   if (finalBand == null) throw new Error("Could not calculate final band from criteria");
   return { parsed, criteria, finalBand };
+}
+
+function shouldTriggerExact9Review(firstResult) {
+  if (!firstResult || firstResult.finalBand < 8.5) return false;
+  const audit = firstResult.parsed?.highBandAudit || {};
+  const signals = [
+    audit.matureControl,
+    audit.preciseLexis,
+    audit.developmentDepth,
+    audit.naturalCohesion,
+    audit.band9Considered
+  ].filter(Boolean).length;
+
+  // This is routing only. It does not raise/lower the score.
+  // A high-scoring AI first pass with enough high-band signals gets a second AI review.
+  return signals >= 4 || firstResult.finalBand >= 9;
+}
+
+async function runExact9Review(task, questionPrompt, essay, firstResult) {
+  const prompt = exact9ReviewPrompt(task, questionPrompt, essay, firstResult);
+  const content = await callDeepSeek([
+    { role: "system", content: "You are a strict IELTS GT Writing exact Band 9 review examiner. Return JSON only." },
+    { role: "user", content: prompt }
+  ], 0.08);
+
+  const parsed = extractJson(content);
+  const criteria = validateCriteria(parsed.criteria, task);
+  const finalBand = averageBand(criteria, task);
+  if (finalBand == null) throw new Error("Could not calculate exact-9 final band from criteria");
+
+  const promotedByAI = String(parsed.exact9Decision || "").toLowerCase().includes("promote")
+    || parsed.exact9Audit?.promoted === true;
+
+  return { parsed, criteria, finalBand, promotedByAI };
+}
+
+async function scoreHighBand(task, questionPrompt, essay) {
+  const first = await runMainHighBandPass(task, questionPrompt, essay);
+  const exact9Triggered = shouldTriggerExact9Review(first);
+
+  let exact9 = null;
+  let selected = first;
+  let selectedSource = "main-highband-pass";
+
+  if (exact9Triggered) {
+    exact9 = await runExact9Review(task, questionPrompt, essay, first);
+    // AI-only selection: use exact-9 review criteria only if the second AI explicitly promotes
+    // and returns criteria whose mechanical average is 8.5 or 9. No local score lifting occurs.
+    if (exact9.promotedByAI && exact9.finalBand >= 8.5) {
+      selected = exact9;
+      selectedSource = "exact9-review-pass";
+    }
+  }
+
+  return {
+    selected,
+    selectedSource,
+    first,
+    exact9Triggered,
+    exact9
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -224,30 +324,45 @@ module.exports = async function handler(req, res) {
     if (!String(essay).trim()) return sendJson(req, res, 400, { ok: false, error: "Missing essay text" });
 
     const result = await scoreHighBand(task, questionPrompt, essay);
+    const selected = result.selected;
+    const selectedParsed = selected.parsed || {};
+
     const payload = {
       ok: true,
       shadowMode: true,
       highBandShadow: true,
       productionScoreChanged: false,
       scoreSystemVersion: SCORE_SYSTEM_VERSION,
-      aiStage: "highband-band9-unlock-score",
+      aiStage: result.selectedSource,
       task,
       scoringTask: task,
       wordCount: wordCount(essay),
-      overallBand: result.finalBand,
-      finalBand: result.finalBand,
-      band: result.finalBand,
-      finalCriteria: result.criteria,
-      criteria: result.criteria,
+      overallBand: selected.finalBand,
+      finalBand: selected.finalBand,
+      band: selected.finalBand,
+      finalCriteria: selected.criteria,
+      criteria: selected.criteria,
       scoreCalculation: {
         method: "mechanical-average-of-ai-returned-criteria",
-        criteria: result.criteria,
-        finalBand: result.finalBand
+        criteria: selected.criteria,
+        finalBand: selected.finalBand
       },
-      highBandDecision: result.parsed.highBandDecision || null,
-      candidateRange: result.parsed.candidateRange || null,
-      reasonCodes: result.parsed.reasonCodes || {},
-      highBandAudit: result.parsed.highBandAudit || {},
+      highBandDecision: selectedParsed.highBandDecision || selectedParsed.exact9Decision || null,
+      candidateRange: selectedParsed.candidateRange || null,
+      reasonCodes: selectedParsed.reasonCodes || {},
+      highBandAudit: selectedParsed.highBandAudit || {},
+      exact9Review: {
+        triggered: result.exact9Triggered,
+        selectedSource: result.selectedSource,
+        mainFinalBand: result.first.finalBand,
+        mainCriteria: result.first.criteria,
+        mainAudit: result.first.parsed?.highBandAudit || {},
+        reviewFinalBand: result.exact9?.finalBand ?? null,
+        reviewCriteria: result.exact9?.criteria || null,
+        reviewDecision: result.exact9?.parsed?.exact9Decision || null,
+        reviewAudit: result.exact9?.parsed?.exact9Audit || null,
+        promotedByAI: result.exact9?.promotedByAI || false
+      },
       disclaimer: DISCLAIMER
     };
 
