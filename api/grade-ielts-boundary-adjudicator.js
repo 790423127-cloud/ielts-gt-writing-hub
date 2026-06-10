@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-2-hybrid-low4-task1-55-guard";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-3-task1-anchor-calibration";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -122,7 +122,7 @@ async function postJson(url, payload) {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v4-2" },
+      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v4-3" },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -254,7 +254,7 @@ function routeDecision(task, wc, main, lowband) {
       base.confidence = "unstable";
       base.conflict = true;
       base.adjudicate = true;
-      base.reasonCodes.push("V4_2_TASK1_LOW4_PROBE_IF_EVIDENCE_WEAK");
+      base.reasonCodes.push("V4_3_TASK1_LOW4_PROBE_IF_EVIDENCE_WEAK");
       base.reasonCodes.push("MAIN_4_5_LOWBAND_4_OR_BELOW");
       return base;
     }
@@ -289,6 +289,7 @@ function routeDecision(task, wc, main, lowband) {
     if (lowScore <= 4.0) base.reasonCodes.push("MAIN_5_LOWBAND_4_OR_BELOW");
     if (gap >= 1.0) base.reasonCodes.push("BOUNDARY_5_0_GAP_GE_1");
     base.reasonCodes.push("STRICT_LOW4_BASIC5_SEPARATOR_REQUIRED");
+      if (task === "Task 1" && lowScore <= 4.0) base.reasonCodes.push("V4_3_TASK1_MAIN5_LOWBAND4_LOW4_PROBE");
     return base;
   }
 
@@ -305,9 +306,10 @@ function routeDecision(task, wc, main, lowband) {
       base.confidence = "unstable";
       base.conflict = true;
       base.adjudicate = true;
-      base.reasonCodes.push("V4_2_HYBRID_ANTI_INFLATION_REVIEW");
+      base.reasonCodes.push("V4_3_HYBRID_ANTI_INFLATION_REVIEW");
       if (task1Suspicious) base.reasonCodes.push("TASK1_MAIN_HIGH_LOWBAND_LOW");
-      if (task1Suspicious && mainScore >= 6.0 && lowScore <= 4.0) base.reasonCodes.push("V4_2_55_PROTECTION_REQUIRES_STRONG_EVIDENCE");
+      if (task1Suspicious && mainScore >= 6.0 && lowScore <= 4.0) base.reasonCodes.push("V4_3_55_PROTECTION_REQUIRES_STRONG_EVIDENCE");
+      if (task === "Task 1" && mainScore >= 7.0 && lowScore <= 5.0) base.reasonCodes.push("V4_3_TASK1_MAIN7_LOWBAND5_ANTI_INFLATION");
       if (veryLowLowband) base.reasonCodes.push("LOWBAND_VERY_LOW_AGAINST_MAIN");
       if (shortTask1) base.reasonCodes.push("SHORT_OR_BORDERLINE_TASK1_MAIN_HIGH");
       if (mainHighLowbandWeak) base.reasonCodes.push("LOWBAND_WEAK_LANGUAGE_SIGNAL");
@@ -339,7 +341,7 @@ function routeDecision(task, wc, main, lowband) {
 function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
   const names = criterionNames(task);
   return [
-    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR v4.2.",
+    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR v4.3.",
     "You resolve conflicts between the main scorer and the low-band shadow scorer.",
     "You must not average the two scores. You must choose your own final criteria and final band from the writing evidence.",
     "Use IELTS bands in 0.5 increments.",
@@ -351,50 +353,41 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "- basic_5: around 5.0; generally understandable and task-relevant, but basic development and frequent language limitations.",
     "- safe_5_5_plus: around 5.5 or above; clearly above low-band weakness, enough specific detail/development, mostly controlled progression, and LR/GRA not merely basic.",
     "",
-    "Core v4.2 hybrid rule:",
-    "Use v4 as the base: keep the strong anti-inflation behavior that correctly protected 4.0 and 4.5 boundary samples.",
-    "Borrow only two narrow ideas from v4.1:",
-    "1) Task 1 low-4 deep probe when a weak Task 1 answer is stuck at 4.5;",
-    "2) cautious 5.5 protection for genuinely stronger responses, without reopening broad basic_5 inflation.",
+    "Core v4.3 rule:",
+    "Use v4.2 hybrid as the base. Preserve the strong protection for 4.0 and 4.5 boundary samples.",
+    "Do NOT reopen broad basic_5 inflation.",
+    "v4.3 only tightens two Task 1 boundary cases:",
+    "1) Task 1 main=5 / lowband=4 low-band probe;",
+    "2) Task 1 main=7 / lowband=5 anti-inflation.",
     "",
-    "Do NOT use broad basic_5 rescue.",
-    "Do not give basic_5 simply because the answer is full-length, has paragraphs, has a clear opinion, or follows letter format.",
-    "For 4.0 and 4.5 boundary samples, if lowband is 4.0 and LR/GRA are around 4.0, stay conservative unless there is clear evidence above boundary level.",
+    "Task 1 main=5 / lowband=4 low-band probe:",
+    "When Task 1 has mainScore around 5.0 and lowbandScore around 4.0, check whether the letter is actually still low_4_band.",
+    "If the letter has frequent basic grammar errors, very limited vocabulary, formulaic wording, and only simple bullet coverage, choose low_4_band or boundary_4_5 conservatively.",
+    "Do not give basic_5 just because the letter covers the bullet points, has paragraphs, or is understandable.",
+    "If LR/GRA are around 3.5-4.0 and development is thin, low_4_band is allowed.",
     "",
-    "Task 1 low-4 deep probe:",
-    "Apply this mainly to Task 1 when main is around 4.5 and lowband is 3.5-4.0.",
-    "If the letter has very frequent basic grammar errors, very limited vocabulary, formulaic wording, and only simple bullet coverage, low_4_band is allowed.",
-    "A correct greeting, closing, paragraphing, or basic bullet attempt must not automatically lift it to boundary_4_5.",
-    "Use low_4_band only when language control is genuinely weak and development remains thin.",
+    "Task 1 main=7 / lowband=5 anti-inflation:",
+    "When Task 1 mainScore is 7.0 or higher but lowbandScore is 5.0 or below, treat the main score as a possible over-reward for format, length, and surface fluency.",
+    "A GT letter around 170-180 words should not receive final 6.0 unless it has clearly developed bullet points, accurate tone, flexible vocabulary, and grammar mostly above basic level.",
+    "If it is complete and coherent but still simple or formulaic, choose basic_5 or at most a cautious 5.5.",
+    "Do not choose final 6.0 unless LR and GRA are truly around 6.0 and task development is strong.",
     "",
-    "Task 2 caution:",
-    "Do not over-apply low_4_band deep probe to full-length Task 2 essays unless the argument is truly very weak and repetitive.",
-    "At the same time, do not over-reward paragraph count. A full-length essay with simple repeated ideas and frequent errors can remain boundary_4_5.",
-    "",
-    "Boundary_4_5 protection:",
+    "Preserve 4.0 and 4.5 protection:",
     "If lowbandScore is 4.0, final LR/GRA around 4.0, and the writing is understandable but basic, boundary_4_5 is usually the safest outcome.",
-    "This is especially important when mainScore is 5.5 or 6.0 but the high score appears to reward format, length, or superficial fluency.",
+    "Do not lift 4.0/4.5 samples to 5.0/5.5 because of full word count, paragraph count, clear opinion, or correct letter format.",
     "",
-    "Basic_5 separator:",
-    "Only choose basic_5 when the response is clearly beyond boundary_4_5: adequate task fulfilment, more than minimal development, understandable progression, and language not dominated by basic errors.",
-    "If LR/GRA are still only 4.0, basic_5 needs strong task/development evidence.",
-    "If evidence is mixed, prefer boundary_4_5 rather than broad basic_5.",
+    "Task 2 relabel awareness:",
+    "Some full-length Task 2 low-band-looking samples may be closer to 4.5 than 3.5. Do not force them down to 3.5 unless they are genuinely very weak.",
+    "For Task 2, maintain v4.2 behavior: avoid broad basic_5 inflation but do not over-apply Task 1 low-4 probing.",
     "",
-    "5.5 protection, narrowly scoped:",
-    "If mainScore is 6.0 or higher and lowbandScore is 4.0, do not automatically force 4.5.",
-    "Check whether the writing has genuinely sufficient task fulfilment, specific details/support, clear progression, and LR/GRA around 5.0+.",
-    "If those are present, basic_5 or safe_5_5_plus may be justified.",
-    "If those are not present, stay at boundary_4_5.",
-    "Do not let 5.5 protection affect weaker 4.0/4.5 samples that only look complete because of format or length.",
-    "",
-    "Task-specific checks:",
-    "Task 1: do not over-reward formal letter conventions. Check whether all bullet points are developed with specific detail and whether grammar/vocabulary support 5.0+.",
-    "Task 2: do not over-reward length or paragraph count. Check whether ideas are genuinely developed rather than repeated in simple language.",
+    "5.5 protection:",
+    "Do not collapse a plausible 5.5 all the way to 4.5 without clear low-band evidence.",
+    "However, do not let this protection lift weaker 4.0/4.5 samples.",
     "",
     "Conflict handling:",
-    "When main is much higher than lowband, explicitly identify whether main over-rewarded format, length, or fluency.",
-    "When lowband is much lower than main, explicitly identify whether lowband over-penalized simplicity despite adequate task fulfilment.",
-    "If evidence is mixed, prefer the conservative adjacent band, but do not collapse a plausible 5.5 all the way to 4.5 without clear low-band evidence.",
+    "When main is much higher than lowband, identify whether main over-rewarded format, length, or fluency.",
+    "When lowband is much lower than main, identify whether lowband over-penalized simplicity despite adequate task fulfilment.",
+    "If evidence is mixed, prefer the conservative adjacent band.",
     "",
     `Route decision before adjudication: ${JSON.stringify(route)}`,
     `Main system score: ${main.score}`,
@@ -409,7 +402,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     `Student response:\n${essay || ""}`,
     "",
     "Return exactly this JSON shape:",
-    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v4-2\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
+    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v4-3\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
   ].join("\n");
 }
 
@@ -461,7 +454,7 @@ async function callDeepSeek(messages, temperature = 0.1) {
 async function adjudicate(task, questionPrompt, essay, main, lowband, route) {
   const prompt = adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route);
   const content = await callDeepSeek([
-    { role: "system", content: "You are a strict IELTS General Training Writing boundary adjudicator v4.2. Use v4 anti-inflation as the base, add narrow Task 1 low-4 probe and cautious 5.5 protection. Return JSON only." },
+    { role: "system", content: "You are a strict IELTS General Training Writing boundary adjudicator v4.3. Preserve v4.2 boundary protection and apply two narrow Task 1 anchor calibrations. Return JSON only." },
     { role: "user", content: prompt }
   ], 0.1);
 
@@ -522,7 +515,7 @@ module.exports = async function handler(req, res) {
       selected = {
         finalBand: adjudicator.finalBand,
         finalCriteria: adjudicator.finalCriteria,
-        finalSource: "boundary-adjudicator-v4-2",
+        finalSource: "boundary-adjudicator-v4-3",
         confidence: adjudicator.confidence
       };
     } else {
