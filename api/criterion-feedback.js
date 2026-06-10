@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SYSTEM_VERSION = "criterion-feedback-v8-5-0-ai-only-matrix-explanations";
+const SYSTEM_VERSION = "criterion-feedback-v8-5-2-criterion-differentiation-compatible";
 
 function setCors(req, res) {
   const origin = req.headers.origin;
@@ -195,6 +195,7 @@ function buildPrompt(body, criterion, band, attempt) {
     `Criterion to explain: ${criterion}`,
     `Frozen band for this criterion: ${Number.isFinite(band) ? band.toFixed(1) : band}`,
     "Half-band explanation rule: explain why this band is stronger than the adjacent lower band and not yet stable at the adjacent higher band. Use exact student evidence.",
+    "Criterion differentiation rule: even if all four frozen bands are identical, explain this criterion independently. Do not copy the same reason across TA/TR, CC, LR and GRA.",
     `Frozen criteria snapshot: ${JSON.stringify(criteria)}`,
     taskSpecificInstruction(task, criterion),
     "Evidence requirement: use at least TWO short exact quotes or very close phrases from the student's response. Explain what each quote proves.",

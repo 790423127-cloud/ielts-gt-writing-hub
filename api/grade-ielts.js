@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-1-ai-only-no-local-signal-bias-full-range";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-2-ai-only-criterion-differentiation-pass";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -235,13 +235,15 @@ const DETAILED_SCORING_STEPS = [
   { stage: "score-criteria", title: "AI 四项初评与半分判断", description: "AI 返回四项分、half-band 理由、原文证据、anchor comparison 和任务专属 gate。" },
   { stage: "score-boundary-audit", title: "本地 hard boundary audit", description: "本地强制检查低分边界、高分天花板、四项同分、anchor 冲突和 Band 6 准入风险。" },
   { stage: "score-boundary-review", title: "AI 二次边界复核", description: "如果本地 audit 触发风险，AI 必须二次复核并重新确认或修正四项分；无风险则跳过。" },
+  { stage: "score-differentiation-review", title: "AI 四项独立区分复核", description: "如果四项分完全相同，AI 必须重新检查四项证据；可以保留同分，但必须证明不是复制 Overall。" },
   { stage: "score-finalize", title: "最终验证并冻结分数", description: "验证结构完整后，机械平均 AI 返回的四项最终分并冻结；本地不直接改分。" }
 ];
 const VISIBLE_SCORING_STEPS = [
   { stage: "local-precheck", title: "本地预检与任务分流", description: "检查词数、任务类型、可评分性、语言风险和 Task 1 / Task 2 评分边界。" },
   { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes，不生成中文、长解释、原文引用或详细反馈。" },
   { stage: "boundary-audit", title: "本地边界审计", description: "检查低分抬高、高分卡 7、弱语言高分、四项同分和 anchor 冲突。" },
-  { stage: "boundary-review", title: "AI 边界复核", description: "只有审计触发时才二次复核；否则跳过。" },
+  { stage: "boundary-review", title: "AI 边界复核", description: "AI 复核低/中/高分边界，并防止首轮评分压缩。" },
+  { stage: "criterion-differentiation", title: "AI 四项区分复核", description: "四项完全同分时，AI 再次独立检查 TA/TR、CC、LR、GRA 是否真的应相同。" },
   { stage: "final-score-freeze", title: "冻结最终分数", description: "只冻结 AI 返回的四项分和 Overall；详细反馈由独立接口生成，不在打分接口内运行。" }
 ];
 
@@ -267,6 +269,13 @@ function visibleStepMessage(stage, result = {}) {
       return `AI 边界复核完成：${audit.boundaryReview?.decision || "reviewed"}。`;
     }
     return "AI 边界复核跳过：本地边界审计未触发强制复核。";
+  }
+  if (stage === "criterion-differentiation") {
+    const diff = audit.criterionDifferentiationReview || {};
+    if (diff.triggered) {
+      return `AI 四项区分复核完成：${diff.decision || "reviewed"}。`;
+    }
+    return "AI 四项区分复核跳过：四项并非需要复核的同分组合。";
   }
   if (stage === "final-score-freeze") {
     const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
@@ -1813,6 +1822,13 @@ function boundaryStepMessage(stage, result = {}) {
     }
     return "AI 二次边界复核跳过：本地 hard audit 未发现必须二次复核的风险。";
   }
+  if (stage === "score-differentiation-review") {
+    const diff = audit.criterionDifferentiationReview || {};
+    if (diff.triggered) {
+      return `AI 四项独立区分复核完成：${diff.decision || "reviewed"}。${diff.whyNotMechanicalCopy || "AI 已检查四项同分是否有独立证据。"}`;
+    }
+    return "AI 四项独立区分复核跳过：四项不是需要复核的中高分同分组合。";
+  }
   if (stage === "score-finalize") {
     const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
     return `最终验证完成：四项最终分已冻结，机械平均后的 Overall Band 为 ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}。`;
@@ -1830,7 +1846,7 @@ function buildDetailedScoringProgress(stageKey, result = {}, status = "done") {
       index: index + 1,
       status: done ? "done" : "waiting",
       message: done ? boundaryStepMessage(step.stage, result) : step.description,
-      detail: step.stage === "score-boundary-audit" ? result.boundaryAudit || null : step.stage === "score-boundary-review" ? result.boundaryAudit?.boundaryReview || null : null
+      detail: step.stage === "score-boundary-audit" ? result.boundaryAudit || null : step.stage === "score-boundary-review" ? result.boundaryAudit?.boundaryReview || null : step.stage === "score-differentiation-review" ? result.boundaryAudit?.criterionDifferentiationReview || null : null
     };
   });
   return {
@@ -1945,7 +1961,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     "If the audit flags under-score risk, you must actively consider whether the first-pass score is too low. Revise upward when the response clearly meets higher-band descriptors; do not keep a low score for vague reasons such as 'not sophisticated enough'.",
     "Task 1 under-score review: if the response is a full-length GT letter with greeting, closing, clear purpose, all three bullet requirements covered, logical paragraphs, and mostly accurate language, do not keep it at Band 5.5/6.0 unless you can cite a serious missing requirement or frequent language breakdown. 6.5-7.5 should be actively considered.",
-    "For all-four Band 7 cases, actively check whether any criterion should be 7.5/8/8.5/9. If you keep 7/7/7/7, give a concise limitation; do not force a server error.",
+    "Criterion differentiation rule: do not return four identical criterion bands unless the evidence for TA/TR, CC, LR and GRA independently supports the same half-band. For all-four Band 7 cases, actively check whether LR/GRA should be 6.5 or whether TA/TR/CC should be 7.5. If you keep 7/7/7/7, give criterion-specific evidence; do not copy Overall into all criteria.",
     "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
     "JSON safety: no markdown, no comments, no trailing prose, no unescaped double quotes inside strings. Use single quotes for student phrases.",
@@ -2049,6 +2065,137 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
     stabilityWarnings: [...new Set([...(reviewed.stabilityWarnings || []), ...(reviewedAuditRaw.reviewReasons || []).map((x) => `Boundary review note: ${x}`), ...unresolvedCriticalReasons.map((x) => `Boundary freeze block: ${x}`)])],
     scoreCoreMeta: { ...(reviewed.scoreCoreMeta || {}), boundaryReviewed: true, boundaryReviewApplied: true, freezeBlocked, scoreFrozen: false }
   };
+}
+
+
+function shouldRunCriterionDifferentiationReview(result = {}) {
+  const criteria = result.finalCriteria || result.criteria || {};
+  const values = scoreValues(criteria);
+  if (values.length !== 4) return false;
+  const same = values.every((x) => x === values[0]);
+  if (!same) return false;
+  const { finalBand } = averageBand(criteria);
+  // Do not spend an extra AI call for strict-zero or very low severely limited writing.
+  // The main problem we are solving is mid/high-band criterion cloning such as 7/7/7/7.
+  return Number.isFinite(finalBand) && finalBand >= 5;
+}
+
+function buildCriterionDifferentiationPrompt(body, reviewedResult, audit = {}) {
+  const signals = resolveScoringSignals(body, reviewedResult);
+  const task = signals.task;
+  const names = criterionNames(task);
+  const criteria = reviewedResult.finalCriteria || reviewedResult.criteria || {};
+  const { finalBand } = averageBand(criteria);
+  return [
+    "You are the third-pass IELTS GT Writing criterion-differentiation examiner. Return compact valid JSON only.",
+    `Score system: ${SCORE_SYSTEM_VERSION}. This is AI-only; the server must not change bands locally.`,
+    `Locked task: ${task}. Criteria must be exactly: ${names.join(", ")}.`,
+    "Purpose: the previous AI pass returned four identical criterion bands. Re-check whether this equality is genuinely justified by criterion-specific evidence, or whether the score copied the overall profile into every criterion.",
+    `Current identical criterion profile: ${JSON.stringify(criteria)}; current overall: ${finalBand}.`,
+    `IELTS criterion band matrix for ${task}:\n${criterionBandMatrixText(task)}`,
+    halfBandDecisionProtocol(),
+    "Independent criterion rule: score each criterion separately. Do not choose a criterion band because the overall score is around that band.",
+    "Evidence separation rule:",
+    `- ${names[0]}: judge only task fulfilment, prompt coverage, position/development, register and purpose as relevant to the locked task.`,
+    "- Coherence and Cohesion: judge progression, paragraphing, referencing, cohesion and sequencing only.",
+    "- Lexical Resource: judge range, precision, collocation, repetition, word choice and spelling/word formation only.",
+    "- Grammatical Range and Accuracy: judge sentence range, clause control, punctuation, agreement, tense and error density only.",
+    "All-four-same challenge: identical bands are allowed only if all four criteria independently deserve the same half-band. If one criterion is slightly stronger or weaker, adjust it by 0.5 or 1.0. Do not create an artificial spread; keep equality if genuinely justified.",
+    "For a Band 7-like profile, actively check whether LR or GRA is actually 6.5, or whether TA/TR or CC is 7.5. For a Band 6/6.5 profile, actively check whether task fulfilment is stronger than language control or vice versa.",
+    "Do not give advice, corrections, translations, or model answers. Score only.",
+    `Boundary review evidence already returned: ${JSON.stringify({ anchorComparison: reviewedResult.anchorComparison, shortReasons: reviewedResult.shortReasons, boundaryReview: audit.boundaryReview || null, examinerSummary: reviewedResult.examinerSummary }).slice(0, 2000)}`,
+    `Prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"score-differentiation-review\",\"task\":\"Task 1 or Task 2\",\"criteria\":{...four criterion bands as numbers...},\"criterionDifferentiationReview\":{\"triggered\":true,\"decision\":\"revised\" or \"kept_identical_with_evidence\",\"sameBandsJustified\":boolean,\"changedCriteria\":[\"Criterion Name\"],\"criterionEvidence\":{\"Criterion Name\":\"max 18 words; specific evidence for this criterion only\"},\"whyNotMechanicalCopy\":\"max 40 words\",\"whyFinalProfileIsBalanced\":\"max 40 words\"},\"examinerSummary\":\"max 35 words\"}."
+  ].join("\n\n");
+}
+
+async function applyCriterionDifferentiationReviewIfNeeded(body, reviewedResult = {}) {
+  const signals = resolveScoringSignals(body, reviewedResult);
+  const criteria = normalizeCriteria(reviewedResult.finalCriteria || reviewedResult.criteria, signals.task);
+  if (!shouldRunCriterionDifferentiationReview({ ...reviewedResult, criteria, finalCriteria: criteria })) {
+    return {
+      ...reviewedResult,
+      boundaryAudit: {
+        ...(reviewedResult.boundaryAudit || {}),
+        criterionDifferentiationReview: {
+          triggered: false,
+          decision: "skipped_not_all_same_mid_high",
+          reason: "Criterion bands were not an identical mid/high profile requiring a differentiation challenge."
+        }
+      },
+      scoreCoreMeta: { ...(reviewedResult.scoreCoreMeta || {}), criterionDifferentiationReviewed: false }
+    };
+  }
+
+  const firstSameCriteria = criteria;
+  const audit = reviewedResult.boundaryAudit || {};
+  let ai;
+  try {
+    ai = await callDeepSeek([
+      { role: "system", content: "You are an IELTS GT Writing criterion-differentiation scoring engine. Score only; no advice." },
+      { role: "user", content: buildCriterionDifferentiationPrompt(body, { ...reviewedResult, criteria, finalCriteria: criteria }, audit) }
+    ], 3400, 0);
+  } catch (error) {
+    return {
+      ...reviewedResult,
+      boundaryAudit: {
+        ...audit,
+        criterionDifferentiationReview: {
+          triggered: true,
+          decision: "skipped_ai_error_keep_previous_ai_score",
+          error: String(error?.message || error),
+          firstCriteria: firstSameCriteria,
+          finalCriteria: firstSameCriteria,
+          whyNotMechanicalCopy: "Differentiation AI call failed; previous AI-reviewed profile is kept without local changes."
+        }
+      },
+      stabilityWarnings: [...new Set([...(reviewedResult.stabilityWarnings || []), `Criterion differentiation AI call failed: ${String(error?.message || error)}`])],
+      scoreCoreMeta: { ...(reviewedResult.scoreCoreMeta || {}), criterionDifferentiationReviewed: false, criterionDifferentiationErrorRecovered: true }
+    };
+  }
+
+  const independentAnchor = hasUsableAnchorComparison(reviewedResult.anchorComparison) ? reviewedResult.anchorComparison : null;
+  const differentiatedBase = await normalizeScoreCoreResultWithZeroRescue(ai, body, signals, { fromBoundaryReview: true, independentAnchor, skipFeedbackQualityAudit: true });
+  const differentiatedCriteria = normalizeCriteria(differentiatedBase.finalCriteria || differentiatedBase.criteria, signals.task);
+  const differentiatedAuditRaw = buildHardBoundaryAudit(differentiatedCriteria, signals, differentiatedBase.anchorComparison || reviewedResult.anchorComparison || {}, differentiatedBase.criterionCalibration || reviewedResult.criterionCalibration || {}, {
+    firstPass: audit.firstPass || null,
+    skipFeedbackQualityAudit: true,
+    boundaryReview: audit.boundaryReview || null
+  });
+  const diffReview = {
+    triggered: true,
+    decision: ai.criterionDifferentiationReview?.decision || (allCriteriaSame(differentiatedCriteria) ? "kept_identical_with_evidence" : "revised"),
+    sameBandsJustified: Boolean(ai.criterionDifferentiationReview?.sameBandsJustified ?? allCriteriaSame(differentiatedCriteria)),
+    changedCriteria: Array.isArray(ai.criterionDifferentiationReview?.changedCriteria) ? ai.criterionDifferentiationReview.changedCriteria : namesChanged(firstSameCriteria, differentiatedCriteria),
+    criterionEvidence: ai.criterionDifferentiationReview?.criterionEvidence || ai.shortReasons || {},
+    whyNotMechanicalCopy: ai.criterionDifferentiationReview?.whyNotMechanicalCopy || "AI re-checked each criterion independently against the matrix.",
+    whyFinalProfileIsBalanced: ai.criterionDifferentiationReview?.whyFinalProfileIsBalanced || "Final profile returned by AI differentiation pass.",
+    firstCriteria: firstSameCriteria,
+    finalCriteria: differentiatedCriteria
+  };
+  return {
+    ...reviewedResult,
+    ...differentiatedBase,
+    criteria: differentiatedCriteria,
+    finalCriteria: differentiatedCriteria,
+    anchorComparison: differentiatedBase.anchorComparison?.anchorMissing ? (reviewedResult.anchorComparison || differentiatedBase.anchorComparison) : differentiatedBase.anchorComparison,
+    boundaryAudit: {
+      ...audit,
+      ...differentiatedAuditRaw,
+      status: "criterion_differentiation_reviewed",
+      reviewRequired: false,
+      freezeBlocked: false,
+      boundaryReview: audit.boundaryReview || differentiatedAuditRaw.boundaryReview || null,
+      criterionDifferentiationReview: diffReview
+    },
+    stabilityWarnings: [...new Set([...(reviewedResult.stabilityWarnings || []), ...(differentiatedBase.stabilityWarnings || []), "Criterion differentiation review completed for all-four-same profile."])],
+    scoreCoreMeta: { ...(reviewedResult.scoreCoreMeta || {}), ...(differentiatedBase.scoreCoreMeta || {}), boundaryReviewed: true, criterionDifferentiationReviewed: true, criterionDifferentiationApplied: true, scoreFrozen: false }
+  };
+}
+
+function namesChanged(before = {}, after = {}) {
+  return Object.keys(after || {}).filter((name) => Number(before?.[name]) !== Number(after?.[name]));
 }
 
 function gateStatus(reason, triggered = false) {
@@ -2197,7 +2344,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Task 1 Band 5/5.5 should be reserved for clearly limited letters: missing/thin bullet coverage, uneven tone, noticeable communication problems, or frequent language errors. If these are not present, consider Band 6.5+.",
     "Sub-7 strict rule: below Band 7, be strict only when there is concrete evidence of weak task completion, thin development, frequent language errors, or poor control. Do not use 'strictness' to push a clean complete response down to 5.5/6.0.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
-    "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
+    "Criterion differentiation rule: score TA/TR, CC, LR and GRA independently before thinking about Overall. Avoid mechanical all-four-same bands. If all four are identical, reasonCodes must prove that each criterion separately deserves that same half-band; otherwise use a justified 0.5 spread.",
     "Calibration failure warning: if a clear Band 8/9-quality sample is scored around 6.0/6.5, that is under-scoring. If a clearly weak Band 3/4 sample is scored around 5.5, that is over-scoring. Use the entire 0-9 scale.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
@@ -2696,8 +2843,12 @@ async function scoreCore(body) {
   // Step 3/4: mandatory AI-only second-pass boundary calibration. Local audit never changes bands.
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);
 
+  // Step 4B: AI-only criterion differentiation challenge for all-four-same mid/high profiles.
+  // This is still AI scoring only; local code never invents or adjusts bands.
+  const differentiated = await applyCriterionDifferentiationReviewIfNeeded(body, reviewed);
+
   // Step 5A: freeze the AI-returned final criteria and mechanically average them.
-  const frozen = freezeReviewedScore(reviewed, body, signals);
+  const frozen = freezeReviewedScore(differentiated, body, signals);
 
   // Step 5B is intentionally external in v8.4.0.
   // Core scoring must freeze quickly and reliably; detailed criterion feedback is generated
