@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SYSTEM_VERSION = "criterion-feedback-v8-5-5-extreme-band-anchor-compatible";
+const SYSTEM_VERSION = "criterion-feedback-v8-5-6-forced-anchor-comparison-compatible";
 
 function setCors(req, res) {
   const origin = req.headers.origin;
