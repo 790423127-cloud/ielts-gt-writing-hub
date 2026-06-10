@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v2-three-systems-boundary-v4-3-highband-v8-5-14";
+const ROUTER_VERSION = "production-router-v2-1-highband-shadow-confirmation";
 const BOUNDARY_VERSION = "boundary-adjudicator-v4-3-task1-anchor-calibration";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
 
@@ -104,7 +104,7 @@ function routeReason(mainBand) {
     return {
       targetSystem: "boundary",
       useBoundary: true,
-      useHighband: false,
+      useHighbandShadow: false,
       routeDecision: "boundary_required_main_score_unreadable",
       routeZone: "unknown_score"
     };
@@ -114,19 +114,19 @@ function routeReason(mainBand) {
     return {
       targetSystem: "boundary",
       useBoundary: true,
-      useHighband: false,
+      useHighbandShadow: false,
       routeDecision: "boundary_v4_3_for_4_0_to_5_5",
       routeZone: "boundary_4_0_5_5"
     };
   }
 
-  if (mainBand >= 7.5) {
+  if (mainBand >= 7.0) {
     return {
-      targetSystem: "highband",
+      targetSystem: "highband-shadow-confirmation",
       useBoundary: false,
-      useHighband: true,
-      routeDecision: "highband_v8_5_14_for_7_5_to_9",
-      routeZone: "highband_7_5_9"
+      useHighbandShadow: true,
+      routeDecision: "highband_shadow_confirmation_for_7_0_plus",
+      routeZone: "highband_candidate_7_0_plus"
     };
   }
 
@@ -134,7 +134,7 @@ function routeReason(mainBand) {
     return {
       targetSystem: "main",
       useBoundary: false,
-      useHighband: false,
+      useHighbandShadow: false,
       routeDecision: "main_direct_below_boundary_known_lowband_limitation",
       routeZone: "below_boundary"
     };
@@ -143,9 +143,9 @@ function routeReason(mainBand) {
   return {
     targetSystem: "main",
     useBoundary: false,
-    useHighband: false,
-    routeDecision: "main_direct_middle_band_6_0_to_7_0",
-    routeZone: "middle_band_6_0_7_0"
+    useHighbandShadow: false,
+    routeDecision: "main_direct_middle_band_6_0_to_6_5",
+    routeZone: "middle_band_6_0_6_5"
   };
 }
 
@@ -173,11 +173,7 @@ async function callJsonWithRetry(url, body, label) {
         throw new Error(`${label} failed: ${message}`);
       }
 
-      return {
-        ok: true,
-        data,
-        attempts: attempt
-      };
+      return { ok: true, data, attempts: attempt };
     } catch (err) {
       lastErr = err;
       if (attempt < RETRY_COUNT) await sleep(700 * attempt);
@@ -189,7 +185,7 @@ async function callJsonWithRetry(url, body, label) {
   throw lastErr || new Error(`${label} failed.`);
 }
 
-function directMainPayload(req, main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
+function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
   const finalBand = mainBand;
   return {
     ...main,
@@ -208,14 +204,18 @@ function directMainPayload(req, main, mainBand, route, mainAttempts, startedAt, 
     criteria: extractCriteria(main),
     mainScore: mainBand,
     boundaryScore: null,
-    highbandScore: null,
+    highbandScore: extra.highbandScore ?? null,
+    highbandShadowCalled: !!extra.highbandShadowCalled,
+    highbandConfirmed: !!extra.highbandConfirmed,
     main,
     boundary: null,
-    highband: null,
+    highband: extra.highband || null,
     routingAudit: {
       mainAttempts,
       boundaryAttempts: 0,
-      highbandAttempts: 0,
+      highbandAttempts: extra.highbandAttempts || 0,
+      highbandShadowCalled: !!extra.highbandShadowCalled,
+      highbandConfirmed: !!extra.highbandConfirmed,
       elapsedMs: Date.now() - startedAt,
       endpoints,
       ...extra.audit
@@ -281,6 +281,8 @@ module.exports = async function handler(req, res) {
         mainScore: mainBand,
         boundaryScore: boundaryBand,
         highbandScore: null,
+        highbandShadowCalled: false,
+        highbandConfirmed: false,
         main,
         boundary,
         highband: null,
@@ -288,6 +290,8 @@ module.exports = async function handler(req, res) {
           mainAttempts: mainCall.attempts,
           boundaryAttempts: boundaryCall.attempts,
           highbandAttempts: 0,
+          highbandShadowCalled: false,
+          highbandConfirmed: false,
           elapsedMs: Date.now() - startedAt,
           endpoints
         },
@@ -295,48 +299,68 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    if (route.useHighband) {
+    if (route.useHighbandShadow) {
       try {
         const highbandCall = await callJsonWithRetry(endpoints.highband, requestBody, "highband scorer");
         const highband = highbandCall.data;
         const highbandBand = extractBand(highband);
-        const finalBand = highbandBand == null ? mainBand : highbandBand;
+        const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand) && highbandBand >= 7.5;
 
-        return sendJson(req, res, 200, {
-          ...highband,
-          ok: highband.ok !== false,
-          productionRouter: true,
-          scoreSystemVersion: ROUTER_VERSION,
-          routerVersion: ROUTER_VERSION,
-          boundaryAdjudicatorVersion: BOUNDARY_VERSION,
-          highbandVersion: HIGHBAND_VERSION,
-          routeDecision: route.routeDecision,
-          routeZone: route.routeZone,
-          targetSystem: route.targetSystem,
-          finalSource: "highband-shadow-v8-5-14",
-          finalBand,
-          score: finalBand,
-          criteria: extractCriteria(highband),
-          mainScore: mainBand,
-          boundaryScore: null,
-          highbandScore: highbandBand,
-          main,
-          boundary: null,
+        if (highbandConfirmed) {
+          return sendJson(req, res, 200, {
+            ...highband,
+            ok: highband.ok !== false,
+            productionRouter: true,
+            scoreSystemVersion: ROUTER_VERSION,
+            routerVersion: ROUTER_VERSION,
+            boundaryAdjudicatorVersion: BOUNDARY_VERSION,
+            highbandVersion: HIGHBAND_VERSION,
+            routeDecision: route.routeDecision,
+            routeZone: route.routeZone,
+            targetSystem: route.targetSystem,
+            finalSource: "highband-shadow-v8-5-14",
+            finalBand: highbandBand,
+            score: highbandBand,
+            criteria: extractCriteria(highband),
+            mainScore: mainBand,
+            boundaryScore: null,
+            highbandScore: highbandBand,
+            highbandShadowCalled: true,
+            highbandConfirmed: true,
+            main,
+            boundary: null,
+            highband,
+            routingAudit: {
+              mainAttempts: mainCall.attempts,
+              boundaryAttempts: 0,
+              highbandAttempts: highbandCall.attempts,
+              highbandShadowCalled: true,
+              highbandConfirmed: true,
+              elapsedMs: Date.now() - startedAt,
+              endpoints
+            },
+            disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
+          });
+        }
+
+        return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints, {
+          finalSource: "main-score-highband-not-confirmed",
           highband,
-          routingAudit: {
-            mainAttempts: mainCall.attempts,
-            boundaryAttempts: 0,
-            highbandAttempts: highbandCall.attempts,
-            elapsedMs: Date.now() - startedAt,
-            endpoints
-          },
-          disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
-        });
-      } catch (highbandErr) {
-        return sendJson(req, res, 200, directMainPayload(req, main, mainBand, route, mainCall.attempts, startedAt, endpoints, {
-          finalSource: "main-score-highband-fallback",
+          highbandScore: highbandBand,
+          highbandAttempts: highbandCall.attempts,
+          highbandShadowCalled: true,
+          highbandConfirmed: false,
           audit: {
-            highbandAttempts: RETRY_COUNT,
+            highbandReason: "highband_score_below_7_5"
+          }
+        }));
+      } catch (highbandErr) {
+        return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints, {
+          finalSource: "main-score-highband-fallback",
+          highbandAttempts: RETRY_COUNT,
+          highbandShadowCalled: true,
+          highbandConfirmed: false,
+          audit: {
             highbandFallback: true,
             highbandError: highbandErr && highbandErr.message ? highbandErr.message : "Highband scorer failed."
           }
@@ -344,7 +368,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    return sendJson(req, res, 200, directMainPayload(req, main, mainBand, route, mainCall.attempts, startedAt, endpoints));
+    return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints));
   } catch (err) {
     return sendJson(req, res, 500, {
       ok: false,
