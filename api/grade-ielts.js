@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-4-ai-zero-rescue";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-5-final-positive-band-rescue";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -2234,7 +2234,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.4 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass instead of being frozen. Feedback cannot change the score.",
+      formula: "v8.3.5 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass instead of being frozen. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2314,7 +2314,7 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.3.4 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
+      formula: "v8.3.5 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2406,22 +2406,87 @@ async function rescueScoreKernelWithoutZero(body, signals, boundaryProfile, prev
   ], 1700, 0);
 }
 
+
+function shouldRunFinalPositiveBandRepair(error = {}) {
+  const msg = String(error?.message || error || "");
+  return error?.code === "IMPOSSIBLE_ZERO_BAND"
+    || /valid half-band|Invalid IELTS band|incomplete criterion bands|Band 0 for a rateable/i.test(msg);
+}
+
+async function finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, previousAi = {}, previousError = null) {
+  const names = criterionNames(signals.task);
+  const allowedBands = VALID_BANDS.filter((band) => band > 0);
+  const exactCriteriaShape = Object.fromEntries(names.map((name) => [name, "choose one of " + allowedBands.join("|")]));
+  const prompt = [
+    "Return exactly one JSON object. No markdown. No explanation outside JSON.",
+    "This is the final AI scoring repair pass for an IELTS GT Writing response.",
+    `The selected task is locked as ${signals.task}. Do not reclassify it.`,
+    "The server has already confirmed this is not a strict hard-zero response: it is not blank, not wholly non-English, and not an explicit no-answer.",
+    "Band 0 is prohibited for every criterion in this final repair pass.",
+    `Allowed band values are exactly: ${allowedBands.join(", ")}.`,
+    "Use the lowest positive band when the response is extremely weak, but never use 0.0.",
+    "Do not copy the previous invalid all-zero result. Score the actual student response again.",
+    "Return the four criteria with the exact criterion names below. Do not abbreviate, rename, or omit any criterion.",
+    `Exact criteria object shape: ${JSON.stringify(exactCriteriaShape)}`,
+    `Non-scoring local signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, englishRatio: signals.englishRatio, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
+    `Previous invalid result summary: ${JSON.stringify({ criteria: previousAi?.criteria || previousAi?.finalCriteria || null, anchorBand: previousAi?.anchorBand, candidateRange: previousAi?.candidateRange }).slice(0, 1000)}`,
+    `Previous validation error: ${String(previousError?.message || previousError || "").slice(0, 600)}`,
+    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    `Return exactly this schema with numeric positive bands: {"ok":true,"aiStage":"score-kernel","task":"${signals.task}","anchorBand":number,"candidateRange":"x-y","criteria":${JSON.stringify(Object.fromEntries(names.map((name) => [name, 1]))).replace(/1/g, 'number')},"reasonCodes":${JSON.stringify(Object.fromEntries(names.map((name) => [name, ["specific_reason","specific_reason"]])))},"flags":{"lowBandRisk":boolean,"weakLanguage":boolean,"highBandCandidate":boolean,"allFourSeven":boolean,"boundaryReviewSuggested":boolean}}`
+  ].join("\n\n");
+  return await callDeepSeek([
+    { role: "system", content: "IELTS final positive-band JSON scorer. Return JSON only. Band 0 is forbidden for this non-hard-zero writing." },
+    { role: "user", content: prompt }
+  ], 2200, 0);
+}
+
+async function normalizeScoreKernelResultWithFinalPositiveRepair(ai, body, signals, boundaryProfile, previousError = null) {
+  const repairedAi = await finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, ai, previousError);
+  const repaired = normalizeScoreKernelResult(repairedAi, body, signals, boundaryProfile);
+  repaired.scoreCoreMeta = {
+    ...(repaired.scoreCoreMeta || {}),
+    zeroBandFinalPositiveRepairApplied: true,
+    zeroBandFinalPositiveRepairReason: String(previousError?.message || previousError || "invalid zero-band kernel output")
+  };
+  return repaired;
+}
+
+async function normalizeScoreCoreResultWithFinalPositiveRepair(ai, body, signals, options = {}, previousError = null) {
+  const boundaryProfile = getLocalBandBoundaryProfile(signals);
+  const repairedAi = await finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, ai, previousError);
+  const repaired = normalizeScoreCoreResult(repairedAi, body, signals, options);
+  repaired.scoreCoreMeta = {
+    ...(repaired.scoreCoreMeta || {}),
+    zeroBandFinalPositiveRepairApplied: true,
+    zeroBandFinalPositiveRepairReason: String(previousError?.message || previousError || "invalid zero-band score output")
+  };
+  return repaired;
+}
+
 async function normalizeScoreKernelResultWithZeroRescue(ai, body, signals, boundaryProfile = null) {
   try {
     return normalizeScoreKernelResult(ai, body, signals, boundaryProfile);
   } catch (error) {
-    if (error?.code !== "IMPOSSIBLE_ZERO_BAND") throw error;
+    if (!shouldRunFinalPositiveBandRepair(error)) throw error;
     const retryAi = await retryScoreKernelAfterImpossibleZero(body, signals, boundaryProfile, ai);
     try {
       const retried = normalizeScoreKernelResult(retryAi, body, signals, boundaryProfile);
       retried.scoreCoreMeta = { ...(retried.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRetryReason: String(error.message || error) };
       return retried;
     } catch (retryError) {
-      if (retryError?.code !== "IMPOSSIBLE_ZERO_BAND") throw retryError;
+      if (!shouldRunFinalPositiveBandRepair(retryError)) throw retryError;
       const rescueAi = await rescueScoreKernelWithoutZero(body, signals, boundaryProfile, retryAi, retryError);
-      const rescued = normalizeScoreKernelResult(rescueAi, body, signals, boundaryProfile);
-      rescued.scoreCoreMeta = { ...(rescued.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
-      return rescued;
+      try {
+        const rescued = normalizeScoreKernelResult(rescueAi, body, signals, boundaryProfile);
+        rescued.scoreCoreMeta = { ...(rescued.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
+        return rescued;
+      } catch (rescueError) {
+        if (!shouldRunFinalPositiveBandRepair(rescueError)) throw rescueError;
+        const finalRepaired = await normalizeScoreKernelResultWithFinalPositiveRepair(rescueAi, body, signals, boundaryProfile, rescueError);
+        finalRepaired.scoreCoreMeta = { ...(finalRepaired.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
+        return finalRepaired;
+      }
     }
   }
 }
@@ -2430,7 +2495,7 @@ async function normalizeScoreCoreResultWithZeroRescue(ai, body, signals, options
   try {
     return normalizeScoreCoreResult(ai, body, signals, options);
   } catch (error) {
-    if (error?.code !== "IMPOSSIBLE_ZERO_BAND") throw error;
+    if (!shouldRunFinalPositiveBandRepair(error)) throw error;
     const boundaryProfile = getLocalBandBoundaryProfile(signals);
     const retryAi = await retryScoreKernelAfterImpossibleZero(body, signals, boundaryProfile, ai);
     try {
@@ -2438,11 +2503,18 @@ async function normalizeScoreCoreResultWithZeroRescue(ai, body, signals, options
       retried.scoreCoreMeta = { ...(retried.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRetryReason: String(error.message || error) };
       return retried;
     } catch (retryError) {
-      if (retryError?.code !== "IMPOSSIBLE_ZERO_BAND") throw retryError;
+      if (!shouldRunFinalPositiveBandRepair(retryError)) throw retryError;
       const rescueAi = await rescueScoreKernelWithoutZero(body, signals, boundaryProfile, retryAi, retryError);
-      const rescued = normalizeScoreCoreResult(rescueAi, body, signals, options);
-      rescued.scoreCoreMeta = { ...(rescued.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
-      return rescued;
+      try {
+        const rescued = normalizeScoreCoreResult(rescueAi, body, signals, options);
+        rescued.scoreCoreMeta = { ...(rescued.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
+        return rescued;
+      } catch (rescueError) {
+        if (!shouldRunFinalPositiveBandRepair(rescueError)) throw rescueError;
+        const finalRepaired = await normalizeScoreCoreResultWithFinalPositiveRepair(rescueAi, body, signals, options, rescueError);
+        finalRepaired.scoreCoreMeta = { ...(finalRepaired.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRescueApplied: true, zeroBandRetryReason: String(error.message || error), zeroBandRescueReason: String(retryError.message || retryError) };
+        return finalRepaired;
+      }
     }
   }
 }
@@ -2721,8 +2793,8 @@ module.exports = async function handler(req, res) {
       error: freezeBlocked ? "Score freeze blocked by unresolved boundary audit." : "AI scoring failed. No non-AI score was generated.",
       provider: DEFAULT_PROVIDER,
       detail,
-      businessError: freezeBlocked ? "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。" : "评分失败：AI 核心评分没有返回可冻结的短 JSON 评分结果。",
-      suggestion: freezeBlocked ? "请重试一次；如果连续出现，请检查独立锚点、四项全7复核和 boundaryAudit 返回内容。" : "Retry once. If it repeats, check Vercel logs and the DeepSeek API key/runtime."
+      businessError: freezeBlocked ? "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。" : "评分失败：AI 核心评分没有返回可冻结的短 JSON 评分结果；系统已尝试零分重评和最终正分修复。",
+      suggestion: freezeBlocked ? "请重试一次；如果连续出现，请检查独立锚点、四项全7复核和 boundaryAudit 返回内容。" : "Retry once. If it repeats, check Vercel logs; the zero-band retry/final positive-band repair also failed."
     });
   }
 };
