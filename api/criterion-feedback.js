@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SYSTEM_VERSION = "criterion-feedback-v8-4-5-exam-realistic-explanations";
+const SYSTEM_VERSION = "criterion-feedback-v8-5-0-ai-only-matrix-explanations";
 
 function setCors(req, res) {
   const origin = req.headers.origin;
@@ -189,11 +189,12 @@ function buildPrompt(body, criterion, band, attempt) {
   return [
     "You generate REQUIRED post-score IELTS General Training criterion feedback. Return JSON only.",
     "The score is already frozen. You must NOT change, estimate, lift, lower, or recalculate any band.",
-    "Explain the frozen band using real IELTS GT standards. Do not exaggerate weaknesses to justify an overly low interpretation; if the band is high-mid, explain the positive evidence clearly.",
+    "Explain the frozen band using real IELTS GT 0-9 criterion-band standards and half-band logic. Do not change the score. Do not exaggerate weaknesses to justify an overly low interpretation; if the band is high-mid, explain the positive evidence clearly.",
     `System version: ${SYSTEM_VERSION}`,
     `Task: ${task}`,
     `Criterion to explain: ${criterion}`,
     `Frozen band for this criterion: ${Number.isFinite(band) ? band.toFixed(1) : band}`,
+    "Half-band explanation rule: explain why this band is stronger than the adjacent lower band and not yet stable at the adjacent higher band. Use exact student evidence.",
     `Frozen criteria snapshot: ${JSON.stringify(criteria)}`,
     taskSpecificInstruction(task, criterion),
     "Evidence requirement: use at least TWO short exact quotes or very close phrases from the student's response. Explain what each quote proves.",

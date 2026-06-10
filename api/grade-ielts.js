@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-4-8-task1-high-completion-recalibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-0-ai-only-criterion-band-matrix-core";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -95,6 +95,133 @@ const EXAM_REALISM_CALIBRATION_RULES = {
 
 function examRealismCalibrationRulesForTask(task) {
   return (EXAM_REALISM_CALIBRATION_RULES[task === "Task 1" ? "Task 1" : "Task 2"] || []).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+}
+
+
+const IELTS_CRITERION_BAND_MATRIX = {
+  "Task 1": {
+    "Task Achievement": {
+      "0": "Blank, non-English, explicit no-answer, copied-only, or no assessable GT letter.",
+      "1": "Only isolated words or memorised fragments; the communicative purpose cannot be identified.",
+      "2": "Very little relevant message; not recognisably a complete letter; bullet points are mostly absent.",
+      "3": "Weak or unclear purpose; only one requirement may be faintly touched; severe communication problems.",
+      "4": "Basically related but incomplete; one or more bullets are missing or very thin; tone/format may be unstable.",
+      "5": "Purpose is generally clear and most bullets are addressed, but development is simple, one bullet may be thin, or tone may be uneven.",
+      "6": "Clear purpose; all bullets are covered with useful basic detail; tone is generally appropriate and the reader can act on the message.",
+      "7": "All bullets are clearly and relevantly developed; tone/register is natural; the letter reads as a complete answer to the reader.",
+      "8": "Requirements are fulfilled fully and naturally; information selection is effective; tone/register is very well controlled.",
+      "9": "Fully natural, mature, precise GT letter; all requirements are completely fulfilled with exact register and negligible weakness."
+    },
+    "Coherence and Cohesion": {
+      "0": "No assessable organisation.",
+      "1": "Fragments without logical order.",
+      "2": "Minimal sequencing; message is very hard to follow.",
+      "3": "Some order may exist, but progression is weak or confusing.",
+      "4": "Basic paragraphing or sequence exists, but links are mechanical/inaccurate and progression is unstable.",
+      "5": "Overall structure is visible; ideas are generally sequenced but may be repetitive, abrupt, or under-linked.",
+      "6": "Clear letter structure; paragraphs serve a purpose; linking generally works.",
+      "7": "Logical, smooth organisation; paragraphing, referencing, and progression help the reader.",
+      "8": "Natural flow; cohesion is flexible and unobtrusive.",
+      "9": "Effortless organisation; cohesion is precise and fully natural."
+    },
+    "Lexical Resource": {
+      "0": "No assessable vocabulary.",
+      "1": "Only isolated words.",
+      "2": "Very limited basic words; meaning is rarely clear.",
+      "3": "Very limited range; frequent word choice/spelling errors often block meaning.",
+      "4": "Basic vocabulary; frequent errors and awkward collocations; meaning is often strained.",
+      "5": "Vocabulary is sufficient for the task but limited/repetitive; errors are noticeable but meaning is usually clear.",
+      "6": "Adequate topic vocabulary; some flexibility; occasional awkward word choice, spelling, or word-form errors.",
+      "7": "Good range and precision for the task; some less common vocabulary; few errors.",
+      "8": "Flexible, precise vocabulary; natural collocation and register; rare minor slips.",
+      "9": "Full, natural, precise lexical control."
+    },
+    "Grammatical Range and Accuracy": {
+      "0": "No assessable grammar.",
+      "1": "Isolated words only.",
+      "2": "Very few correct sentence forms.",
+      "3": "Frequent errors; sentence control is very weak; meaning is often difficult.",
+      "4": "Basic sentence forms attempted; errors are frequent; punctuation and sentence boundaries are unstable.",
+      "5": "Simple and some complex forms attempted; errors are noticeable but the message is usually clear.",
+      "6": "Mix of simple and complex structures; errors occur but rarely block understanding.",
+      "7": "Variety of structures with generally good control; only some errors remain.",
+      "8": "Wide range with strong control; rare non-systematic errors.",
+      "9": "Fully flexible and accurate grammar."
+    }
+  },
+  "Task 2": {
+    "Task Response": {
+      "0": "Blank, non-English, explicit no-answer, copied-only, or wholly unrelated response.",
+      "1": "Isolated fragments with no real position or answer.",
+      "2": "A few relevant sentences may appear, but there is no coherent response to the task.",
+      "3": "Very limited answer; position is unclear or minimal; development is almost absent.",
+      "4": "Related but limited; ideas are simple and barely developed; parts of the task may be missed.",
+      "5": "Clear position/basic structure, but ideas are general, examples are brief, and reasoning is shallow.",
+      "6": "Clear response with real but basic development; relevant reasons/examples; all main parts mostly addressed.",
+      "7": "Fully relevant answer; clear position; ideas are developed logically and sufficiently.",
+      "8": "Well-developed mature response; clear judgement; strong reasoning and support.",
+      "9": "Sophisticated, fully responsive, precise argument with negligible limitations."
+    },
+    "Coherence and Cohesion": {
+      "0": "No assessable organisation.",
+      "1": "No logical sequence.",
+      "2": "Very little organisation; meaning is hard to follow.",
+      "3": "Weak sequence; paragraphing is unclear; links are minimal or inaccurate.",
+      "4": "Basic structure exists but progression is weak; linking is repetitive or faulty.",
+      "5": "Introduction/body/conclusion are visible; ideas are generally sequenced but development may be abrupt.",
+      "6": "Clear overall progression; paragraphing works; cohesive devices are mostly appropriate.",
+      "7": "Logical progression throughout; cohesion and referencing are effective.",
+      "8": "Smooth, natural flow; paragraphs are well managed.",
+      "9": "Seamless organisation and cohesion."
+    },
+    "Lexical Resource": {
+      "0": "No assessable vocabulary.",
+      "1": "Isolated words only.",
+      "2": "Very limited vocabulary.",
+      "3": "Very basic range; frequent errors obscure meaning.",
+      "4": "Limited topic vocabulary; frequent word choice, word form, or spelling problems.",
+      "5": "Vocabulary is adequate for a basic argument but repetitive/general; noticeable errors remain.",
+      "6": "Sufficient range for the topic; some flexibility; errors do not often impede meaning.",
+      "7": "Good range and precision; some less common items; few errors.",
+      "8": "Flexible, precise, natural vocabulary; rare slips.",
+      "9": "Sophisticated and fully natural lexical control."
+    },
+    "Grammatical Range and Accuracy": {
+      "0": "No assessable grammar.",
+      "1": "Isolated words only.",
+      "2": "Very few controlled sentence forms.",
+      "3": "Frequent sentence-level errors; meaning is often difficult.",
+      "4": "Basic structures attempted; errors are frequent and sometimes impede meaning.",
+      "5": "Simple forms and limited complex forms; errors are noticeable but the message is usually clear.",
+      "6": "Mix of sentence forms; grammar errors are present but rarely reduce clarity.",
+      "7": "Variety and generally good control; some errors remain.",
+      "8": "Wide range with strong control; rare minor errors.",
+      "9": "Fully flexible, accurate, and natural grammar."
+    }
+  }
+};
+
+function criterionBandMatrixForTask(task) {
+  return IELTS_CRITERION_BAND_MATRIX[task === "Task 1" ? "Task 1" : "Task 2"];
+}
+
+function criterionBandMatrixText(task) {
+  const matrix = criterionBandMatrixForTask(task);
+  return Object.entries(matrix).map(([criterion, bands]) => {
+    const rows = Object.entries(bands).map(([band, desc]) => `Band ${band}: ${desc}`).join("\n");
+    return `${criterion}\n${rows}`;
+  }).join("\n\n");
+}
+
+function halfBandDecisionProtocol() {
+  return [
+    "Half-band decision protocol:",
+    "- Use 0.5 increments whenever performance sits between two adjacent full bands.",
+    "- Band X.5 means clearly stronger than Band X.0, but not consistently meeting Band X+1.0.",
+    "- For every criterion, compare the adjacent lower, exact, and adjacent higher half/full bands.",
+    "- Do not prefer whole bands by default; use the evidence.",
+    "- Do not use local word-count/spelling/grammar signals as automatic caps or floors; they are only non-scoring risk notes."
+  ].join("\n");
 }
 
 function bandBoundaryProtocolForTask(task) {
@@ -958,135 +1085,36 @@ function rateableTask1TaskAchievementFloor(signals = {}, body = {}) {
 }
 
 function applyRateableResponseFloorGuard(criteria = {}, signals = {}, body = {}) {
-  let calibrated = { ...(criteria || {}) };
-  const notes = [];
-  const task = signals.task;
-  const taskCriterion = criterionNames(task)[0];
-  const before = bandNumber(calibrated[taskCriterion]);
-  if (!Number.isFinite(before)) return { criteria: calibrated, changed: false, notes };
-  const floorProfile = task === "Task 1" ? rateableTask1TaskAchievementFloor(signals, body) : rateableTask2TaskResponseFloor(signals, body);
-  if (floorProfile && before < floorProfile.floor) {
-    calibrated = floorSingleCriterion(calibrated, taskCriterion, floorProfile.floor);
-    notes.push({ type: task === "Task 1" ? "task1_rateable_ta_floor_guard" : "task2_rateable_tr_floor_guard", criterion: taskCriterion, floor: floorProfile.floor, before, reason: floorProfile.reason });
-  }
-  return { criteria: calibrated, changed: notes.length > 0, notes };
+  return {
+    criteria: { ...(criteria || {}) },
+    changed: false,
+    notes: [{
+      type: "ai_only_rateable_floor_disabled",
+      reason: "v8.5.0 AI-only core: rateable-response floors are disabled. Local code may flag but must not raise any AI-returned band."
+    }]
+  };
 }
 
 function applySub7StrictCalibration(criteria = {}, signals = {}, body = {}) {
-  let calibrated = { ...(criteria || {}) };
-  const notes = [];
-  const task = signals.task;
-  const essay = String(body.essay || "");
-  let profile = averageBand(calibrated);
-  if (!Number.isFinite(profile.finalBand) || profile.finalBand >= 7) {
-    return { criteria: calibrated, changed: false, notes };
-  }
-  const names = criterionNames(task);
-  const taskCriterion = names[0];
-  const cc = "Coherence and Cohesion";
-  const lr = "Lexical Resource";
-  const gra = "Grammatical Range and Accuracy";
-  const spelling = Number(signals.spellingIssueCount) || 0;
-  const spellingDensity = Number(signals.spellingDensityPer100Words) || 0;
-  const grammar = Number(signals.grammarIssueSignalCount) || 0;
-  const grammarDensity = Number(signals.grammarDensityPer100Words) || 0;
-  const weakPhrases = Number(signals.weakPhraseCount) || 0;
-  const runOn = sub7RunOnSignal(essay);
-  const requirementAudit = signals.taskRequirementAudit || buildTaskRequirementAudit(body, signals);
-
-  const cap = (criterion, capValue, type, reason) => {
-    const before = bandNumber(calibrated[criterion]);
-    if (Number.isFinite(before) && before > capValue) {
-      calibrated = capSingleCriterion(calibrated, criterion, capValue);
-      notes.push({ type, criterion, cap: capValue, before, reason });
-    }
+  return {
+    criteria: { ...(criteria || {}) },
+    changed: false,
+    notes: [{
+      type: "ai_only_sub7_caps_disabled",
+      reason: "v8.5.0 AI-only core: sub-7 spelling/grammar/word-count/task caps are disabled. These signals are audit notes only and cannot change criteria."
+    }]
   };
-
-  if (task === "Task 1") {
-    const words = Number(signals.wordCount) || 0;
-    if (requirementAudit && Number.isFinite(Number(requirementAudit.taskAchievementCap))) {
-      cap(taskCriterion, Number(requirementAudit.taskAchievementCap), "task1_specific_requirement_audit_cap", requirementAudit.summary || "Task 1 bullet-specific requirement audit constrained Task Achievement.");
-    }
-    if (hasTask1WorkingHoursRequirement(body) && !hasDesiredWorkSchedule(essay)) {
-      cap(taskCriterion, 5.5, "task1_specific_hours_gate", "Task 1 asks which hours the candidate would like to work, but the response does not clearly state the candidate's preferred working hours or schedule; Task Achievement should not enter Band 6.");
-    }
-    if (words < 150 && profile.finalBand >= 6.5 && signals.rateabilityStatus !== "clearly_rateable") {
-      cap(taskCriterion, 6.0, "task1_underlength_detail_gate", `Task 1 has ${words} words and does not show clearly rateable full bullet development; keep Task Achievement below high Band 6.`);
-    }
-  } else {
-    const words = Number(signals.wordCount) || 0;
-    if (requirementAudit && Number.isFinite(Number(requirementAudit.taskResponseCap))) {
-      cap(taskCriterion, Number(requirementAudit.taskResponseCap), "task2_question_type_requirement_audit_cap", requirementAudit.summary || "Task 2 question-type requirement audit constrained Task Response.");
-    }
-    if (words < 230 && profile.finalBand >= 6) {
-      cap(taskCriterion, 5.5, "task2_development_length_gate", `Task 2 has ${words} words; unless development is unusually strong, Task Response should not exceed 5.5/6.0 territory.`);
-    }
-    if (signals.rateabilityStatus !== "clearly_rateable" && profile.finalBand >= 6) {
-      cap(taskCriterion, 5.5, "task2_real_development_gate", "The response is rateable but does not show enough clear paragraph development to justify Band 6+ Task Response.");
-    }
-  }
-
-  if (spelling >= 8 || spellingDensity >= 5) {
-    cap(lr, 4.5, "sub7_spelling_density_lr_cap", `High spelling/word-form density (${spelling} issue signals; ${spellingDensity}/100 words) limits Lexical Resource to about Band 4.5.`);
-  } else if (spelling >= 5 || spellingDensity >= 3) {
-    cap(lr, 5.0, "sub7_spelling_density_lr_cap", `Frequent spelling/word-form errors (${spelling} issue signals; ${spellingDensity}/100 words) limit Lexical Resource to about Band 5.0.`);
-  }
-  if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high" || weakPhrases >= 3) {
-    cap(lr, 5.0, "sub7_lexical_naturalness_cap", "Basic, repetitive, or unnatural word choice/collocation limits Lexical Resource below Band 5.5/6.0.");
-  }
-
-  if (grammar >= 6 || grammarDensity >= 3.5 || signals.sentenceControl === "weak") {
-    cap(gra, 4.5, "sub7_grammar_density_gra_cap", `Frequent grammar/sentence-control issue signals (${grammar}; ${grammarDensity}/100 words) limit GRA to about Band 4.5.`);
-  } else if (grammar >= 3 || grammarDensity >= 2) {
-    cap(gra, 5.0, "sub7_grammar_density_gra_cap", `Repeated grammar/sentence-control issue signals (${grammar}; ${grammarDensity}/100 words) limit GRA to about Band 5.0.`);
-  }
-
-  if (runOn.total >= 2 || signals.sentenceControl === "weak") {
-    cap(cc, 5.0, "sub7_cohesion_sentence_flow_cap", "Sentence-boundary problems or weak sentence control reduce paragraph flow; Coherence and Cohesion should not be lifted by paragraphing alone.");
-  } else if (runOn.total >= 1 && profile.finalBand >= 5.5) {
-    cap(cc, 5.5, "sub7_cohesion_sentence_flow_cap", "Some sentence-boundary or flow problems are visible; Coherence and Cohesion should stay in the mid-band range.");
-  }
-
-  profile = averageBand(calibrated);
-  const lrBand = bandNumber(calibrated[lr]);
-  const graBand = bandNumber(calibrated[gra]);
-  if (Number.isFinite(profile.finalBand) && profile.finalBand > 5.5 && Number.isFinite(lrBand) && Number.isFinite(graBand) && lrBand <= 5 && graBand <= 5) {
-    const beforeCriteria = { ...calibrated };
-    calibrated = capCriteriaBands(calibrated, 5.5);
-    notes.push({ type: "sub7_dual_language_cap", cap: 5.5, beforeCriteria, reason: "When both LR and GRA are 5.0 or below, the overall profile should normally not exceed Band 5.5 in a sub-7 response." });
-  }
-
-  const rateableFloor = applyRateableResponseFloorGuard(calibrated, signals, body);
-  if (rateableFloor.changed) {
-    calibrated = rateableFloor.criteria;
-    notes.push(...rateableFloor.notes);
-  }
-
-  return { criteria: calibrated, changed: notes.length > 0, notes };
 }
 
 function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComparison = {}, body = {}) {
-  let calibrated = { ...(criteria || {}) };
-  const notes = [];
-  const task = signals.task;
-  const words = Number(signals.wordCount) || 0;
-  const { finalBand } = averageBand(calibrated);
-  const shortCap = task === "Task 1" ? task1ShortLetterCap(words) : task2ShortEssayCap(words);
-  if (shortCap && Number.isFinite(finalBand) && finalBand > shortCap.cap) {
-    calibrated = capCriteriaBands(calibrated, shortCap.cap);
-    notes.push({ type: "short_response_cap", cap: shortCap.cap, reason: shortCap.reason });
-  }
-  const sub7Strict = applySub7StrictCalibration(calibrated, signals, body);
-  if (sub7Strict.changed) {
-    calibrated = sub7Strict.criteria;
-    notes.push(...sub7Strict.notes);
-  }
-  const highFloor = highBandFloorProfile(calibrated, signals, anchorComparison);
-  if (highFloor) {
-    calibrated = floorCriteriaBands(calibrated, highFloor.floor);
-    notes.push({ type: "high_band_floor", floor: highFloor.floor, reason: highFloor.reason });
-  }
-  return { criteria: calibrated, changed: notes.length > 0, notes };
+  return {
+    criteria: { ...(criteria || {}) },
+    changed: false,
+    notes: [{
+      type: "ai_only_local_regression_calibration_disabled",
+      reason: "v8.5.0 AI-only core: all local cap/floor/regression calibration is disabled. Final bands must come only from AI core scoring or AI boundary review."
+    }]
+  };
 }
 
 function stableJsonParse(text) {
@@ -1909,6 +1937,8 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "You are the second-pass IELTS GT Writing boundary examiner. Return compact valid JSON only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. The server does not assign bands locally; it only audits and freezes AI-returned criterion bands.`,
     `Task: ${task}. Criteria must be exactly: ${names.join(", ")}.`,
+    `IELTS criterion band matrix for the locked ${task}:\n${criterionBandMatrixText(task)}`,
+    halfBandDecisionProtocol(),
     `Task-specific high/low band boundary protocol:\n${bandBoundaryProtocolForTask(task)}`,
     `Local boundary profile: ${JSON.stringify(localBoundaryProfile)}`,
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
@@ -1954,8 +1984,8 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
           decision: "skipped_ai_error",
           reviewReasons: initialAudit.reviewReasons || [],
           error: String(error?.message || error),
-          whyFinalCriteriaAreSafe: "Boundary review call failed; first-pass score will be frozen with local calibration and warnings rather than returning HTTP 500.",
-          whyFinalCriteriaAreSafeZh: "边界复核调用失败；系统将冻结首轮分数并保留本地校准和警告，避免接口报错。"
+          whyFinalCriteriaAreSafe: "Boundary review call failed; first-pass AI score will be frozen with audit warnings only. No local calibration is applied.",
+          whyFinalCriteriaAreSafeZh: "边界复核调用失败；系统将冻结首轮 AI 分数并保留审计提醒，不进行本地校准或改分。"
         }
       },
       stabilityWarnings: [...new Set([...(firstResult.stabilityWarnings || []), `Boundary review AI call failed: ${String(error?.message || error)}`])],
@@ -2069,13 +2099,13 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
     rawAverage,
     overallBand: finalBand,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_single_pass_strict_anchor_v7" : "task2_essay_single_pass_strict_anchor_v7",
-      formula: "Single-pass task-aware 0-9 anchor pipeline: AI independent anchor, AI criterion scoring, local hard audit, AI boundary review when triggered, final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and freezes, but does not assign bands.",
+      mode: task === "Task 1" ? "task1_gt_letter_v8_5_ai_only_matrix" : "task2_essay_v8_5_ai_only_matrix",
+      formula: "AI-only 0-9 criterion band matrix pipeline: AI scores four task-locked criteria using 0.5 increments; local code performs only strict hard-zero, task lock, audit routing, and mechanical averaging. No local cap, floor, lift, lowering, or regression calibration is applied.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No local band assignment. The server performs hard validation/audit and may require AI boundary review, then mechanically averages AI-returned final criterion bands."
+      localScoreChangeExplanation: "No local band assignment or modification. The server only locks task, blocks strict hard-zero cases, routes audit warnings to AI boundary review, and mechanically averages AI-returned final criterion bands."
     },
     scoreCoreMeta: {
       scoreFirst: true,
@@ -2144,14 +2174,16 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "The selected scoring task is locked by the request. Do not reclassify this response as the other IELTS task. If the writing style resembles another task, treat that as a task-response/achievement issue within the locked task, not permission to change rubrics.",
     "This is Step 2: AI core scoring only. Forbidden in this step: Chinese, long explanations, original quotations, detailed feedback, evidence arrays, taskSpecificGate, scoreProfile, criterionCalibration, corrections, translations, revision/model answers, markdown, comments, trailing prose.",
     "Return only anchorBand, candidateRange, four criterion bands, reasonCodes, and flags. Keep all strings as short snake_case codes. Do not quote the student's text.",
-    "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
+    "Use bands 0-9 in 0.5 increments. The server will average four AI-returned criteria and run audit-only checks. Do not output overallBand.",
+    `IELTS criterion band matrix for the locked ${task}:\n${criterionBandMatrixText(task)}`,
+    halfBandDecisionProtocol(),
     "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English, explicit no-answer, or completely unassessable submissions. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
     "If you believe a criterion is near zero but the essay has any topical English content, use a low positive half-band and explain the concrete limitation; do not output 0.0.",
     ...(taskSpecificPositiveRescueRules(task)),
     "For both Task 1 and Task 2, Band 0 means no assessable response, not merely missing examples, missing bullet points, weak development, poor tone, or limited language.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
-    "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
+    "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     "Task 1 high-completion calibration: a polished GT letter that covers all three bullets, uses appropriate register, has clear paragraphing, and has only minor slips is normally around Band 6.5-7.5. Do not score it as 5.5 merely because vocabulary is not highly sophisticated or ideas are concise.",
     "Task 1 Band 5/5.5 should be reserved for clearly limited letters: missing/thin bullet coverage, uneven tone, noticeable communication problems, or frequent language errors. If these are not present, consider Band 6.5+.",
@@ -2232,14 +2264,14 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.4.5 score-only core with exam-realism calibration: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
+      formula: "v8.5.0 AI-only criterion band matrix core: AI returns task-locked four criterion bands using the 0-9 matrix and 0.5 increments; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI rescue; local cap/floor/regression calibration is disabled. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No local band assignment. Local checks are used only for audit/review routing; final bands are AI-returned and mechanically averaged."
+      localScoreChangeExplanation: "No local cap/floor/lift/lowering. Local checks are audit/review triggers only; final bands are AI-returned and mechanically averaged."
     },
-    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: false, localCalibrationApplied: false, feedbackAfterFreeze: false, externalCriterionFeedback: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
+    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: false, localCalibrationApplied: false, localScoreInterferenceDisabled: true, feedbackAfterFreeze: false, externalCriterionFeedback: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
     localScoreChanged: false
   };
 }
@@ -2845,13 +2877,13 @@ function scoreFinalizeStage(body) {
     boundaryAudit,
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
-      mode: signals.task === "Task 1" ? "task1_gt_letter_single_pass_strict_anchor_v7" : "task2_essay_single_pass_strict_anchor_v7",
-      formula: "Single-pass task-aware 0-9 anchor pipeline: AI independent anchor, AI criterion scoring, local hard audit, AI boundary review when triggered, final AI-returned criterion bands averaged and rounded to nearest 0.5. Local code audits and freezes, but does not assign bands.",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_v8_5_ai_only_matrix" : "task2_essay_v8_5_ai_only_matrix",
+      formula: "AI-only 0-9 criterion band matrix pipeline: AI scores four task-locked criteria using 0.5 increments; local code performs only strict hard-zero, task lock, audit routing, and mechanical averaging. No local cap, floor, lift, lowering, or regression calibration is applied.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No local band assignment. The server performs hard validation/audit and may require AI boundary review, then mechanically averages AI-returned final criterion bands."
+      localScoreChangeExplanation: "No local band assignment or modification. The server only locks task, blocks strict hard-zero cases, routes audit warnings to AI boundary review, and mechanically averages AI-returned final criterion bands."
     },
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
     localScoreChanged: false
