@@ -11,16 +11,16 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-2-ai-only-criterion-differentiation-pass";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-4-ai-only-score-scale-calibration-pass";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
   { band: 1, profile: "Only isolated words or memorised fragments; the purpose of the letter is almost impossible to identify.", zh: "只有零散单词或背诵片段，几乎看不出写信目的。" },
   { band: 2, profile: "Very little relevant message; not recognisably a complete letter; bullet points are largely missing.", zh: "相关信息极少，不像完整书信，题目要点基本缺失。" },
   { band: 3, profile: "Weak or unclear purpose; only minimal bullet coverage; very short or confused message; frequent errors block clarity.", zh: "目的很弱或不清楚，只覆盖极少要点，内容短或混乱，错误严重影响理解。" },
-  { band: 4, profile: "Basically related but covers only part of the bullet points; details are thin; tone and format are unstable; errors are frequent.", zh: "基本相关但只覆盖部分要点，细节少，语气和格式不稳定，错误频繁。" },
-  { band: 5, profile: "Purpose is generally clear and most bullet points are addressed, but development is simple, tone may be uneven, and language is limited or error-prone.", zh: "写信目的基本清楚，大部分要点有回应，但展开简单，语气不够稳定，语言有限且错误较多。" },
-  { band: 6, profile: "Clear purpose; all bullet points are covered with basic detail; tone is generally appropriate; organisation is clear; errors do not seriously reduce understanding.", zh: "目的清楚，三个要点都有基本细节，语气大体合适，结构清楚，错误不严重影响理解。" },
+  { band: 4, profile: "Basically related but limited: bullet points may be attempted, but details are thin, tone/format are unstable, and frequent basic errors or unnatural phrasing reduce clarity.", zh: "基本相关但能力有限：可能尝试回应要点，但细节薄，语气/格式不稳，基础错误或不自然表达频繁影响清晰度。" },
+  { band: 5, profile: "Purpose is generally clear and most bullet points are addressed, but development is simple and language is noticeably limited, repetitive, awkward, or error-prone.", zh: "写信目的基本清楚，大部分要点有回应，但展开简单，语言明显有限、重复、不自然或错误较多。" },
+  { band: 6, profile: "Clear purpose and all bullet points covered with basic useful detail; tone and organisation are generally appropriate; language is understandable but still limited or uneven.", zh: "目的清楚，三个要点都有基本有用细节，语气和结构大体合适，语言可理解但仍有限或不稳定。" },
   { band: 7, profile: "All bullet points are developed well; tone/register is natural; information is logically organised; vocabulary and grammar are flexible with only some errors.", zh: "所有要点展开较充分，语气自然，信息组织清楚，词汇和语法较灵活，错误较少。" },
   { band: 8, profile: "Task requirements are fulfilled fully and naturally; tone, format, and information selection are very appropriate; language is flexible and accurate with rare minor slips.", zh: "任务要求完成充分自然，语气、格式和信息选择很合适，语言灵活准确，只有少量小错。" },
   { band: 9, profile: "A fully natural, mature, precise GT letter; all bullet points are completely and appropriately developed; register is exact and errors are negligible.", zh: "完全自然成熟精准的书信，所有要点充分且得体，语气精准，错误极少。" }
@@ -31,8 +31,8 @@ const TASK2_BAND_ANCHORS_0_TO_9 = [
   { band: 1, profile: "Only isolated words or memorised fragments; almost no position, development, or organisation.", zh: "只有零散词语或背诵片段，几乎没有立场、展开或结构。" },
   { band: 2, profile: "A few relevant sentences may appear, but the response does not form a coherent answer to the task.", zh: "可能有少量相关句子，但不能形成完整任务回应。" },
   { band: 3, profile: "Very limited position and content; weak or confused organisation; frequent errors make meaning difficult.", zh: "观点和内容极少，结构弱或混乱，错误频繁导致理解困难。" },
-  { band: 4, profile: "Basically related but response is very limited; ideas are simple and barely developed; organisation is weak and errors are frequent.", zh: "基本相关但回应很有限，观点简单且几乎没有展开，结构弱，错误频繁。" },
-  { band: 5, profile: "Clear position and basic structure, but ideas are general, examples are brief, reasoning is shallow, and language is simple or error-prone.", zh: "有明确立场和基本结构，但观点笼统、例子短、论证浅，语言简单或错误较多。" },
+  { band: 4, profile: "Basically related but very limited: ideas are simple, repetitive, or barely developed; organisation is weak or mechanical; frequent basic errors restrict control.", zh: "基本相关但很有限：观点简单、重复或几乎没有展开；结构弱或机械；基础错误频繁限制表达控制。" },
+  { band: 5, profile: "Clear position and basic structure, but ideas are general, examples are brief, reasoning is shallow, and language is simple, repetitive, awkward, or error-prone.", zh: "有明确立场和基本结构，但观点笼统、例子短、论证浅，语言简单、重复、不自然或错误较多。" },
   { band: 6, profile: "Clear response with basic but real development; examples or explanations are relevant; progression is generally clear; errors do not seriously reduce clarity.", zh: "回应清楚，有基本但真实的展开，例子或解释相关，结构基本清楚，错误不严重影响理解。" },
   { band: 7, profile: "Well-organised essay with clear position, developed ideas, logical progression, flexible vocabulary, varied grammar, and relatively few errors.", zh: "结构清楚，立场明确，观点发展充分，逻辑推进明显，词汇灵活，语法有变化，错误较少。" },
   { band: 8, profile: "Fully developed response with mature reasoning, natural cohesion, precise flexible vocabulary, strong grammatical control, and rare minor errors.", zh: "回应充分，论证成熟，衔接自然，词汇精准灵活，语法控制强，错误很少。" },
@@ -76,20 +76,53 @@ const TASK2_BAND_BOUNDARY_PROTOCOL = [
   "Task 2 hard checks: 80-119 words usually 3.0-4.0; 120-149 usually 3.5-4.5; 150-179 usually 4.0-5.0; 180-229 needs strong development to justify 5.5/6.0+. High spelling/grammar density must constrain LR/GRA."
 ];
 
-const EXAM_REALISM_CALIBRATION_RULES = {
+const SCORE_SCALE_CALIBRATION_V8_5_4 = {
   "Task 1": [
-    "Task 1 Band 5/5.5 is for a generally understandable but limited or error-prone letter: one bullet may be thin, details may be mechanical, tone may be uneven, or LR/GRA errors are noticeable.",
-    "Task 1 Band 6/6.5 is for a clear, complete letter with all bullets covered and generally appropriate tone, but with limited flexibility, some awkwardness, or noticeable but non-blocking errors.",
-    "Task 1 Band 7/7.5 is normal for a natural GT letter that clearly covers all three bullets with relevant detail, appropriate register, logical organisation, and mostly accurate language. It does not require native-like sophistication.",
-    "Task 1 Band 8+ is appropriate when the letter is fully developed, reader-focused, naturally organised, and language is flexible and accurate with rare slips.",
-    "Do not keep a clean, complete, well-organised Task 1 letter at 5.5 merely because the ideas are not elaborate. GT Task 1 rewards successful communicative completion, not essay-style argument depth."
+    "Scale correction: completion is not the same as quality. A letter can mention all three bullets and still be Band 4/5 if the message is thin, awkward, repetitive, or full of basic errors.",
+    "Low-band correction: for Task 1 Band 3/4 samples, do not lift to Band 5.5/6.5 merely because there is a greeting, closing, paragraphs, and some relevant content. Frequent grammar/word-choice problems and weak control must keep LR/GRA low.",
+    "Band 4 letter profile: related and understandable in places, but basic, uneven, thin, and error-prone. If this profile fits, TA may be 4/4.5 and LR/GRA often 3.5/4 even if all bullets are attempted.",
+    "Band 5/5.5 letter profile: purpose is clear and the task is mostly handled, but expression is simple, formulaic or noticeably limited; it should not automatically become Band 7.",
+    "Band 6/6.5 letter profile: all bullets are covered with useful detail and the tone is generally appropriate, but the response still lacks the natural flexibility and accuracy of Band 7+.",
+    "High-band correction: Band 8/9 Task 1 is concise but highly natural, precise, controlled and reader-focused. If that evidence is present, do not hold the score at 7 just because the letter is short or straightforward."
   ],
   "Task 2": [
+    "Scale correction: a full-length essay with paragraphs and a clear opinion is not automatically Band 6/7. The quality of reasoning, support, cohesion, lexis, and grammar must justify the band.",
+    "Low-band correction: Band 3/4 essays can be above 250 words if they are repetitive, simplistic, poorly controlled, and only weakly developed. Do not lift them because they are long.",
+    "Band 4 essay profile: related but basic and repetitive, with limited reasoning and frequent basic language limitations. If this fits, TR/CC may be 4/4.5 and LR/GRA often 3.5/4.",
+    "Band 5/5.5 essay profile: position and structure are clear, but ideas are general, explanation is shallow, and language is limited. This is the normal score for complete but weak essays.",
+    "Band 6/6.5 essay profile: there is real development and mostly clear progression, but maturity, precision and flexibility are still limited.",
+    "High-band correction: Band 8/9 Task 2 requires mature, well-extended reasoning, precise lexis, natural cohesion, and strong grammatical control. If that evidence is present, do not default to 7."
+  ],
+  "global": [
+    "Use the whole scale. Avoid central compression: do not pull weak 3/4 writing up to 5.5/6, and do not push polished 8/9 writing down to 7 by default.",
+    "Criterion order: assign TA/TR first from task fulfilment and development, CC from progression and cohesion, LR from range/precision/naturalness, and GRA from range/accuracy. Do not infer criteria from overall.",
+    "Language-control rule: frequent basic grammar errors, awkward collocations, repeated simple vocabulary, or unnatural phrasing should visibly constrain LR and GRA even when the answer is relevant.",
+    "High-band unlock rule: rare errors, natural collocation, precise topic vocabulary, controlled complex sentences, and mature progression are sufficient to consider 8/8.5/9; do not require literary style."
+  ]
+};
+
+function scoreScaleCalibrationText(task) {
+  const taskRules = SCORE_SCALE_CALIBRATION_V8_5_4[task === "Task 1" ? "Task 1" : "Task 2"] || [];
+  return [...SCORE_SCALE_CALIBRATION_V8_5_4.global, ...taskRules].map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+}
+
+
+const EXAM_REALISM_CALIBRATION_RULES = {
+  "Task 1": [
+    "Task 1 Band 4 is possible even when a letter has greeting/body/closing if coverage is thin, tone is unstable, and language is basic, awkward, or frequently wrong.",
+    "Task 1 Band 5/5.5 is for a generally understandable but limited or error-prone letter: most bullets may be addressed, but detail, tone, vocabulary or grammar are not strong enough for Band 6.5/7.",
+    "Task 1 Band 6/6.5 is for a clear, complete letter with all bullets covered and generally appropriate tone, but still with limited flexibility, some awkwardness, or noticeable non-blocking errors.",
+    "Task 1 Band 7/7.5 is for a natural GT letter that clearly covers all three bullets with relevant detail, appropriate register, logical organisation, and mostly accurate language.",
+    "Task 1 Band 8+ requires full, reader-focused completion plus natural organisation, precise register, flexible vocabulary and strong grammatical control with rare slips.",
+    "Do not over-reward structure alone. Completion plus weak language is usually mid-band, not Band 7. Completion plus natural accurate control can be Band 7+."
+  ],
+  "Task 2": [
+    "Task 2 Band 4 is possible in a full-length essay if the response is repetitive, simplistic, weakly developed and language control is poor.",
     "Task 2 Band 5/5.5 is for a complete but weak essay: clear position/basic structure but shallow development, generic examples, frequent language issues, or limited progression.",
     "Task 2 Band 6/6.5 is for a clear answer with real explanation and relevant support, even if ideas are not sophisticated and some language errors remain.",
-    "Task 2 Band 7/7.5 is normal for a fully relevant, well-organised essay with developed ideas, clear progression, flexible vocabulary, and generally accurate grammar.",
+    "Task 2 Band 7/7.5 is for a fully relevant, well-organised essay with developed ideas, clear progression, flexible vocabulary, and generally accurate grammar.",
     "Task 2 Band 8+ requires mature, well-developed reasoning, precise lexis, natural cohesion, and strong grammatical control with rare errors.",
-    "Do not compress a strong essay into 5.5 just because it is simple; simplicity is a Band 5 issue only when development, precision, or language control is clearly limited."
+    "Do not over-reward length and paragraphing. A long but repetitive essay with weak grammar is still low or mid-band. Do not under-reward polished, mature writing by defaulting to Band 7."
   ]
 };
 
@@ -1446,9 +1479,9 @@ function buildIndependentAnchorPrompt(body, signals) {
     "Your only job is to classify the response against the 0-9 anchor benchmarks before criterion scoring.",
     "This anchor must be independent from final criterion bands; do not infer it from a score because no criterion score exists yet.",
     "High-band rule: if the response is mature, fully developed, naturally cohesive, precise and mostly error-free, you must consider Band 8 or Band 9 anchors. Do not default to Band 7 for safety.",
-    "Low-band rule: if the response is severely underlength or barely developed, the closest anchor must reflect that even if the response has paragraphs.",
+    "Low-band rule: weak language and shallow development can make a full-length response Band 3/4. Do not lift low-band writing just because it has paragraphs, greeting/closing, or enough words.",
+    `v8.5.4 full-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
     `0-9 anchor benchmarks:\n${anchorTable}`,
-    `Local non-scoring signals for calibration: ${JSON.stringify(signals)}`,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
     "Return exactly: {\"ok\":true,\"aiStage\":\"score-anchor\",\"anchorComparison\":{\"anchorSystem\":\"Task-aware independent 0-9 anchor classification\",\"closestAnchorBand\":number,\"lowerAnchorBand\":number,\"higherAnchorBand\":number,\"candidateRange\":\"e.g. 7.5-8.5\",\"closestAnchorProfile\":\".\",\"closestAnchorProfileZh\":\"中文\",\"whyCloserToThisBand\":\".\",\"whyCloserToThisBandZh\":\"中文\",\"whyNotLowerAnchor\":\".\",\"whyNotLowerAnchorZh\":\"中文\",\"whyNotHigherAnchor\":\".\",\"whyNotHigherAnchorZh\":\"中文\",\"highBandCandidate\":boolean,\"lowBandCandidate\":boolean,\"evidence\":[\"short essay quote or feature\"]}}"
@@ -1959,11 +1992,12 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
-    "If the audit flags under-score risk, you must actively consider whether the first-pass score is too low. Revise upward when the response clearly meets higher-band descriptors; do not keep a low score for vague reasons such as 'not sophisticated enough'.",
-    "Task 1 under-score review: if the response is a full-length GT letter with greeting, closing, clear purpose, all three bullet requirements covered, logical paragraphs, and mostly accurate language, do not keep it at Band 5.5/6.0 unless you can cite a serious missing requirement or frequent language breakdown. 6.5-7.5 should be actively considered.",
+    `v8.5.4 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
+    "Two-sided calibration rule: revise downward when the first score over-rewards weak, repetitive or error-prone writing; revise upward when the first score under-rewards mature, precise and well-controlled writing. Do not only look for under-scoring.",
+    "Task 1 review: greeting/closing/all bullets do not by themselves justify Band 7. Check depth, reader focus, tone, naturalness, LR and GRA. A complete but basic/error-prone letter may be 4.5/5.5/6.0.",
     "Criterion differentiation rule: do not return four identical criterion bands unless the evidence for TA/TR, CC, LR and GRA independently supports the same half-band. For all-four Band 7 cases, actively check whether LR/GRA should be 6.5 or whether TA/TR/CC should be 7.5. If you keep 7/7/7/7, give criterion-specific evidence; do not copy Overall into all criteria.",
-    "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
-    "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
+    "High-band review: if the independent anchor or response quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar.",
+    "Low-band review: if the response is weak, repetitive, error-prone or only mechanically organised, do not keep 5.5/6/6.5 merely because it is long or task-related. Lower LR/GRA and, when content is thin, TA/TR/CC too.",
     "JSON safety: no markdown, no comments, no trailing prose, no unescaped double quotes inside strings. Use single quotes for student phrases.",
     `Review reason: mandatory AI-only second-pass calibration. Ignore local audit scores or caps; they are not allowed to determine bands.`,
     `First compact score to verify or revise: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, shortReasons: firstResult.shortReasons, examinerSummary: firstResult.examinerSummary })}`,
@@ -2340,9 +2374,9 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
-    "Task 1 high-completion calibration: a polished GT letter that covers all three bullets, uses appropriate register, has clear paragraphing, and has only minor slips is normally around Band 6.5-7.5. Do not score it as 5.5 merely because vocabulary is not highly sophisticated or ideas are concise.",
-    "Task 1 Band 5/5.5 should be reserved for clearly limited letters: missing/thin bullet coverage, uneven tone, noticeable communication problems, or frequent language errors. If these are not present, consider Band 6.5+.",
-    "Sub-7 strict rule: below Band 7, be strict only when there is concrete evidence of weak task completion, thin development, frequent language errors, or poor control. Do not use 'strictness' to push a clean complete response down to 5.5/6.0.",
+    `v8.5.4 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
+    "Task 1 calibration: a complete-looking letter is not automatically Band 7. If it is basic, repetitive, awkward, thin, or error-prone, keep it in Band 4/5/6 according to the matrix. If it is natural, precise and well controlled, allow 7/8/9.",
+    "Task 2 calibration: a long essay with paragraphs is not automatically Band 6/7. If reasoning is shallow and language weak, keep it low/mid. If reasoning is mature and language controlled, allow 8/9.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Criterion differentiation rule: score TA/TR, CC, LR and GRA independently before thinking about Overall. Avoid mechanical all-four-same bands. If all four are identical, reasonCodes must prove that each criterion separately deserves that same half-band; otherwise use a justified 0.5 spread.",
     "Calibration failure warning: if a clear Band 8/9-quality sample is scored around 6.0/6.5, that is under-scoring. If a clearly weak Band 3/4 sample is scored around 5.5, that is over-scoring. Use the entire 0-9 scale.",
