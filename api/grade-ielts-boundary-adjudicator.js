@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v2-strict-low4-basic5-separator";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v3-scoped-low4-5plus-balance";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -122,7 +122,7 @@ async function postJson(url, payload) {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v1" },
+      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v3" },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -285,6 +285,7 @@ function routeDecision(task, wc, main, lowband) {
       base.confidence = "unstable";
       base.conflict = true;
       base.adjudicate = true;
+      base.reasonCodes.push("V3_BALANCED_5_5_PLUS_REVIEW");
       if (task1Suspicious) base.reasonCodes.push("TASK1_MAIN_HIGH_LOWBAND_LOW");
       if (veryLowLowband) base.reasonCodes.push("LOWBAND_VERY_LOW_AGAINST_MAIN");
       if (shortTask1) base.reasonCodes.push("SHORT_TASK1_MAIN_HIGH");
@@ -334,13 +335,19 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "If main is much higher than lowband, inspect whether main rewarded format/fluency too much.",
     "If lowband is much lower than main, inspect whether lowband over-penalised a basic but adequate response.",
     "",
-    "Boundary Adjudicator v2 strict low-4 vs basic-5 separator:",
-    "When mainScore is 5.0 and lowbandScore is 4.0 or below, first assume this may be a 4.0-4.5 boundary case, not automatically basic_5.",
-    "Only classify as basic_5 if the response has enough task development, mostly understandable progression, and errors are frequent but not continuously disruptive.",
-    "If the response is short, language is very simple, grammar errors are persistent, or development is thin, classify as boundary_4_5 rather than basic_5 even if the structure is clear.",
-    "For Task 1, a polite format and all bullet points covered are not enough for basic_5 if lexical and grammatical control remain weak.",
-    "For Task 2, a clear opinion and paragraphing are not enough for basic_5 if examples are thin and sentence control is weak.",
-    "Do not choose safe_5_5_plus unless the writing is clearly above low-band weakness.",
+    "Boundary Adjudicator v3 scoped low-4 vs basic-5 separator:",
+    "Apply the strict low-4/basic-5 separator ONLY when route.reasonCodes includes MAIN_5_LOWBAND_4_OR_BELOW or when mainScore is exactly 5.0 and lowbandScore is 4.0 or below.",
+    "In that exact case, first assume this may be a 4.0-4.5 boundary sample, not automatically basic_5.",
+    "For that exact case, choose basic_5 only if the response has enough task development, mostly understandable progression, and errors are frequent but not continuously disruptive.",
+    "For that exact case, if the response is short, language is very simple, grammar errors are persistent, or development is thin, classify as boundary_4_5 rather than basic_5 even if the structure is clear.",
+    "",
+    "V3 protection for 5.5+ cases:",
+    "When mainScore is 5.5 or above, do NOT apply the strict low-4/basic-5 separator merely because lowbandScore is 4.0 or below.",
+    "For mainScore >= 5.5 conflicts, use balanced review: decide whether main over-rewarded fluency/format or lowband over-penalised simple but adequate writing.",
+    "In mainScore >= 5.5 cases, do not push the final band below 5.0 unless the writing is genuinely low-band with very weak task response, very thin development, and persistent disruptive errors.",
+    "In mainScore >= 5.5 cases, safe_5_5_plus is allowed when the response is clearly organised, task-relevant, and mostly understandable, even if language range is limited.",
+    "For Task 1, a polite format alone is not enough for 5.5+, but a complete, coherent letter with adequate detail should not be compressed to 4.5 solely because lowband is harsh.",
+    "For Task 2, a clear position with relevant supporting ideas should not be compressed to 4.5 solely because vocabulary and grammar are simple.",
     "",
     `Route decision before adjudication: ${JSON.stringify(route)}`,
     `Main system score: ${main.score}`,
@@ -355,7 +362,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     `Student response:\n${essay || ""}`,
     "",
     "Return exactly this JSON shape:",
-    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v1\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
+    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v3\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
   ].join("\n");
 }
 
@@ -407,7 +414,7 @@ async function callDeepSeek(messages, temperature = 0.1) {
 async function adjudicate(task, questionPrompt, essay, main, lowband, route) {
   const prompt = adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route);
   const content = await callDeepSeek([
-    { role: "system", content: "You are a strict IELTS General Training Writing boundary adjudicator. Return JSON only." },
+    { role: "system", content: "You are a balanced but strict IELTS General Training Writing boundary adjudicator. Return JSON only." },
     { role: "user", content: prompt }
   ], 0.1);
 
@@ -468,7 +475,7 @@ module.exports = async function handler(req, res) {
       selected = {
         finalBand: adjudicator.finalBand,
         finalCriteria: adjudicator.finalCriteria,
-        finalSource: "boundary-adjudicator-v1",
+        finalSource: "boundary-adjudicator-v3",
         confidence: adjudicator.confidence
       };
     } else {
