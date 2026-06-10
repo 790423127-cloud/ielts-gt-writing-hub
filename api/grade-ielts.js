@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-5-final-positive-band-rescue";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-8-task-synced-exam-realism";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -1450,12 +1450,48 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
   ].join("\n\n");
 }
 
+
+function criterionKeyAliases(name, task = "Task 2") {
+  const normalized = String(name || "").trim();
+  const aliases = new Set([normalized, normalized.replace(" and ", " & ")]);
+  if (normalized === "Task Achievement") {
+    aliases.add("TA");
+    aliases.add("taskAchievement");
+    aliases.add("task_achievement");
+  }
+  if (normalized === "Task Response") {
+    aliases.add("TR");
+    aliases.add("taskResponse");
+    aliases.add("task_response");
+  }
+  if (normalized === "Coherence and Cohesion") {
+    aliases.add("CC");
+    aliases.add("coherenceCohesion");
+    aliases.add("coherence_and_cohesion");
+    aliases.add("Coherence & Cohesion");
+  }
+  if (normalized === "Lexical Resource") {
+    aliases.add("LR");
+    aliases.add("lexicalResource");
+    aliases.add("lexical_resource");
+  }
+  if (normalized === "Grammatical Range and Accuracy") {
+    aliases.add("GRA");
+    aliases.add("grammar");
+    aliases.add("grammaticalRangeAccuracy");
+    aliases.add("grammatical_range_and_accuracy");
+  }
+  // Important: do not alias Task Achievement to Task Response or vice versa.
+  // If the model returns the wrong task criterion, the locked-task scorer must retry instead of silently accepting a cross-task key.
+  return [...aliases];
+}
+
 function normalizeCriteria(rawCriteria, task) {
   const names = criterionNames(task);
   const source = rawCriteria && typeof rawCriteria === "object" ? rawCriteria : {};
   const out = {};
   names.forEach((name) => {
-    const aliases = [name, name.replace("Task Achievement", "Task Response"), name.replace("Task Response", "Task Achievement"), name.replace(" and ", " & ")];
+    const aliases = criterionKeyAliases(name, task);
     const raw = aliases.map((key) => source[key]).find((v) => v !== undefined && v !== null);
     const band = bandNumber(raw);
     if (!Number.isFinite(band)) throw new Error(`AI did not return a valid half-band for ${name}.`);
@@ -1536,8 +1572,7 @@ function normalizeCriterionCalibration(rawCalibration, criteria, task) {
   const source = rawCalibration && typeof rawCalibration === "object" ? rawCalibration : {};
   const out = {};
   names.forEach((name) => {
-    const alt = name.replace("Task Achievement", "Task Response").replace("Task Response", "Task Achievement");
-    const item = source[name] || source[alt] || {};
+    const item = criterionKeyAliases(name, task).map((key) => source[key]).find((value) => value && typeof value === "object") || {};
     const band = criteria[name];
     const lower = Math.max(1, band - 0.5);
     const higher = Math.min(9, band + 0.5);
@@ -1645,6 +1680,9 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   const weakLanguageHighScoreConflict = Boolean((signals.lexicalControl === "weak" || signals.spellingErrorDensity === "high") && lrBand >= 5.5) || Boolean((signals.sentenceControl === "weak" || signals.grammarErrorDensity === "high") && graBand >= 5.5);
   const fullLengthWeakLanguageOverallConflict = Boolean(!wordBoundary.triggered && Number.isFinite(finalBand) && finalBand >= 6 && (signals.lexicalControl === "weak" || signals.sentenceControl === "weak" || signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high"));
   const task1BelowLengthHighTAConflict = Boolean(signals.task === "Task 1" && Number(signals.wordCount) < 150 && Number.isFinite(firstCriterionBand) && firstCriterionBand >= 6);
+  const requirementAudit = signals.taskRequirementAudit || {};
+  const requirementCap = signals.task === "Task 1" ? Number(requirementAudit.taskAchievementCap) : Number(requirementAudit.taskResponseCap);
+  const taskRequirementScoreConflict = Number.isFinite(requirementCap) && Number.isFinite(firstCriterionBand) && firstCriterionBand > requirementCap;
   const reviewReasons = [];
   if (anchorMissing) reviewReasons.push("AI did not provide an independent anchor comparison.");
   if (lowBandScoreTooHigh) reviewReasons.push(`Final Band ${finalBand.toFixed(1)} exceeds local word-count boundary ${wordBoundary.suggestedRange}.`);
@@ -1656,6 +1694,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   if (weakLanguageHighScoreConflict) reviewReasons.push("Language-control conflict: weak spelling/lexical or grammar/sentence-control signals require LR/GRA boundary review.");
   if (fullLengthWeakLanguageOverallConflict) reviewReasons.push("Full-length but weak-language conflict: overall 6.0+ requires strong evidence despite high local language-error signals.");
   if (task1BelowLengthHighTAConflict) reviewReasons.push("Task 1 below recommended length but Task Achievement is 6.0+; bullet detail and purpose/tone must be reviewed.");
+  if (taskRequirementScoreConflict) reviewReasons.push(`${signals.task} task-specific requirement conflict: ${names[0]} ${firstCriterionBand.toFixed(1)} exceeds the requirement-audit ceiling ${requirementCap.toFixed(1)}; AI boundary review must justify or revise it.`);
   if (feedbackQualityIssues.length) reviewReasons.push(`Criterion feedback quality issue: ${feedbackQualityIssues.slice(0, 4).join(" | ")}`);
   return {
     version: "strict-boundary-audit-v6",
@@ -1690,6 +1729,8 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
       weakLanguageHighScoreConflict,
       fullLengthWeakLanguageOverallConflict,
       task1BelowLengthHighTAConflict,
+      taskRequirementScoreConflict,
+      requirementCap: Number.isFinite(requirementCap) ? requirementCap : null,
       feedbackQualityIssues,
       warnings
     },
@@ -2092,7 +2133,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English, explicit no-answer, or completely unassessable submissions. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
     "If you believe a criterion is near zero but the essay has any topical English content, use a low positive half-band and explain the concrete limitation; do not output 0.0.",
-    "For a weak but on-topic Task 2 answer that states a position, Task Response must be a low positive band, not Band 0. Band 0 means no assessable response, not merely no examples.",
+    ...(taskSpecificPositiveRescueRules(task)),
+    "For both Task 1 and Task 2, Band 0 means no assessable response, not merely missing examples, missing bullet points, weak development, poor tone, or limited language.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
@@ -2116,7 +2158,7 @@ function compactCriterionCalibration(ai = {}, criteria = {}, task = "Task 2") {
   const out = {};
   names.forEach((name) => {
     const band = Number(criteria[name]);
-    const rawReason = reasons[name] || reasons[name.replace("Task Achievement", "Task Response").replace("Task Response", "Task Achievement")];
+    const rawReason = criterionKeyAliases(name, task).map((key) => reasons[key]).find((value) => value !== undefined && value !== null);
     const reason = Array.isArray(rawReason) ? rawReason.join(", ") : String(rawReason || `Score kernel reason for Band ${Number.isFinite(band) ? band.toFixed(1) : "-"}.`).trim();
     out[name] = {
       band,
@@ -2204,14 +2246,14 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
   const initialAverage = averageBand(initialCriteria);
   if (!Number.isFinite(initialAverage.finalBand)) throw new Error("AI returned incomplete criterion bands in compact score pass.");
   const initialAnchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, initialCriteria, signals);
-  const localCalibration = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison, body);
-  const criteria = localCalibration.criteria;
+  const localCalibrationAudit = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison, body);
+  const criteria = initialCriteria;
   assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   const calibration = normalizeCriterionCalibration(result.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, criteria, signals);
   const boundaryAuditBase = result.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration, { skipFeedbackQualityAudit: true });
-  const boundaryAudit = localCalibration.changed ? { ...boundaryAuditBase, localCalibrationApplied: true, localCalibrationNotes: localCalibration.notes } : boundaryAuditBase;
+  const boundaryAudit = localCalibrationAudit.changed ? { ...boundaryAuditBase, localAuditNotesOnly: localCalibrationAudit.notes, localCalibrationApplied: false } : boundaryAuditBase;
   assertFinalCanFreeze({ ...result, criteria, finalCriteria: criteria, boundaryAudit, anchorComparison, criterionCalibration: calibration, localSignals: signals });
   return {
     ...result,
@@ -2234,15 +2276,15 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.5 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass instead of being frozen. Feedback cannot change the score.",
+      formula: "v8.3.8 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
-      localScoreChanged: localCalibration.changed,
-      localScoreChangeExplanation: localCalibration.changed ? localCalibration.notes.map((n) => n.reason).join(" ") : "No local calibration changed the AI-returned criterion bands."
+      localScoreChanged: false,
+      localScoreChangeExplanation: "No local band assignment. Local checks are used only for audit/review routing; final bands are AI-returned and mechanically averaged."
     },
-    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: true, localCalibrationApplied: localCalibration.changed, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
-    localScoreChanged: localCalibration.changed
+    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: false, localCalibrationApplied: false, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
+    localScoreChanged: false
   };
 }
 
@@ -2314,7 +2356,7 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.3.5 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected, retried, and routed to an AI no-zero rescue pass; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
+      formula: "v8.3.8 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; detailed feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2360,11 +2402,40 @@ async function callScoreKernel(body, signals, boundaryProfile) {
   }
 }
 
+
+function taskSpecificPositiveRescueRules(task = "Task 2") {
+  if (task === "Task 1") {
+    return [
+      "Task 1 zero rule: Band 0 is only for no assessable GT letter at all: blank, wholly non-English, explicit no-answer, fully copied prompt, or completely unassessable fragments.",
+      "Task 1 positive-band rule: if the response contains any assessable English letter/message attempt, visible purpose, request, complaint, apology, invitation, explanation, greeting/closing, or any relevant bullet-point content, Task Achievement must be a low positive band rather than Band 0.",
+      "Task 1 weak-but-rateable rule: missing bullets, wrong tone, thin details, or poor letter layout can justify a low Task Achievement band, but not Band 0 when there is a real message to the reader.",
+      "Task 1 criteria must be exactly: Task Achievement, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."
+    ];
+  }
+  return [
+    "Task 2 zero rule: Band 0 is only for no assessable essay response at all: blank, wholly non-English, explicit no-answer, fully copied prompt, or completely unassessable fragments.",
+    "Task 2 positive-band rule: if the response contains any assessable English essay attempt, relevant opinion, position, reason, example, conclusion, or answer to any part of the prompt, Task Response must be a low positive band rather than Band 0.",
+    "Task 2 weak-but-rateable rule: no examples, shallow reasoning, undeveloped ideas, weak paragraphing, or vague opinions can justify a low Task Response band, but not Band 0 when there is a real attempt to answer.",
+    "Task 2 criteria must be exactly: Task Response, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."
+  ];
+}
+
+function taskSpecificPositiveLevelSchema(task = "Task 2") {
+  const names = criterionNames(task);
+  return {
+    task,
+    criteria: names,
+    positiveBandLevels: Object.fromEntries(names.map((name) => [name, "integer 1-17 only; 0 forbidden"])),
+    taskSpecificRules: taskSpecificPositiveRescueRules(task)
+  };
+}
+
 async function retryScoreKernelAfterImpossibleZero(body, signals, boundaryProfile, previousAi = {}) {
   const names = criterionNames(signals.task);
   const prompt = [
     "Return one tiny valid JSON object only. No feedback, no Chinese, no markdown.",
     `Task is locked as ${signals.task}. Criteria keys: ${JSON.stringify(names)}.`,
+    ...(taskSpecificPositiveRescueRules(signals.task)),
     "The previous score-kernel returned Band 0 for a response that is not strict hard-zero. That is invalid.",
     "Band 0 is only allowed for blank, wholly non-English, explicit no-answer, or completely unassessable submissions.",
     "This response must be scored as weak-but-rateable if it contains any relevant English attempt, opinion, reason, example, or answer to the prompt. Use Band 1.0-9.0 half-bands, not Band 0, unless it is truly blank/non-English/no-answer.",
@@ -2387,11 +2458,12 @@ async function rescueScoreKernelWithoutZero(body, signals, boundaryProfile, prev
     "Return one tiny valid JSON object only. No feedback, no Chinese, no markdown.",
     "This is an AI-only rescue scoring pass after repeated invalid Band 0 output.",
     `Task is locked as ${signals.task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
+    ...(taskSpecificPositiveRescueRules(signals.task)),
     "The server has confirmed this response is NOT strict hard-zero. It is not blank, not wholly non-English, and not an explicit no-answer.",
     "Therefore, Band 0 is not an available score for any criterion in this rescue pass.",
     "Score strictly from Band 1.0 to Band 9.0 in 0.5 increments. If performance is extremely weak, use Band 1.0 or 1.5, but never 0.0.",
     "Do not inflate the score. A weak list of opinions with no examples may still be very low, but it must be a positive IELTS band if it is assessable English.",
-    "For Task Response/Task Achievement, distinguish: completely no answer = 0; topical attempt with an opinion but no development = low positive band, not 0.",
+    "For Task Achievement/Task Response, distinguish: completely no answer = 0; assessable task attempt with thin detail/development = low positive band, not 0. Apply this equally to Task 1 letters and Task 2 essays.",
     "For Coherence, Lexical Resource, and Grammar, assign the lowest positive band that reflects the actual text if there is any assessable English.",
     `Local non-scoring signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
     `Previous invalid result: ${JSON.stringify(previousAi).slice(0, 1500)}`,
@@ -2413,37 +2485,121 @@ function shouldRunFinalPositiveBandRepair(error = {}) {
     || /valid half-band|Invalid IELTS band|incomplete criterion bands|Band 0 for a rateable/i.test(msg);
 }
 
+function parsePositiveLevelValue(value) {
+  if (value && typeof value === "object") {
+    const candidates = [value.level, value.positiveLevel, value.bandLevel, value.value, value.score, value.band];
+    for (const candidate of candidates) {
+      const parsed = parsePositiveLevelValue(candidate);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    const levelMatch = text.match(/(?:level|positive\s*level|band\s*level)\s*[:=]?\s*(\d+(?:\.\d+)?)/i);
+    if (levelMatch) return Number(levelMatch[1]);
+    const bandMatch = text.match(/band\s*([1-9](?:\.5|\.0)?)/i);
+    if (bandMatch) {
+      const band = Number(bandMatch[1]);
+      if (Number.isFinite(band) && band >= 1 && band <= 9) return Math.round((band - 1) / 0.5 + 1);
+    }
+    const plain = text.match(/^\s*(\d+(?:\.\d+)?)\s*$/);
+    if (plain) return Number(plain[1]);
+    return null;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function positiveBandLevelToBand(level) {
+  const parsed = parsePositiveLevelValue(level);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.round(parsed);
+  if (rounded < 1 || rounded > 17) return null;
+  return 1 + (rounded - 1) * 0.5;
+}
+
+function positiveLevelSourceCandidates(ai = {}) {
+  const direct = [ai.positiveBandLevels, ai.criterionPositiveLevels, ai.criteriaLevels, ai.bandLevels, ai.positiveLevels].filter(Boolean);
+  const nested = [ai.criteria, ai.finalCriteria].filter((x) => x && typeof x === "object");
+  return [...direct, ...nested];
+}
+
+function lookupCriterionValue(source = {}, name, task = "Task 2") {
+  if (!source || typeof source !== "object") return undefined;
+  for (const key of criterionKeyAliases(name, task)) {
+    if (source[key] !== undefined && source[key] !== null) return source[key];
+  }
+  const lowerMap = new Map(Object.entries(source).map(([k, v]) => [String(k).toLowerCase().replace(/[\s_&-]+/g, ""), v]));
+  for (const key of criterionKeyAliases(name, task)) {
+    const normalized = String(key).toLowerCase().replace(/[\s_&-]+/g, "");
+    if (lowerMap.has(normalized)) return lowerMap.get(normalized);
+  }
+  return undefined;
+}
+
+function applyPositiveBandLevelsRepairAi(ai = {}, task = "Task 2") {
+  const names = criterionNames(task);
+  for (const source of positiveLevelSourceCandidates(ai)) {
+    const criteria = {};
+    const levelAudit = {};
+    names.forEach((name) => {
+      const raw = lookupCriterionValue(source, name, task);
+      const band = positiveBandLevelToBand(raw);
+      if (band !== null) {
+        criteria[name] = band;
+        levelAudit[name] = { raw, band };
+      }
+    });
+    if (Object.keys(criteria).length === names.length) {
+      return {
+        ...ai,
+        criteria,
+        finalCriteria: criteria,
+        anchorBand: positiveBandLevelToBand(ai.anchorPositiveLevel || ai.anchorBandLevel) || ai.anchorBand || Math.min(...Object.values(criteria)),
+        positiveBandLevelAudit: levelAudit,
+        aiStage: ai.aiStage || "score-kernel"
+      };
+    }
+  }
+  return ai;
+}
+
 async function finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, previousAi = {}, previousError = null) {
   const names = criterionNames(signals.task);
-  const allowedBands = VALID_BANDS.filter((band) => band > 0);
-  const exactCriteriaShape = Object.fromEntries(names.map((name) => [name, "choose one of " + allowedBands.join("|")]));
+  const levelShape = Object.fromEntries(names.map((name) => [name, "integer 1-17 only"]));
+  const bandScale = Array.from({ length: 17 }, (_, i) => `${i + 1}=${1 + i * 0.5}`).join(", ");
   const prompt = [
     "Return exactly one JSON object. No markdown. No explanation outside JSON.",
     "This is the final AI scoring repair pass for an IELTS GT Writing response.",
     `The selected task is locked as ${signals.task}. Do not reclassify it.`,
-    "The server has already confirmed this is not a strict hard-zero response: it is not blank, not wholly non-English, and not an explicit no-answer.",
-    "Band 0 is prohibited for every criterion in this final repair pass.",
-    `Allowed band values are exactly: ${allowedBands.join(", ")}.`,
-    "Use the lowest positive band when the response is extremely weak, but never use 0.0.",
-    "Do not copy the previous invalid all-zero result. Score the actual student response again.",
+    ...(taskSpecificPositiveRescueRules(signals.task)),
+    "The server has confirmed this is not strict hard-zero: not blank, not wholly non-English, and not an explicit no-answer.",
+    "Do NOT return IELTS band numbers in the criteria field. Instead choose POSITIVE BAND LEVELS.",
+    `Positive band level scale: ${bandScale}.`,
+    "Level 1 means Band 1.0. Level 2 means Band 1.5. Level 17 means Band 9.0.",
+    "There is no level 0. Do not output 0 anywhere. If the writing is extremely weak but assessable, choose level 1 or 2.",
+    "Score the actual student response again. Do not copy the previous invalid all-zero result.",
     "Return the four criteria with the exact criterion names below. Do not abbreviate, rename, or omit any criterion.",
-    `Exact criteria object shape: ${JSON.stringify(exactCriteriaShape)}`,
+    `positiveBandLevels shape: ${JSON.stringify(levelShape)}`,
+    `Task-synced rescue schema: ${JSON.stringify(taskSpecificPositiveLevelSchema(signals.task))}`,
     `Non-scoring local signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, englishRatio: signals.englishRatio, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
     `Previous invalid result summary: ${JSON.stringify({ criteria: previousAi?.criteria || previousAi?.finalCriteria || null, anchorBand: previousAi?.anchorBand, candidateRange: previousAi?.candidateRange }).slice(0, 1000)}`,
     `Previous validation error: ${String(previousError?.message || previousError || "").slice(0, 600)}`,
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
-    `Return exactly this schema with numeric positive bands: {"ok":true,"aiStage":"score-kernel","task":"${signals.task}","anchorBand":number,"candidateRange":"x-y","criteria":${JSON.stringify(Object.fromEntries(names.map((name) => [name, 1]))).replace(/1/g, 'number')},"reasonCodes":${JSON.stringify(Object.fromEntries(names.map((name) => [name, ["specific_reason","specific_reason"]])))},"flags":{"lowBandRisk":boolean,"weakLanguage":boolean,"highBandCandidate":boolean,"allFourSeven":boolean,"boundaryReviewSuggested":boolean}}`
+    `Return exactly this schema with positive integer levels only: {"ok":true,"aiStage":"score-kernel","task":"${signals.task}","anchorPositiveLevel":1,"candidateRange":"positive-levels x-y","positiveBandLevels":${JSON.stringify(Object.fromEntries(names.map((name) => [name, "integer_1_to_17"])))},"reasonCodes":${JSON.stringify(Object.fromEntries(names.map((name) => [name, ["specific_reason","specific_reason"]])))},"flags":{"lowBandRisk":boolean,"weakLanguage":boolean,"highBandCandidate":boolean,"allFourSeven":boolean,"boundaryReviewSuggested":boolean}}`
   ].join("\n\n");
   return await callDeepSeek([
-    { role: "system", content: "IELTS final positive-band JSON scorer. Return JSON only. Band 0 is forbidden for this non-hard-zero writing." },
+    { role: "system", content: "IELTS final positive-level JSON scorer. Return JSON only. Use positive levels 1-17. Level 0 is forbidden." },
     { role: "user", content: prompt }
   ], 2200, 0);
 }
 
+
 async function normalizeScoreKernelResultWithFinalPositiveRepair(ai, body, signals, boundaryProfile, previousError = null) {
   const repairedAi = await finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, ai, previousError);
-  const repaired = normalizeScoreKernelResult(repairedAi, body, signals, boundaryProfile);
+  const repaired = normalizeScoreKernelResult(applyPositiveBandLevelsRepairAi(repairedAi, signals.task), body, signals, boundaryProfile);
   repaired.scoreCoreMeta = {
     ...(repaired.scoreCoreMeta || {}),
     zeroBandFinalPositiveRepairApplied: true,
@@ -2455,7 +2611,7 @@ async function normalizeScoreKernelResultWithFinalPositiveRepair(ai, body, signa
 async function normalizeScoreCoreResultWithFinalPositiveRepair(ai, body, signals, options = {}, previousError = null) {
   const boundaryProfile = getLocalBandBoundaryProfile(signals);
   const repairedAi = await finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile, ai, previousError);
-  const repaired = normalizeScoreCoreResult(repairedAi, body, signals, options);
+  const repaired = normalizeScoreCoreResult(applyPositiveBandLevelsRepairAi(repairedAi, signals.task), body, signals, options);
   repaired.scoreCoreMeta = {
     ...(repaired.scoreCoreMeta || {}),
     zeroBandFinalPositiveRepairApplied: true,
@@ -2793,8 +2949,9 @@ module.exports = async function handler(req, res) {
       error: freezeBlocked ? "Score freeze blocked by unresolved boundary audit." : "AI scoring failed. No non-AI score was generated.",
       provider: DEFAULT_PROVIDER,
       detail,
-      businessError: freezeBlocked ? "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。" : "评分失败：AI 核心评分没有返回可冻结的短 JSON 评分结果；系统已尝试零分重评和最终正分修复。",
-      suggestion: freezeBlocked ? "请重试一次；如果连续出现，请检查独立锚点、四项全7复核和 boundaryAudit 返回内容。" : "Retry once. If it repeats, check Vercel logs; the zero-band retry/final positive-band repair also failed."
+      businessError: freezeBlocked ? "评分冻结失败：边界校准冲突未解决，系统已阻止展示不可信分数。" : "评分失败：AI 核心评分没有返回可冻结的短 JSON 评分结果；系统已尝试零分重评、AI正分救援和正分等级修复。",
+      scoreSystemVersion: SCORE_SYSTEM_VERSION,
+      suggestion: freezeBlocked ? "请重试一次；如果连续出现，请检查独立锚点、四项全7复核和 boundaryAudit 返回内容。" : "Retry once. If it repeats, check Vercel logs; the zero-band retry/task-synced final positive-level repair also failed."
     });
   }
 };
