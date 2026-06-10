@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-0-ai-only-criterion-band-matrix-core";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-1-ai-only-no-local-signal-bias-full-range";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -1932,7 +1932,6 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
   const signals = resolveScoringSignals(body, firstResult);
   const task = signals.task;
   const names = criterionNames(task);
-  const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
   return [
     "You are the second-pass IELTS GT Writing boundary examiner. Return compact valid JSON only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. The server does not assign bands locally; it only audits and freezes AI-returned criterion bands.`,
@@ -1940,7 +1939,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     `IELTS criterion band matrix for the locked ${task}:\n${criterionBandMatrixText(task)}`,
     halfBandDecisionProtocol(),
     `Task-specific high/low band boundary protocol:\n${bandBoundaryProtocolForTask(task)}`,
-    `Local boundary profile: ${JSON.stringify(localBoundaryProfile)}`,
+    "AI-only boundary review rule: do not use local boundary profiles, local word-count limits, local spelling/grammar counters, or local task-requirement caps to keep, lower, or raise bands. Re-score from the prompt, the student response, and the 0-9 criterion matrix only.",
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
@@ -1950,9 +1949,8 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "If the independent anchor or the essay quality suggests Band 8/9 and final score remains 7.0 or below, revise upward unless there are clear concrete limitations. If a polished full response is kept at 7/7.5, identify exact limitations in task fulfilment, cohesion, lexis and grammar. High-band same scores are allowed when justified.",
     "For weak full-length essays, lower LR/GRA specifically when spelling/grammar control is weak; do not over-penalise TR/TA or CC unless content/organisation is also weak.",
     "JSON safety: no markdown, no comments, no trailing prose, no unescaped double quotes inside strings. Use single quotes for student phrases.",
-    `Local signals: ${JSON.stringify(signals)}`,
-    `Hard audit requiring review: ${JSON.stringify(audit)}`,
-    `First compact score: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, shortReasons: firstResult.shortReasons, examinerSummary: firstResult.examinerSummary })}`,
+    `Review reason: mandatory AI-only second-pass calibration. Ignore local audit scores or caps; they are not allowed to determine bands.`,
+    `First compact score to verify or revise: ${JSON.stringify({ criteria: firstResult.finalCriteria || firstResult.criteria, overallBand: firstResult.overallBand, anchorComparison: firstResult.anchorComparison, shortReasons: firstResult.shortReasons, examinerSummary: firstResult.examinerSummary })}`,
     `Prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
     "Return exactly this compact shape: {\"ok\":true,\"aiStage\":\"score-boundary-review\",\"task\":\"Task 1 or Task 2\",\"anchorComparison\":{\"closestAnchorBand\":number,\"lowerAnchorBand\":number,\"higherAnchorBand\":number,\"candidateRange\":\"x-y\",\"whyCloserToThisBand\":\"max 30 words\",\"whyNotLowerAnchor\":\"max 25 words\",\"whyNotHigherAnchor\":\"max 25 words\"},\"criteria\":{...four criterion bands as numbers...},\"shortReasons\":{\"Criterion Name\":\"max 18 words, concrete reason\"},\"boundaryReview\":{\"triggered\":true,\"decision\":\"revised\" or \"kept_after_review\",\"reviewReasons\":[\"short reason\"],\"whyFinalCriteriaAreSafe\":\"max 45 words\",\"whyFinalCriteriaAreSafeZh\":\"中文简短说明\",\"firstCriteria\":{...},\"finalCriteria\":{...},\"allFourSevenResolution\":{\"resolved\":boolean,\"keptAllSeven\":boolean,\"criteriaDecisions\":{}}},\"examinerSummary\":\"max 35 words\"}."
@@ -1962,27 +1960,37 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
 async function applyBoundaryReviewIfNeeded(body, firstResult) {
   const signals = resolveScoringSignals(body, firstResult);
   const initialAudit = firstResult.boundaryAudit || buildHardBoundaryAudit(firstResult.finalCriteria || firstResult.criteria, signals, firstResult.anchorComparison || {}, firstResult.criterionCalibration || {}, { skipFeedbackQualityAudit: true });
-  if (!initialAudit.reviewRequired) {
-    return { ...firstResult, boundaryAudit: { ...initialAudit, status: "passed", reviewRequired: false } };
-  }
+  // v8.5.1: Always run one AI-only second-pass calibration. This is not local scoring:
+  // it prevents first-pass central-band compression and lets the AI re-check 0.5-band boundaries.
+  const forcedAudit = {
+    ...initialAudit,
+    status: "mandatory_ai_only_review",
+    reviewRequired: true,
+    reviewReasons: [
+      ...new Set([
+        ...(initialAudit.reviewReasons || []),
+        "Mandatory AI-only second-pass calibration: verify low/mid/high band boundaries using only the 0-9 criterion matrix."
+      ])
+    ]
+  };
   let ai;
   try {
     ai = await callDeepSeek([
       { role: "system", content: "You are an IELTS GT Writing boundary-review scoring engine. You score only; no editing advice." },
-      { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, initialAudit) }
+      { role: "user", content: buildBoundaryReviewPrompt(body, firstResult, forcedAudit) }
     ], 3600, 0);
   } catch (error) {
     return {
       ...firstResult,
       boundaryAudit: {
-        ...initialAudit,
+        ...forcedAudit,
         status: "review_skipped_ai_error_freeze_first_pass",
         reviewRequired: false,
         freezeBlocked: false,
         boundaryReview: {
           triggered: true,
           decision: "skipped_ai_error",
-          reviewReasons: initialAudit.reviewReasons || [],
+          reviewReasons: forcedAudit.reviewReasons || [],
           error: String(error?.message || error),
           whyFinalCriteriaAreSafe: "Boundary review call failed; first-pass AI score will be frozen with audit warnings only. No local calibration is applied.",
           whyFinalCriteriaAreSafeZh: "边界复核调用失败；系统将冻结首轮 AI 分数并保留审计提醒，不进行本地校准或改分。"
@@ -2003,13 +2011,13 @@ async function applyBoundaryReviewIfNeeded(body, firstResult) {
       criteria: firstResult.finalCriteria || firstResult.criteria,
       overallBand: firstResult.overallBand,
       anchorComparison: firstResult.anchorComparison,
-      audit: initialAudit
+      audit: forcedAudit
     },
     skipFeedbackQualityAudit: true,
     boundaryReview: {
       triggered: true,
       decision: ai.boundaryReview?.decision || "reviewed",
-      reviewReasons: initialAudit.reviewReasons,
+      reviewReasons: forcedAudit.reviewReasons,
       whyFinalCriteriaAreSafe: ai.boundaryReview?.whyFinalCriteriaAreSafe || ai.boundaryReview?.explanation || "Boundary review completed by AI.",
       whyFinalCriteriaAreSafeZh: ai.boundaryReview?.whyFinalCriteriaAreSafeZh || "AI 已完成边界复核并返回最终四项分。"
     }
@@ -2166,8 +2174,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
   };
   const anchorMini = anchorSetForTask(task).map((item) => `B${item.band}: ${item.profile}`).join(" | ");
   const taskMini = task === "Task 1"
-    ? `Task 1 bullet points extracted: ${JSON.stringify(signals.task1BulletPoints || [])}. Judge each bullet as covered, partly_covered or missing. Local task-requirement audit: ${JSON.stringify(signals.taskRequirementAudit || {})}.`
-    : `Task 2 question profile: ${JSON.stringify(signals.task2QuestionProfile || {})}. Judge the exact question type and each required part. Local task-requirement audit: ${JSON.stringify(signals.taskRequirementAudit || {})}.`;
+    ? `Task 1 prompt bullets extracted for orientation only: ${JSON.stringify(signals.task1BulletPoints || [])}. You, the AI examiner, must judge each bullet from the prompt and response yourself as covered, partly_covered, or missing. Do not rely on any local audit.`
+    : `Task 2 question profile for orientation only: ${JSON.stringify(signals.task2QuestionProfile || {})}. You, the AI examiner, must judge the question type and all required parts yourself from the prompt and response. Do not rely on any local audit.`;
   return [
     "You are an IELTS GT Writing SCORE KERNEL. Return one tiny valid JSON object only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
@@ -2190,11 +2198,13 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Sub-7 strict rule: below Band 7, be strict only when there is concrete evidence of weak task completion, thin development, frequent language errors, or poor control. Do not use 'strictness' to push a clean complete response down to 5.5/6.0.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
+    "Calibration failure warning: if a clear Band 8/9-quality sample is scored around 6.0/6.5, that is under-scoring. If a clearly weak Band 3/4 sample is scored around 5.5, that is over-scoring. Use the entire 0-9 scale.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
     taskMini,
-    `Compact local non-scoring signals: ${JSON.stringify(compactSignals)}`,
-    `Local boundary profile: ${JSON.stringify({ wordBoundary: localBoundaryProfile.wordBoundary, languageWeak: localBoundaryProfile.languageWeak, languageModerate: localBoundaryProfile.languageModerate, highBandEligible: localBoundaryProfile.highBandEligible, lowBandRisk: localBoundaryProfile.lowBandRisk, midBandRisk: localBoundaryProfile.midBandRisk, likelyZone: localBoundaryProfile.likelyZone })}`,
+    "AI-only rule: ignore all local risk signals, local likely zones, local word-count boundaries, local spelling/grammar counters, and local task-requirement caps when choosing bands. Use only the prompt, the student response, and the 0-9 criterion matrix.",
+    "Full-range calibration rule: do not compress scores toward 5.5/6.5. Very weak full-length writing may still be Band 3/4 if communication, control, and development match those descriptors. Strong, polished writing must be allowed to reach 7.5/8/8.5/9 when the matrix supports it.",
+    "Adjacent-band rule: before returning each criterion, mentally compare the selected band against the lower 0.5 and higher 0.5. Pick the closest descriptor, not the safest middle score.",
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
     "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"score-kernel\",\"task\":\"Task 1 or Task 2\",\"anchorBand\":number,\"candidateRange\":\"x-y\",\"criteria\":{...four criterion bands as numbers...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"flags\":{\"lowBandRisk\":boolean,\"weakLanguage\":boolean,\"highBandCandidate\":boolean,\"allFourSeven\":boolean,\"boundaryReviewSuggested\":boolean}}"
@@ -2683,7 +2693,7 @@ async function scoreCore(body) {
   const kernelAi = await callScoreKernel(body, signals, boundaryProfile);
   const first = await normalizeScoreKernelResultWithZeroRescue(kernelAi, body, signals, boundaryProfile);
 
-  // Step 3/4: local hard boundary audit first; AI boundary review only if the audit requires it.
+  // Step 3/4: mandatory AI-only second-pass boundary calibration. Local audit never changes bands.
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);
 
   // Step 5A: freeze the AI-returned final criteria and mechanically average them.
