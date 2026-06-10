@@ -450,6 +450,7 @@
   function updateScoringProgress(stepIndex, status, message = "", error = null) {
     const progress = ensureScoringProgress();
     progress.status = error ? "error" : (status === "running" ? "running" : progress.status);
+    if (stepIndex >= 5 && status === "running") progress.phase = "feedback";
     progress.currentStep = Math.max(1, stepIndex + 1);
     progress.updatedAt = new Date().toISOString();
     const step = progress.steps[stepIndex];
@@ -492,6 +493,7 @@
   function markScoreFrozenAndStartCriterionFeedback(message = "核心分数已冻结；正在逐项生成详细反馈。") {
     const progress = ensureScoringProgress();
     progress.status = "running";
+    progress.phase = "feedback";
     progress.currentStep = 6;
     progress.updatedAt = new Date().toISOString();
     progress.error = null;
@@ -514,12 +516,30 @@
   function completeScoringProgress() {
     const progress = ensureScoringProgress();
     progress.status = "done";
+    progress.phase = "done";
     progress.currentStep = SCORING_STEPS.length;
     progress.updatedAt = new Date().toISOString();
     progress.steps.forEach((step) => {
       if (step.status !== "error") step.status = "done";
     });
     return progress;
+  }
+
+  function refreshScoringSkeleton() {
+    if (!els.gradingResults || !latestScoringProgress) return;
+    els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
+  }
+
+  function progressStatusLabel(progress = latestScoringProgress) {
+    const p = progress || {};
+    const current = p.steps?.find((step) => step.status === "running") || p.steps?.find((step) => step.status === "error") || p.steps?.[Math.max(0, (p.currentStep || 1) - 1)];
+    if (p.status === "error" || p.error) {
+      return current?.stage === "criterion-feedback" ? "详细反馈失败" : "评分失败";
+    }
+    if (p.status === "done") return "批改完成";
+    if (current?.stage === "criterion-feedback" || p.phase === "feedback") return "正在生成详细反馈";
+    if (p.status === "running") return "正在评分";
+    return "等待评分";
   }
 
   function statusText(status) {
@@ -537,7 +557,7 @@
       <summary>评分流程与错误反馈 / Scoring Progress &amp; Error Log</summary>
       <div class="score-accordion-body">
         <div class="score-progress-overview">
-          <span class="score-progress-chip ${escapeHtml(statusClass)}">当前状态：${escapeHtml(hasError ? "评分失败" : p.status === "done" ? "评分完成" : p.status === "running" ? "正在评分" : "等待评分")}</span>
+          <span class="score-progress-chip ${escapeHtml(statusClass)}">当前状态：${escapeHtml(progressStatusLabel(p))}</span>
           <span class="score-progress-chip">当前步骤：第 ${escapeHtml(current?.index || p.currentStep || 1)} 步/${escapeHtml((p.steps || SCORING_STEPS).length)}</span>
           <span class="score-progress-chip">更新时间：${escapeHtml(p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-")}</span>
         </div>
@@ -1857,7 +1877,9 @@
       const criterion = criterionNames[i];
       const band = Number(criteria[criterion]);
       setGradingStatus(`详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}...`, "loading");
+      if (els.gradeBtn) els.gradeBtn.textContent = `反馈 ${i + 1}/${criterionNames.length}...`;
       updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}。`);
+      refreshScoringSkeleton();
       let lastError = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
@@ -1877,11 +1899,14 @@
           if (!data.ok || !data.criterionCalibration?.[criterion]) throw new Error(data.detail || data.error || `${criterion} detailed feedback missing.`);
           merged = mergeCriterionFeedback(merged, data);
           updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：${criterion} 已完成。`);
+          refreshScoringSkeleton();
           lastError = null;
           break;
         } catch (error) {
           lastError = error;
           setGradingStatus(`${criterion} 详细反馈第 ${attempt} 次生成失败，正在重试...`, "loading");
+          updateScoringProgress(5, "running", `${criterion} 详细反馈第 ${attempt} 次生成失败，正在重试。`);
+          refreshScoringSkeleton();
         }
       }
       if (lastError) {
@@ -1890,6 +1915,7 @@
     }
 
     updateScoringProgress(5, "done", "四项详细反馈已全部生成完成。");
+    refreshScoringSkeleton();
 
     return {
       ...merged,
@@ -2221,13 +2247,14 @@
       syncScoringProgressFromResult(result);
       markScoreFrozenAndStartCriterionFeedback("核心分数已冻结；现在开始逐项生成四项详细反馈。");
       failureStepIndex = 5;
+      if (els.gradeBtn) els.gradeBtn.textContent = "生成反馈中...";
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
       setGradingStatus("第 6 步/6：核心分数已冻结。正在通过独立接口逐项生成四项详细反馈...", "loading");
       const resultWithRequiredFeedback = await generateRequiredCriterionFeedback(result);
       latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
       renderScoreResult(resultWithRequiredFeedback);
-      setGradingStatus("评分完成。核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
+      setGradingStatus("批改完成：核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       const failedStep = latestScoringProgress?.currentStep ? Math.max(0, latestScoringProgress.currentStep - 1) : 1;
       updateScoringProgress(failedStep, "error", failedStep >= 5 ? "详细反馈生成失败。" : "评分流程执行失败。", error);
