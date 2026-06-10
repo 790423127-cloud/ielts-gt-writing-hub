@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-2-task-specific-strict-rateable-floor-guard";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-1-task-lock-zero-band-guard";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -306,6 +306,46 @@ function detectHardZeroResponse(body = {}, signals = null) {
   if (copiedLike && !rateableMicroAttempt) return { triggered: true, reason: "copied_prompt_or_prompt_keyword_recycling", task, words, overlapRatio: Number(copiedPromptOverlapRatio(essay, prompt).toFixed(2)) };
   if ((ultraShortNoSentence || onlyKeywords || repeatedKeywordFragment || meaninglessFragments) && !rateableMicroAttempt) return { triggered: true, reason: "keyword_fragments_without_assessable_response", task, words };
   return { triggered: false, reason: rateableMicroAttempt && words <= 12 ? "minimal_but_rateable_micro_attempt" : "assessable_or_rateable", task, words, rateableMicroAttempt };
+}
+
+const STRICT_HARD_ZERO_REASONS = new Set([
+  "blank_response",
+  "non_english_or_no_assessable_english",
+  "explicit_no_answer_or_copied_prompt_marker"
+]);
+
+function isStrictHardZeroGate(gate = {}) {
+  return Boolean(gate?.triggered && STRICT_HARD_ZERO_REASONS.has(String(gate.reason || "")));
+}
+
+function downgradeSoftHardZeroGate(gate = {}) {
+  if (!gate?.triggered || isStrictHardZeroGate(gate)) return gate;
+  return {
+    ...gate,
+    triggered: false,
+    originalTriggered: true,
+    originalReason: gate.reason,
+    reason: "soft_hard_zero_blocked_for_ai_scoring",
+    note: "Soft local hard-zero signal was not allowed to assign Band 0. The response must go to AI scoring unless it is blank, non-English, or an explicit no-answer."
+  };
+}
+
+function zeroBandCriterionNames(criteria = {}) {
+  return Object.entries(criteria || {})
+    .filter(([, band]) => Number(band) === 0)
+    .map(([criterion]) => criterion);
+}
+
+function assertNoImpossibleZeroBand(criteria = {}, signals = {}) {
+  const zeroCriteria = zeroBandCriterionNames(criteria);
+  if (!zeroCriteria.length) return;
+  if (isStrictHardZeroGate(signals.hardZeroGate)) return;
+  const error = new Error(`AI returned Band 0 for a rateable/non-hard-zero response: ${zeroCriteria.join(", ")}. Retry scoring instead of freezing a false zero.`);
+  error.status = 502;
+  error.aiStage = "score-kernel";
+  error.code = "IMPOSSIBLE_ZERO_BAND";
+  error.zeroCriteria = zeroCriteria;
+  throw error;
 }
 
 function makeCriteriaWithBand(task, band) {
@@ -712,9 +752,10 @@ function localSignals(body) {
   const sentenceControl = grammarErrorDensity === "high" ? "weak" : grammarErrorDensity === "moderate" ? "basic" : "adequate_or_better";
   const lexicalControl = spellingErrorDensity === "high" || lexicalNaturalnessRisk === "high" ? "weak" : spellingErrorDensity === "moderate" || lexicalNaturalnessRisk === "moderate" ? "basic" : "adequate_or_better";
 
-  const hardZeroGate = detectHardZeroResponse(body, { task, wordCount: words });
+  const rawHardZeroGate = detectHardZeroResponse(body, { task, wordCount: words });
+  const hardZeroGate = downgradeSoftHardZeroGate(rawHardZeroGate);
   let rateabilityStatus = "weak_but_rateable";
-  if (hardZeroGate.triggered || !essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
+  if (isStrictHardZeroGate(hardZeroGate) || !essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
   else if (words >= (task === "Task 1" ? 120 : 180) && paragraphs >= 2 && sentences.length >= 5) rateabilityStatus = "clearly_rateable";
 
   const task1BulletPoints = task === "Task 1" ? extractTask1Bullets(body.questionPrompt || body.promptText || "") : [];
@@ -856,7 +897,7 @@ function floorSingleCriterion(criteria = {}, criterion, floorValue) {
 
 function rateableTask2TaskResponseFloor(signals = {}, body = {}) {
   const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
-  if (hardZero?.triggered) return null;
+  if (isStrictHardZeroGate(hardZero)) return null;
   const words = Number(signals.wordCount) || countWords(body.essay || "");
   const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(body.essay || "").length;
   const paragraphCount = Number(signals.paragraphCount) || countParagraphs(body.essay || "");
@@ -881,7 +922,7 @@ function rateableTask2TaskResponseFloor(signals = {}, body = {}) {
 
 function rateableTask1TaskAchievementFloor(signals = {}, body = {}) {
   const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
-  if (hardZero?.triggered) return null;
+  if (isStrictHardZeroGate(hardZero)) return null;
   const essay = String(body.essay || "");
   const words = Number(signals.wordCount) || countWords(essay);
   const requirementCap = Number(signals.taskRequirementAudit?.taskAchievementCap);
@@ -1949,6 +1990,7 @@ function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison
 function normalizeScoreCoreResult(ai, body, signals, options = {}) {
   const task = signals.task === "Task 1" ? "Task 1" : "Task 2";
   const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+  assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
   const warnings = collectScoreWarnings(criteria, signals);
@@ -2048,6 +2090,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "This is Step 2: AI core scoring only. Forbidden in this step: Chinese, long explanations, original quotations, detailed feedback, evidence arrays, taskSpecificGate, scoreProfile, criterionCalibration, corrections, translations, revision/model answers, markdown, comments, trailing prose.",
     "Return only anchorBand, candidateRange, four criterion bands, reasonCodes, and flags. Keep all strings as short snake_case codes. Do not quote the student's text.",
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
+    "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English, explicit no-answer, or completely unassessable submissions. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
@@ -2148,6 +2191,7 @@ async function generateCriterionFeedbackAfterFreeze(body, frozenResult, signals)
 
 function freezeReviewedScore(result = {}, body = {}, signals = {}) {
   const initialCriteria = normalizeCriteria(result.finalCriteria || result.criteria, signals.task);
+  assertNoImpossibleZeroBand(initialCriteria, signals);
   const initialAverage = averageBand(initialCriteria);
   if (!Number.isFinite(initialAverage.finalBand)) throw new Error("AI returned incomplete criterion bands in compact score pass.");
   const initialAnchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, initialCriteria, signals);
@@ -2179,8 +2223,8 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     boundaryAudit: { ...boundaryAudit, reviewRequired: false, freezeBlocked: false },
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
-      mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v8.2 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, applies stricter sub-7 Task 1/Task 2 gates, and runs a task-specific requirement audit and applies a rateable-response floor guard so full relevant Task 1/Task 2 answers cannot be misclassified as Band 0/1. Feedback cannot change the score.",
+      mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
+      formula: "v8.3.1 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried instead of being frozen. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2219,6 +2263,7 @@ function anchorComparisonFromKernel(ai = {}, task = "Task 2", criteria = {}, sig
 function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
   const task = signals.task || (body.task === "Task 1" ? "Task 1" : "Task 2");
   const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+  assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI score kernel returned incomplete criterion bands.");
   const anchorComparison = anchorComparisonFromKernel(ai, task, criteria, signals);
@@ -2258,8 +2303,8 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     examinerSummaryZh: "核心评分内核已完成。详细证据只在分数冻结后生成。",
     stabilityWarnings: warnings,
     scoreCalculation: {
-      mode: task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel" : "task2_essay_v7_3_score_kernel",
-      formula: "v7.3 five-step score-kernel pipeline: AI returns a tiny score kernel first; local hard audit checks boundaries; AI boundary review runs only if needed; final AI-returned bands are frozen and averaged; detailed feedback is generated after freeze and cannot change the score.",
+      mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
+      formula: "v8.3.1 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2305,17 +2350,45 @@ async function callScoreKernel(body, signals, boundaryProfile) {
   }
 }
 
+async function retryScoreKernelAfterImpossibleZero(body, signals, boundaryProfile, previousAi = {}) {
+  const names = criterionNames(signals.task);
+  const prompt = [
+    "Return one tiny valid JSON object only. No feedback, no Chinese, no markdown.",
+    `Task is locked as ${signals.task}. Criteria keys: ${JSON.stringify(names)}.`,
+    "The previous score-kernel returned Band 0 for a response that is not strict hard-zero. That is invalid.",
+    "Band 0 is only allowed for blank, wholly non-English, explicit no-answer, or completely unassessable submissions.",
+    "This response must be scored as weak-but-rateable if it contains any relevant English attempt, opinion, reason, example, or answer to the prompt. Use Band 1.0-9.0 half-bands, not Band 0, unless it is truly blank/non-English/no-answer.",
+    `Local signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
+    `Previous invalid compact result: ${JSON.stringify(previousAi).slice(0, 1200)}`,
+    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
+    `Student response: ${body.essay || ""}`,
+    `JSON shape: {"ok":true,"aiStage":"score-kernel","task":"Task 1 or Task 2","anchorBand":number,"candidateRange":"x-y","criteria":{...four numeric bands...},"reasonCodes":{"Criterion Name":["code","code"]},"flags":{"lowBandRisk":boolean,"weakLanguage":boolean,"highBandCandidate":boolean,"allFourSeven":boolean,"boundaryReviewSuggested":boolean}}`
+  ].join("\n\n");
+  return await callDeepSeek([
+    { role: "system", content: "IELTS score-kernel zero-band retry. Return JSON only." },
+    { role: "user", content: prompt }
+  ], 1400, 0);
+}
+
 async function scoreCore(body) {
   const signals = resolveScoringSignals(body);
   const hardZeroGate = signals.hardZeroGate || detectHardZeroResponse(body, signals);
-  if (hardZeroGate.triggered) {
+  if (isStrictHardZeroGate(hardZeroGate)) {
     return buildHardZeroScore(body, signals, hardZeroGate);
   }
   const boundaryProfile = getLocalBandBoundaryProfile(signals);
 
   // Step 2: one tiny AI score kernel call. No separate anchor call and no detailed feedback here.
   const kernelAi = await callScoreKernel(body, signals, boundaryProfile);
-  const first = normalizeScoreKernelResult(kernelAi, body, signals, boundaryProfile);
+  let first;
+  try {
+    first = normalizeScoreKernelResult(kernelAi, body, signals, boundaryProfile);
+  } catch (error) {
+    if (error?.code !== "IMPOSSIBLE_ZERO_BAND") throw error;
+    const retryAi = await retryScoreKernelAfterImpossibleZero(body, signals, boundaryProfile, kernelAi);
+    first = normalizeScoreKernelResult(retryAi, body, signals, boundaryProfile);
+    first.scoreCoreMeta = { ...(first.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRetryReason: String(error.message || error) };
+  }
 
   // Step 3/4: local hard boundary audit first; AI boundary review only if the audit requires it.
   const reviewed = await applyBoundaryReviewIfNeeded(body, first);

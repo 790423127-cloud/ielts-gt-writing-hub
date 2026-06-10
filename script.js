@@ -1207,7 +1207,7 @@
   function nearestHalfBand(value, direction) {
     const n = Number(value);
     if (!Number.isFinite(n)) return "-";
-    const out = direction === "lower" ? Math.max(1, n - 0.5) : Math.min(9, n + 0.5);
+    const out = direction === "lower" ? Math.max(0, n - 0.5) : Math.min(9, n + 0.5);
     return formatBand(out);
   }
 
