@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-9-highband-band9-unlock-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-9-fixed-highband-band9-unlock-clean";
 const DISCLAIMER = "This is an AI-generated estimated IELTS high-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -41,24 +41,25 @@ function readJsonBody(req) {
       }
     });
     req.on("end", () => {
-      if (!raw.trim()) return resolve({});
-      try { resolve(JSON.parse(raw)); }
-      catch (error) { error.status = 400; reject(error); }
+      try { resolve(raw ? JSON.parse(raw) : {}); }
+      catch {
+        const error = new Error("Invalid JSON body");
+        error.status = 400;
+        reject(error);
+      }
     });
     req.on("error", reject);
   });
 }
 
-function wordCount(text = "") {
+function wordCount(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g) || []).length;
 }
 
-function normalizeTask(body = {}) {
-  const raw = String(body.task || body.scoringTask || body.selectedTask || body.taskType || body.mode || "").toLowerCase();
-  if (/task\s*1|task1|letter|gt\s*letter/.test(raw)) return "Task 1";
-  if (/task\s*2|task2|essay/.test(raw)) return "Task 2";
-  const prompt = String(body.questionPrompt || body.promptText || "").toLowerCase();
-  if (/write a letter|dear|yours faithfully|yours sincerely|in your letter/.test(prompt)) return "Task 1";
+function normalizeTask(value) {
+  const s = String(value || "").toLowerCase();
+  if (s.includes("1") || s.includes("letter") || s === "task1") return "Task 1";
+  if (s.includes("2") || s.includes("essay") || s === "task2") return "Task 2";
   return "Task 2";
 }
 
@@ -68,243 +69,197 @@ function criterionNames(task) {
     : ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
 }
 
-function nearestValidBand(value) {
+function isValidBand(value) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return NaN;
-  let best = VALID_BANDS[0];
-  let diff = Math.abs(n - best);
-  for (const band of VALID_BANDS) {
-    const d = Math.abs(n - band);
-    if (d < diff) { best = band; diff = d; }
-  }
-  return best;
+  return Number.isFinite(n) && VALID_BANDS.some((b) => Math.abs(b - n) < 0.001);
 }
 
-function normalizeCriteria(raw, task) {
+function roundHalf(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(9, Math.round(n * 2) / 2));
+}
+
+function averageBand(criteria, task) {
   const names = criterionNames(task);
-  const src = raw && typeof raw === "object" ? raw : {};
+  const values = names.map((name) => Number(criteria?.[name]));
+  if (values.some((v) => !Number.isFinite(v))) return null;
+  return roundHalf(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+function extractJson(text) {
+  const s = String(text || "").trim();
+  try { return JSON.parse(s); } catch {}
+  const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try { return JSON.parse(fenced[1].trim()); } catch {}
+  }
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    try { return JSON.parse(s.slice(first, last + 1)); } catch {}
+  }
+  throw new Error("AI did not return valid JSON");
+}
+
+function validateCriteria(criteria, task) {
   const out = {};
-  for (const name of names) {
-    const aliases = [name];
-    if (name === "Task Achievement") aliases.push("TA", "taskAchievement", "Task achievement");
-    if (name === "Task Response") aliases.push("TR", "taskResponse", "Task response");
-    if (name === "Coherence and Cohesion") aliases.push("CC", "coherenceCohesion", "Coherence & Cohesion");
-    if (name === "Lexical Resource") aliases.push("LR", "lexicalResource");
-    if (name === "Grammatical Range and Accuracy") aliases.push("GRA", "grammar", "grammaticalRangeAccuracy");
-    const found = aliases.map((k) => src[k]).find((v) => v !== undefined && v !== null);
-    const band = nearestValidBand(found);
-    if (!Number.isFinite(band)) throw new Error(`High-band AI did not return a usable numeric band for ${name}.`);
-    out[name] = band;
+  for (const name of criterionNames(task)) {
+    const n = Number(criteria?.[name]);
+    if (!isValidBand(n)) throw new Error(`Invalid or missing criterion band: ${name}`);
+    out[name] = n;
   }
   return out;
 }
 
-function averageBand(criteria) {
-  const values = Object.values(criteria).map(Number).filter(Number.isFinite);
-  if (values.length !== 4) throw new Error("Incomplete criterion bands.");
-  const rawAverage = values.reduce((a, b) => a + b, 0) / values.length;
-  const finalBand = nearestValidBand(rawAverage);
-  return { rawAverage, finalBand };
-}
-
-function isMostlyEnglish(text = "") {
-  const words = String(text || "").match(/[A-Za-z]+/g) || [];
-  return words.length >= 8;
-}
-
-function detectStrictHardZero(body, task) {
-  const essay = String(body.essay || body.response || body.answer || "").trim();
-  const prompt = String(body.questionPrompt || body.promptText || "").trim();
-  if (!essay) return { triggered: true, reason: "blank" };
-  const words = wordCount(essay);
-  if (words < 5) return { triggered: true, reason: "too_short_unassessable" };
-  if (!isMostlyEnglish(essay)) return { triggered: true, reason: "non_english_or_unassessable" };
-  const compactEssay = essay.toLowerCase().replace(/\s+/g, " ").trim();
-  const compactPrompt = prompt.toLowerCase().replace(/\s+/g, " ").trim();
-  if (compactPrompt && compactEssay && compactPrompt.includes(compactEssay) && words > 10) return { triggered: true, reason: "copied_prompt_only" };
-  return { triggered: false, reason: "rateable" };
-}
-
-function hardZeroScore(body, task, gate) {
+function highBandPrompt(task, questionPrompt, essay) {
   const names = criterionNames(task);
-  const criteria = Object.fromEntries(names.map((name) => [name, 0]));
-  return {
-    ok: true,
-    aiStage: "highband-shadow-hard-zero",
-    scoreSystemVersion: SCORE_SYSTEM_VERSION,
-    disclaimer: DISCLAIMER,
-    shadowMode: true,
-    highBandShadow: true,
-    productionScoreChanged: false,
-    task,
-    criteria,
-    finalCriteria: criteria,
-    rawAverage: 0,
-    overallBand: 0,
-    highBandAudit: { hardZero: true, reason: gate.reason },
-    scoreCalculation: {
-      mode: task === "Task 1" ? "task1_highband_shadow" : "task2_highband_shadow",
-      formula: "Strict hard-zero only for blank/non-English/unassessable/copied-only responses. No local cap/floor/lift/lowering is applied.",
-      criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
-      rawAverage: 0,
-      finalBand: 0,
-      localScoreChanged: false
-    }
-  };
+  const wc = wordCount(essay);
+
+  const taskNotes = task === "Task 1" ? [
+    "Task 1 high-band calibration: judge whether the letter is fully effective communication, not merely complete format.",
+    "Band 7.5: clear, complete and controlled, but there may still be mechanical phrasing, ordinary detail, or limited naturalness.",
+    "Band 8: fully covers all bullet points with skilful relevant detail; tone/register are consistently appropriate; cohesion is smooth; errors are rare and minor.",
+    "Band 8.5: highly natural, precise and purposeful; details are very well judged; language is fluent, varied and nearly effortless; errors are rare and unobtrusive.",
+    "Band 9: fully effective natural communication. It does not require literary genius or superhuman complexity. It means the task is handled completely and naturally, with virtually no language limitation, no visible template feel, and only negligible slips if any."
+  ] : [
+    "Task 2 high-band calibration: judge depth, nuance, precision, progression, and how naturally the argument develops.",
+    "Band 7.5: well-developed and coherent, but some ideas may be predictable, some progression mechanical, or some language choices not consistently sophisticated.",
+    "Band 8: fully addresses the question with relevant, extended and well-supported ideas; progression is logical and fluent; vocabulary is precise; grammar is flexible with rare minor errors.",
+    "Band 8.5: nuanced, mature argument with strong control of emphasis and qualification; cohesion is natural; lexical choices are precise and idiomatic; errors are rare and insignificant.",
+    "Band 9: complete, sophisticated and fully effective. It does not require a published academic article or perfect literary style. It means seamless progression, precise reasoning, natural academic control, and virtually no language limitation."
+  ];
+
+  return [
+    "You are the HIGH-BAND SHADOW IELTS General Training Writing examiner.",
+    "This endpoint is separate from production scoring. It exists only to test Band 7.5-9.0 calibration. Return JSON only.",
+    `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
+    "Use IELTS bands 0-9 in 0.5 increments. Focus on accurate separation of 7.5, 8.0, 8.5 and 9.0.",
+    "AI-only rule: choose all bands yourself from the prompt and response. Do not apply a local cap, floor, lift, or penalty. The server will only validate and mechanically average your four criterion bands.",
+    "Main correction for v8.5.9 fixed: do not automatically cap excellent writing at Band 8. Band 9 is rare, but it is allowed when the criteria are met.",
+    "Band 9 does not mean superhuman writing. It means fully effective, natural, precise, fluent, and virtually error-free IELTS writing for the task.",
+    "If all four criteria are clearly at 8.5-9 descriptor level, award 8.5 or 9 instead of defaulting to 8.",
+    "If a response is excellent but has only minor limitations, use 8.5. If it is fully effective with no meaningful language limitation, use 9.",
+    "Do not inflate ordinary polished writing: length, formal tone, paragraphing, or advanced-looking vocabulary alone does not justify 8.5 or 9.",
+    "If there is noticeable repetition, generic development, template phrasing, awkward collocation, or frequent minor errors, 7.0-7.5 is usually more appropriate than 8.5-9.",
+    "High-band scoring anchors: 7.5 = strong but visibly limited; 8 = very strong with minor limitations; 8.5 = near-native task control with rare insignificant slips; 9 = fully effective and virtually limitation-free for IELTS purposes.",
+    ...taskNotes,
+    `Word count: ${wc}. Remember: word count alone does not justify a high band.`,
+    `Question prompt:\n${questionPrompt || ""}`,
+    `Student response:\n${essay || ""}`,
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"highband-band9-unlock-score\",\"task\":\"Task 1 or Task 2\",\"highBandDecision\":\"band_7_or_7_5_or_8_or_8_5_or_9\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"highBandAudit\":{\"wordCountRewarded\":false,\"templateInflated\":false,\"matureControl\":boolean,\"preciseLexis\":boolean,\"developmentDepth\":boolean,\"naturalCohesion\":boolean,\"band9Considered\":true,\"whyNotHigher\":[\"short_code\"],\"whyNotLower\":[\"short_code\"]}}"
+  ].join("\n\n");
 }
 
-function extractJsonObject(text = "") {
-  const raw = String(text || "").trim();
-  try { return JSON.parse(raw); } catch {}
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) {
-    try { return JSON.parse(fenced[1]); } catch {}
-  }
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
-  throw new Error("AI response was not valid JSON.");
-}
-
-async function callDeepSeek(messages, maxTokens = 2500, temperature = 0) {
+async function callDeepSeek(messages) {
   const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    const err = new Error("Missing DEEPSEEK_API_KEY environment variable.");
-    err.status = 500;
-    throw err;
+    const error = new Error("Missing DEEPSEEK_API_KEY environment variable");
+    error.status = 500;
+    throw error;
   }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(DEEPSEEK_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: DEFAULT_MODEL, messages, temperature, max_tokens: maxTokens, response_format: { type: "json_object" } }),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        temperature: 0.12,
+        response_format: { type: "json_object" },
+        messages
+      }),
       signal: controller.signal
     });
+
     const text = await response.text();
-    if (!response.ok) throw new Error(`DeepSeek HTTP ${response.status}: ${text.slice(0, 600)}`);
-    const payload = JSON.parse(text);
-    const content = payload?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek returned empty content.");
-    return extractJsonObject(content);
+    let data;
+    try { data = JSON.parse(text); } catch { data = null; }
+
+    if (!response.ok) {
+      const detail = data?.error?.message || text.slice(0, 800);
+      const error = new Error(`DeepSeek API error ${response.status}: ${detail}`);
+      error.status = 502;
+      throw error;
+    }
+
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("DeepSeek response missing message content");
+    return content;
   } finally {
     clearTimeout(timer);
   }
 }
 
-function lowBandPrompt(task, prompt, essay) {
-  const names = criterionNames(task);
-  const wc = wordCount(essay);
-  const taskSpecific = task === "Task 1" ? [
-    "Task 1 high-band warning: greeting, closing, paragraphing, and mentioning the topic do NOT prove Band 5+.",
-    "Band 3 Task 1: weak or unclear purpose; only minimal bullet coverage; many basic errors; the reader can only partly understand the message.",
-    "Band 3.5 Task 1: recognisable letter attempt, but coverage is very thin/confused; control is poor; communication is limited.",
-    "Band 4 Task 1: basically related but incomplete or very thin; tone/format unstable; frequent basic errors restrict clarity.",
-    "Band 4.5 Task 1: more understandable than Band 4, but still simple, repetitive, thin, and error-prone. It should not become Band 6 merely because all bullets are mentioned.",
-    "Band 5/5.5 Task 1: generally clear purpose and most bullets addressed with some usable detail, but language remains limited. Award this only if the reader can clearly act on the message."
-  ] : [
-    "Task 2 high-band warning: 250+ words, four paragraphs, and an introduction/conclusion do NOT prove Band 5+.",
-    "Band 3 Task 2: very limited position/content; confused or repetitive organisation; frequent errors make meaning difficult.",
-    "Band 3.5 Task 2: relevant attempt but weak answer; mostly simple repeated assertions; poor development; language control is weak.",
-    "Band 4 Task 2: basically related but very limited; ideas are simple/repetitive/barely developed; organisation is weak or mechanical; frequent basic errors restrict control.",
-    "Band 4.5 Task 2: understandable and related, but development remains thin and general; vocabulary/grammar still limited. Do not lift to Band 6 for length alone.",
-    "Band 5/5.5 Task 2: clear position/basic structure with some explanation, but reasoning is shallow and language is still limited."
-  ];
-  return [
-    "You are the HIGH-BAND SHADOW IELTS General Training Writing examiner.",
-    "This endpoint is separate from production scoring. It exists only to test Band 3.0-4.5 calibration. Return JSON only.",
-    `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.` ,
-    "Use IELTS bands 0-9 in 0.5 increments, but focus especially on 3.0, 3.5, 4.0, 4.5, 5.0 and 5.5.",
-    "AI-only rule: choose all bands yourself from the prompt and response. Do not apply a local cap, floor, lift, or penalty. The server will only average your four criterion bands.",
-    "Core decision: distinguish a truly high-band script from a merely simple but functional Band 5 script.",
-    "Do NOT reward word count, paragraph count, greeting/sign-off, or template structure as quality. These only make the writing rateable; they do not prove control, development, or coherence.",
-    "Frequent basic grammar problems, unnatural phrasing, repetitive sentence patterns, limited vocabulary, thin development, or mechanical progression should keep LR/GRA and sometimes CC/TA/TR in the low band.",
-    "If a response is relevant and complete-looking but the language is very basic, repetitive, awkward, or error-prone, strongly consider Band 4.0-4.5 rather than Band 5.5-6.0.",
-    "If a response is easy to understand, covers the task with usable detail, and errors do not often restrict communication, then Band 5.0+ may be justified. Explain with short reason codes.",
-    ...taskSpecific,
-    `Word count: ${wc}. Remember: meeting the IELTS word count does not lift a weak response out of low band by itself.`,
-    `Question prompt:\n${prompt || ""}`,
-    `Student response:\n${essay || ""}`,
-    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"highband-shadow-score\",\"task\":\"Task 1 or Task 2\",\"highBandDecision\":\"band_3_or_3_5_or_4_or_4_5_or_5_plus\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"highBandAudit\":{\"wordCountRewarded\":false,\"formatRewarded\":false,\"weakLanguage\":boolean,\"thinDevelopment\":boolean,\"trueLowBand\":boolean,\"whyNotHigher\":[\"short_code\"]}}"
-  ].join("\n\n");
-}
+async function scoreHighBand(task, questionPrompt, essay) {
+  const prompt = highBandPrompt(task, questionPrompt, essay);
+  const content = await callDeepSeek([
+    { role: "system", content: "You are a strict IELTS General Training Writing high-band and Band 9 calibration examiner. Return JSON only." },
+    { role: "user", content: prompt }
+  ]);
 
-async function highBandShadowScore(body) {
-  const task = normalizeTask(body);
-  const essay = String(body.essay || body.response || body.answer || "");
-  const prompt = String(body.questionPrompt || body.promptText || body.prompt || "");
-  const gate = detectStrictHardZero({ ...body, essay, questionPrompt: prompt }, task);
-  if (gate.triggered) return hardZeroScore(body, task, gate);
-
-  const ai = await callDeepSeek([
-    { role: "system", content: "You are a high-band IELTS GT Writing shadow scorer. Return JSON only. Do not provide feedback." },
-    { role: "user", content: lowBandPrompt(task, prompt, essay) }
-  ], 2600, 0);
-
-  const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
-  const { rawAverage, finalBand } = averageBand(criteria);
-  return {
-    ok: true,
-    aiStage: "highband-band9-unlock-score",
-    scoreSystemVersion: SCORE_SYSTEM_VERSION,
-    disclaimer: DISCLAIMER,
-    shadowMode: true,
-    highBandShadow: true,
-    productionScoreChanged: false,
-    task,
-    criteria,
-    finalCriteria: criteria,
-    rawAverage,
-    overallBand: finalBand,
-    localSignals: {
-      task,
-      wordCount: wordCount(essay),
-      shadowEndpoint: true,
-      productionEndpointUntouched: true
-    },
-    highBandDecision: ai.highBandDecision || "",
-    candidateRange: ai.candidateRange || "",
-    reasonCodes: ai.reasonCodes || {},
-    highBandAudit: {
-      ...(ai.highBandAudit && typeof ai.highBandAudit === "object" ? ai.highBandAudit : {}),
-      hardZero: false,
-      aiOnly: true,
-      localScoreChanged: false,
-      productionScoreChanged: false
-    },
-    scoreCalculation: {
-      mode: task === "Task 1" ? "task1_highband_shadow_v8_5_7" : "task2_highband_shadow_v8_5_7",
-      formula: "High-band shadow endpoint: AI returns four criterion bands using a high-band calibration prompt; the server only validates bands and mechanically averages them. No local cap, floor, lift, lowering, or regression calibration is applied.",
-      criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
-      rawAverage,
-      finalBand,
-      localScoreChanged: false
-    }
-  };
-}
-
-async function handleRequest(req, res) {
-  if (req.method === "OPTIONS") return sendJson(req, res, 204, {});
-  if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
-  const body = await readJsonBody(req);
-  return sendJson(req, res, 200, await highBandShadowScore(body));
+  const parsed = extractJson(content);
+  const criteria = validateCriteria(parsed.criteria, task);
+  const finalBand = averageBand(criteria, task);
+  if (finalBand == null) throw new Error("Could not calculate final band from criteria");
+  return { parsed, criteria, finalBand };
 }
 
 module.exports = async function handler(req, res) {
   try {
-    await handleRequest(req, res);
-  } catch (error) {
-    sendJson(req, res, Number(error?.status) || 502, {
-      ok: false,
-      error: "High-band shadow scoring failed. No production score was changed.",
-      detail: error?.message || String(error),
-      scoreSystemVersion: SCORE_SYSTEM_VERSION,
+    setCors(req, res);
+    if (req.method === "OPTIONS") return sendJson(req, res, 200, { ok: true });
+    if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed. Use POST." });
+
+    const body = await readJsonBody(req);
+    const task = normalizeTask(body.task || body.scoringTask || body.taskType || body.selectedTask);
+    const questionPrompt = body.questionPrompt || body.promptText || body.prompt || body.question || "";
+    const essay = body.essay || body.answer || body.response || body.text || "";
+
+    if (!String(essay).trim()) return sendJson(req, res, 400, { ok: false, error: "Missing essay text" });
+
+    const result = await scoreHighBand(task, questionPrompt, essay);
+    const payload = {
+      ok: true,
       shadowMode: true,
       highBandShadow: true,
-      productionScoreChanged: false
+      productionScoreChanged: false,
+      scoreSystemVersion: SCORE_SYSTEM_VERSION,
+      aiStage: "highband-band9-unlock-score",
+      task,
+      scoringTask: task,
+      wordCount: wordCount(essay),
+      overallBand: result.finalBand,
+      finalBand: result.finalBand,
+      band: result.finalBand,
+      finalCriteria: result.criteria,
+      criteria: result.criteria,
+      scoreCalculation: {
+        method: "mechanical-average-of-ai-returned-criteria",
+        criteria: result.criteria,
+        finalBand: result.finalBand
+      },
+      highBandDecision: result.parsed.highBandDecision || null,
+      candidateRange: result.parsed.candidateRange || null,
+      reasonCodes: result.parsed.reasonCodes || {},
+      highBandAudit: result.parsed.highBandAudit || {},
+      disclaimer: DISCLAIMER
+    };
+
+    return sendJson(req, res, 200, payload);
+  } catch (err) {
+    return sendJson(req, res, err.status || 500, {
+      ok: false,
+      shadowMode: true,
+      highBandShadow: true,
+      productionScoreChanged: false,
+      scoreSystemVersion: SCORE_SYSTEM_VERSION,
+      error: err.message || "High-band shadow scoring failed. No production score was changed."
     });
   }
 };
-
-module.exports.config = { maxDuration: 300 };
