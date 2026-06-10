@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-1-task-specific-strict-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-2-task-specific-strict-rateable-floor-guard";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -780,6 +780,72 @@ function sub7RunOnSignal(text = "") {
   return { longSentences, boundaryBreaks, gluedClauses, total: longSentences + boundaryBreaks + gluedClauses };
 }
 
+
+
+function floorSingleCriterion(criteria = {}, criterion, floorValue) {
+  const out = { ...(criteria || {}) };
+  const current = bandNumber(out[criterion]);
+  if (Number.isFinite(current) && current < floorValue) out[criterion] = floorValue;
+  return out;
+}
+
+function rateableTask2TaskResponseFloor(signals = {}, body = {}) {
+  const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
+  if (hardZero?.triggered) return null;
+  const words = Number(signals.wordCount) || countWords(body.essay || "");
+  const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(body.essay || "").length;
+  const paragraphCount = Number(signals.paragraphCount) || countParagraphs(body.essay || "");
+  const markers = signals.taskRequirementAudit?.markers || detectTask2RequirementSignals(body.essay || "");
+  const requirementCap = Number(signals.taskRequirementAudit?.taskResponseCap);
+  const relevantPosition = Boolean(markers.clearOpinion || markers.positiveNegativeJudgement || markers.outweighJudgement);
+  const relevantContent = Boolean(markers.advantage || markers.disadvantage || markers.problem || markers.cause || markers.solution || markers.exampleSupport || markers.explanationMarkers >= 1);
+  if (!relevantContent && !relevantPosition) return null;
+
+  let floor = null;
+  if (words >= 240 && paragraphCount >= 3 && sentenceCount >= 8 && relevantPosition && (markers.explanationMarkers >= 2 || markers.exampleSupport) && (markers.advantage || markers.disadvantage || markers.problem || markers.solution || markers.positiveNegativeJudgement)) {
+    floor = 5.0;
+  } else if (words >= 180 && sentenceCount >= 6 && (relevantPosition || markers.explanationMarkers >= 2) && relevantContent) {
+    floor = 4.5;
+  } else if (words >= 120 && sentenceCount >= 4 && relevantContent) {
+    floor = 4.0;
+  }
+  if (!Number.isFinite(floor)) return null;
+  if (Number.isFinite(requirementCap)) floor = Math.min(floor, requirementCap);
+  return { floor, reason: `Rateable Task 2 response floor: ${words} words with relevant position/content signals. Band 0/1/2 Task Response is reserved for no assessable or extremely limited responses, not a full relevant essay.` };
+}
+
+function rateableTask1TaskAchievementFloor(signals = {}, body = {}) {
+  const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
+  if (hardZero?.triggered) return null;
+  const essay = String(body.essay || "");
+  const words = Number(signals.wordCount) || countWords(essay);
+  const requirementCap = Number(signals.taskRequirementAudit?.taskAchievementCap);
+  const hasLetterForm = /\b(dear|hello|hi)\b/i.test(essay) || /\b(yours|regards|sincerely|best wishes)\b/i.test(essay);
+  const hasPurpose = /\b(i am writing|i'm writing|i would like|i want|could you|please|ask|request|apolog|complain|thank|invite|explain)\b/i.test(essay);
+  const partlyOrCovered = (signals.taskRequirementAudit?.items || []).filter((item) => item.status === "covered" || item.status === "partly_covered").length;
+  let floor = null;
+  if (words >= 120 && hasLetterForm && hasPurpose && partlyOrCovered >= 2) floor = 4.5;
+  else if (words >= 80 && (hasLetterForm || hasPurpose) && partlyOrCovered >= 1) floor = 4.0;
+  if (!Number.isFinite(floor)) return null;
+  if (Number.isFinite(requirementCap)) floor = Math.min(floor, requirementCap);
+  return { floor, reason: `Rateable Task 1 letter floor: ${words} words with letter-form/purpose and relevant bullet signals. Band 0/1/2 TA is reserved for no assessable or extremely limited letters.` };
+}
+
+function applyRateableResponseFloorGuard(criteria = {}, signals = {}, body = {}) {
+  let calibrated = { ...(criteria || {}) };
+  const notes = [];
+  const task = signals.task;
+  const taskCriterion = criterionNames(task)[0];
+  const before = bandNumber(calibrated[taskCriterion]);
+  if (!Number.isFinite(before)) return { criteria: calibrated, changed: false, notes };
+  const floorProfile = task === "Task 1" ? rateableTask1TaskAchievementFloor(signals, body) : rateableTask2TaskResponseFloor(signals, body);
+  if (floorProfile && before < floorProfile.floor) {
+    calibrated = floorSingleCriterion(calibrated, taskCriterion, floorProfile.floor);
+    notes.push({ type: task === "Task 1" ? "task1_rateable_ta_floor_guard" : "task2_rateable_tr_floor_guard", criterion: taskCriterion, floor: floorProfile.floor, before, reason: floorProfile.reason });
+  }
+  return { criteria: calibrated, changed: notes.length > 0, notes };
+}
+
 function applySub7StrictCalibration(criteria = {}, signals = {}, body = {}) {
   let calibrated = { ...(criteria || {}) };
   const notes = [];
@@ -862,6 +928,12 @@ function applySub7StrictCalibration(criteria = {}, signals = {}, body = {}) {
     const beforeCriteria = { ...calibrated };
     calibrated = capCriteriaBands(calibrated, 5.5);
     notes.push({ type: "sub7_dual_language_cap", cap: 5.5, beforeCriteria, reason: "When both LR and GRA are 5.0 or below, the overall profile should normally not exceed Band 5.5 in a sub-7 response." });
+  }
+
+  const rateableFloor = applyRateableResponseFloorGuard(calibrated, signals, body);
+  if (rateableFloor.changed) {
+    calibrated = rateableFloor.criteria;
+    notes.push(...rateableFloor.notes);
   }
 
   return { criteria: calibrated, changed: notes.length > 0, notes };
@@ -2041,7 +2113,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v8.1 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, applies stricter sub-7 Task 1/Task 2 gates, and now runs a task-specific requirement audit for each Task 1 bullet and each Task 2 question type before freezing the score. Feedback cannot change the score.",
+      formula: "v8.2 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, applies stricter sub-7 Task 1/Task 2 gates, and runs a task-specific requirement audit and applies a rateable-response floor guard so full relevant Task 1/Task 2 answers cannot be misclassified as Band 0/1. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
