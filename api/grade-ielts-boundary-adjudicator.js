@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v3-scoped-low4-5plus-balance";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-lowband-anchored-anti-inflation";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -122,7 +122,7 @@ async function postJson(url, payload) {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v3" },
+      headers: { "Content-Type": "application/json", "User-Agent": "ielts-boundary-adjudicator-v4" },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -203,6 +203,15 @@ async function callMainAndLowband(req, body, task, promptText, essayText) {
   return { main, lowband, mainUrl, lowUrl };
 }
 
+function weakLanguageSignal(criteria, task) {
+  const names = criterionNames(task);
+  const values = names.map((name) => Number(criteria?.[name])).filter(Number.isFinite);
+  if (!values.length) return false;
+  const lr = Number(criteria?.["Lexical Resource"]);
+  const gra = Number(criteria?.["Grammatical Range and Accuracy"]);
+  return (Number.isFinite(lr) && lr <= 4.5) || (Number.isFinite(gra) && gra <= 4.5) || values.some((v) => v <= 4.0);
+}
+
 function routeDecision(task, wc, main, lowband) {
   const mainScore = Number(main.score);
   const lowScore = Number(lowband.score);
@@ -240,6 +249,15 @@ function routeDecision(task, wc, main, lowband) {
 
   if (mainScore === 4.5) {
     base.zone = "boundary_4_5";
+    if (lowScore <= 4.0) {
+      base.decision = "boundary_4_5_lowband_anchor_adjudicate";
+      base.confidence = "unstable";
+      base.conflict = true;
+      base.adjudicate = true;
+      base.reasonCodes.push("V4_LOWBAND_ANCHOR_BELOW_4_5");
+      base.reasonCodes.push("MAIN_4_5_LOWBAND_4_OR_BELOW");
+      return base;
+    }
     if (gap <= 0.5) {
       base.decision = "use_main_lowband_consistent";
       base.conflict = false;
@@ -277,18 +295,21 @@ function routeDecision(task, wc, main, lowband) {
   if (mainScore >= 5.5) {
     base.zone = "main_5_5_plus";
     const task1Suspicious = task === "Task 1" && mainScore >= 6.0 && lowScore <= 5.0;
-    const veryLowLowband = lowScore <= 4.0 && mainScore <= 6.0;
-    const shortTask1 = task === "Task 1" && wc < 150 && mainScore >= 6.0 && lowScore <= 5.0;
+    const veryLowLowband = lowScore <= 4.0;
+    const shortTask1 = task === "Task 1" && wc < 180 && mainScore >= 6.0 && lowScore <= 5.0;
+    const lowbandWeakLanguage = weakLanguageSignal(lowband.criteria, task);
+    const mainHighLowbandWeak = mainScore >= 5.5 && lowScore <= 4.5 && lowbandWeakLanguage;
 
-    if (task1Suspicious || veryLowLowband || shortTask1 || gap >= 1.5) {
+    if (task1Suspicious || veryLowLowband || shortTask1 || mainHighLowbandWeak || gap >= 1.5) {
       base.decision = "main_high_lowband_conflict_adjudicate";
       base.confidence = "unstable";
       base.conflict = true;
       base.adjudicate = true;
-      base.reasonCodes.push("V3_BALANCED_5_5_PLUS_REVIEW");
+      base.reasonCodes.push("V4_LOWBAND_ANCHORED_ANTI_INFLATION_REVIEW");
       if (task1Suspicious) base.reasonCodes.push("TASK1_MAIN_HIGH_LOWBAND_LOW");
       if (veryLowLowband) base.reasonCodes.push("LOWBAND_VERY_LOW_AGAINST_MAIN");
-      if (shortTask1) base.reasonCodes.push("SHORT_TASK1_MAIN_HIGH");
+      if (shortTask1) base.reasonCodes.push("SHORT_OR_BORDERLINE_TASK1_MAIN_HIGH");
+      if (mainHighLowbandWeak) base.reasonCodes.push("LOWBAND_WEAK_LANGUAGE_SIGNAL");
       if (gap >= 1.5) base.reasonCodes.push("GAP_GE_1_5");
       return base;
     }
@@ -317,37 +338,45 @@ function routeDecision(task, wc, main, lowband) {
 function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
   const names = criterionNames(task);
   return [
-    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR.",
-    "You only handle conflicts between the main scorer and the low-band shadow scorer in the 4.0-5.5 boundary region.",
-    "You must not average the two scores. Choose your own final criteria and final band from the writing evidence.",
+    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR v4.",
+    "You resolve conflicts between the main scorer and the low-band shadow scorer.",
+    "You must not average the two scores. You must choose your own final criteria and final band from the writing evidence.",
     "Use IELTS bands in 0.5 increments.",
     `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
-    "Your classification must be one of:",
-    "- low_4_band: weak writing around 3.5-4.0; limited control, weak development, frequent errors.",
-    "- boundary_4_5: between 4.0 and 5.0; some task response and organisation, but limited language control.",
-    "- basic_5: around 5.0; basic task completion, simple but understandable development, frequent but manageable errors.",
-    "- safe_5_5_plus: around 5.5 or above; clearly above low-band weakness, generally organised and understandable with some development.",
     "",
-    "Important calibration:",
-    "Task 1 letters can look neat and polite but still be only Band 4.5-5.5 if the language range is limited, detail is simple, or grammar control is basic.",
-    "Do not give Band 6.5-7 just because a letter has a clear format and polite tone.",
-    "Lowband may be too harsh at 5.0-5.5, so do not automatically follow lowband either.",
-    "If main is much higher than lowband, inspect whether main rewarded format/fluency too much.",
-    "If lowband is much lower than main, inspect whether lowband over-penalised a basic but adequate response.",
+    "Classification options:",
+    "- low_4_band: around 3.5-4.0; weak control, thin task development, frequent errors, limited vocabulary, basic sequencing.",
+    "- boundary_4_5: around 4.0-4.5; recognizable response, some organization, but language and development remain limited.",
+    "- basic_5: around 5.0; generally understandable and task-relevant, but basic development and frequent language limitations.",
+    "- safe_5_5_plus: around 5.5 or above; clearly above low-band weakness, enough specific detail/development, mostly controlled progression, and LR/GRA not merely basic.",
     "",
-    "Boundary Adjudicator v3 scoped low-4 vs basic-5 separator:",
-    "Apply the strict low-4/basic-5 separator ONLY when route.reasonCodes includes MAIN_5_LOWBAND_4_OR_BELOW or when mainScore is exactly 5.0 and lowbandScore is 4.0 or below.",
-    "In that exact case, first assume this may be a 4.0-4.5 boundary sample, not automatically basic_5.",
-    "For that exact case, choose basic_5 only if the response has enough task development, mostly understandable progression, and errors are frequent but not continuously disruptive.",
-    "For that exact case, if the response is short, language is very simple, grammar errors are persistent, or development is thin, classify as boundary_4_5 rather than basic_5 even if the structure is clear.",
+    "Core v4 rule: LOWBAND ANCHOR AGAINST INFLATION.",
+    "When lowbandScore is 4.0 or below, treat it as a serious warning that the writing may be low-band or boundary-band.",
+    "Do NOT choose safe_5_5_plus just because the main score is 5.5, 6.0, or 7.0.",
+    "If lowband LR/GRA are around 4.0, the final score should normally stay in low_4_band or boundary_4_5 unless the writing itself clearly proves stronger control.",
+    "A complete response, correct letter format, clear paragraphs, or a stated opinion is not enough for 5.5+ if the language is still simple and error-prone.",
     "",
-    "V3 protection for 5.5+ cases:",
-    "When mainScore is 5.5 or above, do NOT apply the strict low-4/basic-5 separator merely because lowbandScore is 4.0 or below.",
-    "For mainScore >= 5.5 conflicts, use balanced review: decide whether main over-rewarded fluency/format or lowband over-penalised simple but adequate writing.",
-    "In mainScore >= 5.5 cases, do not push the final band below 5.0 unless the writing is genuinely low-band with very weak task response, very thin development, and persistent disruptive errors.",
-    "In mainScore >= 5.5 cases, safe_5_5_plus is allowed when the response is clearly organised, task-relevant, and mostly understandable, even if language range is limited.",
-    "For Task 1, a polite format alone is not enough for 5.5+, but a complete, coherent letter with adequate detail should not be compressed to 4.5 solely because lowband is harsh.",
-    "For Task 2, a clear position with relevant supporting ideas should not be compressed to 4.5 solely because vocabulary and grammar are simple.",
+    "Band 3.5-4.0 protection:",
+    "If the response has very simple vocabulary, frequent grammar errors, and thin or repetitive development, classify low_4_band even if it is full-length.",
+    "Full IELTS word count must not automatically lift a weak response to 4.5 or 5.0.",
+    "",
+    "Band 4.5 protection:",
+    "Use boundary_4_5 when the answer is understandable and mostly task-relevant but development is basic, cohesion is mechanical, and LR/GRA are limited.",
+    "For Task 1, polite tone and paragraph format do not justify 5.5 if details are simple and grammar is weak.",
+    "For Task 2, a five-paragraph structure or clear opinion does not justify 5.5 if argument is simple and language control is weak.",
+    "",
+    "Band 5.0 vs 5.5 separator:",
+    "Choose basic_5 only when task coverage is adequate, progression is mostly understandable, and errors are frequent but not continuously disruptive.",
+    "Choose safe_5_5_plus only when there is clear evidence beyond basic_5: more specific support/details, better control of paragraph progression, and LR/GRA mostly at or above 5.0.",
+    "If final LR or GRA would be 4.0-4.5, safe_5_5_plus is normally inconsistent. In that case, use boundary_4_5 or basic_5.",
+    "",
+    "Task-specific anti-inflation checks:",
+    "Task 1: do not over-reward formal letter conventions. Check whether all bullet points are actually developed with sufficient specific detail.",
+    "Task 1: a letter under about 180 words with simple formulaic language should be treated cautiously when mainScore is high and lowbandScore is low.",
+    "Task 2: do not over-reward length or paragraph count. Check whether ideas are genuinely developed, not just repeated in simple language.",
+    "",
+    "Important: The lowband scorer can be too harsh at 5.0-5.5, so do not blindly follow lowband. But when lowband is 4.0 and main is 5.5+, the burden of proof is on the writing to justify 5.5+.",
+    "If evidence is mixed or uncertain, choose the more conservative adjacent band rather than the higher main score.",
     "",
     `Route decision before adjudication: ${JSON.stringify(route)}`,
     `Main system score: ${main.score}`,
@@ -362,7 +391,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     `Student response:\n${essay || ""}`,
     "",
     "Return exactly this JSON shape:",
-    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v3\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
+    "{\"ok\":true,\"aiStage\":\"boundary-adjudicator-v4\",\"classification\":\"low_4_band or boundary_4_5 or basic_5 or safe_5_5_plus\",\"finalCriteria\":{...four numeric criterion bands...},\"rationaleCodes\":[\"short_code\"],\"whyMainTooHigh\":[\"short_code\"],\"whyLowbandTooLow\":[\"short_code\"],\"confidence\":\"low or medium or high\"}"
   ].join("\n");
 }
 
@@ -414,7 +443,7 @@ async function callDeepSeek(messages, temperature = 0.1) {
 async function adjudicate(task, questionPrompt, essay, main, lowband, route) {
   const prompt = adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route);
   const content = await callDeepSeek([
-    { role: "system", content: "You are a balanced but strict IELTS General Training Writing boundary adjudicator. Return JSON only." },
+    { role: "system", content: "You are a strict IELTS General Training Writing boundary adjudicator v4. Anchor against low-band inflation. Return JSON only." },
     { role: "user", content: prompt }
   ], 0.1);
 
@@ -475,7 +504,7 @@ module.exports = async function handler(req, res) {
       selected = {
         finalBand: adjudicator.finalBand,
         finalCriteria: adjudicator.finalCriteria,
-        finalSource: "boundary-adjudicator-v3",
+        finalSource: "boundary-adjudicator-v4",
         confidence: adjudicator.confidence
       };
     } else {
