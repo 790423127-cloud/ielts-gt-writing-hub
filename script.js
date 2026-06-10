@@ -564,11 +564,19 @@
       .criterion-score-card { border: 1px solid var(--border, #d7e2ea); border-radius: 16px; background: var(--card, #fff); overflow: hidden; box-shadow: 0 1px 0 rgba(15,23,42,.03); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
       .criterion-score-card:hover { border-color: rgba(15,118,110,.35); box-shadow: 0 10px 24px rgba(15,23,42,.06); }
       .criterion-card-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--border, #d7e2ea); background: rgba(248,250,252,.7); }
+      .criterion-score-card.is-collapsed .criterion-card-header { border-bottom: 0; }
       .criterion-title { font-weight: 800; font-size: 1.05rem; color: var(--text, #122033); }
       .criterion-band-pill { font-weight: 900; border-radius: 999px; padding: 8px 13px; background: rgba(15,118,110,.12); color: var(--teal, #0f766e); white-space: nowrap; }
       .criterion-toggle { width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--border, #bfd1de); background: transparent; font-weight: 900; font-size: 1.1rem; cursor: pointer; color: var(--teal, #0f766e); }
       .criterion-card-body { padding: 16px 18px 18px; }
       .criterion-card-body.hidden { display: none; }
+      .criterion-compact-toolbar { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin: 0 0 2px; }
+      .criterion-compact-toolbar button { border: 1px solid var(--border, #bfd1de); border-radius: 999px; background: rgba(255,255,255,.78); padding: 8px 13px; font-weight: 800; color: var(--teal, #0f766e); cursor: pointer; }
+      .criterion-card-preview { padding: 0 18px 16px; display: grid; gap: 8px; color: var(--muted, #5b7082); }
+      .criterion-card-preview strong { color: var(--text, #122033); font-weight: 900; }
+      .criterion-preview-line { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.55; }
+      .criterion-preview-zh { border-left: 4px solid rgba(15,118,110,.45); border-radius: 9px; background: rgba(224,242,241,.55); padding: 8px 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.55; }
+      .criterion-score-card.is-expanded .criterion-card-preview { border-bottom: 1px solid var(--border, #d7e2ea); padding-bottom: 14px; }
       .criterion-quick-grid { display: grid; gap: 12px; }
       .criterion-quick-row { border-left: 4px solid rgba(15,118,110,.7); padding: 10px 12px; border-radius: 10px; background: rgba(15,118,110,.055); }
       .criterion-quick-row h5 { margin: 0 0 6px; font-size: .96rem; color: var(--text, #122033); }
@@ -813,6 +821,14 @@
 
 .grading-results .criterion-card-body{
   padding:18px 20px 20px !important;
+}
+
+.grading-results .criterion-card-preview{
+  padding:0 20px 16px !important;
+}
+
+.grading-results .criterion-compact-toolbar{
+  margin:0 0 6px !important;
 }
 
 .grading-results .criterion-quick-grid{
@@ -1366,11 +1382,42 @@
           translateBtn.textContent = hidden ? "中文解释" : "收起中文";
         }
       }
+      const expandAllCriteria = event.target.closest("[data-criterion-expand-all]");
+      if (expandAllCriteria) {
+        els.gradingResults.querySelectorAll("[data-criterion-toggle]").forEach((btn) => {
+          const target = document.getElementById(btn.dataset.criterionToggle);
+          const card = btn.closest(".criterion-score-card");
+          if (target) target.classList.remove("hidden");
+          if (card) {
+            card.classList.remove("is-collapsed");
+            card.classList.add("is-expanded");
+          }
+          btn.textContent = "-";
+        });
+      }
+      const collapseAllCriteria = event.target.closest("[data-criterion-collapse-all]");
+      if (collapseAllCriteria) {
+        els.gradingResults.querySelectorAll("[data-criterion-toggle]").forEach((btn) => {
+          const target = document.getElementById(btn.dataset.criterionToggle);
+          const card = btn.closest(".criterion-score-card");
+          if (target) target.classList.add("hidden");
+          if (card) {
+            card.classList.add("is-collapsed");
+            card.classList.remove("is-expanded");
+          }
+          btn.textContent = "+";
+        });
+      }
       const cardToggle = event.target.closest("[data-criterion-toggle]");
       if (cardToggle) {
         const target = document.getElementById(cardToggle.dataset.criterionToggle);
         if (target) {
           const hidden = target.classList.toggle("hidden");
+          const card = cardToggle.closest(".criterion-score-card");
+          if (card) {
+            card.classList.toggle("is-collapsed", hidden);
+            card.classList.toggle("is-expanded", !hidden);
+          }
           cardToggle.textContent = hidden ? "+" : "-";
         }
       }
@@ -1551,6 +1598,27 @@
     }
     return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已生成，不会改变分数。")}</div>`;
   }
+
+  function compactCriterionPreviewText(text, max = 170) {
+    const raw = cleanUserFeedbackText(text);
+    if (!raw) return "";
+    const normalized = raw.replace(/\s+/g, " ").trim();
+    const firstSentence = normalized.match(/^.{35,}?[.!?。！？](\s|$)/);
+    const candidate = firstSentence ? firstSentence[0].trim() : normalized;
+    if (candidate.length <= max) return candidate;
+    return `${candidate.slice(0, max).replace(/\s+\S*$/, "")}...`;
+  }
+
+  function criterionPreviewHtml(pair, fallbackPair, context = {}) {
+    const en = compactCriterionPreviewText(pair?.en || fallbackPair?.en || "");
+    const zh = compactCriterionPreviewText(pair?.zh || fallbackPair?.zh || "");
+    if (!hasMeaningfulContent(en) && !hasMeaningfulContent(zh)) return "";
+    return `<div class="criterion-card-preview" aria-label="该项简要说明">
+      ${hasMeaningfulContent(en) ? `<div class="criterion-preview-line"><strong>简要：</strong>${escapeHtml(en)}</div>` : ""}
+      ${hasMeaningfulContent(zh) ? `<div class="criterion-preview-zh">${escapeHtml(zh)}</div>` : ""}
+    </div>`;
+  }
+
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
     const entries = Object.entries(criteria);
@@ -1563,6 +1631,10 @@
       ? `<div class="ai-warning feedback-status-warning"><strong>评分异常：</strong>系统收到 Band 0，但该回答可能并非空白/非英文/明确放弃作答。请重新评分；新版后端会阻止这种假 0 分冻结。</div>`
       : "";
     return `${impossibleZeroWarning}<section class="criterion-card-grid" aria-label="四项评分说明">
+      <div class="criterion-compact-toolbar">
+        <button type="button" data-criterion-expand-all>全部展开</button>
+        <button type="button" data-criterion-collapse-all>全部收起</button>
+      </div>
       ${entries.map(([criterion, band], index) => {
         const item = criterionItem(result, criterion);
         const half = item.halfBandDecision || {};
@@ -1578,6 +1650,7 @@
         const whyLower = whyLowerPair.en;
         const whyHigher = whyHigherPair.en;
         const improve = improvePair.en;
+        const previewHtml = criterionPreviewHtml(whyThisPair, improvePair, { criterion, band });
         const lowerLabel = Number(band) <= 0 ? "为什么系统认为不是空白/完全跑题" : `为什么没有更低到 Band ${lowerBand}`;
         const higherLabel = Number(band) >= 9 ? "为什么已经接近满分" : (Number(band) <= 0 ? "为什么不能显示为 Band 0.5+" : `为什么还不能到 Band ${higherBand}`);
         const zh = criterionZhSummary(item, {
@@ -1605,13 +1678,14 @@
           <button class="score-detail-toggle" type="button" data-score-detail-toggle="${detailId}"><span>详细证据 / Evidence details</span><span>+</span></button>
           <div id="${detailId}" class="score-detail-body hidden"><div class="evidence-grid">${detailSections.join("")}</div></div>
         </div>` : "";
-        return `<article class="criterion-score-card refined-criterion-card">
+        return `<article class="criterion-score-card refined-criterion-card is-collapsed">
           <div class="criterion-card-header">
             <div class="criterion-title">${escapeHtml(criterion)}</div>
             <div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div>
-            <button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">-</button>
+            <button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">+</button>
           </div>
-          <div class="criterion-card-body" id="${cardId}">
+          ${previewHtml}
+          <div class="criterion-card-body hidden" id="${cardId}">
             <div class="criterion-quick-grid bilingual-criterion-grid">
               <div class="criterion-quick-row"><h5>为什么是 Band ${escapeHtml(formatBand(band))}</h5>${bilingualTextHtml(whyThisPair.en, whyThisPair.zh, { criterion, band, heading: "为什么是这个分" })}</div>
               <div class="criterion-quick-row"><h5>${escapeHtml(lowerLabel)}</h5>${bilingualTextHtml(whyLowerPair.en, whyLowerPair.zh, { criterion, band, heading: "为什么没有更低" })}</div>
