@@ -12,10 +12,11 @@
   let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
     { stage: "local-precheck", title: "本地预检与任务分流", description: "检查词数、任务类型、可评分性、语言风险和 Task 1 / Task 2 评分边界。" },
-    { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes，不生成中文、长解释、原文引用或详细反馈。" },
-    { stage: "boundary-audit", title: "本地边界审计", description: "检查低分抬高、高分卡 7、弱语言高分、四项同分和 anchor 冲突。" },
-    { stage: "boundary-review", title: "AI 边界复核", description: "只有审计触发时才二次复核；否则跳过。" },
-    { stage: "final-freeze-feedback", title: "冻结分数与后置反馈", description: "先冻结最终分数，再生成详细反馈；反馈失败不影响分数。" }
+    { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes；不生成详细反馈。" },
+    { stage: "boundary-audit", title: "本地边界审计", description: "只做一致性检查：低分/高分边界、弱语言高分、四项同分和 anchor 冲突。" },
+    { stage: "boundary-review", title: "AI 边界复核", description: "只有边界审计触发时才二次复核；否则跳过。" },
+    { stage: "freeze-score", title: "冻结最终分数", description: "冻结 Overall 与四项分；从这里开始详细反馈不能改变分数。" },
+    { stage: "criterion-feedback", title: "逐项详细反馈", description: "分数冻结后，独立生成四项详细反馈：证据、原因、差 0.5 的说明和提升建议。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
 
@@ -485,6 +486,28 @@
       const incoming = byStage.get(step.stage);
       return incoming ? { ...step, ...incoming, index: step.index || incoming.index } : step;
     });
+    return progress;
+  }
+
+  function markScoreFrozenAndStartCriterionFeedback(message = "核心分数已冻结；正在逐项生成详细反馈。") {
+    const progress = ensureScoringProgress();
+    progress.status = "running";
+    progress.currentStep = 6;
+    progress.updatedAt = new Date().toISOString();
+    progress.error = null;
+    progress.steps.forEach((step, index) => {
+      if (index <= 4) {
+        if (step.status !== "error") {
+          step.status = step.stage === "boundary-review" && /跳过|skip/i.test(String(step.message || step.description || "")) ? "skipped" : "done";
+        }
+      }
+    });
+    const feedbackStep = progress.steps[5];
+    if (feedbackStep) {
+      feedbackStep.status = "running";
+      feedbackStep.message = message;
+      feedbackStep.error = "";
+    }
     return progress;
   }
 
@@ -1760,7 +1783,7 @@
       const criterion = criterionNames[i];
       const band = Number(criteria[criterion]);
       setGradingStatus(`详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}...`, "loading");
-      updateScoringProgress(4, "running", `分数已冻结，正在单独生成 ${criterion} 详细反馈。`);
+      updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}。`);
       let lastError = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
@@ -1779,6 +1802,7 @@
           }));
           if (!data.ok || !data.criterionCalibration?.[criterion]) throw new Error(data.detail || data.error || `${criterion} detailed feedback missing.`);
           merged = mergeCriterionFeedback(merged, data);
+          updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：${criterion} 已完成。`);
           lastError = null;
           break;
         } catch (error) {
@@ -1790,6 +1814,8 @@
         throw new Error(`${criterion} 详细反馈生成失败：${lastError.message || lastError}`);
       }
     }
+
+    updateScoringProgress(5, "done", "四项详细反馈已全部生成完成。");
 
     return {
       ...merged,
@@ -2111,21 +2137,26 @@
     try {
       latestScoringProgress = createScoringProgress();
       latestScoringProgress.status = "running";
+      let failureStepIndex = 1;
       updateScoringProgress(0, "done", "文本已提交，后端将进行本地预检与任务分流。");
       updateScoringProgress(1, "running", "AI 正在生成短 JSON 核心评分：anchor、四项分和 reason codes。");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      setGradingStatus("第 2 步/5：AI 核心评分。", "loading");
+      setGradingStatus("第 2 步/6：AI 核心评分。", "loading");
       const result = await postStage(endpoint, gradingPayload({ mode: "score" }));
       latestScoreResult = result;
       syncScoringProgressFromResult(result);
-      setGradingStatus("核心分数已冻结。正在通过独立接口逐项生成四项详细反馈...", "loading");
+      markScoreFrozenAndStartCriterionFeedback("核心分数已冻结；现在开始逐项生成四项详细反馈。");
+      failureStepIndex = 5;
+      if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
+      setGradingStatus("第 6 步/6：核心分数已冻结。正在通过独立接口逐项生成四项详细反馈...", "loading");
       const resultWithRequiredFeedback = await generateRequiredCriterionFeedback(result);
       latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
       renderScoreResult(resultWithRequiredFeedback);
       setGradingStatus("评分完成。核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
-      updateScoringProgress(1, "error", "评分流程执行失败。", error);
+      const failedStep = latestScoringProgress?.currentStep ? Math.max(0, latestScoringProgress.currentStep - 1) : 1;
+      updateScoringProgress(failedStep, "error", failedStep >= 5 ? "详细反馈生成失败。" : "评分流程执行失败。", error);
       setGradingStatus(friendlyScoringError(error), "error");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
     } finally {
