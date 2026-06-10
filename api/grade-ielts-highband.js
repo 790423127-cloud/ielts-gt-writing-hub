@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-10-highband-exact9-review-pass";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-11-highband-balanced-exact9-review";
 const DISCLAIMER = "This is an AI-generated estimated IELTS high-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -117,11 +117,11 @@ function highBandPrompt(task, questionPrompt, essay) {
   const wc = wordCount(essay);
 
   const taskNotes = task === "Task 1" ? [
-    "Task 1 high-band calibration: judge whether the letter is fully effective communication, not merely complete format.",
+    "Task 1 high-band calibration: judge whether the letter is fully effective communication, not whether it looks like an academic essay.",
     "Band 7.5: clear, complete and controlled, but there may still be mechanical phrasing, ordinary detail, or limited naturalness.",
     "Band 8: fully covers all bullet points with skilful relevant detail; tone/register are consistently appropriate; cohesion is smooth; errors are rare and minor.",
     "Band 8.5: highly natural, precise and purposeful; details are very well judged; language is fluent, varied and nearly effortless; errors are rare and unobtrusive.",
-    "Band 9: fully effective natural communication. It does not require literary genius or superhuman complexity. It means the task is handled completely and naturally, with virtually no language limitation, no visible template feel, and only negligible slips if any."
+    "Band 9: a fully effective IELTS GT letter. It may be concise. It does not need literary style, complex academic argument, or unusual vocabulary. It must feel natural, precise, complete, and virtually limitation-free for the communicative purpose."
   ] : [
     "Task 2 high-band calibration: judge depth, nuance, precision, progression, and how naturally the argument develops.",
     "Band 7.5: well-developed and coherent, but some ideas may be predictable, some progression mechanical, or some language choices not consistently sophisticated.",
@@ -139,7 +139,7 @@ function highBandPrompt(task, questionPrompt, essay) {
     "Do not automatically cap excellent writing at Band 8. Band 9 is rare, but it is allowed when the criteria are met.",
     "Band 9 does not mean superhuman writing. It means fully effective, natural, precise, fluent, and virtually error-free IELTS writing for the task.",
     "If all four criteria are clearly at 8.5-9 descriptor level, award 8.5 or 9 instead of defaulting to 8.",
-    "If a response is excellent but has only minor limitations, use 8.5. If it is fully effective with no meaningful language limitation, use 9.",
+    "If a response is excellent but has only minor limitations, use 8.5. If it is fully effective with no meaningful limitation, use 9.",
     "Do not inflate ordinary polished writing: length, formal tone, paragraphing, or advanced-looking vocabulary alone does not justify 8.5 or 9.",
     "If there is noticeable repetition, generic development, template phrasing, awkward collocation, or frequent minor errors, 7.0-7.5 is usually more appropriate than 8.5-9.",
     "High-band scoring anchors: 7.5 = strong but visibly limited; 8 = very strong with minor limitations; 8.5 = near-native task control with rare insignificant slips; 9 = fully effective and virtually limitation-free for IELTS purposes.",
@@ -159,19 +159,25 @@ function exact9ReviewPrompt(task, questionPrompt, essay, firstResult) {
   const firstBand = firstResult.finalBand;
 
   const taskSpecific = task === "Task 1" ? [
-    "Task 1 exact-9 review: Ask whether this is a completely effective letter for the stated purpose, with natural register, precise detail, and virtually no language limitation.",
-    "A Task 1 letter can be Band 9 without being long or literary if it is fully effective, naturally phrased, precise, and essentially error-free.",
-    "Do not require unnecessary complexity. Penalise visible template feel, stiff phrasing, vague detail, or any noticeable unnaturalness."
+    "Task 1 balanced exact-9 review:",
+    "Do not judge the letter as if it were an academic essay. IELTS GT Task 1 can be Band 9 at about 150-210 words.",
+    "A concise letter may be Band 9 if it fully satisfies the purpose, covers all bullets naturally, uses the right tone, and has virtually no language limitation.",
+    "Do not penalise a letter for being simple when simple wording is the most natural and appropriate choice.",
+    "If the first pass gave Band 8 but the only objections are slight formality, minor lexical repetition, or not being 'sophisticated' enough, consider whether 8.5 is more accurate.",
+    "Promote to exact 9 only if the letter is complete, natural, precise, appropriately toned, and essentially limitation-free. Otherwise choose upgrade_to_8_5 or keep_first."
   ] : [
-    "Task 2 exact-9 review: Ask whether this is a fully effective essay with seamless progression, precise reasoning, mature qualification, and virtually no language limitation.",
-    "A Task 2 essay can be Band 9 without being a published academic article if it completely answers the question with natural, precise, controlled argument.",
-    "Do not require rare vocabulary or excessive complexity. Penalise generic argument, predictable development, repetition, or visible strain."
+    "Task 2 balanced exact-9 review:",
+    "Keep this stricter than Task 1. Task 2 Band 9 requires a fully effective essay with mature reasoning, sustained nuance, seamless progression, and virtually no language limitation.",
+    "Do not promote to 9 if the argument is predictable, only generally developed, or has merely standard high-band academic phrasing.",
+    "A strong but not fully exceptional Task 2 answer should usually remain 8 or 8.5.",
+    "Promote to exact 9 only when the essay is genuinely fully effective across TR, CC, LR and GRA. Otherwise choose upgrade_to_8_5 or keep_first."
   ];
 
   return [
-    "You are the EXACT-9 REVIEW examiner for IELTS General Training Writing.",
-    "This is a second-pass AI-only review. The first high-band pass already rated this response highly.",
-    "Your job is not to be generous. Your job is to decide whether the first-pass 8.5-type result should remain 8.5 or become a genuine 9.",
+    "You are the BALANCED EXACT-9 REVIEW examiner for IELTS General Training Writing.",
+    "This is a second-pass AI-only review. The first high-band pass has already provided criteria and audit signals.",
+    "Your job is to decide whether the first-pass result should stay as it is, upgrade to 8.5, or promote to genuine 9.",
+    "Do not be generous with 9, but do not cap true IELTS Band 9 writing at 8 just because it is concise or not literary.",
     `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
     `First-pass final band: ${firstBand}.`,
     `First-pass criteria: ${JSON.stringify(firstCriteria)}.`,
@@ -181,12 +187,13 @@ function exact9ReviewPrompt(task, questionPrompt, essay, firstResult) {
     "If there are only negligible slips that do not affect naturalness or control, Band 9 may still be justified.",
     "If the response is excellent but has any visible limitation in detail, naturalness, precision, sophistication, or development, keep it at 8.5.",
     "Do NOT promote to 9 because of length, formality, paragraphing, or advanced-looking vocabulary.",
-    "Do promote to 9 if all four criteria genuinely meet 9-level performance and the response is fully effective for the task.",
+    "Use upgrade_to_8_5 when the first pass is too harsh at 8 but the response is not fully 9.",
+    "Use promote_to_9 only when all four returned criteria can honestly average to 9 under IELTS high-band standards.",
     ...taskSpecific,
     `Word count: ${wc}.`,
     `Question prompt:\n${questionPrompt || ""}`,
     `Student response:\n${essay || ""}`,
-    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"exact9-review\",\"task\":\"Task 1 or Task 2\",\"exact9Decision\":\"promote_to_9 or keep_8_5\",\"criteria\":{...four numeric criterion bands...},\"exact9Audit\":{\"promoted\":boolean,\"fullyEffective\":boolean,\"virtuallyNoLimitation\":boolean,\"naturalPrecision\":boolean,\"seamlessProgression\":boolean,\"negligibleSlipsOnly\":boolean,\"whyPromote\":[\"short_code\"],\"whyKeepAt85\":[\"short_code\"]}}"
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"balanced-exact9-review\",\"task\":\"Task 1 or Task 2\",\"exact9Decision\":\"keep_first or upgrade_to_8_5 or promote_to_9\",\"criteria\":{...four numeric criterion bands...},\"exact9Audit\":{\"promoted\":boolean,\"upgradedTo85\":boolean,\"fullyEffective\":boolean,\"virtuallyNoLimitation\":boolean,\"naturalPrecision\":boolean,\"seamlessProgression\":boolean,\"negligibleSlipsOnly\":boolean,\"whyPromote\":[\"short_code\"],\"whyUpgradeTo85\":[\"short_code\"],\"whyKeepFirst\":[\"short_code\"]}}"
   ].join("\n\n");
 }
 
@@ -249,26 +256,35 @@ async function runMainHighBandPass(task, questionPrompt, essay) {
   return { parsed, criteria, finalBand };
 }
 
-function shouldTriggerExact9Review(firstResult) {
-  if (!firstResult || firstResult.finalBand < 8.5) return false;
+function strongSignalCount(firstResult) {
   const audit = firstResult.parsed?.highBandAudit || {};
-  const signals = [
+  return [
     audit.matureControl,
     audit.preciseLexis,
     audit.developmentDepth,
     audit.naturalCohesion,
     audit.band9Considered
   ].filter(Boolean).length;
+}
 
-  // This is routing only. It does not raise/lower the score.
-  // A high-scoring AI first pass with enough high-band signals gets a second AI review.
-  return signals >= 4 || firstResult.finalBand >= 9;
+function shouldTriggerExact9Review(task, firstResult) {
+  if (!firstResult) return false;
+  const signals = strongSignalCount(firstResult);
+
+  // Routing only. It does not change score.
+  // v8.5.11 change:
+  // - Task 1 may trigger review from Band 8 if high-band signals are strong, because concise excellent letters were being held at 8.
+  // - Task 2 remains more conservative and normally requires first pass 8.5+.
+  if (task === "Task 1") {
+    return firstResult.finalBand >= 8 && signals >= 4;
+  }
+  return firstResult.finalBand >= 8.5 && signals >= 4;
 }
 
 async function runExact9Review(task, questionPrompt, essay, firstResult) {
   const prompt = exact9ReviewPrompt(task, questionPrompt, essay, firstResult);
   const content = await callDeepSeek([
-    { role: "system", content: "You are a strict IELTS GT Writing exact Band 9 review examiner. Return JSON only." },
+    { role: "system", content: "You are a strict but balanced IELTS GT Writing exact Band 9 review examiner. Return JSON only." },
     { role: "user", content: prompt }
   ], 0.08);
 
@@ -277,15 +293,16 @@ async function runExact9Review(task, questionPrompt, essay, firstResult) {
   const finalBand = averageBand(criteria, task);
   if (finalBand == null) throw new Error("Could not calculate exact-9 final band from criteria");
 
-  const promotedByAI = String(parsed.exact9Decision || "").toLowerCase().includes("promote")
-    || parsed.exact9Audit?.promoted === true;
+  const decision = String(parsed.exact9Decision || "").toLowerCase();
+  const promotedByAI = decision.includes("promote") || parsed.exact9Audit?.promoted === true;
+  const upgradedTo85ByAI = decision.includes("upgrade") || parsed.exact9Audit?.upgradedTo85 === true;
 
-  return { parsed, criteria, finalBand, promotedByAI };
+  return { parsed, criteria, finalBand, decision, promotedByAI, upgradedTo85ByAI };
 }
 
 async function scoreHighBand(task, questionPrompt, essay) {
   const first = await runMainHighBandPass(task, questionPrompt, essay);
-  const exact9Triggered = shouldTriggerExact9Review(first);
+  const exact9Triggered = shouldTriggerExact9Review(task, first);
 
   let exact9 = null;
   let selected = first;
@@ -293,11 +310,19 @@ async function scoreHighBand(task, questionPrompt, essay) {
 
   if (exact9Triggered) {
     exact9 = await runExact9Review(task, questionPrompt, essay, first);
-    // AI-only selection: use exact-9 review criteria only if the second AI explicitly promotes
-    // and returns criteria whose mechanical average is 8.5 or 9. No local score lifting occurs.
-    if (exact9.promotedByAI && exact9.finalBand >= 8.5) {
+
+    // AI-only selection:
+    // - Use exact review if the second AI explicitly promotes to 9 and returns an average >= 8.5.
+    // - Use exact review if the second AI explicitly upgrades to 8.5 and returns 8.5.
+    // - Never use a review result that is below the first-pass band.
+    // No local numerical lift is applied; all selected scores are AI-returned criteria averages.
+    const reviewImprovesOrMatches = exact9.finalBand >= first.finalBand;
+    if (exact9.promotedByAI && exact9.finalBand >= 8.5 && reviewImprovesOrMatches) {
       selected = exact9;
-      selectedSource = "exact9-review-pass";
+      selectedSource = "balanced-exact9-review-pass";
+    } else if (exact9.upgradedTo85ByAI && exact9.finalBand === 8.5 && reviewImprovesOrMatches) {
+      selected = exact9;
+      selectedSource = "balanced-85-review-pass";
     }
   }
 
@@ -357,11 +382,13 @@ module.exports = async function handler(req, res) {
         mainFinalBand: result.first.finalBand,
         mainCriteria: result.first.criteria,
         mainAudit: result.first.parsed?.highBandAudit || {},
+        signalCount: strongSignalCount(result.first),
         reviewFinalBand: result.exact9?.finalBand ?? null,
         reviewCriteria: result.exact9?.criteria || null,
         reviewDecision: result.exact9?.parsed?.exact9Decision || null,
         reviewAudit: result.exact9?.parsed?.exact9Audit || null,
-        promotedByAI: result.exact9?.promotedByAI || false
+        promotedByAI: result.exact9?.promotedByAI || false,
+        upgradedTo85ByAI: result.exact9?.upgradedTo85ByAI || false
       },
       disclaimer: DISCLAIMER
     };
