@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v1-0-independent-task-locked";
+const GENERATOR_VERSION = "essay-generator-v2-three-step-learnable-upgrade";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -117,6 +117,81 @@ function safeFrozenContext(body = {}) {
   };
 }
 
+function extractFrozenBandFromContext(context = {}) {
+  const frozen = context.frozenScore && typeof context.frozenScore === "object" ? context.frozenScore : {};
+  const current = context.currentResult && typeof context.currentResult === "object" ? context.currentResult : {};
+  const candidates = [
+    frozen.finalBand,
+    frozen.overallBand,
+    frozen.score,
+    frozen.band,
+    frozen.scoreCalculation && frozen.scoreCalculation.finalBand,
+    current.finalBand,
+    current.overallBand,
+    current.score,
+    current.band,
+    current.scoreCalculation && current.scoreCalculation.finalBand
+  ];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0 && n <= 9) return Math.round(n * 2) / 2;
+  }
+  return null;
+}
+
+function clampBand(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(9, Math.round(n * 2) / 2));
+}
+
+function bandLabel(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toFixed(1).replace(/\.0$/, ".0");
+}
+
+function textArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function objectOnly(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function generationTargetsForContext(context = {}) {
+  const currentBand = extractFrozenBandFromContext(context);
+  if (!Number.isFinite(currentBand)) {
+    return {
+      currentBand: null,
+      targetBandModel: null,
+      targetBandPlus05: null,
+      targetBandPlus10: null,
+      levelInstruction: "No frozen band is available. Keep all generated answers learner-realistic, practical, and not unrealistically advanced."
+    };
+  }
+
+  const targetBandPlus05 = clampBand(currentBand + 0.5);
+  const targetBandPlus10 = clampBand(currentBand + 1.0);
+  const targetBandModel = currentBand < 7.5 ? targetBandPlus10 : targetBandPlus05;
+
+  let levelInstruction = "";
+  if (currentBand < 5) {
+    levelInstruction = "The student is below Band 5. Use clear, simple, learnable sentences. Improve task coverage, basic paragraphing, grammar accuracy, and useful everyday vocabulary. Do not use advanced academic language.";
+  } else if (currentBand < 6.5) {
+    levelInstruction = "The student is around Band 5 to 6. Use moderately improved but still learnable language. Avoid native-speaker-only phrasing. Focus on clearer task response, paragraph development, and safer sentence control.";
+  } else if (currentBand < 7.5) {
+    levelInstruction = "The student is around Band 6.5 to 7. Use stronger but still practical IELTS language. Focus on precision, development, cohesion, and controlled complex sentences.";
+  } else {
+    levelInstruction = "The student is already high band. The model answer can be sophisticated, but learning notes must remain practical and explainable.";
+  }
+
+  return { currentBand, targetBandModel, targetBandPlus05, targetBandPlus10, levelInstruction };
+}
+
+
 function extractJson(text) {
   const raw = String(text || "").trim();
   if (!raw) throw new Error("Empty AI response");
@@ -134,23 +209,44 @@ function extractJson(text) {
 function buildGenerationPrompt(body = {}) {
   const task = normalizeRequestedTask(body);
   const context = safeFrozenContext(body);
+  const targets = generationTargetsForContext(context);
   const prompt = body.questionPrompt || body.prompt || body.promptText || "";
   const essay = String(body.essay || "").trim();
+
   const taskSpecific = task === "Task 1"
-    ? "Generate GT Task 1 letter practice output: clear purpose, suitable opening/closing, correct tone/register, and full bullet coverage."
-    : "Generate GT Task 2 essay practice output: clear position when needed, logical body paragraphs, developed reasons/examples, and a concise conclusion.";
-  const revisedInstruction = essay
-    ? "Also generate a revisedEssay that improves the student's original response while preserving meaning and staying learner-realistic."
-    : "No student essay was provided, so revisedEssay should be an empty string and the modelAnswer should be the main useful output.";
+    ? [
+        "Task 1 requirements:",
+        "- Generate General Training Task 1 letter practice output.",
+        "- The question-based model answer must clearly cover all bullet points.",
+        "- Use a suitable tone/register: formal, semi-formal, or informal depending on the prompt.",
+        "- Keep paragraphs short, functional, and easy to imitate."
+      ].join("\n")
+    : [
+        "Task 2 requirements:",
+        "- Generate General Training Task 2 essay practice output.",
+        "- Identify the question type and answer all parts.",
+        "- Keep the position clear when the task asks for opinion.",
+        "- Use logical body paragraphs with reasons and examples."
+      ].join("\n");
+
+  const essayInstruction = essay
+    ? "The student essay is provided. Generate TWO revised versions based on the student's essay: one aimed at about +0.5 band, and one aimed at about +1.0 band. Preserve the student's core meaning, topic, and main ideas."
+    : "No student essay was provided. Leave revisionPlus05.essay and revisionPlus10.essay empty, but still provide the question-based model answer and learning guide.";
+
   return [
-    "You are an IELTS General Training Writing essay-generation tutor.",
-    "This endpoint is generation-only. You are NOT scoring the essay.",
-    "Do not change, estimate, mention, recommend, or recalculate any IELTS score or criterion band.",
-    "The selected task is locked by the request. Do not reclassify Task 1 and Task 2. If the user's writing style resembles another task, still generate for the locked task.",
+    "You are an IELTS General Training Writing tutor.",
+    "This endpoint is generation-only. You are NOT scoring the essay and must NOT change any frozen score.",
+    "Use frozen score/current result only as a language-level reference for generating learnable writing.",
+    "Generate exactly THREE learning outputs:",
+    "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
+    "2) revisionPlus05: a revised version based on the student's essay, aiming for about +0.5 band improvement.",
+    "3) revisionPlus10: a revised version based on the student's essay, aiming for about +1.0 band improvement.",
+    "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable.",
+    "Explain WHY each version is higher and WHAT the student should learn from it.",
+    "Do not tell the student to memorize entire essays. Focus on structure, task coverage, useful sentences, grammar control, and paragraph development.",
     taskSpecific,
-    revisedInstruction,
-    "Use practical IELTS learner language. Avoid over-advanced, literary, or native-speaker-only expressions unless the frozen score clearly suggests a high-band learner.",
-    "If frozen score context exists, use it only to choose a realistic language level. Never modify or recalculate it.",
+    essayInstruction,
+    targets.levelInstruction,
     "Return strict JSON only. No markdown, no code fences, no comments, no trailing prose.",
     "Return exactly this shape:",
     JSON.stringify({
@@ -159,26 +255,134 @@ function buildGenerationPrompt(body = {}) {
       task,
       generationOnly: true,
       scoreUnaffected: true,
-      modelAnswerOutline: "...",
-      modelAnswer: "...",
-      revisedEssay: essay ? "..." : ""
+      currentBand: targets.currentBand,
+      targetBandModel: targets.targetBandModel,
+      targetBandPlus05: targets.targetBandPlus05,
+      targetBandPlus10: targets.targetBandPlus10,
+      modelAnswer: {
+        title: "Question-based model answer",
+        targetBand: targets.targetBandModel,
+        essay: "...",
+        whyThisIsLearnable: "...",
+        whyHigherThanUserEssay: "...",
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      },
+      revisionPlus05: {
+        title: "Revised version: +0.5 band",
+        targetBand: targets.targetBandPlus05,
+        essay: essay ? "..." : "",
+        whyItIsPlus05: "...",
+        whatChanged: ["..."],
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      },
+      revisionPlus10: {
+        title: "Revised version: +1.0 band",
+        targetBand: targets.targetBandPlus10,
+        essay: essay ? "..." : "",
+        whyItIsPlus10: "...",
+        whatChangedFromPlus05: ["..."],
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      },
+      learningGuide: {
+        mainWeaknesses: ["..."],
+        nextPracticeFocus: ["..."],
+        doNotCopyBlindly: ["..."]
+      },
+      legacy: {
+        modelAnswerOutline: "...",
+        modelAnswer: "...",
+        revisedEssay: essay ? "..." : ""
+      }
     }, null, 2),
     "Context:",
     `Task: ${task}`,
     `Question type: ${body.questionType || body.type || ""}`,
     `Title: ${body.title || ""}`,
-    `Prompt: ${clipText(prompt, 2200)}`,
-    `Frozen score/current result for level reference only: ${JSON.stringify({ frozenScore: context.frozenScore, currentResult: context.currentResult ? { task: context.currentResult.task, overallBand: context.currentResult.overallBand || context.currentResult.scoreCalculation?.finalBand, criteria: context.currentResult.finalCriteria || context.currentResult.criteria } : null })}`,
+    `Prompt: ${clipText(prompt, 2400)}`,
+    `Current frozen band used only as level reference: ${targets.currentBand == null ? "unknown" : bandLabel(targets.currentBand)}`,
+    `Target model answer band: ${targets.targetBandModel == null ? "learner-realistic" : bandLabel(targets.targetBandModel)}`,
+    `Target +0.5 revised band: ${targets.targetBandPlus05 == null ? "learner-realistic +0.5" : bandLabel(targets.targetBandPlus05)}`,
+    `Target +1.0 revised band: ${targets.targetBandPlus10 == null ? "learner-realistic +1.0" : bandLabel(targets.targetBandPlus10)}`,
+    `Frozen score/current result for level reference only: ${JSON.stringify({
+      frozenScore: context.frozenScore,
+      currentResult: context.currentResult ? {
+        task: context.currentResult.task,
+        overallBand: context.currentResult.overallBand || context.currentResult.finalBand || context.currentResult.scoreCalculation?.finalBand,
+        criteria: context.currentResult.finalCriteria || context.currentResult.criteria
+      } : null
+    })}`,
     `Essay word count: ${countWords(essay)}`,
     "Student essay:",
-    clipText(essay, 6500)
+    clipText(essay, 7000)
   ].join("\n\n");
 }
+
 
 function normalizeGenerationResult(raw = {}, body = {}) {
   const task = normalizeRequestedTask(body);
   const context = safeFrozenContext(body);
+  const targets = generationTargetsForContext(context);
   const result = raw && typeof raw === "object" ? raw : {};
+
+  const legacy = objectOnly(result.legacy);
+  const modelObj = objectOnly(result.modelAnswer);
+  const plus05Obj = objectOnly(result.revisionPlus05);
+  const plus10Obj = objectOnly(result.revisionPlus10);
+  const guideObj = objectOnly(result.learningGuide);
+
+  const legacyModelAnswer = typeof result.modelAnswer === "string"
+    ? result.modelAnswer
+    : String(legacy.modelAnswer || result.answer || result.sampleAnswer || modelObj.essay || "").trim();
+
+  const modelAnswer = {
+    title: String(modelObj.title || "Question-based model answer").trim(),
+    targetBand: clampBand(modelObj.targetBand ?? result.targetBandModel ?? targets.targetBandModel),
+    essay: String(modelObj.essay || legacyModelAnswer || "").trim(),
+    whyThisIsLearnable: String(modelObj.whyThisIsLearnable || result.whyThisModelIsLearnable || "").trim(),
+    whyHigherThanUserEssay: String(modelObj.whyHigherThanUserEssay || result.whyModelIsHigher || "").trim(),
+    studyPoints: textArray(modelObj.studyPoints),
+    usefulSentences: textArray(modelObj.usefulSentences)
+  };
+
+  const revisionPlus05 = {
+    title: String(plus05Obj.title || "Revised version: +0.5 band").trim(),
+    targetBand: clampBand(plus05Obj.targetBand ?? result.targetBandPlus05 ?? targets.targetBandPlus05),
+    essay: String(plus05Obj.essay || result.revisedEssayPlus05 || result.revisedEssay || legacy.revisedEssay || result.revision || result.improvedEssay || "").trim(),
+    whyItIsPlus05: String(plus05Obj.whyItIsPlus05 || result.whyPlus05 || "").trim(),
+    whatChanged: textArray(plus05Obj.whatChanged),
+    studyPoints: textArray(plus05Obj.studyPoints),
+    usefulSentences: textArray(plus05Obj.usefulSentences)
+  };
+
+  const revisionPlus10 = {
+    title: String(plus10Obj.title || "Revised version: +1.0 band").trim(),
+    targetBand: clampBand(plus10Obj.targetBand ?? result.targetBandPlus10 ?? targets.targetBandPlus10),
+    essay: String(plus10Obj.essay || result.revisedEssayPlus10 || "").trim(),
+    whyItIsPlus10: String(plus10Obj.whyItIsPlus10 || result.whyPlus10 || "").trim(),
+    whatChangedFromPlus05: textArray(plus10Obj.whatChangedFromPlus05 || plus10Obj.whatChanged),
+    studyPoints: textArray(plus10Obj.studyPoints),
+    usefulSentences: textArray(plus10Obj.usefulSentences)
+  };
+
+  const learningGuide = {
+    mainWeaknesses: textArray(guideObj.mainWeaknesses),
+    nextPracticeFocus: textArray(guideObj.nextPracticeFocus),
+    doNotCopyBlindly: textArray(guideObj.doNotCopyBlindly)
+  };
+
+  const modelAnswerOutline = String(
+    result.modelAnswerOutline ||
+    legacy.modelAnswerOutline ||
+    [
+      modelAnswer.studyPoints.length ? `Model answer: ${modelAnswer.studyPoints.join("; ")}` : "",
+      revisionPlus05.whatChanged.length ? `+0.5 revision: ${revisionPlus05.whatChanged.join("; ")}` : "",
+      revisionPlus10.whatChangedFromPlus05.length ? `+1.0 revision: ${revisionPlus10.whatChangedFromPlus05.join("; ")}` : ""
+    ].filter(Boolean).join("\n")
+  ).trim();
+
   return {
     ok: true,
     aiStage: "essay-generator",
@@ -192,17 +396,25 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     currentResultUsed: context.currentResultUsed,
     currentResultRejectedReason: context.currentResultRejectedReason,
     wordCount: countWords(body.essay),
-    modelAnswerOutline: String(result.modelAnswerOutline || result.outline || "").trim(),
-    modelAnswer: String(result.modelAnswer || result.answer || result.sampleAnswer || "").trim(),
-    revisedEssay: String(result.revisedEssay || result.revision || result.improvedEssay || "").trim(),
+    currentBand: targets.currentBand,
+    targetBandModel: modelAnswer.targetBand,
+    targetBandPlus05: revisionPlus05.targetBand,
+    targetBandPlus10: revisionPlus10.targetBand,
+    modelAnswer,
+    revisionPlus05,
+    revisionPlus10,
+    learningGuide,
+    modelAnswerOutline,
+    revisedEssay: revisionPlus05.essay,
     systemFeedback: {
       system: "essay-generation",
-      status: "generated",
+      status: "generated_three_step_learning_outputs",
       scoreChanged: false,
-      message: "作文生成完成；没有调用评分流程，也没有改变已冻结分数。"
+      message: "作文生成完成；生成了题目范文、+0.5 修改版、+1.0 修改版和学习说明。分数没有改变。"
     }
   };
 }
+
 
 async function callDeepSeek(prompt) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -215,10 +427,10 @@ async function callDeepSeek(prompt) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        temperature: 0.25,
-        max_tokens: 4500,
+        temperature: 0.35,
+        max_tokens: 8000,
         messages: [
-          { role: "system", content: "Return strict JSON only. Generate IELTS practice writing only. Never score or change any score." },
+          { role: "system", content: "Return strict JSON only. Generate IELTS GT practice writing only. Never recalculate or change any score." },
           { role: "user", content: prompt }
         ]
       }),

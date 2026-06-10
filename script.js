@@ -2300,32 +2300,159 @@
   }
   function renderRevisionResult(result = {}) {
     if (!els.gradingResults) return;
-    const modelOutline = String(result.modelAnswerOutline || "").trim();
-    const modelAnswer = String(result.modelAnswer || "").trim();
-    const revisedEssay = String(result.revisedEssay || "").trim();
+
     const taskLabel = result.task || lockedTaskForSelected();
+    const toText = (value) => String(value || "").trim();
+    const toArr = (value) => Array.isArray(value)
+      ? value.map((item) => String(item || "").trim()).filter(Boolean)
+      : (toText(value) ? [toText(value)] : []);
+
+    const bandText = (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? `Band ${formatBand(n)}` : "可学习提升";
+    };
+
+    const listBlock = (title, items) => {
+      const arr = toArr(items);
+      return arr.length ? `<div class="generated-study-list"><h5>${escapeHtml(title)}</h5>${listHtml(arr)}</div>` : "";
+    };
+
+    const oldModelAnswer = typeof result.modelAnswer === "string" ? result.modelAnswer : "";
+    const model = typeof result.modelAnswer === "object" && result.modelAnswer
+      ? result.modelAnswer
+      : { targetBand: result.targetBandModel, essay: oldModelAnswer, studyPoints: [], usefulSentences: [] };
+
+    const plus05 = result.revisionPlus05 || {
+      targetBand: result.targetBandPlus05,
+      essay: result.revisedEssay || "",
+      whyItIsPlus05: "",
+      whatChanged: [],
+      studyPoints: [],
+      usefulSentences: []
+    };
+
+    const plus10 = result.revisionPlus10 || {
+      targetBand: result.targetBandPlus10,
+      essay: "",
+      whyItIsPlus10: "",
+      whatChangedFromPlus05: [],
+      studyPoints: [],
+      usefulSentences: []
+    };
+
+    const guide = result.learningGuide || {};
+    const generatedTextMap = {
+      model: toText(model.essay),
+      plus05: toText(plus05.essay),
+      plus10: toText(plus10.essay)
+    };
+
     const systemNote = result.currentResultRejectedReason
       ? `旧评分结果未使用：${result.currentResultRejectedReason}`
       : result.currentResultUsed
         ? "已使用同一任务的冻结分数作为语言水平参考。"
-        : "未使用旧评分结果；仅按当前题目生成。";
-    const html = `<section class="grading-section revision-block">
-      <h4>作文生成 / Model and Revision</h4>
-      <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
-      <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
-      <details class="score-collapse" ${modelOutline ? "open" : ""}><summary>范文大纲</summary><div class="score-collapse-body"><pre>${escapeHtml(modelOutline || "暂未生成")}</pre></div></details>
-      <details class="score-collapse" ${modelAnswer ? "open" : ""}><summary>同题范文</summary><div class="score-collapse-body"><pre>${escapeHtml(modelAnswer || "暂未生成")}</pre></div></details>
-      <details class="score-collapse" ${revisedEssay ? "open" : ""}><summary>基于原文的修改版</summary><div class="score-collapse-body"><pre>${escapeHtml(revisedEssay || "暂未生成")}</pre>${revisedEssay ? `<button class="secondary" type="button" id="applyRevisedEssayBtn">应用到作文输入区</button>` : ""}</div></details>
+        : "未使用旧评分结果；将按当前题目生成可学习作文。";
+
+    const essayPre = (text, empty = "暂未生成") => `<pre class="generated-essay-text">${escapeHtml(toText(text) || empty)}</pre>`;
+    const copyButton = (id, label) => `<button class="secondary" type="button" data-copy-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
+    const applyButton = (id, label) => `<button class="secondary" type="button" data-apply-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
+
+    const card = (title, subtitle, essayText, explanationHtml, actionsHtml = "") => `
+      <details class="score-accordion generated-essay-card">
+        <summary>${escapeHtml(title)} <span class="muted">${escapeHtml(subtitle)}</span></summary>
+        <div class="score-accordion-body">
+          ${essayPre(essayText)}
+          ${explanationHtml}
+          <div class="actions generated-essay-actions">${actionsHtml}</div>
+        </div>
+      </details>`;
+
+    const modelExplanation = `
+      ${toText(model.whyThisIsLearnable) ? `<div class="score-flow-note"><strong>为什么这篇适合你学：</strong>${escapeHtml(model.whyThisIsLearnable)}</div>` : ""}
+      ${toText(model.whyHigherThanUserEssay) ? `<div class="score-flow-note"><strong>为什么比你的原文更高：</strong>${escapeHtml(model.whyHigherThanUserEssay)}</div>` : ""}
+      ${listBlock("这篇范文里要学习什么", model.studyPoints)}
+      ${listBlock("可模仿句子", model.usefulSentences)}
+    `;
+
+    const plus05Explanation = `
+      ${toText(plus05.whyItIsPlus05) ? `<div class="score-flow-note"><strong>为什么大约高 0.5 分：</strong>${escapeHtml(plus05.whyItIsPlus05)}</div>` : ""}
+      ${listBlock("主要改了什么", plus05.whatChanged)}
+      ${listBlock("你下次最应该先学什么", plus05.studyPoints)}
+      ${listBlock("可模仿句子", plus05.usefulSentences)}
+    `;
+
+    const plus10Explanation = `
+      ${toText(plus10.whyItIsPlus10) ? `<div class="score-flow-note"><strong>为什么大约高 1.0 分：</strong>${escapeHtml(plus10.whyItIsPlus10)}</div>` : ""}
+      ${listBlock("比 +0.5 版本多提升在哪里", plus10.whatChangedFromPlus05 || plus10.whatChanged)}
+      ${listBlock("下一阶段要学习什么", plus10.studyPoints)}
+      ${listBlock("可模仿句子", plus10.usefulSentences)}
+    `;
+
+    const guideHtml = `
+      <details class="score-accordion generated-learning-guide">
+        <summary>学习路线 / How to learn from these answers</summary>
+        <div class="score-accordion-body">
+          ${listBlock("你当前最主要的问题", guide.mainWeaknesses)}
+          ${listBlock("下一篇作文优先练什么", guide.nextPracticeFocus)}
+          ${listBlock("不要盲目照抄什么", guide.doNotCopyBlindly)}
+          <div class="score-flow-note"><strong>学习顺序：</strong>先看题目范文的结构，再看 +0.5 修改版学习最容易马上改的地方，最后看 +1.0 修改版作为下一阶段目标。</div>
+        </div>
+      </details>`;
+
+    const html = `<section class="grading-section revision-block generated-writing-learning-block">
+      <details class="score-accordion generated-writing-panel">
+        <summary>作文生成 / Model and Revision <span class="muted">已生成 3 篇可学习作文，点击展开。</span></summary>
+        <div class="score-accordion-body">
+          <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
+          <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成只高 0.5–1.0 分、能学得会的版本。</div>` : ""}
+          ${card("① 题目范文 / Question-based model answer", `目标：${bandText(model.targetBand || result.targetBandModel)}`, generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
+          ${card("② 基于原文修改版 / +0.5 band revision", `目标：${bandText(plus05.targetBand || result.targetBandPlus05)}`, generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", "复制 +0.5 修改版")}${applyButton("plus05", "应用 +0.5 到作文输入区")}`)}
+          ${card("③ 基于原文修改版 / +1.0 band revision", `目标：${bandText(plus10.targetBand || result.targetBandPlus10)}`, generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", "复制 +1.0 修改版")}${applyButton("plus10", "应用 +1.0 到作文输入区")}`)}
+          ${guideHtml}
+        </div>
+      </details>
     </section>`;
+
     els.gradingResults.insertAdjacentHTML("beforeend", html);
-    $("applyRevisedEssayBtn")?.addEventListener("click", () => {
-      if (!els.essayInput || !selected) return;
-      els.essayInput.value = revisedEssay;
-      save(selected.id, "essay", revisedEssay);
-      updateWords();
-      showStatus("已应用修改版");
+    const block = els.gradingResults.querySelector(".generated-writing-learning-block:last-child");
+    if (!block) return;
+
+    block.addEventListener("click", async (event) => {
+      const copy = event.target.closest("[data-copy-generated]");
+      if (copy) {
+        const key = copy.dataset.copyGenerated;
+        const text = generatedTextMap[key] || "";
+        if (!text) { showStatus("暂无可复制内容"); return; }
+        try { await navigator.clipboard.writeText(text); }
+        catch {
+          const tmp = document.createElement("textarea");
+          tmp.value = text;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand("copy");
+          tmp.remove();
+        }
+        showStatus("已复制");
+        return;
+      }
+
+      const apply = event.target.closest("[data-apply-generated]");
+      if (apply) {
+        const key = apply.dataset.applyGenerated;
+        const text = generatedTextMap[key] || "";
+        if (!text) { showStatus("暂无可应用内容"); return; }
+        const ok = window.confirm("确认要用这个修改版替换当前作文输入区内容吗？建议先复制保存原文。");
+        if (!ok) return;
+        if (!els.essayInput || !selected) return;
+        els.essayInput.value = text;
+        save(selected.id, "essay", text);
+        updateWords();
+        showStatus("已应用到作文输入区");
+      }
     });
   }
+
 
   async function generateEssayOnly() {
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
