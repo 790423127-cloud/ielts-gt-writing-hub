@@ -580,6 +580,26 @@
     style.id = "scoreUiStyles";
     style.textContent = `
       .score-flow-note { border: 1px solid var(--border, #d7e2ea); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.65); margin: 12px 0; }
+
+      .criterion-diff-review-card { border: 1px solid rgba(15,118,110,.22); border-radius: 18px; background: linear-gradient(135deg, rgba(240,253,250,.86), rgba(255,255,255,.96)); padding: 16px 18px; margin: 14px 0; box-shadow: 0 10px 26px rgba(15,23,42,.05); }
+      .criterion-diff-review-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+      .criterion-diff-review-title { margin: 0; font-size: 1rem; font-weight: 950; color: var(--text, #122033); }
+      .criterion-diff-review-subtitle { margin: 5px 0 0; color: var(--muted, #5b7082); line-height: 1.55; }
+      .criterion-diff-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 7px 11px; font-weight: 900; font-size: .84rem; color: var(--teal, #0f766e); background: rgba(15,118,110,.12); border: 1px solid rgba(15,118,110,.18); white-space: nowrap; }
+      .criterion-diff-badge.revised { color: var(--amber, #a45d00); background: rgba(164,93,0,.11); border-color: rgba(164,93,0,.2); }
+      .criterion-diff-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+      .criterion-diff-panel { border: 1px solid rgba(15,118,110,.16); border-radius: 14px; background: rgba(255,255,255,.72); padding: 12px 14px; }
+      .criterion-diff-panel h5 { margin: 0 0 8px; font-size: .92rem; color: var(--teal, #0f766e); }
+      .criterion-diff-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid rgba(15,118,110,.08); }
+      .criterion-diff-row:first-of-type { border-top: 0; }
+      .criterion-diff-row span { color: var(--text, #122033); font-weight: 800; }
+      .criterion-diff-row strong { white-space: nowrap; color: var(--teal, #0f766e); }
+      .criterion-diff-row.is-changed strong { color: var(--amber, #a45d00); }
+      .criterion-diff-evidence { display: grid; gap: 8px; margin-top: 12px; }
+      .criterion-diff-evidence-item { border-left: 4px solid rgba(15,118,110,.52); padding: 8px 10px; border-radius: 9px; background: rgba(255,255,255,.74); line-height: 1.55; }
+      .criterion-diff-evidence-item strong { display: block; margin-bottom: 4px; color: var(--text, #122033); }
+      .criterion-diff-note { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(15,118,110,.07); color: var(--muted, #5b7082); line-height: 1.6; }
+      @media (max-width: 760px) { .criterion-diff-grid { grid-template-columns: 1fr; } }
       .criterion-card-grid { display: grid; gap: 14px; margin: 14px 0; }
       .criterion-score-card { border: 1px solid var(--border, #d7e2ea); border-radius: 16px; background: var(--card, #fff); overflow: hidden; box-shadow: 0 1px 0 rgba(15,23,42,.03); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
       .criterion-score-card:hover { border-color: rgba(15,118,110,.35); box-shadow: 0 10px 24px rgba(15,23,42,.06); }
@@ -1697,6 +1717,57 @@
     </div>`;
   }
 
+
+  function renderCriterionDifferentiationReview(result = {}) {
+    const review = result.criterionDifferentiationReview || result.boundaryAudit?.criterionDifferentiationReview || result.scoreCoreMeta?.criterionDifferentiationReview || null;
+    if (!review || typeof review !== "object") return "";
+    const triggered = review.triggered === true || /revised|kept_identical|error|failed/i.test(String(review.decision || ""));
+    if (!triggered) return "";
+    const firstCriteria = review.firstCriteria && typeof review.firstCriteria === "object" ? review.firstCriteria : {};
+    const finalCriteria = review.finalCriteria && typeof review.finalCriteria === "object" ? review.finalCriteria : (result.finalCriteria || result.criteria || {});
+    const names = Object.keys(finalCriteria || {}).length ? Object.keys(finalCriteria) : Object.keys(firstCriteria || {});
+    const changed = new Set(Array.isArray(review.changedCriteria) ? review.changedCriteria.map(String) : []);
+    names.forEach((name) => {
+      if (Number(firstCriteria?.[name]) !== Number(finalCriteria?.[name]) && Number.isFinite(Number(firstCriteria?.[name])) && Number.isFinite(Number(finalCriteria?.[name]))) changed.add(name);
+    });
+    const decision = String(review.decision || (changed.size ? "revised" : "kept_identical_with_evidence"));
+    const badgeClass = changed.size ? "revised" : "kept";
+    const badgeText = changed.size ? `AI adjusted ${changed.size} criterion${changed.size > 1 ? "s" : ""}` : "AI kept same bands";
+    const sameJustified = review.sameBandsJustified === true;
+    const subtitle = changed.size
+      ? "四项同分触发了 AI-only 复核；AI 重新按四项证据检查后调整了部分 criterion。"
+      : "四项同分触发了 AI-only 复核；AI 重新检查后认为四项同分有证据支持。";
+    const beforeRows = names.map((name) => `<div class="criterion-diff-row ${changed.has(name) ? "is-changed" : ""}"><span>${escapeHtml(name)}</span><strong>${Number.isFinite(Number(firstCriteria?.[name])) ? `Band ${escapeHtml(formatBand(firstCriteria[name]))}` : "-"}</strong></div>`).join("");
+    const afterRows = names.map((name) => `<div class="criterion-diff-row ${changed.has(name) ? "is-changed" : ""}"><span>${escapeHtml(name)}</span><strong>${Number.isFinite(Number(finalCriteria?.[name])) ? `Band ${escapeHtml(formatBand(finalCriteria[name]))}` : "-"}</strong></div>`).join("");
+    const evidenceObj = review.criterionEvidence && typeof review.criterionEvidence === "object" ? review.criterionEvidence : {};
+    const evidenceRows = names.map((name) => {
+      const evidence = evidenceObj[name] || evidenceObj[name.replace(/\s+/g, "_")] || evidenceObj[name.toLowerCase()] || "AI reviewed this criterion separately against the band matrix.";
+      return `<div class="criterion-diff-evidence-item"><strong>${escapeHtml(name)}</strong>${escapeHtml(String(evidence))}</div>`;
+    }).join("");
+    const whyCopy = review.whyNotMechanicalCopy ? `<div class="criterion-diff-note"><strong>Why this is not mechanical copy / 为什么不是机械复制：</strong>${escapeHtml(review.whyNotMechanicalCopy)}</div>` : "";
+    const whyBalanced = review.whyFinalProfileIsBalanced ? `<div class="criterion-diff-note"><strong>Final profile / 最终四项组合：</strong>${escapeHtml(review.whyFinalProfileIsBalanced)}</div>` : "";
+    const error = review.error ? `<div class="ai-warning feedback-status-warning"><strong>四项复核失败：</strong>${escapeHtml(review.error)}。分数没有被本地改写，保留上一轮 AI 分数。</div>` : "";
+    return `<section class="criterion-diff-review-card" aria-label="Criterion differentiation review">
+      <div class="criterion-diff-review-head">
+        <div>
+          <h4 class="criterion-diff-review-title">四项分复核 / Criterion Differentiation Review</h4>
+          <p class="criterion-diff-review-subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+        <span class="criterion-diff-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
+      </div>
+      <div class="criterion-diff-grid">
+        <div class="criterion-diff-panel"><h5>复核前 / Before review</h5>${beforeRows || "<p class='muted'>No before-profile returned.</p>"}</div>
+        <div class="criterion-diff-panel"><h5>复核后 / After review</h5>${afterRows || "<p class='muted'>No final-profile returned.</p>"}</div>
+      </div>
+      <div class="criterion-diff-panel" style="margin-top:12px"><h5>四项独立证据 / Criterion-specific evidence</h5><div class="criterion-diff-evidence">${evidenceRows}</div></div>
+      ${whyCopy}
+      ${whyBalanced}
+      ${sameJustified && !changed.size ? `<div class="criterion-diff-note"><strong>结论：</strong>AI 认为四项同分是合理的，不是简单复制 Overall。</div>` : ""}
+      ${error}
+      <div class="criterion-diff-note"><strong>Decision:</strong> ${escapeHtml(decision)} ｜ <strong>本地是否改分：</strong>否。这里只显示 AI 复核结果。</div>
+    </section>`;
+  }
+
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
     const entries = Object.entries(criteria);
@@ -2219,6 +2290,7 @@
       </section>
       ${renderFeedbackStatusNotice(result)}
       ${renderCriterionCards(result)}
+      ${renderCriterionDifferentiationReview(result)}
       ${renderLearningFeedbackHtml()}
       ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
       ${renderScoreCalibration(result)}`;
