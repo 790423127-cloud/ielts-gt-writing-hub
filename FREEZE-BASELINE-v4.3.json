@@ -1,0 +1,100 @@
+{
+  "freezeName": "IELTS Boundary Adjudicator v4.3 Freeze Baseline",
+  "freezeDecision": "freeze_candidate_accepted",
+  "decisionDateUtc": "2026-06-10T21:51:27.324050+00:00",
+  "adjudicatorEndpoint": "https://ielts-gt-writing-hub.vercel.app/api/grade-ielts-boundary-adjudicator",
+  "adjudicatorVersion": "boundary-adjudicator-v4-3-task1-anchor-calibration",
+  "sourceCorpus": "boundary-corpus-v2-3-relabel-cleaned",
+  "result": {
+    "total": 20,
+    "finalInRange": 18,
+    "finalPassRate": 90,
+    "adjudicated": 20,
+    "conflicts": 20,
+    "targetSummaries": [
+      {
+        "targetBand": 4,
+        "total": 4,
+        "finalInRange": 4,
+        "adjudicated": 4,
+        "conflicts": 4,
+        "avgFinal": 4.5,
+        "avgMain": 5.5,
+        "avgLowband": 4,
+        "avgGap": 1.5
+      },
+      {
+        "targetBand": 5,
+        "total": 5,
+        "finalInRange": 5,
+        "adjudicated": 5,
+        "conflicts": 5,
+        "avgFinal": 4.9,
+        "avgMain": 5.8,
+        "avgLowband": 4.2,
+        "avgGap": 1.6
+      },
+      {
+        "targetBand": 3.5,
+        "total": 2,
+        "finalInRange": 0,
+        "adjudicated": 2,
+        "conflicts": 2,
+        "avgFinal": 4.5,
+        "avgMain": 4.5,
+        "avgLowband": 3.75,
+        "avgGap": 0.75
+      },
+      {
+        "targetBand": 4.5,
+        "total": 6,
+        "finalInRange": 6,
+        "adjudicated": 6,
+        "conflicts": 6,
+        "avgFinal": 4.5,
+        "avgMain": 5.42,
+        "avgLowband": 4,
+        "avgGap": 1.42
+      },
+      {
+        "targetBand": 5.5,
+        "total": 3,
+        "finalInRange": 3,
+        "adjudicated": 3,
+        "conflicts": 3,
+        "avgFinal": 5,
+        "avgMain": 6.33,
+        "avgLowband": 4.33,
+        "avgGap": 2
+      }
+    ]
+  },
+  "freezeReason": [
+    "Overall result reached 18/20 = 90% on relabel-cleaned Boundary Corpus v2.3.",
+    "All target bands except 3.5 passed: 4.0, 4.5, 5.0, and 5.5 all passed.",
+    "Further tuning for 3.5 risks damaging stable 4.0/4.5 boundary behavior.",
+    "3.5 will be documented as known limitation and handled later only with a separate true-low-band corpus."
+  ],
+  "knownLimitation": {
+    "targetBand": 3.5,
+    "status": "not_fixed_in_v4_3",
+    "failureCount": 2,
+    "failedIds": [
+      "BND_V2_T1_3_5_A",
+      "BND_V2_T1_3_5_B"
+    ],
+    "policy": "Do not tune v4.3 further for these two 3.5 anchors in the freeze baseline."
+  },
+  "frozenFiles": [
+    "api/grade-ielts-boundary-adjudicator.js",
+    "BOUNDARY-ADJUDICATOR-v4.3.md",
+    "boundary-corpus-v2-3-test/*",
+    "test-evidence/*"
+  ],
+  "doNotModify": [
+    "api/grade-ielts.js",
+    "api/grade-ielts-lowband.js",
+    "api/grade-ielts-highband.js"
+  ],
+  "recommendedGitTag": "boundary-adjudicator-v4.3-freeze"
+}

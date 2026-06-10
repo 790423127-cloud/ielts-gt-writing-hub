@@ -1,0 +1,120 @@
+IELTS Boundary Corpus v2.3 Blind Rubric Dual-System Test
+Main endpoint: https://ielts-gt-writing-hub.vercel.app/api/grade-ielts
+Lowband endpoint: https://ielts-gt-writing-hub.vercel.app/api/grade-ielts-lowband
+Samples: 20
+Blind payload: target labels, rubric, bandCode, bandGroup, systemScope and title are local-only and not sent to API.
+
+[1/20] BND_V2_T1_3_5_A | BND_V2_T1_3_5_A | Task 1 | Target Band 3.5 | GT_TASK_1_LETTER | BAND_3_5 | wc=155 | labelRisk=normal
+  main=4.5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  lowband=3.5 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4,"Coherence and Cohesion":4,"Lexical Resource":3.5,"Grammatical Range and Accuracy":3.5}
+  gap=1 route=boundary_gap_review mainRange=false lowRange=true
+
+[2/20] BND_V2_T1_3_5_B | BND_V2_T1_3_5_B | Task 1 | Target Band 3.5 | GT_TASK_1_LETTER | BAND_3_5 | wc=160 | labelRisk=normal
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4,"Coherence and Cohesion":4,"Lexical Resource":4,"Grammatical Range and Accuracy":3.5}
+  gap=1 route=boundary_lowband_warning_review mainRange=false lowRange=true
+
+[3/20] BND_V2_T2_3_5_A | BND_V2_T2_3_5_A | Task 2 | Target Band 4.5 | GT_TASK_2_ESSAY | BAND_4_5 | wc=272 | labelRisk=relabel_cleaned
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=true lowRange=true
+
+[4/20] BND_V2_T2_3_5_B | BND_V2_T2_3_5_B | Task 2 | Target Band 4.5 | GT_TASK_2_ESSAY | BAND_4_5 | wc=277 | labelRisk=relabel_cleaned
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=true lowRange=true
+
+[5/20] BND_V2_T1_4_0_A | BND_V2_T1_4_0_A | Task 1 | Target Band 4 | GT_TASK_1_LETTER | BAND_4_0 | wc=172 | labelRisk=review_required
+  main=5.5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":5.5,"Coherence and Cohesion":5.5,"Lexical Resource":5,"Grammatical Range and Accuracy":5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1.5 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[6/20] BND_V2_T1_4_0_B | BND_V2_T1_4_0_B | Task 1 | Target Band 4 | GT_TASK_1_LETTER | BAND_4_0 | wc=167 | labelRisk=review_required
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[7/20] BND_V2_T2_4_0_A | BND_V2_T2_4_0_A | Task 2 | Target Band 4 | GT_TASK_2_ESSAY | BAND_4_0 | wc=252 | labelRisk=review_required
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=false lowRange=true
+
+[8/20] BND_V2_T2_4_0_B | BND_V2_T2_4_0_B | Task 2 | Target Band 4 | GT_TASK_2_ESSAY | BAND_4_0 | wc=257 | labelRisk=review_required
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=false lowRange=true
+
+[9/20] BND_V2_T1_4_5_A | BND_V2_T1_4_5_A | Task 1 | Target Band 4.5 | GT_TASK_1_LETTER | BAND_4_5 | wc=164 | labelRisk=review_required
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[10/20] BND_V2_T1_4_5_B | BND_V2_T1_4_5_B | Task 1 | Target Band 4.5 | GT_TASK_1_LETTER | BAND_4_5 | wc=161 | labelRisk=review_required
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[11/20] BND_V2_T2_4_5_A | BND_V2_T2_4_5_A | Task 2 | Target Band 4.5 | GT_TASK_2_ESSAY | BAND_4_5 | wc=251 | labelRisk=review_required
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=true lowRange=true
+
+[12/20] BND_V2_T2_4_5_B | BND_V2_T2_4_5_B | Task 2 | Target Band 4.5 | GT_TASK_2_ESSAY | BAND_4_5 | wc=253 | labelRisk=review_required
+  main=5.5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5.5,"Coherence and Cohesion":5.5,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1.5 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[13/20] BND_V2_T1_5_0_A | BND_V2_T1_5_0_A | Task 1 | Target Band 5 | GT_TASK_1_LETTER | BAND_5_0 | wc=170 | labelRisk=normal
+  main=7 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":7,"Coherence and Cohesion":7,"Lexical Resource":7,"Grammatical Range and Accuracy":7}
+  lowband=5 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":5,"Coherence and Cohesion":5,"Lexical Resource":5,"Grammatical Range and Accuracy":5}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[14/20] BND_V2_T1_5_0_B | BND_V2_T1_5_0_B | Task 1 | Target Band 5 | GT_TASK_1_LETTER | BAND_5_0 | wc=175 | labelRisk=normal
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=false
+
+[15/20] BND_V2_T2_5_0_A | BND_V2_T2_5_0_A | Task 2 | Target Band 5 | GT_TASK_2_ESSAY | BAND_5_0 | wc=264 | labelRisk=normal
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=true lowRange=false
+
+[16/20] BND_V2_T2_5_0_B | BND_V2_T2_5_0_B | Task 2 | Target Band 5 | GT_TASK_2_ESSAY | BAND_5_0 | wc=258 | labelRisk=normal
+  main=5 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":5,"Coherence and Cohesion":5,"Lexical Resource":4.5,"Grammatical Range and Accuracy":4.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=1 route=boundary_lowband_warning_review mainRange=true lowRange=false
+
+[17/20] BND_V2_T1_5_5_A | BND_V2_T1_5_5_A | Task 1 | Target Band 5.5 | GT_TASK_1_LETTER | BAND_5_5 | wc=160 | labelRisk=normal
+  main=7 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":7,"Coherence and Cohesion":7,"Lexical Resource":6.5,"Grammatical Range and Accuracy":6.5}
+  lowband=5 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":5,"Coherence and Cohesion":5,"Lexical Resource":5,"Grammatical Range and Accuracy":5}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=true
+
+[18/20] BND_V2_T1_5_5_B | BND_V2_T1_5_5_B | Task 1 | Target Band 5 | GT_TASK_1_LETTER | BAND_5_0 | wc=168 | labelRisk=relabel_cleaned
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Achievement":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Achievement":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=false lowRange=false
+
+[19/20] BND_V2_T2_5_5_A | BND_V2_T2_5_5_A | Task 2 | Target Band 5.5 | GT_TASK_2_ESSAY | BAND_5_5 | wc=272 | labelRisk=normal
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=true lowRange=false
+
+[20/20] BND_V2_T2_5_5_B | BND_V2_T2_5_5_B | Task 2 | Target Band 5.5 | GT_TASK_2_ESSAY | BAND_5_5 | wc=274 | labelRisk=normal
+  main=6 score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration criteria={"Task Response":6,"Coherence and Cohesion":6,"Lexical Resource":5.5,"Grammatical Range and Accuracy":5.5}
+  lowband=4 score-core-v8-5-7-lowband-shadow-system criteria={"Task Response":4.5,"Coherence and Cohesion":4.5,"Lexical Resource":4,"Grammatical Range and Accuracy":4}
+  gap=2 route=main_high_lowband_conflict_review mainRange=true lowRange=false
+
+=== Summary ===
+mainInRange: 7/20
+lowbandInRange: 14/20
+bothInRange: 3/20
+conflicts: 20
+target 4: main 0/4, low 4/4, both 0/4, avgMain 5.38, avgLow 4
+target 5: main 2/5, low 1/5, both 0/5, avgMain 5.8, avgLow 4.2
+target 3.5: main 0/2, low 2/2, both 0/2, avgMain 4.75, avgLow 3.75
+target 4.5: main 3/6, low 6/6, both 3/6, avgMain 5.42, avgLow 4
+target 5.5: main 2/3, low 1/3, both 0/3, avgMain 6.33, avgLow 4.33
+JSON: C:\Users\79042\Desktop\boundary-corpus-v2-3-test\boundary-v2-3-results\boundary-corpus-v2-3-dual-report-2026-06-10T21-42-45-456Z.json
+CSV: C:\Users\79042\Desktop\boundary-corpus-v2-3-test\boundary-v2-3-results\boundary-corpus-v2-3-dual-report-2026-06-10T21-42-45-456Z.csv
+Summary CSV: C:\Users\79042\Desktop\boundary-corpus-v2-3-test\boundary-v2-3-results\boundary-corpus-v2-3-dual-summary-2026-06-10T21-42-45-456Z.csv
+Log: C:\Users\79042\Desktop\boundary-corpus-v2-3-test\boundary-v2-3-results\boundary-corpus-v2-3-dual-run-log-2026-06-10T21-42-45-456Z.txt
