@@ -67,6 +67,37 @@
     return prompt?.task === "Task 1" ? "task1" : "task2";
   }
 
+  function lockedTaskForSelected() {
+    return selected?.task === "Task 1" ? "Task 1" : "Task 2";
+  }
+
+  function taskTypeForLockedTask(task) {
+    return task === "Task 1" ? "task1" : "task2";
+  }
+
+  function taskOfScoreResult(result) {
+    if (!result || typeof result !== "object") return "";
+    return result.task || result.localSignals?.task || result.requestedTask || result.scoringTask || result.selectedTask || "";
+  }
+
+  function safeCurrentResultForTask(task = lockedTaskForSelected()) {
+    const resultTask = taskOfScoreResult(latestScoreResult);
+    return resultTask === task ? latestScoreResult : null;
+  }
+
+  function lockedTaskFields(task = lockedTaskForSelected()) {
+    const lockedTask = task === "Task 1" ? "Task 1" : "Task 2";
+    return {
+      task: lockedTask,
+      taskType: taskTypeForLockedTask(lockedTask),
+      scoringTask: lockedTask,
+      feedbackTask: lockedTask,
+      generationTask: lockedTask,
+      requestedTask: lockedTask,
+      selectedTask: lockedTask
+    };
+  }
+
   function extractBulletPointsFromPrompt(text) {
     const source = String(text || "");
     const clean = (value) => String(value || "")
@@ -361,14 +392,18 @@
 
   function gradingPayload(extra = {}) {
     const essay = String(els.essayInput?.value || "").trim();
+    const lockedTask = lockedTaskForSelected();
     return {
-      task: selected?.task || "Task 2",
+      ...lockedTaskFields(lockedTask),
       promptId: selected?.id || "",
       title: selected?.title || "",
-      taskType: selected?.task === "Task 1" ? "task1" : "task2",
       letterStyle: selected?.letterStyle || "",
       questionType: selected?.type || "",
       questionPrompt: selected?.prompt || "",
+      promptText: selected?.prompt || "",
+      prompt: selected?.prompt || "",
+      task1BulletPoints: lockedTask === "Task 1" ? extractBulletPointsFromPrompt(selected?.prompt) : [],
+      task2QuestionProfile: lockedTask === "Task 2" ? buildTask2QuestionProfile(selected?.prompt) : null,
       essay,
       wordCount: countWords(essay),
       mode: "score",
@@ -1584,6 +1619,20 @@
     }
   }
 
+  function essayGeneratorEndpointFromGradingEndpoint() {
+    const raw = String(els.gradingEndpointInput?.value || "").trim();
+    if (!raw) return "/api/essay-generator";
+    try {
+      const url = new URL(raw, window.location.origin);
+      url.pathname = url.pathname.replace(/\/api\/grade-ielts\/?$/i, "/api/essay-generator");
+      url.pathname = url.pathname.replace(/\/api\/writing-feedback\/?$/i, "/api/essay-generator");
+      if (!/\/api\/essay-generator\/?$/i.test(url.pathname)) url.pathname = "/api/essay-generator";
+      return url.toString();
+    } catch {
+      return "/api/essay-generator";
+    }
+  }
+
   function frozenScoreForFeedback() {
     if (!latestScoreResult) return null;
     return {
@@ -1595,19 +1644,21 @@
 
   function feedbackPayload(moduleName) {
     const essay = String(els.essayInput?.value || "").trim();
+    const lockedTask = lockedTaskForSelected();
     return {
       module: moduleName,
-      task: selected?.task || "Task 2",
+      ...lockedTaskFields(lockedTask),
       promptId: selected?.id || "",
       title: selected?.title || "",
-      taskType: selected?.task === "Task 1" ? "task1" : "task2",
       letterStyle: selected?.letterStyle || "",
       questionType: selected?.type || "",
       prompt: selected?.prompt || "",
       questionPrompt: selected?.prompt || "",
+      promptText: selected?.prompt || "",
       essay,
       wordCount: countWords(essay),
-      frozenScore: frozenScoreForFeedback()
+      frozenScore: frozenScoreForFeedback(),
+      currentResult: safeCurrentResultForTask(lockedTask)
     };
   }
 
@@ -1821,9 +1872,16 @@
     const modelOutline = String(result.modelAnswerOutline || "").trim();
     const modelAnswer = String(result.modelAnswer || "").trim();
     const revisedEssay = String(result.revisedEssay || "").trim();
+    const taskLabel = result.task || lockedTaskForSelected();
+    const systemNote = result.currentResultRejectedReason
+      ? `旧评分结果未使用：${result.currentResultRejectedReason}`
+      : result.currentResultUsed
+        ? "已使用同一任务的冻结分数作为语言水平参考。"
+        : "未使用旧评分结果；仅按当前题目生成。";
     const html = `<section class="grading-section revision-block">
       <h4>作文生成 / Model and Revision</h4>
-      <p class="muted">这一部分只生成作文，不改变已经冻结的分数。</p>
+      <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
+      <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
       <details class="score-collapse" ${modelOutline ? "open" : ""}><summary>范文大纲</summary><div class="score-collapse-body"><pre>${escapeHtml(modelOutline || "暂未生成")}</pre></div></details>
       <details class="score-collapse" ${modelAnswer ? "open" : ""}><summary>同题范文</summary><div class="score-collapse-body"><pre>${escapeHtml(modelAnswer || "暂未生成")}</pre></div></details>
       <details class="score-collapse" ${revisedEssay ? "open" : ""}><summary>基于原文的修改版</summary><div class="score-collapse-body"><pre>${escapeHtml(revisedEssay || "暂未生成")}</pre>${revisedEssay ? `<button class="secondary" type="button" id="applyRevisedEssayBtn">应用到作文输入区</button>` : ""}</div></details>
@@ -1840,15 +1898,21 @@
 
   async function generateEssayOnly() {
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
-    const endpoint = String(els.gradingEndpointInput?.value || "").trim();
-    if (!endpoint) { setGradingStatus("请先填写批改接口地址。不要把 API key 放在前端网页中。", "error"); return; }
+    const endpoint = essayGeneratorEndpointFromGradingEndpoint();
+    if (!endpoint) { setGradingStatus("请先填写作文生成接口地址。不要把 API key 放在前端网页中。", "error"); return; }
     const originalText = els.generateRevisionBtn?.textContent || "生成作文 / Generate essay";
     if (els.generateRevisionBtn) { els.generateRevisionBtn.disabled = true; els.generateRevisionBtn.textContent = "Generating..."; els.generateRevisionBtn.setAttribute("aria-busy", "true"); }
     if (els.gradeBtn) els.gradeBtn.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
     try {
       setGradingStatus("正在单独生成作文。评分流程不会被调用，分数不会被改变。", "loading");
-      const revision = await postStage(endpoint, gradingPayload({ aiStage: "revision-generator", currentResult: latestScoreResult || null, mode: "revision_only" }));
+      const lockedTask = lockedTaskForSelected();
+      const revision = await postStage(endpoint, gradingPayload({
+        aiStage: "essay-generator",
+        mode: "generation_only",
+        currentResult: safeCurrentResultForTask(lockedTask),
+        frozenScore: frozenScoreForFeedback()
+      }));
       if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
       renderRevisionResult(revision);
       setGradingStatus("作文生成完成。评分没有改变。", "done");
@@ -1920,8 +1984,7 @@
     const wordCount = countWords(essay);
     const targetWordCount = targetWordsForPrompt(prompt);
     return {
-      task: prompt?.task || "Task 2",
-      taskType: taskTypeForPrompt(prompt),
+      ...lockedTaskFields(prompt?.task === "Task 1" ? "Task 1" : "Task 2"),
       promptId: prompt?.id || "",
       book: prompt?.book || "",
       test: prompt?.test || "",

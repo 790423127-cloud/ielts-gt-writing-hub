@@ -182,6 +182,71 @@ async function readJsonBody(req) {
   for await (const chunk of req) raw += chunk;
   return raw ? JSON.parse(raw) : {};
 }
+function normalizeRequestedTask(body = {}) {
+  const raw = String(
+    body.task ||
+    body.taskType ||
+    body.scoringTask ||
+    body.requestedTask ||
+    body.selectedTask ||
+    body.writingTask ||
+    body.moduleTask ||
+    ""
+  ).toLowerCase();
+
+  if (/task\s*1|task1|gt\s*task\s*1|letter|gt\s*letter|writing\s*1/.test(raw)) return "Task 1";
+  if (/task\s*2|task2|gt\s*task\s*2|essay|gt\s*essay|writing\s*2/.test(raw)) return "Task 2";
+
+  return "Task 2";
+}
+
+function normalizeIncomingBody(rawBody = {}) {
+  const body = rawBody && typeof rawBody === "object" ? { ...rawBody } : {};
+  const lockedTask = normalizeRequestedTask(body);
+  body.task = lockedTask;
+  body.taskType = lockedTask === "Task 1" ? "task1" : "task2";
+  body.scoringTask = lockedTask;
+  body.requestedTask = lockedTask;
+  body.selectedTask = lockedTask;
+  body.essay = String(body.essay || "");
+  body.questionPrompt = String(body.questionPrompt || body.promptText || body.prompt || "");
+  body.promptText = String(body.promptText || body.questionPrompt || body.prompt || "");
+  body.wordCount = Number.isFinite(Number(body.wordCount)) ? Number(body.wordCount) : countWords(body.essay);
+  return body;
+}
+
+function resolveScoringSignals(body = {}, current = {}) {
+  const lockedTask = normalizeRequestedTask(body);
+  const existing = current && typeof current === "object" ? current.localSignals : null;
+  if (existing && typeof existing === "object" && existing.task === lockedTask) {
+    return existing;
+  }
+  return localSignals({
+    ...body,
+    task: lockedTask,
+    taskType: lockedTask === "Task 1" ? "task1" : "task2",
+    scoringTask: lockedTask,
+    requestedTask: lockedTask,
+    selectedTask: lockedTask
+  });
+}
+
+function taskValueFromCurrent(current = {}) {
+  if (!current || typeof current !== "object") return "";
+  return current.localSignals?.task || current.task || current.scoringTask || current.requestedTask || current.selectedTask || "";
+}
+
+function safeCurrentForTask(body = {}, current = {}) {
+  const lockedTask = normalizeRequestedTask(body);
+  const currentTask = taskValueFromCurrent(current);
+  if (currentTask && currentTask !== lockedTask) {
+    return {
+      staleCurrentResultRejected: true,
+      staleCurrentResultRejectedReason: `Ignored stale currentResult for ${currentTask}; locked request task is ${lockedTask}.`
+    };
+  }
+  return current && typeof current === "object" ? current : {};
+}
 
 function countWords(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
@@ -216,7 +281,7 @@ function copiedPromptOverlapRatio(essay, prompt) {
 function detectHardZeroResponse(body = {}, signals = null) {
   const essay = String(body.essay || "").trim();
   const prompt = String(body.questionPrompt || body.promptText || "");
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const task = normalizeRequestedTask(body);
   const words = signals?.wordCount ?? countWords(essay);
   const sentences = sentenceUnits(essay);
   const totalTokens = (essay.match(/\S+/g) || []).length;
@@ -605,7 +670,7 @@ function countPattern(text, regex) {
 
 function localSignals(body) {
   const essay = String(body.essay || "");
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const task = normalizeRequestedTask(body);
   const words = Number(body.wordCount) || countWords(essay);
   const paragraphs = countParagraphs(essay);
   const sentences = sentenceUnits(essay);
@@ -1278,6 +1343,7 @@ function buildIndependentAnchorPrompt(body, signals) {
   return [
     "You are an IELTS GT Writing anchor-classification examiner. Return JSON only. Do not assign criterion bands in this stage.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}.`,
+    "The selected task is locked by the request. Do not switch Task 1 and Task 2 inside this stage.",
     taskSpecific,
     "Your only job is to classify the response against the 0-9 anchor benchmarks before criterion scoring.",
     "This anchor must be independent from final criterion bands; do not infer it from a score because no criterion score exists yet.",
@@ -1742,7 +1808,7 @@ function assertFinalCanFreeze(result = {}) {
 }
 
 function buildBoundaryReviewPrompt(body, firstResult, audit) {
-  const signals = firstResult.localSignals || localSignals(body);
+  const signals = resolveScoringSignals(body, firstResult);
   const task = signals.task;
   const names = criterionNames(task);
   const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
@@ -1768,7 +1834,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
 }
 
 async function applyBoundaryReviewIfNeeded(body, firstResult) {
-  const signals = firstResult.localSignals || localSignals(body);
+  const signals = resolveScoringSignals(body, firstResult);
   const initialAudit = firstResult.boundaryAudit || buildHardBoundaryAudit(firstResult.finalCriteria || firstResult.criteria, signals, firstResult.anchorComparison || {}, firstResult.criterionCalibration || {}, { skipFeedbackQualityAudit: true });
   if (!initialAudit.reviewRequired) {
     return { ...firstResult, boundaryAudit: { ...initialAudit, status: "passed", reviewRequired: false } };
@@ -1881,7 +1947,7 @@ function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison
   };
 }
 function normalizeScoreCoreResult(ai, body, signals, options = {}) {
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const task = signals.task === "Task 1" ? "Task 1" : "Task 2";
   const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
@@ -1978,6 +2044,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
   return [
     "You are an IELTS GT Writing SCORE KERNEL. Return one tiny valid JSON object only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
+    "The selected scoring task is locked by the request. Do not reclassify this response as the other IELTS task. If the writing style resembles another task, treat that as a task-response/achievement issue within the locked task, not permission to change rubrics.",
     "This is Step 2: AI core scoring only. Forbidden in this step: Chinese, long explanations, original quotations, detailed feedback, evidence arrays, taskSpecificGate, scoreProfile, criterionCalibration, corrections, translations, revision/model answers, markdown, comments, trailing prose.",
     "Return only anchorBand, candidateRange, four criterion bands, reasonCodes, and flags. Keep all strings as short snake_case codes. Do not quote the student's text.",
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
@@ -2239,7 +2306,7 @@ async function callScoreKernel(body, signals, boundaryProfile) {
 }
 
 async function scoreCore(body) {
-  const signals = localSignals(body);
+  const signals = resolveScoringSignals(body);
   const hardZeroGate = signals.hardZeroGate || detectHardZeroResponse(body, signals);
   if (hardZeroGate.triggered) {
     return buildHardZeroScore(body, signals, hardZeroGate);
@@ -2275,7 +2342,7 @@ async function scoreCore(body) {
 }
 
 function scorePrecheck(body) {
-  const signals = localSignals(body);
+  const signals = resolveScoringSignals(body);
   return withDetailedProgress({
     ok: true,
     aiStage: "score-precheck",
@@ -2288,8 +2355,8 @@ function scorePrecheck(body) {
 }
 
 function scoreTaskRouterStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   return withDetailedProgress({
     ...current,
     ok: true,
@@ -2297,15 +2364,15 @@ function scoreTaskRouterStage(body) {
     scoreSystemVersion: SCORE_SYSTEM_VERSION,
     task: signals.task,
     localSignals: signals,
-    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    taskProfile: buildTaskProfile(body, signals),
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), taskRouted: true, stage: "task-router" },
     note: "Task routed. No criterion band is assigned in this stage."
   }, "score-task-router");
 }
 
 async function scoreAnchorStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   const ai = await callDeepSeek([
     { role: "system", content: "You are an IELTS GT Writing independent anchor classifier. Return JSON only. Do not assign criterion bands." },
     { role: "user", content: buildIndependentAnchorPrompt(body, signals) }
@@ -2319,7 +2386,7 @@ async function scoreAnchorStage(body) {
     scoreSystemVersion: SCORE_SYSTEM_VERSION,
     task: signals.task,
     localSignals: signals,
-    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    taskProfile: buildTaskProfile(body, signals),
     anchorComparison,
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), anchorPrepared: true, independentAiAnchorReturned: true, stage: "anchor" },
     note: "AI independent anchor classification completed and will be used to calibrate criterion scoring."
@@ -2327,8 +2394,8 @@ async function scoreAnchorStage(body) {
 }
 
 async function scoreCriteriaStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   const independentAnchor = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, {}, signals);
   const prompt = buildCompactScorePrompt(body, signals, independentAnchor);
   const ai = await callDeepSeek([
@@ -2359,8 +2426,8 @@ async function scoreCriteriaStage(body) {
 }
 
 function scoreGatesStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const normalizedCalibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
   const anchorComparisonForGates = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
@@ -2375,7 +2442,7 @@ function scoreGatesStage(body) {
     criteria,
     finalCriteria: criteria,
     localSignals: signals,
-    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    taskProfile: buildTaskProfile(body, signals),
     anchorComparison: anchorComparisonForGates,
     criterionCalibration: normalizedCalibration,
     scoreProfile,
@@ -2388,8 +2455,8 @@ function scoreGatesStage(body) {
 }
 
 async function scoreBoundaryReviewStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
@@ -2404,8 +2471,8 @@ async function scoreBoundaryReviewStage(body) {
 }
 
 function scoreFinalizeStage(body) {
-  const current = body.currentResult || {};
-  const signals = current.localSignals || localSignals(body);
+  const current = safeCurrentForTask(body, body.currentResult || {});
+  const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
   const { rawAverage, finalBand } = averageBand(criteria);
   const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
@@ -2425,7 +2492,7 @@ function scoreFinalizeStage(body) {
     rawAverage,
     overallBand: finalBand,
     localSignals: signals,
-    taskProfile: current.taskProfile || buildTaskProfile(body, signals),
+    taskProfile: buildTaskProfile(body, signals),
     anchorComparison,
     criterionCalibration: calibration,
     scoreProfile,
@@ -2452,7 +2519,7 @@ function buildRevisionPrompt(body) {
     "You are generating IELTS learning models only. Do not change or comment on the score.",
     "Return JSON only. Generate optional model/revision content based on the already frozen score.",
     `Frozen score: ${JSON.stringify({ criteria: frozen.criteria || frozen.finalCriteria, overallBand: frozen.overallBand || frozen.scoreCalculation?.finalBand })}`,
-    `Task: ${body.task || "Task 2"}`,
+    `Task: ${normalizeRequestedTask(body)}`,
     `Prompt: ${body.questionPrompt || body.promptText || ""}`,
     `Student response: ${body.essay || ""}`,
     "Return {\"ok\":true,\"aiStage\":\"revision-generator\",\"revisionMeta\":{\"scoreUnchanged\":true},\"modelAnswerOutline\":\"...\",\"modelAnswer\":\"...\",\"revisedEssay\":\"...\"}."
@@ -2469,6 +2536,9 @@ async function revisionGenerator(body) {
     aiStage: "revision-generator",
     disclaimer: DISCLAIMER,
     scoreUnchanged: true,
+    generationOnly: true,
+    task: normalizeRequestedTask(body),
+    taskLocked: true,
     revisionMeta: { ...(ai.revisionMeta || {}), scoreUnchanged: true },
     modelAnswerOutline: String(ai.modelAnswerOutline || "").trim(),
     modelAnswer: String(ai.modelAnswer || "").trim(),
@@ -2479,7 +2549,7 @@ async function revisionGenerator(body) {
 async function handleRequest(req, res) {
   if (req.method === "OPTIONS") return sendJson(req, res, 204, {});
   if (req.method !== "POST") return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
-  const body = await readJsonBody(req);
+  const body = normalizeIncomingBody(await readJsonBody(req));
   const requestedStage = body.aiStage || body.stage || (String(body.mode || "").toLowerCase() === "score" ? "score-core" : "score-core");
   const stage = String(requestedStage).toLowerCase();
   if (stage === "revision-generator" || stage === "revision") return sendJson(req, res, 200, await revisionGenerator(body));

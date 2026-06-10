@@ -123,6 +123,38 @@ async function readJsonBody(req) {
   for await (const chunk of req) raw += chunk;
   return raw ? JSON.parse(raw) : {};
 }
+function normalizeRequestedTask(body = {}) {
+  const raw = String(
+    body.task ||
+    body.taskType ||
+    body.feedbackTask ||
+    body.scoringTask ||
+    body.requestedTask ||
+    body.selectedTask ||
+    body.writingTask ||
+    ""
+  ).toLowerCase();
+
+  if (/task\s*1|task1|gt\s*task\s*1|letter|gt\s*letter|writing\s*1/.test(raw)) return "Task 1";
+  if (/task\s*2|task2|gt\s*task\s*2|essay|gt\s*essay|writing\s*2/.test(raw)) return "Task 2";
+
+  return "Task 2";
+}
+
+function normalizeIncomingBody(rawBody = {}) {
+  const body = rawBody && typeof rawBody === "object" ? { ...rawBody } : {};
+  const lockedTask = normalizeRequestedTask(body);
+  body.task = lockedTask;
+  body.taskType = lockedTask === "Task 1" ? "task1" : "task2";
+  body.feedbackTask = lockedTask;
+  body.requestedTask = lockedTask;
+  body.selectedTask = lockedTask;
+  body.essay = String(body.essay || "");
+  body.prompt = String(body.prompt || body.questionPrompt || body.promptText || "");
+  body.questionPrompt = String(body.questionPrompt || body.prompt || body.promptText || "");
+  body.wordCount = Number.isFinite(Number(body.wordCount)) ? Number(body.wordCount) : countWords(body.essay);
+  return body;
+}
 
 function countWords(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
@@ -349,10 +381,11 @@ function buildPrompt(body, moduleName) {
   const moduleConfig = MODULES[moduleName];
   const schema = JSON.stringify(moduleConfig.schema, null, 2);
   const frozenScore = body.frozenScore ? JSON.stringify(body.frozenScore, null, 2) : "null";
-  const task = body.task === "Task 1" ? "Task 1" : "Task 2";
+  const task = normalizeRequestedTask(body);
   return [
     "You are an IELTS General Training writing feedback tutor.",
     "The IELTS score has already been frozen by another system. You are NOT scoring the essay.",
+    "The selected task is locked by the request. Do not reclassify Task 1 and Task 2. If the writing style looks like another task, mention it only as a task-fit issue inside the locked task.",
     "Do not change, estimate, mention, recommend, or recalculate any IELTS score or criterion band.",
     "Your only job is bilingual learning feedback for the requested module.",
     "Every user-facing English explanation, label, advice, example explanation, rule, sentence, correction, improved expression, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or the matching *Zh field.",
@@ -419,7 +452,7 @@ module.exports = async function handler(req, res) {
     return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   }
   try {
-    const body = await readJsonBody(req);
+    const body = normalizeIncomingBody(await readJsonBody(req));
     const moduleName = String(body.module || "").trim();
     const essay = String(body.essay || "").trim();
     if (!MODULES[moduleName]) {
@@ -433,9 +466,13 @@ module.exports = async function handler(req, res) {
       feedbackVersion: FEEDBACK_VERSION,
       module: moduleName,
       moduleTitle: MODULES[moduleName].title,
-      task: body.task === "Task 1" ? "Task 1" : "Task 2",
+      task: normalizeRequestedTask(body),
+      taskLocked: true,
+      system: "writing-feedback",
       wordCount: countWords(essay),
       scoreUnaffected: true,
+      feedbackOnly: true,
+      systemFeedback: { status: "generated", scoreChanged: false, message: "学习反馈已生成；没有调用评分流程，也没有改变已冻结分数。" },
       moduleResult
     });
   } catch (error) {
