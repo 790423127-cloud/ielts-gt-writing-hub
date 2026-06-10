@@ -1,0 +1,30 @@
+[
+  {
+    "id": "V2_ROUTER_T1_BOUNDARY_4_5",
+    "expectedSystem": "boundary",
+    "task": "Task 1",
+    "prompt": "You bought a phone online and it does not work properly. Write a letter to the company. In your letter: describe the problem, explain how you feel, and say what you want the company to do.",
+    "essay": "Dear Sir or Madam,\n\nI am writing about a mobile phone I bought from your online shop two weeks ago. When the phone arrived it looked new, but after one day I found several problems. The screen sometimes becomes black and I cannot answer calls. Also the battery is weak, even when I charge it all night.\n\nI feel very disappointed because I paid a lot of money. I need this phone for work and for contacting my family. Now I have to use my old phone again and it causes many problems.\n\nI want your company to send me a new phone or return my money. Please tell me how I can send the broken phone back.\n\nYours faithfully,\nChen Wei"
+  },
+  {
+    "id": "V2_ROUTER_T2_BOUNDARY_5_0",
+    "expectedSystem": "boundary",
+    "task": "Task 2",
+    "prompt": "Some people think young people should spend more time helping in their local community. To what extent do you agree or disagree?",
+    "essay": "Many people think young people should help more in their local community. I agree because it is good for society and also good for young people themselves. Today many young people spend much time on phones or computers. If they help in community, they can learn real life and meet different people.\n\nThere are many things they can do. For example, they can clean parks, help old people buy food, or teach children after school. These activities can make the local area better. Young people can also become more responsible because they understand other people's problems.\n\nHowever, young people also have study and work. If they spend too much time helping, they may not have enough time for homework or rest. So community work should not be forced every day.\n\nIn conclusion, young people should help their community, but it should be done in a reasonable way. It is useful for everyone, but it must not make young people too tired."
+  },
+  {
+    "id": "V2_ROUTER_T2_MID_6_5",
+    "expectedSystem": "main",
+    "task": "Task 2",
+    "prompt": "Some people think parents should teach children how to be good members of society. Others believe school is the best place to learn this. Discuss both views and give your opinion.",
+    "essay": "Children learn social behaviour from many places, especially from their parents and from school. Some people believe parents should be mainly responsible, while others think schools are better. In my opinion, both have important roles, but parents should provide the first foundation.\n\nParents are the first teachers in a child's life. Children watch how their parents speak to other people, deal with problems and follow rules. If parents are polite, patient and responsible, children are more likely to copy those habits. Parents can also teach values through daily routines, such as sharing housework or respecting older people.\n\nSchools, however, also play an important role. Teachers can explain social rules in a more organised way, and children can practise cooperation with classmates. School activities such as group projects, sports and volunteering help students understand fairness and teamwork.\n\nIn my view, parents should start this education at home, while schools should develop it further. If both sides work together, children will receive consistent messages and become more responsible members of society."
+  },
+  {
+    "id": "V2_ROUTER_T2_HIGH_8",
+    "expectedSystem": "highband",
+    "task": "Task 2",
+    "prompt": "Some people believe that employers should allow staff to work from home whenever possible. Discuss both views and give your opinion.",
+    "essay": "The expansion of remote work has raised an important question about how much flexibility employers should offer. While some people argue that staff should be allowed to work from home whenever their duties permit it, others believe that regular office attendance remains essential. I think a flexible hybrid model is the most sensible approach.\n\nThe strongest argument for home working is that it can improve efficiency and well-being at the same time. Employees who avoid long commutes often have more energy and can organise their day more productively. Remote work can also reduce office costs for companies and make employment more accessible to people with caring responsibilities or disabilities. For tasks that require concentration, such as writing reports, coding or analysing data, the home environment may be less distracting than a busy office.\n\nHowever, office work should not be dismissed. Face-to-face communication is often more effective for training, negotiation and creative collaboration. New employees in particular may find it difficult to learn a company's culture if they rarely meet colleagues in person. There is also a risk that remote staff become isolated or that communication becomes fragmented across too many online channels.\n\nIn my view, employers should allow home working when performance can be measured clearly and the role does not require constant physical presence. At the same time, they should maintain regular office days for team building, mentoring and complex discussions. This balanced model preserves the advantages of flexibility while reducing the social and professional disadvantages of fully remote work.\n\nOverall, working from home should be widely available but not unlimited. The best policy is one that matches flexibility to the nature of the job and the needs of the team."
+  }
+]
