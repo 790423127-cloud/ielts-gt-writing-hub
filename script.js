@@ -596,7 +596,9 @@
       .criterion-card-preview strong { color: var(--text, #122033); font-weight: 900; }
       .criterion-preview-line { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.55; }
       .criterion-preview-zh { border-left: 4px solid rgba(15,118,110,.45); border-radius: 9px; background: rgba(224,242,241,.55); padding: 8px 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.55; }
-      .criterion-score-card.is-expanded .criterion-card-preview { border-bottom: 1px solid var(--border, #d7e2ea); padding-bottom: 14px; }
+      .criterion-score-card.is-expanded .criterion-card-preview { display: none; }
+      .criterion-score-card.is-expanded .criterion-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .criterion-score-card.is-expanded .criterion-visible-evidence { margin-top: 16px; }
       .criterion-quick-grid { display: grid; gap: 12px; }
       .criterion-quick-row { border-left: 4px solid rgba(15,118,110,.7); padding: 10px 12px; border-radius: 10px; background: rgba(15,118,110,.055); }
       .criterion-quick-row h5 { margin: 0 0 6px; font-size: .96rem; color: var(--text, #122033); }
@@ -661,6 +663,7 @@
       .score-technical-details summary { min-height: 42px; padding: 0 12px; background: rgba(248,250,252,.72); font-weight: 850; }
       .score-technical-details pre { max-height: 240px; overflow: auto; margin: 0; padding: 12px; background: var(--card, #fff); white-space: pre-wrap; word-break: break-word; }
       @media (min-width: 980px) { .criterion-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 979px) { .criterion-score-card.is-expanded .criterion-quick-grid { grid-template-columns: 1fr; } }
       @media (max-width: 760px) { .criterion-card-header { align-items: flex-start; } .criterion-band-pill { margin-left: auto; } .overall-card-main { grid-template-columns: 1fr; } .overall-disclaimer-card { padding: 14px; } }
     `;
     style.textContent += `\n
@@ -808,6 +811,28 @@
   box-shadow:0 20px 44px rgba(31,45,58,.10) !important;
 }
 
+.grading-results .criterion-score-card.is-expanded{
+  grid-column:1 / -1 !important;
+  transform:none !important;
+}
+
+.grading-results .criterion-score-card.is-expanded .criterion-card-preview{
+  display:none !important;
+}
+
+.grading-results .criterion-score-card.is-expanded .criterion-card-body{
+  display:block;
+}
+
+.grading-results .criterion-score-card.is-expanded .criterion-quick-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  align-items:start;
+}
+
+.grading-results .criterion-score-card.is-expanded .criterion-quick-row{
+  min-height:auto;
+}
+
 .grading-results .criterion-card-header{
   min-height:88px;
   padding:18px 20px !important;
@@ -937,6 +962,9 @@
 @media (max-width:760px){
   .grading-results{
     gap:14px;
+  }
+  .grading-results .criterion-score-card.is-expanded .criterion-quick-grid{
+    grid-template-columns:1fr !important;
   }
   .grading-results .overall-card-main,
   .grading-results .evidence-grid,
