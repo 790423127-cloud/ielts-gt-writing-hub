@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v7-9-complete-bilingual-feedback";
+const SCORE_SYSTEM_VERSION = "score-core-v8-1-task-specific-strict-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -370,6 +370,235 @@ function inferTask2Profile(promptText) {
   return { questionType, requiredParts, positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative, bothSidesRequired: asksBothViews, causeRequired: asksCause, problemRequired: asksProblem, solutionRequired: asksSolution, advantageRequired: asksAdvantage, disadvantageRequired: asksDisadvantage, outweighRequired: asksOutweigh, positiveNegativeRequired: asksPositiveNegative };
 }
 
+function compactLowerText(text = "") {
+  return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function firstMatchingSentence(text = "", regex = null) {
+  const sentences = sentenceUnits(text);
+  const found = sentences.find((sentence) => regex ? regex.test(sentence) : sentence.trim());
+  if (!found) return "";
+  return found.length > 180 ? `${found.slice(0, 177)}...` : found;
+}
+
+function contentWords(text = "") {
+  const stop = new Set(["the","a","an","to","of","and","or","in","on","for","with","is","are","was","were","be","been","being","you","your","i","we","they","he","she","it","this","that","these","those","my","our","their","me","him","her","them","do","does","did","can","could","would","should","will","may","might","must","have","has","had","want","like","say","tell","write","letter"]);
+  return (String(text || "").toLowerCase().match(/[a-z][a-z'’-]*/g) || []).filter((word) => word.length > 2 && !stop.has(word));
+}
+
+function overlapCount(requirement = "", essay = "") {
+  const words = new Set(contentWords(requirement));
+  const essayWords = new Set(contentWords(essay));
+  let count = 0;
+  words.forEach((word) => { if (essayWords.has(word)) count += 1; });
+  return count;
+}
+
+function hasDesiredWorkSchedule(text = "") {
+  const source = compactLowerText(text);
+  return /\b(i|we)\s+(would\s+like|want|hope|prefer|can|could|am\s+able|will\s+be\s+able)\s+[^.!?]{0,80}\b(work|working|shift|hours)\b[^.!?]{0,80}\b(morning|afternoon|evening|day\s+shift|weekends?|weekdays?|before\s+\d{1,2}|after\s+\d{1,2}|from\s+\d{1,2}|\d{1,2}\s*(?:am|pm))/i.test(source)
+    || /\b(work|working)\s+(?:from\s+\d{1,2}\s*(?:am|pm)?\s+to\s+\d{1,2}\s*(?:am|pm)?|before\s+\d{1,2}\s*(?:am|pm)?|after\s+\d{1,2}\s*(?:am|pm)?|in\s+the\s+morning|during\s+the\s+day|on\s+weekends?|on\s+weekdays?)\b/i.test(source)
+    || /\b(morning|afternoon|evening|day)\s+shift\b/i.test(source);
+}
+
+function hasPartialWorkSchedule(text = "") {
+  const source = compactLowerText(text);
+  return hasSpecificWorkHoursOrShift(source) || /\b(change|reduce|cut|avoid|stop)\s+[^.!?]{0,40}\b(night\s+shift|evening\s+shift|working\s+hours|hours)\b/i.test(source) || /\bclass\s+(?:at|from)\s+\d{1,2}\s*(?:am|pm)?\b/i.test(source);
+}
+
+function classifyTask1Requirement(requirement = "", essay = "") {
+  const req = compactLowerText(requirement);
+  const source = compactLowerText(essay);
+  const overlap = overlapCount(req, source);
+  const evidenceFrom = (regex) => firstMatchingSentence(essay, regex) || "No clear direct evidence found.";
+  let status = "missing";
+  let issue = "This bullet point is not clearly answered.";
+  let evidence = "No clear direct evidence found.";
+
+  if (/\b((which|what)\s+hours|which\s+hours|what\s+hours|say\s+which\s+hours|hours\s+you\s+would\s+like\s+to\s+work|work\s+schedule|preferred\s+hours|preferred\s+shift)\b/i.test(req)) {
+    if (hasDesiredWorkSchedule(source)) {
+      status = "covered";
+      issue = "A preferred working time, shift, or schedule is stated clearly enough.";
+      evidence = evidenceFrom(/\b(work|working|shift|hours|morning|afternoon|evening|weekend|weekday|before|after|from|to)\b/i);
+    } else if (hasPartialWorkSchedule(source)) {
+      status = "partly_covered";
+      issue = "The answer mentions class time or a shift problem, but it does not clearly state the exact hours or schedule the candidate wants to work.";
+      evidence = evidenceFrom(/\b(class|shift|hours|work|working|morning|night|evening|6\s*pm|9\s*pm)\b/i);
+    }
+    return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+  }
+
+  if (/\b(why|reason|explain why|want to|would like to|reduce)\b/i.test(req)) {
+    const hasReason = /\b(because|as|since|so that|in order to|due to|reason|study|course|class|campus|college|family|health|exam|part[- ]time)\b/i.test(source);
+    if (hasReason && overlap >= 1) { status = "covered"; issue = "A relevant reason is given."; }
+    else if (hasReason || overlap >= 2) { status = "partly_covered"; issue = "A reason is visible, but it is not developed or clearly connected to the bullet point."; }
+    evidence = evidenceFrom(/\b(because|as|since|so that|in order to|study|course|class|campus|college|family|health|exam|part[- ]time)\b/i);
+    return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+  }
+
+  if (/\b(benefit|benefits|employer|company|boss|manager|workplace|restaurant|business|customer)\b/i.test(req)) {
+    const hasBenefit = /\b(benefit|help|improve|increase|bring|useful|skill|skills|knowledge|menu|dish|dishes|customer|customers|restaurant|business|performance|profit|service|quality)\b/i.test(source);
+    if (hasBenefit && overlap >= 1) { status = "covered"; issue = "A relevant benefit to the employer is stated."; }
+    else if (hasBenefit) { status = "partly_covered"; issue = "The employer benefit is mentioned, but it is thin or not clearly explained."; }
+    evidence = evidenceFrom(/\b(benefit|help|improve|bring|skill|menu|dish|customer|restaurant|business|performance|service)\b/i);
+    return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+  }
+
+  if (/\b(apologise|apologize|sorry|apology)\b/i.test(req)) {
+    const ok = /\b(sorry|apologise|apologize|apology|regret)\b/i.test(source);
+    status = ok ? "covered" : "missing";
+    issue = ok ? "An apology is clearly included." : "The required apology is missing.";
+    evidence = evidenceFrom(/\b(sorry|apologise|apologize|apology|regret)\b/i);
+    return { requirement, status, evidence, issue, capIfProblem: ok ? null : 5.0 };
+  }
+
+  if (/\b(complain|complaint|problem|issue|broken|damage|wrong|refund|replace|repair)\b/i.test(req)) {
+    const ok = /\b(problem|issue|broken|damage|damaged|wrong|refund|replace|repair|complain|complaint|not\s+work|poor|late|delay)\b/i.test(source);
+    status = ok ? "covered" : (overlap >= 2 ? "partly_covered" : "missing");
+    issue = ok ? "The problem or complaint is described." : "The complaint/problem is not clearly described.";
+    evidence = evidenceFrom(/\b(problem|issue|broken|damage|wrong|refund|replace|repair|complain|poor|late|delay)\b/i);
+    return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+  }
+
+  if (/\b(ask|request|could|would|please|arrange|suggest|recommend|invite|thank|describe|explain|tell|give|state|mention)\b/i.test(req)) {
+    const actionWords = /\b(please|could|would|ask|request|hope|suggest|recommend|invite|thank|thanks|grateful|describe|explain|tell|give|state|mention|arrange|meet)\b/i.test(source);
+    if (actionWords && overlap >= 2) { status = "covered"; issue = "The requested communicative function is present."; }
+    else if (actionWords || overlap >= 2) { status = "partly_covered"; issue = "The required function is visible but not sufficiently clear or developed."; }
+    evidence = evidenceFrom(/\b(please|could|would|ask|request|hope|suggest|recommend|invite|thank|describe|explain|tell|give|state|mention|arrange|meet)\b/i);
+    return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+  }
+
+  if (overlap >= 3) { status = "covered"; issue = "This bullet is answered with relevant content."; evidence = firstMatchingSentence(essay, null); }
+  else if (overlap >= 1) { status = "partly_covered"; issue = "This bullet is only partly addressed; the link to the requirement is weak or thin."; evidence = firstMatchingSentence(essay, null); }
+  return { requirement, status, evidence, issue, capIfProblem: status === "covered" ? null : 5.5 };
+}
+
+function auditTask1Requirements(body = {}, signals = {}) {
+  const essay = String(body.essay || "");
+  const prompt = String(body.questionPrompt || body.promptText || body.prompt || "");
+  const bullets = Array.isArray(signals.task1BulletPoints) && signals.task1BulletPoints.length ? signals.task1BulletPoints : extractTask1Bullets(prompt);
+  const items = bullets.map((requirement, index) => ({ index: index + 1, ...classifyTask1Requirement(requirement, essay) }));
+  const missingCount = items.filter((item) => item.status === "missing").length;
+  const partlyCount = items.filter((item) => item.status === "partly_covered").length;
+  let taskAchievementCap = null;
+  if (missingCount >= 2) taskAchievementCap = 4.0;
+  else if (missingCount === 1) taskAchievementCap = 5.0;
+  else if (partlyCount >= 1) taskAchievementCap = 5.5;
+  else if (items.length >= 3 && items.every((item) => item.status === "covered") && Number(signals.wordCount) < 120) taskAchievementCap = 6.0;
+  return {
+    version: "task1-requirement-audit-v8-1",
+    task: "Task 1",
+    extractedRequirements: bullets,
+    items,
+    missingCount,
+    partlyCount,
+    taskAchievementCap,
+    triggered: Number.isFinite(taskAchievementCap),
+    summary: Number.isFinite(taskAchievementCap)
+      ? `Task 1 requirement audit capped Task Achievement at Band ${taskAchievementCap.toFixed(1)} because ${missingCount} bullet(s) are missing and ${partlyCount} bullet(s) are only partly covered.`
+      : "All extracted Task 1 bullet requirements appear covered by local requirement audit."
+  };
+}
+
+function detectTask2RequirementSignals(essay = "") {
+  const source = compactLowerText(essay);
+  return {
+    clearOpinion: /\b(i\s+(strongly\s+)?(agree|disagree|believe|think)|in\s+my\s+opinion|from\s+my\s+perspective|my\s+view\s+is|i\s+would\s+argue|this\s+is\s+(?:a\s+)?(positive|negative)|i\s+support|i\s+oppose)\b/i.test(source),
+    viewOne: /\b(some\s+people|one\s+view|on\s+the\s+one\s+hand|supporters|those\s+who\s+support|people\s+who\s+believe|one\s+argument)\b/i.test(source),
+    viewTwo: /\b(other\s+people|others|another\s+view|on\s+the\s+other\s+hand|opponents|however|whereas|while\s+others|critics)\b/i.test(source),
+    advantage: /\b(advantage|benefit|beneficial|positive|good\s+point|improve|save|helpful|useful|opportunity|convenient)\b/i.test(source),
+    disadvantage: /\b(disadvantage|drawback|negative|problem|harmful|risk|cost|waste|damage|pressure|difficult|bad\s+point)\b/i.test(source),
+    cause: /\b(cause|reason|because|due\s+to|as\s+a\s+result\s+of|result\s+from|lead\s+to|is\s+caused\s+by)\b/i.test(source),
+    problem: /\b(problem|issue|challenge|difficulty|risk|concern|negative\s+effect|harmful\s+effect)\b/i.test(source),
+    solution: /\b(solution|solve|measure|should|need\s+to|must|can\s+be\s+done|government\s+should|people\s+should|schools\s+should|companies\s+should)\b/i.test(source),
+    positiveNegativeJudgement: /\b(positive|negative|beneficial|harmful|good\s+development|bad\s+development|overall\s+it\s+is|mainly\s+positive|mainly\s+negative)\b/i.test(source),
+    outweighJudgement: /\b(outweigh|more\s+important\s+than|greater\s+than|more\s+benefits?|more\s+drawbacks?|advantages\s+are\s+greater|disadvantages\s+are\s+greater)\b/i.test(source),
+    exampleSupport: /\b(for\s+example|for\s+instance|such\s+as|a\s+good\s+example|to\s+illustrate)\b/i.test(source),
+    explanationMarkers: countPattern(source, /\b(because|therefore|as\s+a\s+result|this\s+means|this\s+can|this\s+will|so\s+that|which\s+means|for\s+this\s+reason)\b/gi)
+  };
+}
+
+function auditTask2Requirements(body = {}, signals = {}) {
+  const essay = String(body.essay || "");
+  const profile = signals.task2QuestionProfile || inferTask2Profile(body.questionPrompt || body.promptText || body.prompt || "");
+  const markers = detectTask2RequirementSignals(essay);
+  const items = [];
+  const addItem = (requirement, status, evidence, issue, capIfProblem = 5.5) => {
+    items.push({ index: items.length + 1, requirement, status, evidence: evidence || "No clear direct evidence found.", issue, capIfProblem: status === "covered" ? null : capIfProblem });
+  };
+  const evidence = (regex) => firstMatchingSentence(essay, regex) || "No clear direct evidence found.";
+
+  if (profile.bothSidesRequired) {
+    addItem("discuss both views", markers.viewOne && markers.viewTwo ? "covered" : (markers.viewOne || markers.viewTwo ? "partly_covered" : "missing"), evidence(/\b(some people|other people|others|on the one hand|on the other hand|however|whereas|while)\b/i), "Discuss-both-views essays must clearly cover both sides, not only one side.", 5.0);
+  }
+  if (profile.positionRequired) {
+    addItem("state a clear position or judgement", markers.clearOpinion || markers.outweighJudgement || markers.positiveNegativeJudgement ? "covered" : "missing", evidence(/\b(i agree|i disagree|i believe|i think|in my opinion|positive|negative|outweigh|overall)\b/i), "This question type requires a clear position or judgement.", 5.5);
+  }
+  if (profile.advantageRequired) {
+    addItem("cover advantages/benefits", markers.advantage ? "covered" : "missing", evidence(/\b(advantage|benefit|positive|improve|save|helpful|opportunity|convenient)\b/i), "The advantages/benefits side is required by this prompt.", 5.0);
+  }
+  if (profile.disadvantageRequired) {
+    addItem("cover disadvantages/drawbacks", markers.disadvantage ? "covered" : "missing", evidence(/\b(disadvantage|drawback|negative|problem|harmful|risk|cost|waste|damage)\b/i), "The disadvantages/drawbacks side is required by this prompt.", 5.0);
+  }
+  if (profile.outweighRequired) {
+    addItem("state whether one side outweighs the other", markers.outweighJudgement ? "covered" : "missing", evidence(/\b(outweigh|more important|greater|more benefits|more drawbacks|advantages are greater|disadvantages are greater)\b/i), "Outweigh questions require a comparative judgement, not only a list of pros and cons.", 5.5);
+  }
+  if (profile.causeRequired) {
+    addItem("explain causes/reasons", markers.cause ? "covered" : "missing", evidence(/\b(cause|reason|because|due to|result from|lead to)\b/i), "Cause/reason discussion is required by this prompt.", 5.0);
+  }
+  if (profile.problemRequired) {
+    addItem("explain problems/issues", markers.problem ? "covered" : "missing", evidence(/\b(problem|issue|challenge|difficulty|risk|concern)\b/i), "Problem/issue discussion is required by this prompt.", 5.0);
+  }
+  if (profile.solutionRequired) {
+    addItem("suggest solutions/measures", markers.solution ? "covered" : "missing", evidence(/\b(solution|solve|measure|should|need to|must|government should|people should|companies should)\b/i), "Solutions/measures are required by this prompt.", 5.0);
+  }
+  if (profile.positiveNegativeRequired) {
+    addItem("judge whether the development is positive or negative", markers.positiveNegativeJudgement ? "covered" : "missing", evidence(/\b(positive|negative|beneficial|harmful|good development|bad development|mainly positive|mainly negative)\b/i), "Positive/negative development questions require a clear judgement.", 5.5);
+  }
+
+  const questions = (String(body.questionPrompt || body.promptText || body.prompt || "").match(/[^?]+\?/g) || []).map((x) => x.trim()).filter(Boolean);
+  if (questions.length >= 2) {
+    const paraCount = Number(signals.paragraphCount) || countParagraphs(essay);
+    const enoughSeparateTreatment = paraCount >= Math.min(questions.length + 1, 4) || markers.explanationMarkers >= questions.length;
+    addItem("answer all direct question parts", enoughSeparateTreatment ? "covered" : "partly_covered", evidence(/\b(because|therefore|for example|firstly|secondly|in conclusion)\b/i), "Two-part questions must answer each direct question, not just the general topic.", 5.5);
+  }
+
+  const words = Number(signals.wordCount) || countWords(essay);
+  const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(essay).length;
+  const paragraphCount = Number(signals.paragraphCount) || countParagraphs(essay);
+  const realDevelopment = words >= 230 && paragraphCount >= 3 && sentenceCount >= 8 && (markers.exampleSupport || markers.explanationMarkers >= 3);
+  if (!realDevelopment) {
+    addItem("develop ideas with explanation and support", sentenceCount >= 6 && markers.explanationMarkers >= 2 ? "partly_covered" : "missing", evidence(/\b(for example|such as|because|therefore|this means|as a result)\b/i), "Band 6+ Task Response needs real development, not only a position plus paragraph labels.", words < 180 ? 5.0 : 5.5);
+  }
+
+  const missingCount = items.filter((item) => item.status === "missing").length;
+  const partlyCount = items.filter((item) => item.status === "partly_covered").length;
+  const severeMissing = items.filter((item) => item.status === "missing" && item.capIfProblem <= 5.0).length;
+  let taskResponseCap = null;
+  if (severeMissing >= 1) taskResponseCap = 5.0;
+  else if (missingCount >= 1 || partlyCount >= 2) taskResponseCap = 5.5;
+  else if (partlyCount === 1) taskResponseCap = 6.0;
+  return {
+    version: "task2-question-type-audit-v8-1",
+    task: "Task 2",
+    questionType: profile.questionType,
+    requiredParts: profile.requiredParts || [],
+    markers,
+    items,
+    missingCount,
+    partlyCount,
+    taskResponseCap,
+    triggered: Number.isFinite(taskResponseCap),
+    summary: Number.isFinite(taskResponseCap)
+      ? `Task 2 question-type audit capped Task Response at Band ${taskResponseCap.toFixed(1)} because ${missingCount} required part(s) are missing and ${partlyCount} are only partly covered.`
+      : "All detected Task 2 question-type requirements appear covered by local audit."
+  };
+}
+
+function buildTaskRequirementAudit(body = {}, signals = {}) {
+  return signals.task === "Task 1" ? auditTask1Requirements(body, signals) : auditTask2Requirements(body, signals);
+}
+
 function countPattern(text, regex) {
   return (String(text || "").match(regex) || []).length;
 }
@@ -384,7 +613,7 @@ function localSignals(body) {
   const englishTokens = (essay.match(/[A-Za-z][A-Za-z'’-]*/g) || []).length;
   const englishRatio = totalTokens ? englishTokens / totalTokens : 0;
 
-  const spellingList = ["nowdays", "posiible", "improtant", "furture", "proformence", "deepends", "themslves", "caryfully", "recieve", "becuase", "wich", "enviroment", "goverment", "seperate", "definately", "untill", "frist", "seondly"];
+  const spellingList = ["nowdays", "nowdays", "posiible", "improtant", "furture", "proformence", "deepends", "themslves", "caryfully", "recieve", "recived", "becuase", "becasue", "wich", "enviroment", "goverment", "seperate", "definately", "untill", "frist", "seondly", "wirting", "perpare", "complet", "homewrok", "crouse", "resterants", "restraunts", "resturant", "meun", "performence", "perfomance", "costumer", "costumers", "oppertunity", "responsiblity", "convinient", "developement", "benifit", "benifits", "neccessary", "sucess", "sucessful"];
   const spellingHits = spellingList.map((word) => ({ item: word, count: countPattern(essay, new RegExp(`\\b${word}\\b`, "gi")) })).filter((x) => x.count);
   const spellingIssueCount = spellingHits.reduce((sum, x) => sum + x.count, 0);
 
@@ -395,7 +624,11 @@ function localSignals(body) {
     { label: "comparative error", regex: /\bmuch\s+comfortable\b/gi },
     { label: "missing be / comparison control", regex: /\b\w+\s+never\s+(important|better|worse|good|bad)\s+than\b/gi },
     { label: "gerund/parallel pattern", regex: /\busing\s+[^.!?]{0,60}\s+or\s+pay\s+for\b/gi },
-    { label: "article/plural/control phrase", regex: /\b(some of beauty products|using beauty product|facing customer|at working days|at now)\b/gi }
+    { label: "article/plural/control phrase", regex: /\b(some of beauty products|using beauty product|facing customer|at working days|at now)\b/gi },
+    { label: "awkward request structure", regex: /\b(to want to ask you for if|ask you for if|wish you can|waiting for you feedback)\b/gi },
+    { label: "missing infinitive after tell/ask", regex: /\b(told me attend|tell me attend|ask me attend|told me go|tell me go)\b/gi },
+    { label: "incorrect preposition/control", regex: /\b(attend to class|at morning|at night shift|benefit for our|bring some benefit for|benefit for my employer)\b/gi },
+    { label: "sentence boundary / run-on signal", regex: /\b(it can'?t affect my work at morning|after i finish[^.!?]{0,100}and also|after that,?\s+it[^.!?]{0,80}i can)\b/gi }
   ];
   const grammarHits = grammarPatterns.map((item) => ({ label: item.label, count: countPattern(essay, item.regex) })).filter((x) => x.count);
   const grammarIssueCount = grammarHits.reduce((sum, x) => sum + x.count, 0);
@@ -419,15 +652,18 @@ function localSignals(body) {
   if (hardZeroGate.triggered || !essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
   else if (words >= (task === "Task 1" ? 120 : 180) && paragraphs >= 2 && sentences.length >= 5) rateabilityStatus = "clearly_rateable";
 
-  return {
+  const task1BulletPoints = task === "Task 1" ? extractTask1Bullets(body.questionPrompt || body.promptText || "") : [];
+  const task2QuestionProfile = task === "Task 2" ? inferTask2Profile(body.questionPrompt || body.promptText || "") : null;
+  const baseSignals = {
     task, wordCount: words, paragraphCount: paragraphs, sentenceCount: sentences.length, englishRatio: Number(englishRatio.toFixed(2)), rateabilityStatus, hardZeroGate,
     recommendedMinimum: task === "Task 1" ? 150 : 250,
     spellingIssueCount, spellingDensityPer100Words: spellingDensity, spellingErrorDensity, spellingExamples: spellingHits.slice(0, 10),
     grammarIssueSignalCount: grammarIssueCount, grammarDensityPer100Words: grammarDensity, grammarErrorDensity, grammarIssueSignals: grammarHits.slice(0, 10),
     weakPhraseCount, lexicalNaturalnessRisk, weakPhraseSignals: weakPhraseHits.slice(0, 10), sentenceControl, lexicalControl,
-    task1BulletPoints: task === "Task 1" ? extractTask1Bullets(body.questionPrompt || body.promptText || "") : [],
-    task2QuestionProfile: task === "Task 2" ? inferTask2Profile(body.questionPrompt || body.promptText || "") : null
+    task1BulletPoints,
+    task2QuestionProfile
   };
+  return { ...baseSignals, taskRequirementAudit: buildTaskRequirementAudit(body, baseSignals) };
 }
 
 function criterionNames(task) {
@@ -519,7 +755,119 @@ function task2ShortEssayCap(words) {
   return null;
 }
 
-function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComparison = {}) {
+function capSingleCriterion(criteria = {}, criterion, cap) {
+  const out = { ...(criteria || {}) };
+  const current = bandNumber(out[criterion]);
+  if (Number.isFinite(current) && current > cap) out[criterion] = cap;
+  return out;
+}
+
+function hasTask1WorkingHoursRequirement(body = {}) {
+  const prompt = String(body.questionPrompt || body.promptText || body.prompt || "");
+  return /\b(which hours|what hours|hours you would like to work|working hours|reduce your working hours|work schedule|shift)\b/i.test(prompt);
+}
+
+function hasSpecificWorkHoursOrShift(text = "") {
+  const source = String(text || "").toLowerCase();
+  return /\b(\d{1,2}\s*(?:am|pm)|\d{1,2}\s*[-–]\s*\d{1,2}|from\s+\d{1,2}\s*(?:am|pm)?\s+to\s+\d{1,2}\s*(?:am|pm)?|before\s+\d{1,2}|after\s+\d{1,2}|morning shift|afternoon shift|evening shift|night shift|day shift|weekends?|weekdays?|three days a week|part[- ]time hours)\b/i.test(source);
+}
+
+function sub7RunOnSignal(text = "") {
+  const sentences = sentenceUnits(text);
+  const longSentences = sentences.filter((s) => countWords(s) >= 34).length;
+  const boundaryBreaks = countPattern(text, /\b(After that|Because|So)\b[^.!?]{35,}\b(i|I|we|they|he|she|it|this|that)\b/gi);
+  const gluedClauses = countPattern(text, /\b(at morning|after class|after that)[^.!?]{0,120}\b(i can|I can|it can|It can|we can)\b/gi);
+  return { longSentences, boundaryBreaks, gluedClauses, total: longSentences + boundaryBreaks + gluedClauses };
+}
+
+function applySub7StrictCalibration(criteria = {}, signals = {}, body = {}) {
+  let calibrated = { ...(criteria || {}) };
+  const notes = [];
+  const task = signals.task;
+  const essay = String(body.essay || "");
+  let profile = averageBand(calibrated);
+  if (!Number.isFinite(profile.finalBand) || profile.finalBand >= 7) {
+    return { criteria: calibrated, changed: false, notes };
+  }
+  const names = criterionNames(task);
+  const taskCriterion = names[0];
+  const cc = "Coherence and Cohesion";
+  const lr = "Lexical Resource";
+  const gra = "Grammatical Range and Accuracy";
+  const spelling = Number(signals.spellingIssueCount) || 0;
+  const spellingDensity = Number(signals.spellingDensityPer100Words) || 0;
+  const grammar = Number(signals.grammarIssueSignalCount) || 0;
+  const grammarDensity = Number(signals.grammarDensityPer100Words) || 0;
+  const weakPhrases = Number(signals.weakPhraseCount) || 0;
+  const runOn = sub7RunOnSignal(essay);
+  const requirementAudit = signals.taskRequirementAudit || buildTaskRequirementAudit(body, signals);
+
+  const cap = (criterion, capValue, type, reason) => {
+    const before = bandNumber(calibrated[criterion]);
+    if (Number.isFinite(before) && before > capValue) {
+      calibrated = capSingleCriterion(calibrated, criterion, capValue);
+      notes.push({ type, criterion, cap: capValue, before, reason });
+    }
+  };
+
+  if (task === "Task 1") {
+    const words = Number(signals.wordCount) || 0;
+    if (requirementAudit && Number.isFinite(Number(requirementAudit.taskAchievementCap))) {
+      cap(taskCriterion, Number(requirementAudit.taskAchievementCap), "task1_specific_requirement_audit_cap", requirementAudit.summary || "Task 1 bullet-specific requirement audit constrained Task Achievement.");
+    }
+    if (hasTask1WorkingHoursRequirement(body) && !hasDesiredWorkSchedule(essay)) {
+      cap(taskCriterion, 5.5, "task1_specific_hours_gate", "Task 1 asks which hours the candidate would like to work, but the response does not clearly state the candidate's preferred working hours or schedule; Task Achievement should not enter Band 6.");
+    }
+    if (words < 150 && profile.finalBand >= 6.5 && signals.rateabilityStatus !== "clearly_rateable") {
+      cap(taskCriterion, 6.0, "task1_underlength_detail_gate", `Task 1 has ${words} words and does not show clearly rateable full bullet development; keep Task Achievement below high Band 6.`);
+    }
+  } else {
+    const words = Number(signals.wordCount) || 0;
+    if (requirementAudit && Number.isFinite(Number(requirementAudit.taskResponseCap))) {
+      cap(taskCriterion, Number(requirementAudit.taskResponseCap), "task2_question_type_requirement_audit_cap", requirementAudit.summary || "Task 2 question-type requirement audit constrained Task Response.");
+    }
+    if (words < 230 && profile.finalBand >= 6) {
+      cap(taskCriterion, 5.5, "task2_development_length_gate", `Task 2 has ${words} words; unless development is unusually strong, Task Response should not exceed 5.5/6.0 territory.`);
+    }
+    if (signals.rateabilityStatus !== "clearly_rateable" && profile.finalBand >= 6) {
+      cap(taskCriterion, 5.5, "task2_real_development_gate", "The response is rateable but does not show enough clear paragraph development to justify Band 6+ Task Response.");
+    }
+  }
+
+  if (spelling >= 8 || spellingDensity >= 5) {
+    cap(lr, 4.5, "sub7_spelling_density_lr_cap", `High spelling/word-form density (${spelling} issue signals; ${spellingDensity}/100 words) limits Lexical Resource to about Band 4.5.`);
+  } else if (spelling >= 5 || spellingDensity >= 3) {
+    cap(lr, 5.0, "sub7_spelling_density_lr_cap", `Frequent spelling/word-form errors (${spelling} issue signals; ${spellingDensity}/100 words) limit Lexical Resource to about Band 5.0.`);
+  }
+  if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high" || weakPhrases >= 3) {
+    cap(lr, 5.0, "sub7_lexical_naturalness_cap", "Basic, repetitive, or unnatural word choice/collocation limits Lexical Resource below Band 5.5/6.0.");
+  }
+
+  if (grammar >= 6 || grammarDensity >= 3.5 || signals.sentenceControl === "weak") {
+    cap(gra, 4.5, "sub7_grammar_density_gra_cap", `Frequent grammar/sentence-control issue signals (${grammar}; ${grammarDensity}/100 words) limit GRA to about Band 4.5.`);
+  } else if (grammar >= 3 || grammarDensity >= 2) {
+    cap(gra, 5.0, "sub7_grammar_density_gra_cap", `Repeated grammar/sentence-control issue signals (${grammar}; ${grammarDensity}/100 words) limit GRA to about Band 5.0.`);
+  }
+
+  if (runOn.total >= 2 || signals.sentenceControl === "weak") {
+    cap(cc, 5.0, "sub7_cohesion_sentence_flow_cap", "Sentence-boundary problems or weak sentence control reduce paragraph flow; Coherence and Cohesion should not be lifted by paragraphing alone.");
+  } else if (runOn.total >= 1 && profile.finalBand >= 5.5) {
+    cap(cc, 5.5, "sub7_cohesion_sentence_flow_cap", "Some sentence-boundary or flow problems are visible; Coherence and Cohesion should stay in the mid-band range.");
+  }
+
+  profile = averageBand(calibrated);
+  const lrBand = bandNumber(calibrated[lr]);
+  const graBand = bandNumber(calibrated[gra]);
+  if (Number.isFinite(profile.finalBand) && profile.finalBand > 5.5 && Number.isFinite(lrBand) && Number.isFinite(graBand) && lrBand <= 5 && graBand <= 5) {
+    const beforeCriteria = { ...calibrated };
+    calibrated = capCriteriaBands(calibrated, 5.5);
+    notes.push({ type: "sub7_dual_language_cap", cap: 5.5, beforeCriteria, reason: "When both LR and GRA are 5.0 or below, the overall profile should normally not exceed Band 5.5 in a sub-7 response." });
+  }
+
+  return { criteria: calibrated, changed: notes.length > 0, notes };
+}
+
+function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComparison = {}, body = {}) {
   let calibrated = { ...(criteria || {}) };
   const notes = [];
   const task = signals.task;
@@ -529,6 +877,11 @@ function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComp
   if (shortCap && Number.isFinite(finalBand) && finalBand > shortCap.cap) {
     calibrated = capCriteriaBands(calibrated, shortCap.cap);
     notes.push({ type: "short_response_cap", cap: shortCap.cap, reason: shortCap.reason });
+  }
+  const sub7Strict = applySub7StrictCalibration(calibrated, signals, body);
+  if (sub7Strict.changed) {
+    calibrated = sub7Strict.criteria;
+    notes.push(...sub7Strict.notes);
   }
   const highFloor = highBandFloorProfile(calibrated, signals, anchorComparison);
   if (highFloor) {
@@ -824,7 +1177,8 @@ function normalizeTaskSpecificGate(raw, signals, criteria = {}, anchor = {}, cal
       toneRegisterGate: normalizeGate(source.toneRegisterGate || source.toneRegister, "Task 1 tone/register checked against recipient relationship and letter purpose; wrong tone constrains TA and LR.", false),
       letterCompletenessGate: normalizeGate(source.letterCompletenessGate || source.letterCompleteness, "Letter completeness checked: greeting/opening purpose/body details/closing/request or thanks/sign-off.", false),
       wordCountGuard: normalizeGate(source.wordCountGuard, `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.`, wordBoundary.triggered),
-      highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5))
+      highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5)),
+      taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 1 bullet-specific requirement audit completed.", Boolean(signals.taskRequirementAudit?.triggered))
     };
   }
   return {
@@ -833,7 +1187,8 @@ function normalizeTaskSpecificGate(raw, signals, criteria = {}, anchor = {}, cal
     lowBandGuard: normalizeGate(source.lowBandGuard, `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.`, wordBoundary.triggered || signals.rateabilityStatus === "not_rateable_or_severely_limited"),
     midBandCheck: normalizeGate(source.midBandCheck || source.midBandGate, "Mid-band check applied: do not over-reward paragraphs, basic connectors, or a stated opinion without development.", false),
     highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5)),
-    scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", allCriteriaSame(criteria))
+    scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", allCriteriaSame(criteria)),
+    taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 2 question-type requirement audit completed.", Boolean(signals.taskRequirementAudit?.triggered))
   };
 }
 
@@ -1056,6 +1411,7 @@ function buildTaskProfile(body, signals) {
         anchorBands: TASK1_BAND_ANCHORS_0_TO_9,
         gateRules: TASK1_GATE_RULES,
         bulletPoints: signals.task1BulletPoints,
+        taskRequirementAudit: signals.taskRequirementAudit || null,
         letterStyle: body.letterStyle || "",
         purposeRequired: true,
         requiredMinimumWords: 150
@@ -1068,6 +1424,7 @@ function buildTaskProfile(body, signals) {
         gateRules: TASK2_GATE_RULES,
         questionType: signals.task2QuestionProfile?.questionType || body.questionType || "general_essay",
         requiredParts: signals.task2QuestionProfile?.requiredParts || [],
+        taskRequirementAudit: signals.taskRequirementAudit || null,
         positionRequired: Boolean(signals.task2QuestionProfile?.positionRequired),
         requiredMinimumWords: 250
       };
@@ -1440,11 +1797,14 @@ function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison
   const localMid = gateStatus("Mid-band gate checked: visible structure alone must not over-reward TR/TA or CC, and LR/GRA are checked against language-control signals.", Boolean((first >= 5.5 || cc >= 5.5 || lr >= 5.5 || gra >= 5) && (signals.grammarErrorDensity === "high" || signals.spellingErrorDensity === "high" || signals.lexicalControl === "weak" || signals.sentenceControl === "weak")));
   const localHigh = gateStatus(highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => x >= 7.5));
   const localProfile = gateStatus(warnings.length ? warnings.join(" ") : "No major score-profile instability detected.", warnings.length > 0 || allCriteriaSame(criteria));
+  const reqAudit = signals.taskRequirementAudit || null;
+  const localRequirement = gateStatus(reqAudit?.summary || "Task-specific requirement audit not available.", Boolean(reqAudit?.triggered));
   return {
     likelyOverallRange: profile.likelyOverallRange || (wordBoundary.triggered ? wordBoundary.suggestedRange : (signals.rateabilityStatus === "clearly_rateable" ? "rateable; band depends on criterion evidence" : "limited or weakly rateable")),
     lowBandGate: combineGate(localLow, profile.lowBandGate),
     midBandGate: combineGate(localMid, profile.midBandGate),
     highBandGate: combineGate(localHigh, profile.highBandGate),
+    taskRequirementGate: combineGate(localRequirement, profile.taskRequirementGate),
     scoreProfileGate: combineGate(localProfile, profile.scoreProfileGate)
   };
 }
@@ -1528,12 +1888,21 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     sentenceControl: signals.sentenceControl,
     lexicalNaturalnessRisk: signals.lexicalNaturalnessRisk,
     task1BulletCount: Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints.length : 0,
-    task2QuestionType: signals.task2QuestionProfile?.questionType || ""
+    task2QuestionType: signals.task2QuestionProfile?.questionType || "",
+    taskRequirementAudit: signals.taskRequirementAudit ? {
+      version: signals.taskRequirementAudit.version,
+      triggered: signals.taskRequirementAudit.triggered,
+      missingCount: signals.taskRequirementAudit.missingCount,
+      partlyCount: signals.taskRequirementAudit.partlyCount,
+      taskAchievementCap: signals.taskRequirementAudit.taskAchievementCap,
+      taskResponseCap: signals.taskRequirementAudit.taskResponseCap,
+      summary: signals.taskRequirementAudit.summary
+    } : null
   };
   const anchorMini = anchorSetForTask(task).map((item) => `B${item.band}: ${item.profile}`).join(" | ");
   const taskMini = task === "Task 1"
-    ? `Task 1 bullet points extracted: ${JSON.stringify(signals.task1BulletPoints || [])}. Judge purpose, bullet coverage, tone/register and letter completeness.`
-    : `Task 2 question profile: ${JSON.stringify(signals.task2QuestionProfile || {})}. Judge prompt coverage, position, development, reasons/examples, progression and language control.`;
+    ? `Task 1 bullet points extracted: ${JSON.stringify(signals.task1BulletPoints || [])}. Judge each bullet as covered, partly_covered or missing. Local task-requirement audit: ${JSON.stringify(signals.taskRequirementAudit || {})}.`
+    : `Task 2 question profile: ${JSON.stringify(signals.task2QuestionProfile || {})}. Judge the exact question type and each required part. Local task-requirement audit: ${JSON.stringify(signals.taskRequirementAudit || {})}.`;
   return [
     "You are an IELTS GT Writing SCORE KERNEL. Return one tiny valid JSON object only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
@@ -1542,6 +1911,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
+    "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
+    "Sub-7 strict rule: below Band 7, be closer to real exam strictness. Do not award 5.5/6.0/6.5 just because the response is organised; require actual task completion, development, and language control.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Score spread rule: avoid mechanical all-four-same bands. If criteria differ, use 0.5 spread. If all four are identical, reasonCodes must make the equality credible.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
@@ -1641,7 +2012,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
   const initialAverage = averageBand(initialCriteria);
   if (!Number.isFinite(initialAverage.finalBand)) throw new Error("AI returned incomplete criterion bands in compact score pass.");
   const initialAnchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, initialCriteria, signals);
-  const localCalibration = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison);
+  const localCalibration = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison, body);
   const criteria = localCalibration.criteria;
   const { rawAverage, finalBand } = averageBand(criteria);
   const calibration = normalizeCriterionCalibration(result.criterionCalibration || {}, criteria, signals.task);
@@ -1670,14 +2041,14 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v7_3_score_kernel_feedback_after_freeze" : "task2_essay_v7_3_score_kernel_feedback_after_freeze",
-      formula: "v7.7 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, protects true micro-attempts from false Band 0, blocks keyword fragments, and prevents full-length high-band responses from being compressed at Band 7/7.5; feedback cannot change the score.",
+      formula: "v8.1 five-step pipeline: AI returns compact criterion bands; local boundary calibration caps over-generous short responses, applies stricter sub-7 Task 1/Task 2 gates, and now runs a task-specific requirement audit for each Task 1 bullet and each Task 2 question type before freezing the score. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: localCalibration.changed,
       localScoreChangeExplanation: localCalibration.changed ? localCalibration.notes.map((n) => n.reason).join(" ") : "No local calibration changed the AI-returned criterion bands."
     },
-    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, localCalibrationApplied: localCalibration.changed, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
+    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: true, localCalibrationApplied: localCalibration.changed, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
     localScoreChanged: localCalibration.changed
   };
 }
