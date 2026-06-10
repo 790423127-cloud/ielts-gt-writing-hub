@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-8-task-synced-exam-realism";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-9-task-synced-exam-realism-tightened";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -1436,6 +1436,9 @@ function buildScoreCorePrompt(body, signals, independentAnchor = null) {
     "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
     "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
     "Band 6 access rule: Band 6 requires real task fulfilment and development, not only paragraphing. If ideas are general, examples are brief, or frequent language errors reduce precision, stay at 5.0-5.5.",
+    "Band 5 realism rule: do not use Band 5 as a default rescue score. Band 5 needs a generally understandable response with some relevant task fulfilment, some organization, limited but usable vocabulary, and errors that do not usually prevent meaning. If the writing is mostly understandable but has frequent basic grammar/spelling/word-form errors, LR/GRA normally sit around 4.0-4.5 unless there is stronger language evidence.",
+    "Band 4 realism rule: Band 4 is appropriate when meaning is often clear in short stretches but grammar, word choice, spelling, sentence control, or task development is limited enough to make the response difficult or repetitive. Do not lift this profile to all Band 5 merely because the message can be understood.",
+    "Task mismatch realism rule: if the selected task is Task 2 but the response is a letter or answers another topic, keep the Task Response band very low for relevance; do not switch to Task Achievement. If the selected task is Task 1 but the response is an essay, keep Task Achievement very low; do not switch to Task Response.",
     "High-band unlock rule: if the response has full task fulfilment, developed ideas, natural progression, precise/flexible lexis, and strong grammar control, actively consider 7.5/8.0/8.5/9.0 rather than defaulting to 7.0.",
     "LR/GRA gates: high spelling/word-form density must limit LR unless strong evidence overrides it. High grammar density or weak sentence control must limit GRA unless strong evidence overrides it.",
     "Task-aware low-band AI action: if the response is complete but language is weak, lower LR/GRA rather than blindly lowering TR/TA or CC. If the response is short or missing task content, lower TR/TA and CC as well.",
@@ -2276,7 +2279,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.8 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Feedback cannot change the score.",
+      formula: "v8.3.9 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2356,7 +2359,7 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.3.8 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; detailed feedback cannot change the score.",
+      formula: "v8.3.9 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; detailed feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2409,6 +2412,8 @@ function taskSpecificPositiveRescueRules(task = "Task 2") {
       "Task 1 zero rule: Band 0 is only for no assessable GT letter at all: blank, wholly non-English, explicit no-answer, fully copied prompt, or completely unassessable fragments.",
       "Task 1 positive-band rule: if the response contains any assessable English letter/message attempt, visible purpose, request, complaint, apology, invitation, explanation, greeting/closing, or any relevant bullet-point content, Task Achievement must be a low positive band rather than Band 0.",
       "Task 1 weak-but-rateable rule: missing bullets, wrong tone, thin details, or poor letter layout can justify a low Task Achievement band, but not Band 0 when there is a real message to the reader.",
+      "Task 1 exam-realism rule: a weak but understandable letter with many basic grammar/spelling errors and limited detail is usually around Band 4.0-5.0 overall, not automatically 5.0+. Band 5+ needs generally clear purpose and some bullet coverage; Band 6+ needs adequate bullet coverage, detail, tone/register, and language control.",
+      "Task 1 language ceiling rule: if errors such as wrong verb forms, missing articles/prepositions, misspellings, and awkward word choice are frequent across sentences, keep Lexical Resource and Grammar around low-mid bands unless the text shows clear stronger control.",
       "Task 1 criteria must be exactly: Task Achievement, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."
     ];
   }
@@ -2416,6 +2421,8 @@ function taskSpecificPositiveRescueRules(task = "Task 2") {
     "Task 2 zero rule: Band 0 is only for no assessable essay response at all: blank, wholly non-English, explicit no-answer, fully copied prompt, or completely unassessable fragments.",
     "Task 2 positive-band rule: if the response contains any assessable English essay attempt, relevant opinion, position, reason, example, conclusion, or answer to any part of the prompt, Task Response must be a low positive band rather than Band 0.",
     "Task 2 weak-but-rateable rule: no examples, shallow reasoning, undeveloped ideas, weak paragraphing, or vague opinions can justify a low Task Response band, but not Band 0 when there is a real attempt to answer.",
+    "Task 2 exam-realism rule: a response can be positive-band but still very low if it is a wrong format, wrong topic, list of assertions, or barely developed. Band 5+ requires some relevant development; Band 6+ requires a clear position and adequately extended ideas, not only a list of assertions.",
+    "Task 2 language ceiling rule: frequent basic grammar/spelling/word-form problems should keep Lexical Resource and Grammar around low-mid bands unless the text shows clear stronger control.",
     "Task 2 criteria must be exactly: Task Response, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."
   ];
 }
@@ -2462,7 +2469,8 @@ async function rescueScoreKernelWithoutZero(body, signals, boundaryProfile, prev
     "The server has confirmed this response is NOT strict hard-zero. It is not blank, not wholly non-English, and not an explicit no-answer.",
     "Therefore, Band 0 is not an available score for any criterion in this rescue pass.",
     "Score strictly from Band 1.0 to Band 9.0 in 0.5 increments. If performance is extremely weak, use Band 1.0 or 1.5, but never 0.0.",
-    "Do not inflate the score. A weak list of opinions with no examples may still be very low, but it must be a positive IELTS band if it is assessable English.",
+    "Do not inflate the score. This rescue pass exists only to avoid a false zero; it must still choose the lowest realistic IELTS band supported by the actual writing.",
+    "Do not use Band 5.0 as a safe/default rescue value. Choose Band 4.0/4.5 when the response is understandable but has frequent basic errors, limited detail, or weak development; choose Band 5.0 only if the evidence meets Band 5 descriptors.",
     "For Task Achievement/Task Response, distinguish: completely no answer = 0; assessable task attempt with thin detail/development = low positive band, not 0. Apply this equally to Task 1 letters and Task 2 essays.",
     "For Coherence, Lexical Resource, and Grammar, assign the lowest positive band that reflects the actual text if there is any assessable English.",
     `Local non-scoring signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
@@ -2579,10 +2587,13 @@ async function finalPositiveBandRepairScoreKernel(body, signals, boundaryProfile
     `Positive band level scale: ${bandScale}.`,
     "Level 1 means Band 1.0. Level 2 means Band 1.5. Level 17 means Band 9.0.",
     "There is no level 0. Do not output 0 anywhere. If the writing is extremely weak but assessable, choose level 1 or 2.",
+    "Do not choose level 9 (Band 5.0) as a default. For frequent basic sentence errors, repeated misspellings, weak word choice, and limited development, levels 7-8 (Band 4.0-4.5) are often more realistic unless stronger evidence is present.",
+    "For Task 1, level 9+ in Task Achievement requires generally clear purpose and some coverage of the actual bullet requirements; for Task 2, level 9+ in Task Response requires some relevant development of the actual prompt. Wrong task format or wrong topic must keep the first criterion low.",
     "Score the actual student response again. Do not copy the previous invalid all-zero result.",
     "Return the four criteria with the exact criterion names below. Do not abbreviate, rename, or omit any criterion.",
     `positiveBandLevels shape: ${JSON.stringify(levelShape)}`,
     `Task-synced rescue schema: ${JSON.stringify(taskSpecificPositiveLevelSchema(signals.task))}`,
+    "Exam realism calibration: before selecting levels, identify whether the response is (a) wrong task/wrong topic, (b) task attempt with limited development, (c) generally adequate Band 5-level writing, or (d) Band 6+ writing. Do not skip directly from false-zero prevention to Band 5.",
     `Non-scoring local signals: ${JSON.stringify({ task: signals.task, wordCount: signals.wordCount, paragraphCount: signals.paragraphCount, sentenceCount: signals.sentenceCount, englishRatio: signals.englishRatio, rateabilityStatus: signals.rateabilityStatus, hardZeroGate: signals.hardZeroGate, boundaryProfile: boundaryProfile?.likelyZone || "" })}`,
     `Previous invalid result summary: ${JSON.stringify({ criteria: previousAi?.criteria || previousAi?.finalCriteria || null, anchorBand: previousAi?.anchorBand, candidateRange: previousAi?.candidateRange }).slice(0, 1000)}`,
     `Previous validation error: ${String(previousError?.message || previousError || "").slice(0, 600)}`,
