@@ -829,6 +829,25 @@
   align-items:start;
 }
 
+
+.grading-results .criterion-card-grid.has-expanded-criterion{
+  display:block !important;
+}
+
+.grading-results .criterion-card-grid.has-expanded-criterion .criterion-score-card{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 0 18px !important;
+}
+
+.grading-results .criterion-card-grid.has-expanded-criterion .criterion-score-card.is-expanded{
+  grid-column:auto !important;
+}
+
+.grading-results .criterion-card-grid.has-expanded-criterion .criterion-compact-toolbar{
+  display:flex !important;
+}
+
 .grading-results .criterion-score-card.is-expanded .criterion-quick-row{
   min-height:auto;
 }
@@ -1418,6 +1437,14 @@
     return `<div class="criterion-visible-evidence"><h5>本项证据 / Evidence used</h5>${quotes ? `<div class="criterion-evidence-quotes">${quotes}</div>` : ""}${chips ? `<div class="criterion-evidence-chips">${chips}</div>` : ""}</div>`;
   }
 
+  function syncCriterionGridLayout(scope = els.gradingResults) {
+    const root = scope || els.gradingResults || document;
+    root.querySelectorAll(".criterion-card-grid").forEach((grid) => {
+      const hasExpanded = Boolean(grid.querySelector(".criterion-score-card.is-expanded"));
+      grid.classList.toggle("has-expanded-criterion", hasExpanded);
+    });
+  }
+
   function bindScoreUiInteractions() {
     if (!els.gradingResults || els.gradingResults.dataset.scoreUiBound === "true") return;
     els.gradingResults.dataset.scoreUiBound = "true";
@@ -1442,6 +1469,7 @@
           }
           btn.textContent = "-";
         });
+        syncCriterionGridLayout();
       }
       const collapseAllCriteria = event.target.closest("[data-criterion-collapse-all]");
       if (collapseAllCriteria) {
@@ -1455,6 +1483,7 @@
           }
           btn.textContent = "+";
         });
+        syncCriterionGridLayout();
       }
       const cardToggle = event.target.closest("[data-criterion-toggle]");
       if (cardToggle) {
@@ -1467,6 +1496,7 @@
             card.classList.toggle("is-expanded", !hidden);
           }
           cardToggle.textContent = hidden ? "+" : "-";
+          syncCriterionGridLayout(card || els.gradingResults);
         }
       }
       const detailToggle = event.target.closest("[data-score-detail-toggle]");
