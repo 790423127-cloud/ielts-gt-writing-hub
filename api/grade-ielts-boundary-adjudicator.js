@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v1-main-lowband-conflict-router";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v2-strict-low4-basic5-separator";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -264,11 +264,13 @@ function routeDecision(task, wc, main, lowband) {
       base.reasonCodes.push("BOUNDARY_5_0_LOWBAND_NEAR");
       return base;
     }
-    base.decision = "boundary_5_0_lowband_warning_adjudicate";
+    base.decision = "boundary_5_0_low4_basic5_strict_adjudicate";
     base.confidence = "unstable";
     base.conflict = true;
     base.adjudicate = true;
-    base.reasonCodes.push("BOUNDARY_5_0_LOWBAND_LOW_OR_GAP");
+    if (lowScore <= 4.0) base.reasonCodes.push("MAIN_5_LOWBAND_4_OR_BELOW");
+    if (gap >= 1.0) base.reasonCodes.push("BOUNDARY_5_0_GAP_GE_1");
+    base.reasonCodes.push("STRICT_LOW4_BASIC5_SEPARATOR_REQUIRED");
     return base;
   }
 
@@ -331,6 +333,14 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "Lowband may be too harsh at 5.0-5.5, so do not automatically follow lowband either.",
     "If main is much higher than lowband, inspect whether main rewarded format/fluency too much.",
     "If lowband is much lower than main, inspect whether lowband over-penalised a basic but adequate response.",
+    "",
+    "Boundary Adjudicator v2 strict low-4 vs basic-5 separator:",
+    "When mainScore is 5.0 and lowbandScore is 4.0 or below, first assume this may be a 4.0-4.5 boundary case, not automatically basic_5.",
+    "Only classify as basic_5 if the response has enough task development, mostly understandable progression, and errors are frequent but not continuously disruptive.",
+    "If the response is short, language is very simple, grammar errors are persistent, or development is thin, classify as boundary_4_5 rather than basic_5 even if the structure is clear.",
+    "For Task 1, a polite format and all bullet points covered are not enough for basic_5 if lexical and grammatical control remain weak.",
+    "For Task 2, a clear opinion and paragraphing are not enough for basic_5 if examples are thin and sentence control is weak.",
+    "Do not choose safe_5_5_plus unless the writing is clearly above low-band weakness.",
     "",
     `Route decision before adjudication: ${JSON.stringify(route)}`,
     `Main system score: ${main.score}`,
