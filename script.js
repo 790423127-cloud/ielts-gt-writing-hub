@@ -1222,8 +1222,22 @@
   function criterionItem(result, criterion) {
     const cal = result.criterionCalibration || result.criterionExplanations || {};
     const direct = cal[criterion] || {};
-    const altName = criterion.replace("Task Response", "Task Achievement").replace("Task Achievement", "Task Response");
-    return direct && Object.keys(direct).length ? direct : (cal[altName] || {});
+    // v8.4: do not cross-map Task Achievement and Task Response.
+    // Task 1 and Task 2 first criteria must remain task-specific.
+    return direct && Object.keys(direct).length ? direct : {};
+  }
+
+  function criterionHasRequiredEvidence(item = {}) {
+    const evidence = arr(item.essayEvidence || item.textEvidence || item.evidenceQuotes);
+    const hasQuote = evidence.some((entry) => typeof entry === "string" ? hasMeaningfulContent(entry) : hasMeaningfulContent(entry?.quote || entry?.text || entry?.original));
+    return hasQuote && hasMeaningfulContent(item.whyThisBand || item.summary) && hasMeaningfulContent(item.whyNotHigher || item.halfBandDecision?.whyBelowUpperBand) && hasMeaningfulContent(item.howToImprove || item.improvementFocus);
+  }
+
+  function resultHasRequiredCriterionFeedback(result = {}) {
+    const criteria = result.finalCriteria || result.criteria || {};
+    const names = Object.keys(criteria);
+    if (!names.length) return false;
+    return names.every((criterion) => criterionHasRequiredEvidence(criterionItem(result, criterion)));
   }
 
   function firstText(...items) {
@@ -1500,19 +1514,28 @@
     const status = result.feedbackStatus || result.scoreCoreMeta?.feedbackStatus;
     const statusValue = typeof status === "string" ? status : status?.status;
     if (!statusValue) return "";
+    if (/generated_required_external|generated/i.test(statusValue)) {
+      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后逐项生成，不会改变分数。")}</div>`;
+    }
+    if (/required_external|generating_required/i.test(statusValue)) {
+      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>核心分数已冻结；四项详细反馈将通过独立接口逐项生成，生成完成后才显示完整卡片。</div>`;
+    }
     if (/failed/i.test(statusValue)) {
-      return `<div class="ai-warning feedback-status-warning"><strong>详细反馈暂时生成失败：</strong>核心评分已经冻结，分数不受影响。${escapeHtml(status?.note || status?.error || "可重新评分或后续重试生成反馈。")}</div>`;
+      return `<div class="ai-warning feedback-status-warning"><strong>详细反馈生成失败：</strong>核心评分已经冻结，分数不受影响；但本版本不会用模板内容冒充详细反馈。${escapeHtml(status?.note || status?.error || "请重新生成评分，或稍后再试。")}</div>`;
     }
     if (/quality/i.test(statusValue)) {
       return `<div class="ai-warning feedback-status-warning"><strong>反馈质量提醒：</strong>核心评分已经冻结；部分四项解释可能仍偏模板化。${escapeHtml(arr(status?.qualityIssues).join(" | "))}</div>`;
     }
-    return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后生成，不会改变分数。")}</div>`;
+    return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已生成，不会改变分数。")}</div>`;
   }
   function renderCriterionCards(result = {}) {
     const criteria = result.finalCriteria || result.criteria || {};
     const entries = Object.entries(criteria);
     if (!entries.length) return `<section class="grading-section"><p class="muted">AI 没有返回完整四项分。</p></section>`;
     const feedbackFailed = /failed/i.test(String(result.feedbackStatus?.status || result.scoreCoreMeta?.feedbackStatus?.status || ""));
+    if (feedbackFailed && !resultHasRequiredCriterionFeedback(result)) {
+      return `<section class="criterion-card-grid" aria-label="四项分数"><div class="ai-warning feedback-status-warning" style="grid-column:1/-1"><strong>详细反馈没有生成完成。</strong>核心分数已冻结，但系统不会显示模板化解释。请重新评分或稍后再试。</div>${entries.map(([criterion, band]) => `<article class="criterion-score-card refined-criterion-card"><div class="criterion-card-header"><div class="criterion-title">${escapeHtml(criterion)}</div><div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div></div></article>`).join("")}</section>`;
+    }
     const impossibleZeroWarning = entries.some(([, band]) => Number(band) === 0) && !/hard-zero|skipped_hard_zero|not_rateable/i.test(JSON.stringify(result.scoreCoreMeta || {}) + JSON.stringify(result.feedbackStatus || {}) + JSON.stringify(result.localSignals?.hardZeroGate || {}))
       ? `<div class="ai-warning feedback-status-warning"><strong>评分异常：</strong>系统收到 Band 0，但该回答可能并非空白/非英文/明确放弃作答。请重新评分；新版后端会阻止这种假 0 分冻结。</div>`
       : "";
@@ -1676,6 +1699,112 @@
     } catch {
       return "/api/essay-generator";
     }
+  }
+
+  function criterionFeedbackEndpointFromGradingEndpoint() {
+    const raw = String(els.gradingEndpointInput?.value || "").trim();
+    if (!raw) return "/api/criterion-feedback";
+    try {
+      const url = new URL(raw, window.location.origin);
+      url.pathname = url.pathname.replace(/\/api\/grade-ielts\/?$/i, "/api/criterion-feedback");
+      url.pathname = url.pathname.replace(/\/api\/writing-feedback\/?$/i, "/api/criterion-feedback");
+      url.pathname = url.pathname.replace(/\/api\/essay-generator\/?$/i, "/api/criterion-feedback");
+      if (!/\/api\/criterion-feedback\/?$/i.test(url.pathname)) url.pathname = "/api/criterion-feedback";
+      return url.toString();
+    } catch {
+      return "/api/criterion-feedback";
+    }
+  }
+
+  function criteriaForScoreResult(result = {}) {
+    const criteria = result.finalCriteria || result.criteria || {};
+    const keys = Object.keys(criteria);
+    if (keys.length) return keys;
+    const task = taskOfScoreResult(result) || lockedTaskForSelected();
+    return task === "Task 1"
+      ? ["Task Achievement", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"]
+      : ["Task Response", "Coherence and Cohesion", "Lexical Resource", "Grammatical Range and Accuracy"];
+  }
+
+  function mergeCriterionFeedback(base = {}, feedback = {}) {
+    const mergedCalibration = { ...(base.criterionCalibration || {}) };
+    Object.assign(mergedCalibration, feedback.criterionCalibration || {});
+    return {
+      ...base,
+      criterionCalibration: mergedCalibration,
+      feedbackStatus: feedback.feedbackStatus || base.feedbackStatus,
+      scoreCoreMeta: {
+        ...(base.scoreCoreMeta || {}),
+        feedbackRequiredExternal: true,
+        feedbackGenerated: true,
+        feedbackStatus: feedback.feedbackStatus?.status || "generated_required_external"
+      }
+    };
+  }
+
+  async function generateRequiredCriterionFeedback(coreResult = {}) {
+    const endpoint = criterionFeedbackEndpointFromGradingEndpoint();
+    const criteria = coreResult.finalCriteria || coreResult.criteria || {};
+    const criterionNames = criteriaForScoreResult(coreResult);
+    let merged = {
+      ...coreResult,
+      criterionCalibration: {},
+      feedbackStatus: {
+        status: "generating_required_external",
+        scoreChanged: false,
+        note: "Core score is frozen. Required detailed criterion feedback is being generated criterion by criterion."
+      }
+    };
+
+    for (let i = 0; i < criterionNames.length; i += 1) {
+      const criterion = criterionNames[i];
+      const band = Number(criteria[criterion]);
+      setGradingStatus(`详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}...`, "loading");
+      updateScoringProgress(4, "running", `分数已冻结，正在单独生成 ${criterion} 详细反馈。`);
+      let lastError = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const data = await postStage(endpoint, gradingPayload({
+            mode: "criterion_feedback",
+            aiStage: "required-criterion-feedback",
+            criterion,
+            criterionName: criterion,
+            criterionBand: band,
+            currentResult: coreResult,
+            frozenScore: {
+              ...coreResult,
+              criteria: coreResult.finalCriteria || coreResult.criteria || {},
+              finalCriteria: coreResult.finalCriteria || coreResult.criteria || {}
+            }
+          }));
+          if (!data.ok || !data.criterionCalibration?.[criterion]) throw new Error(data.detail || data.error || `${criterion} detailed feedback missing.`);
+          merged = mergeCriterionFeedback(merged, data);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          setGradingStatus(`${criterion} 详细反馈第 ${attempt} 次生成失败，正在重试...`, "loading");
+        }
+      }
+      if (lastError) {
+        throw new Error(`${criterion} 详细反馈生成失败：${lastError.message || lastError}`);
+      }
+    }
+
+    return {
+      ...merged,
+      feedbackStatus: {
+        status: "generated_required_external",
+        scoreChanged: false,
+        note: "四项详细反馈已逐项生成。核心分数已经先冻结，详细反馈没有改变分数。"
+      },
+      scoreCoreMeta: {
+        ...(merged.scoreCoreMeta || {}),
+        feedbackRequiredExternal: true,
+        feedbackGenerated: true,
+        feedbackStatus: "generated_required_external"
+      }
+    };
   }
 
   function frozenScoreForFeedback() {
@@ -1989,9 +2118,12 @@
       const result = await postStage(endpoint, gradingPayload({ mode: "score" }));
       latestScoreResult = result;
       syncScoringProgressFromResult(result);
+      setGradingStatus("核心分数已冻结。正在通过独立接口逐项生成四项详细反馈...", "loading");
+      const resultWithRequiredFeedback = await generateRequiredCriterionFeedback(result);
+      latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
-      renderScoreResult(result);
-      setGradingStatus("评分完成。五步流程已完成，四项分数已冻结；详细反馈若失败不会影响分数。作文生成请使用旁边的单独按钮。", "done");
+      renderScoreResult(resultWithRequiredFeedback);
+      setGradingStatus("评分完成。核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       updateScoringProgress(1, "error", "评分流程执行失败。", error);
       setGradingStatus(friendlyScoringError(error), "error");

@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-9-task-synced-exam-realism-tightened";
+const SCORE_SYSTEM_VERSION = "score-core-v8-4-1-score-only-core-external-feedback";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -94,7 +94,7 @@ const VISIBLE_SCORING_STEPS = [
   { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes，不生成中文、长解释、原文引用或详细反馈。" },
   { stage: "boundary-audit", title: "本地边界审计", description: "检查低分抬高、高分卡 7、弱语言高分、四项同分和 anchor 冲突。" },
   { stage: "boundary-review", title: "AI 边界复核", description: "只有审计触发时才二次复核；否则跳过。" },
-  { stage: "final-freeze-feedback", title: "冻结分数与后置反馈", description: "先冻结最终分数，再生成详细反馈；反馈失败不影响分数。" }
+  { stage: "final-score-freeze", title: "冻结最终分数", description: "只冻结 AI 返回的四项分和 Overall；详细反馈由独立接口生成，不在打分接口内运行。" }
 ];
 
 function visibleStepMessage(stage, result = {}) {
@@ -120,10 +120,9 @@ function visibleStepMessage(stage, result = {}) {
     }
     return "AI 边界复核跳过：本地边界审计未触发强制复核。";
   }
-  if (stage === "final-freeze-feedback") {
+  if (stage === "final-score-freeze") {
     const finalBand = result.overallBand ?? result.scoreCalculation?.finalBand;
-    const feedback = result.feedbackStatus?.status || "not_requested";
-    return `最终分数已冻结：Overall Band ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}；详细反馈状态：${feedback}。`;
+    return `最终分数已冻结：Overall Band ${Number.isFinite(Number(finalBand)) ? Number(finalBand).toFixed(1) : "-"}；四项详细反馈将由 /api/criterion-feedback 独立生成。`;
   }
   return "阶段状态已更新。";
 }
@@ -1398,61 +1397,7 @@ function buildIndependentAnchorPrompt(body, signals) {
   ].join("\n\n");
 }
 
-function buildScoreCorePrompt(body, signals, independentAnchor = null) {
-  const task = signals.task;
-  const names = criterionNames(task);
-  const anchorTable = stringifyAnchorTable(task);
-  const gateRules = gateRulesForTask(task).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
-  const bandBoundaryProtocol = bandBoundaryProtocolForTask(task);
-  const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
-  const compactMode = localBoundaryProfile.lowBandRisk || localBoundaryProfile.languageWeak || signals.wordCount < (task === "Task 1" ? 150 : 230);
-  const taskSpecific = task === "Task 1"
-    ? `Task 1 GT letter checks: purpose clarity; all bullet points separately covered/partly/missing; functional detail; recipient relationship; tone/register; opening/closing/format. Extracted bullet points: ${JSON.stringify(signals.task1BulletPoints)}.`
-    : `Task 2 essay checks: question type; all required parts; clear position when required; relevant development; reasons; examples; conclusion. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
-  const anchorInstruction = hasUsableAnchorComparison(independentAnchor)
-    ? `Independent anchor from Step 3: ${JSON.stringify(independentAnchor)}. Your criterion bands must be calibrated against this anchor. If you disagree, explain explicitly in anchorComparison, but do not silently fall back to Band 7.`
-    : "No valid independent anchor was passed from Step 3; you must return a full independent anchorComparison and the hard audit will force review if it is missing.";
-
-  return [
-    "You are a strict but fair IELTS General Training Writing examiner. Return JSON only.",
-    `Use ${SCORE_SYSTEM_VERSION}. First route the script as ${task}. Do not use Task 2 essay logic for Task 1 letters or Task 1 letter logic for Task 2 essays.`,
-    "Grade IELTS Writing from Band 0.0 to Band 9.0. Use 0 only for no assessable answer / wholly unrelated / non-English / fully copied. Otherwise use 1.0 to 9.0 in 0.5 increments.",
-    "For every criterion, actively compare adjacent half bands. Use X.5 when performance clearly exceeds X.0 but does not consistently reach X+1.0. Do not prefer whole bands by default.",
-    "Do not generate editing, language diagnostics, learning notes, revisions, or model answers in this scoring pass. This endpoint is for scoring only.",
-    taskSpecific,
-    `0-9 anchor benchmarks for this task:\n${anchorTable}`,
-    `Task-specific gates for this task:\n${gateRules}`,
-    "Anchor calibration requirement: before assigning final criterion bands, decide which 0-9 anchor the response is closest to. Explain why it is not the lower adjacent anchor and why it is not the higher adjacent anchor. This prevents low/mid writing being lifted by visible structure and prevents high-band writing being capped at 7.0.",
-    "Independent anchor rule: anchorComparison must be decided before and independently from the final criterion average. Never infer closestAnchorBand from the final score.",
-    anchorInstruction,
-    "Hard local audit rule: the server will independently check underlength, all-four-same, all-four-7, anchor/final conflicts, Band 6 access, and high-band ceiling. If a conflict is found, your result may be sent to a second AI boundary review before freezing.",
-    "Fail-closed rule: every criterion must include evidence and half-band boundary reasoning. If all four criteria are identical, justify equality with evidence or differentiate the bands by 0.5 where appropriate.",
-    "High-band ceiling rule: Band 8/9 writing can have rare minor slips. Do not keep a mature, fully developed, precise and natural response at four Band 7s merely because it is not perfect.",
-    "Criterion feedback evidence rule: criterionCalibration must be essay-specific, not templated. Every criterion must cite or paraphrase at least two concrete features or short quotes from the student's response in positiveEvidence, limitingEvidence, or essayEvidence.",
-    "Invalid generic feedback rule: comments such as 'clear position but lacks depth', 'adequate vocabulary', 'some grammatical errors', 'coherence is generally clear', or any comment that could apply to any essay are invalid. Rewrite with exact evidence from this essay.",
-    "Each criterion explanation must include: whyThisBand, whyNotLower, whyNotHigher, howToImprove, essayEvidence, and specific evidence for/against the next half band. Do not leave evidence arrays empty unless the answer is not assessable.",
-    "JSON safety rule: do not use unescaped double quotes inside JSON string values. Use single quotes around student phrases. Return no markdown, no comments, no trailing prose.",
-    "Low-band boundary rule: severe underlength may be rateable but still belongs to a low-band boundary. Task 2 80-119 words is usually Band 3.0-4.0; Task 2 120-149 words is usually Band 3.5-4.5 unless exceptional evidence exists.",
-    "Task 1 special rule: Task Achievement is mainly determined by purpose clarity, bullet coverage, detail, tone/register, and letter completeness. Missing bullets or wrong tone must constrain TA and can also constrain CC/LR.",
-    "Task 2 special rule: Task Response is mainly determined by answering all prompt parts, position, development, examples/reasons, relevance, and conclusion. A position plus paragraphs is not enough for Band 6.",
-    "Band 6 access rule: Band 6 requires real task fulfilment and development, not only paragraphing. If ideas are general, examples are brief, or frequent language errors reduce precision, stay at 5.0-5.5.",
-    "Band 5 realism rule: do not use Band 5 as a default rescue score. Band 5 needs a generally understandable response with some relevant task fulfilment, some organization, limited but usable vocabulary, and errors that do not usually prevent meaning. If the writing is mostly understandable but has frequent basic grammar/spelling/word-form errors, LR/GRA normally sit around 4.0-4.5 unless there is stronger language evidence.",
-    "Band 4 realism rule: Band 4 is appropriate when meaning is often clear in short stretches but grammar, word choice, spelling, sentence control, or task development is limited enough to make the response difficult or repetitive. Do not lift this profile to all Band 5 merely because the message can be understood.",
-    "Task mismatch realism rule: if the selected task is Task 2 but the response is a letter or answers another topic, keep the Task Response band very low for relevance; do not switch to Task Achievement. If the selected task is Task 1 but the response is an essay, keep Task Achievement very low; do not switch to Task Response.",
-    "High-band unlock rule: if the response has full task fulfilment, developed ideas, natural progression, precise/flexible lexis, and strong grammar control, actively consider 7.5/8.0/8.5/9.0 rather than defaulting to 7.0.",
-    "LR/GRA gates: high spelling/word-form density must limit LR unless strong evidence overrides it. High grammar density or weak sentence control must limit GRA unless strong evidence overrides it.",
-    "Task-aware low-band AI action: if the response is complete but language is weak, lower LR/GRA rather than blindly lowering TR/TA or CC. If the response is short or missing task content, lower TR/TA and CC as well.",
-    "Task-aware high-band AI action: if the response meets high-band task fulfilment and language-control evidence, break the Band 7 ceiling with 7.5/8/8.5/9 where justified. Band 8/9 writing does not need literary native-speaker style; it needs complete task fulfilment, natural control, precision, and very few errors. Use anchorBand 9 when the script is fully responsive, fluent, controlled, and has negligible limitation.",
-    "Score-profile gate: challenge all-equal bands, TR/TA+CC much higher than LR/GRA, and overall 5.5+ when language-control signals are weak.",
-    "The server will average the four criterion bands and round to the nearest 0.5. Do not invent a separate overall band that conflicts with the four criteria.",
-    `Criterion names must be exactly: ${JSON.stringify(names)}.` ,
-    `Local scoring signals for calibration only, not local scoring: ${JSON.stringify(signals)}.` ,
-    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
-    `Student response: ${body.essay || ""}`,
-    "Return this exact JSON shape: {\"ok\":true,\"aiStage\":\"score-core\",\"task\":\"Task 1 or Task 2\",\"anchorComparison\":{\"anchorSystem\":\"Task 1 Letter anchors or Task 2 Essay anchors\",\"closestAnchorBand\":number,\"lowerAnchorBand\":number,\"higherAnchorBand\":number,\"closestAnchorProfile\":\"...\",\"closestAnchorProfileZh\":\"中文\",\"whyCloserToThisBand\":\"...\",\"whyCloserToThisBandZh\":\"中文\",\"whyNotLowerAnchor\":\"...\",\"whyNotLowerAnchorZh\":\"中文\",\"whyNotHigherAnchor\":\"...\",\"whyNotHigherAnchorZh\":\"中文\"},\"criteria\":{...four criterion bands as numbers...},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[...],\"summary\":\"one-sentence reason for this band\",\"summaryZh\":\"中文一句话原因\",\"whyThisBand\":\"why this exact band was selected\",\"whyThisBandZh\":\"中文\",\"whyNotLower\":\"why not 0.5 lower\",\"whyNotLowerZh\":\"中文\",\"whyNotHigher\":\"why not 0.5 higher\",\"whyNotHigherZh\":\"中文\",\"howToImprove\":\"one specific way to move 0.5 higher\",\"howToImproveZh\":\"中文\",\"positiveEvidence\":[...],\"positiveEvidenceZh\":[...],\"limitingEvidence\":[...],\"limitingEvidenceZh\":[...],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what it proves\",\"meaningZh\":\"中文\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"中文\"}}},\"scoreProfile\":{\"likelyOverallRange\":\"...\",\"lowBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"midBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"highBandGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"},\"scoreProfileGate\":{\"status\":\"passed/triggered\",\"reason\":\"...\",\"reasonZh\":\"中文\"}},\"taskSpecificGate\":{...Task 1 gates or Task 2 gates from the listed gate rules, each with status/reason/reasonZh/evidence...},\"diagnosticSignals\":{...},\"examinerSummary\":\"short scoring-only explanation\",\"examinerSummaryZh\":\"中文评分摘要\"}"
-  ].join("\n\n");
-}
-
+// Removed legacy full score+feedback prompt. Core scoring now uses buildScoreKernelPrompt only.
 
 function criterionKeyAliases(name, task = "Task 2") {
   const normalized = String(name || "").trim();
@@ -1535,40 +1480,8 @@ function defaultImproveForCriterion(criterion) {
 }
 
 
-function evidenceItemCount(item = {}) {
-  const arrays = [item.positiveEvidence, item.limitingEvidence, item.essayEvidence, item.textEvidence, item.evidenceQuotes].filter(Array.isArray);
-  return arrays.reduce((sum, arr) => sum + arr.filter(Boolean).length, 0);
-}
-
-function isGenericCriterionFeedbackText(text) {
-  const value = String(text || "").toLowerCase();
-  if (!value.trim()) return true;
-  const genericPatterns = [
-    /clear position but lacks depth/,
-    /adequate vocabulary/,
-    /some grammatical errors/,
-    /coherence is generally clear/,
-    /ideas are underdeveloped/,
-    /grammar is generally controlled/,
-    /vocabulary is limited/,
-    /some relevant vocabulary avoids band/,
-    /some attempts at complex structures/,
-    /avoid band 4/,
-    /needs more examples/,
-    /good but not excellent/
-  ];
-  return genericPatterns.some((pattern) => pattern.test(value));
-}
-
-function criterionFeedbackQualityIssues(calibration = {}) {
-  return Object.entries(calibration || {}).flatMap(([criterion, item]) => {
-    const text = [item.summary, item.whyThisBand, item.whyNotLower, item.whyNotHigher, item.howToImprove].filter(Boolean).join(" ");
-    const issues = [];
-    if (isGenericCriterionFeedbackText(text)) issues.push(`${criterion}: criterion feedback appears generic or under-specific.`);
-    if (evidenceItemCount(item) < 2) issues.push(`${criterion}: fewer than two concrete evidence items were returned.`);
-    return issues;
-  });
-}
+// Detailed feedback quality auditing has been removed from the scoring endpoint.
+// The scoring endpoint only freezes bands; /api/criterion-feedback owns feedback quality.
 
 function normalizeCriterionCalibration(rawCalibration, criteria, task) {
   const names = criterionNames(task);
@@ -1667,7 +1580,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   const wordBoundary = getWordCountBoundaryProfile(signals.task, signals.wordCount);
   const highCandidate = detectHighBandCandidate(criteria, signals, anchorComparison, criterionCalibration);
   const warnings = collectScoreWarnings(criteria, signals);
-  const feedbackQualityIssues = existing?.skipFeedbackQualityAudit ? [] : criterionFeedbackQualityIssues(criterionCalibration);
+  const feedbackQualityIssues = [];
   const anchorBand = Number(anchorComparison?.closestAnchorBand);
   const anchorMissing = Boolean(anchorComparison?.anchorMissing || anchorComparison?.anchorSource === "local_fallback_missing_ai_anchor");
   const anchorConflict = Number.isFinite(anchorBand) && Number.isFinite(finalBand) && Math.abs(anchorBand - finalBand) > 1;
@@ -1698,7 +1611,6 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   if (fullLengthWeakLanguageOverallConflict) reviewReasons.push("Full-length but weak-language conflict: overall 6.0+ requires strong evidence despite high local language-error signals.");
   if (task1BelowLengthHighTAConflict) reviewReasons.push("Task 1 below recommended length but Task Achievement is 6.0+; bullet detail and purpose/tone must be reviewed.");
   if (taskRequirementScoreConflict) reviewReasons.push(`${signals.task} task-specific requirement conflict: ${names[0]} ${firstCriterionBand.toFixed(1)} exceeds the requirement-audit ceiling ${requirementCap.toFixed(1)}; AI boundary review must justify or revise it.`);
-  if (feedbackQualityIssues.length) reviewReasons.push(`Criterion feedback quality issue: ${feedbackQualityIssues.slice(0, 4).join(" | ")}`);
   return {
     version: "strict-boundary-audit-v6",
     localScoringApplied: false,
@@ -2179,69 +2091,8 @@ function compactCriterionCalibration(ai = {}, criteria = {}, task = "Task 2") {
   });
   return out;
 }
-function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
-  const task = signals.task;
-  const names = criterionNames(task);
-  return [
-    "You generate post-freeze IELTS criterion feedback. Return JSON only.",
-    "The score is already frozen. Do not change any band, criterion score, anchor, boundary decision, or overall score.",
-    "Write concise examiner-style feedback for the four criterion cards. Do not use generic IELTS stock wording.",
-    "Each criterion card must feel written for this exact essay. Name the actual topic, position, paragraph behaviour, vocabulary pattern, grammar pattern, or missing support from the student's response.",
-    "Bilingual requirement: every English feedback string must have a matching natural Simplified Chinese meaning field. Do not leave any Chinese field blank. Chinese must explain the exact English sentence, not only give a vague summary.",
-    "For arrays, the Chinese array must have the same number of items and the same order as the English array, e.g. positiveEvidence[0] must match positiveEvidenceZh[0].",
-    "Evidence requirement: for every criterion, include at least 1 essayEvidence object and preferably 2. Each quote must be a real short phrase or sentence fragment from the student's essay. Do not invent evidence.",
-    "For essayEvidence, use objects only: {quote, meaning, meaningZh}. Do not return plain strings for essayEvidence.",
-    "Card specificity rule: every whyThisBand, whyNotLower, whyNotHigher, and howToImprove must mention this essay's actual topic or claim. Do not write a generic examiner sentence that could fit another essay.",
-    "Task Response card rule: refer to the student's exact claim(s), such as what benefit/risk/side they mentioned, and say exactly what explanation/example is missing. Do not only say vague opinions or no development.",
-    "Coherence card rule: describe the actual paragraph flow or repeated sentence pattern in this essay. Do not only say basic structure or limited progression.",
-    "Lexical and Grammar card rules: cite actual word choices, collocations, spelling/word-form problems, or sentence patterns when available; if none are quoted, explain the visible language feature concretely.",
-    "For positiveEvidence and limitingEvidence, each item must identify a concrete feature, not a generic label. Good: 'clear position appears in the introduction'; bad: 'has some relevant ideas'.",
-    "For halfBandDecision, include whyAboveLowerBandZh, whyBelowUpperBandZh, and whyExactBandZh. These are required.",
-    "Every comment must refer to concrete features from the student's response. If a sentence could apply to any essay, rewrite it.",
-    "Use natural boundary wording: whyThisBand = why this exact band fits; whyNotLower = what concrete performance prevents a lower adjacent half-band; whyNotHigher = what concrete limitation blocks the next adjacent half-band.",
-    "Avoid these template phrases unless followed immediately by concrete essay-specific detail or a quote: 'related to the prompt', 'clear opinion', 'ideas are general', 'some errors', 'limited vocabulary', 'basic structure', 'no logical progression', 'no concrete examples'.",
-    "Length limits per criterion: whyThisBand max 60 words; whyNotLower max 40 words; whyNotHigher max 45 words; howToImprove max 45 words; each Chinese translation should be concise but complete; zhSummary max 150 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 18 words.",
-    "Use single quotes around student phrases. Do not use unescaped double quotes inside JSON strings. No markdown and no trailing prose.",
-    `Task: ${task}. Criteria: ${names.join(", ")}.`,
-    `Frozen score: ${JSON.stringify({ criteria: frozenResult.finalCriteria || frozenResult.criteria, overallBand: frozenResult.overallBand, anchorComparison: frozenResult.anchorComparison, shortReasons: frozenResult.shortReasons })}`,
-    `Local signals: ${JSON.stringify(signals)}`,
-    `Task-specific boundary protocol:\n${bandBoundaryProtocolForTask(task)}`,
-    `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
-    `Student response: ${body.essay || ""}`,
-    "Return exactly: {\"ok\":true,\"aiStage\":\"criterion-feedback-after-freeze\",\"feedbackStatus\":{\"status\":\"generated\",\"scoreChanged\":false},\"criterionCalibration\":{\"Criterion Name\":{\"band\":number,\"selectedBand\":number,\"candidateBandsConsidered\":[number,number,number],\"summary\":\"one sentence\",\"summaryZh\":\"对应 summary 的中文释义\",\"whyThisBand\":\"...\",\"whyThisBandZh\":\"对应 whyThisBand 的中文释义\",\"whyNotLower\":\"why above lower adjacent half-band\",\"whyNotLowerZh\":\"对应 whyNotLower 的中文释义\",\"whyNotHigher\":\"why not yet higher adjacent half-band\",\"whyNotHigherZh\":\"对应 whyNotHigher 的中文释义\",\"howToImprove\":\"...\",\"howToImproveZh\":\"对应 howToImprove 的中文释义\",\"zhSummary\":\"整张卡片的中文总结\",\"positiveEvidence\":[\"...\"],\"positiveEvidenceZh\":[\"逐条对应 positiveEvidence 的中文释义\"],\"limitingEvidence\":[\"...\"],\"limitingEvidenceZh\":[\"逐条对应 limitingEvidence 的中文释义\"],\"essayEvidence\":[{\"quote\":\"short quote from essay\",\"meaning\":\"what this quote proves\",\"meaningZh\":\"对应 meaning 的中文释义，并说明原文片段体现什么\"}],\"halfBandDecision\":{\"whyAboveLowerBand\":\"...\",\"whyAboveLowerBandZh\":\"对应中文\",\"whyBelowUpperBand\":\"...\",\"whyBelowUpperBandZh\":\"对应中文\",\"whyExactBand\":\"...\",\"whyExactBandZh\":\"对应中文\"}}}}."
-  ].join("\n\n");
-}
-
-
-async function generateCriterionFeedbackAfterFreeze(body, frozenResult, signals) {
-  try {
-    const ai = await callDeepSeek([
-      { role: "system", content: "You generate post-freeze IELTS criterion feedback. You must not change scores." },
-      { role: "user", content: buildCriterionFeedbackPrompt(body, frozenResult, signals) }
-    ], 3600, 0);
-    const feedbackCalibration = normalizeCriterionCalibration(ai.criterionCalibration || {}, frozenResult.finalCriteria || frozenResult.criteria, signals.task);
-    const qualityIssues = criterionFeedbackQualityIssues(feedbackCalibration);
-    return {
-      criterionCalibration: feedbackCalibration,
-      feedbackStatus: {
-        status: qualityIssues.length ? "generated_with_quality_warnings" : "generated",
-        scoreChanged: false,
-        qualityIssues,
-        note: qualityIssues.length ? "Feedback generated, but some explanations may still be generic." : "Detailed criterion feedback generated after score freeze."
-      }
-    };
-  } catch (error) {
-    return {
-      criterionCalibration: frozenResult.criterionCalibration,
-      feedbackStatus: {
-        status: "failed_after_score_freeze",
-        scoreChanged: false,
-        error: String(error?.message || error),
-        note: "Core score was frozen successfully. Detailed criterion feedback failed and did not affect the score."
-      }
-    };
-  }
-}
+// Detailed criterion feedback generation is intentionally not implemented here.
+// Use /api/criterion-feedback after the score is frozen.
 
 function freezeReviewedScore(result = {}, body = {}, signals = {}) {
   const initialCriteria = normalizeCriteria(result.finalCriteria || result.criteria, signals.task);
@@ -2279,14 +2130,14 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.9 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Feedback cannot change the score.",
+      formula: "v8.3.9 five-step pipeline: AI returns compact criterion bands using the request-locked Task 1 or Task 2 rubric; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; local code audits but does not change AI-returned bands. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
       localScoreChangeExplanation: "No local band assignment. Local checks are used only for audit/review routing; final bands are AI-returned and mechanically averaged."
     },
-    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: false, localCalibrationApplied: false, feedbackAfterFreeze: true, feedbackStagesMayNotChangeScore: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
+    scoreCoreMeta: { ...(result.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, sub7StrictCalibrated: false, localCalibrationApplied: false, feedbackAfterFreeze: false, externalCriterionFeedback: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "single-pass-score-core" },
     localScoreChanged: false
   };
 }
@@ -2359,14 +2210,14 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.3.9 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; detailed feedback cannot change the score.",
+      formula: "v8.4.0 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; required detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
       localScoreChanged: false,
-      localScoreChangeExplanation: "No local band assignment. The server audits, may require AI boundary review, freezes AI-returned bands, then optionally generates post-freeze feedback."
+      localScoreChangeExplanation: "No local band assignment. The server audits, may require AI boundary review, and freezes AI-returned bands. It does not generate detailed feedback in this endpoint."
     },
-    scoreCoreMeta: { scoreKernelFirst: true, scoreFrozen: false, feedbackAfterFreeze: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "score-kernel" },
+    scoreCoreMeta: { scoreKernelFirst: true, scoreFrozen: false, feedbackAfterFreeze: false, externalCriterionFeedback: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "score-kernel" },
     localScoreChanged: false
   };
 }
@@ -2704,22 +2555,29 @@ async function scoreCore(body) {
   // Step 5A: freeze the AI-returned final criteria and mechanically average them.
   const frozen = freezeReviewedScore(reviewed, body, signals);
 
-  // Step 5B: generate detailed criterion feedback after freeze. Failure does not change or remove the score.
-  const feedback = await generateCriterionFeedbackAfterFreeze(body, frozen, signals);
-  const withFeedback = {
+  // Step 5B is intentionally external in v8.4.0.
+  // Core scoring must freeze quickly and reliably; detailed criterion feedback is generated
+  // by /api/criterion-feedback after the frozen score is returned. This prevents a long
+  // feedback JSON failure from affecting the scoring response.
+  const withFeedbackPlan = {
     ...frozen,
-    criterionCalibration: feedback.criterionCalibration || frozen.criterionCalibration,
-    feedbackStatus: feedback.feedbackStatus,
+    feedbackStatus: {
+      status: "required_external",
+      scoreChanged: false,
+      note: "Core score is frozen. Required detailed criterion feedback must be generated by /api/criterion-feedback and cannot change the score."
+    },
     scoreCoreMeta: {
       ...(frozen.scoreCoreMeta || {}),
       fiveStepPipeline: true,
       scoreKernelFirst: true,
       scoreFrozenBeforeFeedback: true,
-      feedbackGenerated: feedback.feedbackStatus?.status === "generated" || feedback.feedbackStatus?.status === "generated_with_quality_warnings",
-      feedbackStatus: feedback.feedbackStatus?.status || "unknown"
+      feedbackGenerated: false,
+      feedbackRequiredExternal: true,
+      feedbackEndpoint: "/api/criterion-feedback",
+      feedbackStatus: "required_external"
     }
   };
-  return attachSinglePassProgress(withFeedback, "done");
+  return attachSinglePassProgress(withFeedbackPlan, "done");
 }
 
 function scorePrecheck(body) {
