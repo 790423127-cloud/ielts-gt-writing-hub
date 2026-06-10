@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-2-evidence-card-quality";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-3-impossible-zero-freeze-block";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -2091,6 +2091,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Return only anchorBand, candidateRange, four criterion bands, reasonCodes, and flags. Keep all strings as short snake_case codes. Do not quote the student's text.",
     "Use bands 0-9 in 0.5 increments. The server will average four criteria and run local boundary audit. Do not output overallBand.",
     "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English, explicit no-answer, or completely unassessable submissions. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
+    "If you believe a criterion is near zero but the essay has any topical English content, use a low positive half-band and explain the concrete limitation; do not output 0.0.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately and cap Task Achievement when any bullet is missing or only partly covered. For Task 2, judge the exact question type and cap Task Response when a required part is missing: both views, own opinion, advantages, disadvantages, outweigh judgement, causes, problems, solutions, or positive/negative judgement. A general answer to the topic is not enough.",
@@ -2144,11 +2145,15 @@ function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
     "For arrays, the Chinese array must have the same number of items and the same order as the English array, e.g. positiveEvidence[0] must match positiveEvidenceZh[0].",
     "Evidence requirement: for every criterion, include at least 1 essayEvidence object and preferably 2. Each quote must be a real short phrase or sentence fragment from the student's essay. Do not invent evidence.",
     "For essayEvidence, use objects only: {quote, meaning, meaningZh}. Do not return plain strings for essayEvidence.",
+    "Card specificity rule: every whyThisBand, whyNotLower, whyNotHigher, and howToImprove must mention this essay's actual topic or claim. Do not write a generic examiner sentence that could fit another essay.",
+    "Task Response card rule: refer to the student's exact claim(s), such as what benefit/risk/side they mentioned, and say exactly what explanation/example is missing. Do not only say vague opinions or no development.",
+    "Coherence card rule: describe the actual paragraph flow or repeated sentence pattern in this essay. Do not only say basic structure or limited progression.",
+    "Lexical and Grammar card rules: cite actual word choices, collocations, spelling/word-form problems, or sentence patterns when available; if none are quoted, explain the visible language feature concretely.",
     "For positiveEvidence and limitingEvidence, each item must identify a concrete feature, not a generic label. Good: 'clear position appears in the introduction'; bad: 'has some relevant ideas'.",
     "For halfBandDecision, include whyAboveLowerBandZh, whyBelowUpperBandZh, and whyExactBandZh. These are required.",
     "Every comment must refer to concrete features from the student's response. If a sentence could apply to any essay, rewrite it.",
     "Use natural boundary wording: whyThisBand = why this exact band fits; whyNotLower = what concrete performance prevents a lower adjacent half-band; whyNotHigher = what concrete limitation blocks the next adjacent half-band.",
-    "Avoid these template phrases unless followed by essay-specific detail: 'related to the prompt', 'clear opinion', 'ideas are general', 'some errors', 'limited vocabulary', 'basic structure'.",
+    "Avoid these template phrases unless followed immediately by concrete essay-specific detail or a quote: 'related to the prompt', 'clear opinion', 'ideas are general', 'some errors', 'limited vocabulary', 'basic structure', 'no logical progression', 'no concrete examples'.",
     "Length limits per criterion: whyThisBand max 60 words; whyNotLower max 40 words; whyNotHigher max 45 words; howToImprove max 45 words; each Chinese translation should be concise but complete; zhSummary max 150 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 18 words.",
     "Use single quotes around student phrases. Do not use unescaped double quotes inside JSON strings. No markdown and no trailing prose.",
     `Task: ${task}. Criteria: ${names.join(", ")}.`,
@@ -2200,6 +2205,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
   const initialAnchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, initialCriteria, signals);
   const localCalibration = applyLocalRegressionCalibration(initialCriteria, signals, initialAnchorComparison, body);
   const criteria = localCalibration.criteria;
+  assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   const calibration = normalizeCriterionCalibration(result.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(result.anchorComparison || result.anchorCalibration || {}, signals.task, criteria, signals);
@@ -2227,7 +2233,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.3.1 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried instead of being frozen. Feedback cannot change the score.",
+      formula: "v8.3.3 five-step pipeline: AI returns compact criterion bands; the request-locked task controls the rubric; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried instead of being frozen. Feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2307,7 +2313,7 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.3.1 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
+      formula: "v8.3.3 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; AI Band 0 for rateable writing is rejected and retried; final AI-returned bands are frozen and averaged; detailed feedback cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2482,7 +2488,15 @@ async function scoreCriteriaStage(body) {
     const compactCriteria = normalizeCriteria(ai.criteria || ai.finalCriteria, signals.task);
     ai.criterionCalibration = compactCriterionCalibration(ai, compactCriteria, signals.task);
   }
-  const firstRaw = normalizeScoreCoreResult(ai, body, signals, { independentAnchor, skipFeedbackQualityAudit: true });
+  let firstRaw;
+  try {
+    firstRaw = normalizeScoreCoreResult(ai, body, signals, { independentAnchor, skipFeedbackQualityAudit: true });
+  } catch (error) {
+    if (error?.code !== "IMPOSSIBLE_ZERO_BAND") throw error;
+    const retryAi = await retryScoreKernelAfterImpossibleZero(body, signals, getLocalBandBoundaryProfile(signals), ai);
+    firstRaw = normalizeScoreCoreResult(retryAi, body, signals, { independentAnchor, skipFeedbackQualityAudit: true });
+    firstRaw.scoreCoreMeta = { ...(firstRaw.scoreCoreMeta || {}), zeroBandRetryApplied: true, zeroBandRetryReason: String(error.message || error) };
+  }
   const criteria = firstRaw.finalCriteria || firstRaw.criteria;
   const anchorForResult = !independentAnchor.anchorMissing ? independentAnchor : firstRaw.anchorComparison;
   const calibration = normalizeCriterionCalibration(firstRaw.criterionCalibration || {}, criteria, signals.task);
@@ -2505,6 +2519,7 @@ function scoreGatesStage(body) {
   const current = safeCurrentForTask(body, body.currentResult || {});
   const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  assertNoImpossibleZeroBand(criteria, signals);
   const normalizedCalibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
   const anchorComparisonForGates = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
   const scoreProfile = buildLocalGateReport(criteria, signals, current.scoreProfile || {}, anchorComparisonForGates, normalizedCalibration);
@@ -2534,11 +2549,13 @@ async function scoreBoundaryReviewStage(body) {
   const current = safeCurrentForTask(body, body.currentResult || {});
   const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  assertNoImpossibleZeroBand(criteria, signals);
   const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);
   const boundaryAudit = current.boundaryAudit || buildHardBoundaryAudit(criteria, signals, anchorComparison, calibration);
   const staged = { ...current, localSignals: signals, finalCriteria: criteria, criteria, criterionCalibration: calibration, anchorComparison, boundaryAudit };
   const reviewed = await applyBoundaryReviewIfNeeded(body, staged);
+  assertNoImpossibleZeroBand(normalizeCriteria(reviewed.finalCriteria || reviewed.criteria, signals.task), signals);
   return withDetailedProgress({
     ...reviewed,
     aiStage: "score-boundary-review",
@@ -2550,6 +2567,7 @@ function scoreFinalizeStage(body) {
   const current = safeCurrentForTask(body, body.currentResult || {});
   const signals = resolveScoringSignals(body, current);
   const criteria = normalizeCriteria(current.finalCriteria || current.criteria, signals.task);
+  assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   const calibration = normalizeCriterionCalibration(current.criterionCalibration || {}, criteria, signals.task);
   const anchorComparison = normalizeAnchorComparison(current.anchorComparison || current.anchorCalibration || {}, signals.task, criteria, signals);

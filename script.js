@@ -1109,10 +1109,10 @@
     const field = criterionFieldEn(criterion);
     const current = formatBand(band);
     if (kind === "whyThis") {
-      if (/task response|task achievement/i.test(criterion)) return `This band reflects the current task fulfilment: the answer attempts the task, but the main ideas or required parts need clearer, more specific development.`;
-      if (/coherence/i.test(criterion)) return `This band reflects the current organisation: the writing has a basic structure, but paragraph development and sentence links are still limited.`;
-      if (/lexical/i.test(criterion)) return `This band reflects the current vocabulary control: the meaning is usually clear, but word choice and collocation are still simple or repetitive.`;
-      if (/grammatical/i.test(criterion)) return `This band reflects the current grammar control: the writing is understandable, but sentence range and accuracy are still limited.`;
+      if (/task response|task achievement/i.test(criterion)) return `This band reflects the task evidence shown in the response. Use the evidence box below to check which claim was accepted and which missing explanation or example is limiting the score.`;
+      if (/coherence/i.test(criterion)) return `This band reflects the organisation visible in this response. Check whether the ideas are actually developed from sentence to sentence, not only separated into paragraphs.`;
+      if (/lexical/i.test(criterion)) return `This band reflects the vocabulary evidence in the response, including topic-word accuracy, repetition, word form, and collocation control.`;
+      if (/grammatical/i.test(criterion)) return `This band reflects the sentence evidence in the response, including verb forms, sentence boundaries, clause control, and accuracy.`;
       return `This criterion is currently around Band ${current}.`;
     }
     if (kind === "whyLower") return `It is not lower because the writing still shows some assessable control in ${field}, rather than being absent or completely unclear.`;
@@ -1513,7 +1513,10 @@
     const entries = Object.entries(criteria);
     if (!entries.length) return `<section class="grading-section"><p class="muted">AI 没有返回完整四项分。</p></section>`;
     const feedbackFailed = /failed/i.test(String(result.feedbackStatus?.status || result.scoreCoreMeta?.feedbackStatus?.status || ""));
-    return `<section class="criterion-card-grid" aria-label="四项评分说明">
+    const impossibleZeroWarning = entries.some(([, band]) => Number(band) === 0) && !/hard-zero|skipped_hard_zero|not_rateable/i.test(JSON.stringify(result.scoreCoreMeta || {}) + JSON.stringify(result.feedbackStatus || {}) + JSON.stringify(result.localSignals?.hardZeroGate || {}))
+      ? `<div class="ai-warning feedback-status-warning"><strong>评分异常：</strong>系统收到 Band 0，但该回答可能并非空白/非英文/明确放弃作答。请重新评分；新版后端会阻止这种假 0 分冻结。</div>`
+      : "";
+    return `${impossibleZeroWarning}<section class="criterion-card-grid" aria-label="四项评分说明">
       ${entries.map(([criterion, band], index) => {
         const item = criterionItem(result, criterion);
         const half = item.halfBandDecision || {};
@@ -1529,8 +1532,8 @@
         const whyLower = whyLowerPair.en;
         const whyHigher = whyHigherPair.en;
         const improve = improvePair.en;
-        const lowerLabel = Number(band) <= 0 ? "为什么不是不可评分" : `为什么没有更低到 Band ${lowerBand}`;
-        const higherLabel = Number(band) >= 9 ? "为什么已经接近满分" : `为什么还不能到 Band ${higherBand}`;
+        const lowerLabel = Number(band) <= 0 ? "为什么系统认为不是空白/完全跑题" : `为什么没有更低到 Band ${lowerBand}`;
+        const higherLabel = Number(band) >= 9 ? "为什么已经接近满分" : (Number(band) <= 0 ? "为什么不能显示为 Band 0.5+" : `为什么还不能到 Band ${higherBand}`);
         const zh = criterionZhSummary(item, {
           whyThis: `为什么是 Band ${formatBand(band)}`,
           whyLower: lowerLabel,
