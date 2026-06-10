@@ -1,0 +1,30 @@
+[
+  {
+    "id": "ROUTER_T1_BOUNDARY_4_5",
+    "task": "Task 1",
+    "expectedRoute": "boundary_v4_3_for_4_0_to_5_5",
+    "prompt": "You bought a phone online and it does not work properly. Write a letter to the company. In your letter: describe the problem, explain how you feel, and say what you want the company to do.",
+    "essay": "Dear Sir or Madam,\n\nI am writing about a mobile phone I bought from your online shop two weeks ago. When the phone arrived it looked new, but after one day I found several problems. The screen sometimes becomes black and I cannot answer calls. Also the battery is weak, even when I charge it all night.\n\nI feel very disappointed because I paid a lot of money. I need this phone for work and for contacting my family. Now I have to use my old phone again and it causes many problems.\n\nI want your company to send me a new phone or return my money. Please tell me how I can send the broken phone back.\n\nYours faithfully,\nChen Wei"
+  },
+  {
+    "id": "ROUTER_T2_BOUNDARY_5_0",
+    "task": "Task 2",
+    "expectedRoute": "boundary_v4_3_for_4_0_to_5_5",
+    "prompt": "Some people think young people should spend more time helping in their local community. To what extent do you agree or disagree?",
+    "essay": "Many people think young people should help more in their local community. I agree because it is good for society and also good for young people themselves. Today many young people spend much time on phones or computers. If they help in community, they can learn real life and meet different people.\n\nThere are many things they can do. For example, they can clean parks, help old people buy food, or teach children after school. These activities can make the local area better. Young people can also become more responsible because they understand other people's problems.\n\nHowever, young people also have study and work. If they spend too much time helping, they may not have enough time for homework or rest. So community work should not be forced every day.\n\nIn conclusion, young people should help their community, but it should be done in a reasonable way. It is useful for everyone, but it must not make young people too tired."
+  },
+  {
+    "id": "ROUTER_T1_DIRECT_HIGH",
+    "task": "Task 1",
+    "expectedRoute": "main_direct_above_boundary_or_boundary_if_main_scores_lower",
+    "prompt": "A friend has invited you to a family celebration, but you cannot attend. Write a letter to your friend. In your letter: thank your friend, explain why you cannot come, and suggest meeting another time.",
+    "essay": "Dear Maria,\n\nThank you very much for inviting me to your father's birthday celebration next Saturday. I was really pleased to hear from you, and I am sorry that I will not be able to attend such an important family event.\n\nUnfortunately, I have already promised to help my sister move into her new flat on the same day. She has two young children, and I am the only person available to help her carry boxes and clean the old apartment. I tried to change the arrangement, but it is not possible now.\n\nPlease give my best wishes to your father. I hope everyone has a wonderful evening. Perhaps we could meet the following Sunday for coffee, and you can show me some photos from the celebration.\n\nBest wishes,\nAnna"
+  },
+  {
+    "id": "ROUTER_T2_DIRECT_HIGH",
+    "task": "Task 2",
+    "expectedRoute": "main_direct_above_boundary_or_boundary_if_main_scores_lower",
+    "prompt": "Some people believe that employers should allow staff to work from home whenever possible. Discuss both views and give your opinion.",
+    "essay": "Working from home has become common in many industries. Some people believe employers should allow it whenever possible, while others think staff should mainly work in an office. In my view, a flexible approach is best.\n\nThere are clear advantages to home working. Employees can save time and money because they do not need to travel every day. This may improve their work-life balance and reduce stress. Companies can also save office costs. In addition, many tasks, such as writing reports or answering emails, can be completed just as effectively from home.\n\nHowever, office work also has benefits. Some employees communicate better face to face, especially when they need to solve complex problems or train new staff. Working only from home may also make people feel isolated. For these reasons, employers should not assume that home working is suitable for every job or every person.\n\nIn conclusion, employers should allow staff to work from home when the job can be done effectively, but they should also keep some office time for teamwork and training."
+  }
+]
