@@ -19,6 +19,7 @@
     { stage: "criterion-feedback", title: "逐项详细反馈", description: "分数冻结后，独立生成四项详细反馈：证据、原因、差 0.5 的说明和提升建议。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
+  const DEFAULT_GRADING_ENDPOINT = "/api/grade-ielts-production-router";
 
   const LEARNING_FEEDBACK_MODULES = [
     { key: "structureCohesion", label: "结构与衔接", en: "Structure & Cohesion" },
@@ -2699,7 +2700,16 @@
     setupGradingModes();
     ensureMockExamPanel();
     bind();
-    if (els.gradingEndpointInput) els.gradingEndpointInput.value = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
+    if (els.gradingEndpointInput) {
+      const savedEndpoint = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
+      const migratedEndpoint = /\/api\/grade-ielts\/?$/i.test(savedEndpoint)
+        ? savedEndpoint.replace(/\/api\/grade-ielts\/?$/i, "/api/grade-ielts-production-router")
+        : savedEndpoint;
+      els.gradingEndpointInput.value = migratedEndpoint || DEFAULT_GRADING_ENDPOINT;
+      if (migratedEndpoint !== savedEndpoint || !savedEndpoint) {
+        localStorage.setItem(GRADING_ENDPOINT_KEY, els.gradingEndpointInput.value.trim());
+      }
+    }
     const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
     document.documentElement.dataset.theme = theme;
     if (els.themeBtn) els.themeBtn.textContent = theme === "dark" ? "浅色模式" : "深色模式";
