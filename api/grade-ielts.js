@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-3-1-task-lock-zero-band-guard";
+const SCORE_SYSTEM_VERSION = "score-core-v8-3-2-evidence-card-quality";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -2138,15 +2138,18 @@ function buildCriterionFeedbackPrompt(body, frozenResult, signals) {
   return [
     "You generate post-freeze IELTS criterion feedback. Return JSON only.",
     "The score is already frozen. Do not change any band, criterion score, anchor, boundary decision, or overall score.",
-    "Write concise examiner-style feedback for the four criterion cards. Avoid robotic template wording.",
+    "Write concise examiner-style feedback for the four criterion cards. Do not use generic IELTS stock wording.",
+    "Each criterion card must feel written for this exact essay. Name the actual topic, position, paragraph behaviour, vocabulary pattern, grammar pattern, or missing support from the student's response.",
     "Bilingual requirement: every English feedback string must have a matching natural Simplified Chinese meaning field. Do not leave any Chinese field blank. Chinese must explain the exact English sentence, not only give a vague summary.",
     "For arrays, the Chinese array must have the same number of items and the same order as the English array, e.g. positiveEvidence[0] must match positiveEvidenceZh[0].",
+    "Evidence requirement: for every criterion, include at least 1 essayEvidence object and preferably 2. Each quote must be a real short phrase or sentence fragment from the student's essay. Do not invent evidence.",
     "For essayEvidence, use objects only: {quote, meaning, meaningZh}. Do not return plain strings for essayEvidence.",
+    "For positiveEvidence and limitingEvidence, each item must identify a concrete feature, not a generic label. Good: 'clear position appears in the introduction'; bad: 'has some relevant ideas'.",
     "For halfBandDecision, include whyAboveLowerBandZh, whyBelowUpperBandZh, and whyExactBandZh. These are required.",
     "Every comment must refer to concrete features from the student's response. If a sentence could apply to any essay, rewrite it.",
-    "Use natural boundary wording: whyThisBand, whyNotLower means why the score is above the lower adjacent half-band, and whyNotHigher means why it is not yet the higher adjacent half-band.",
-    "Do not write phrases like 'Some relevant vocabulary avoids Band 4' or 'some grammatical errors'. Be specific and plain.",
-    "Length limits per criterion: whyThisBand max 55 words; whyNotLower max 35 words; whyNotHigher max 35 words; howToImprove max 45 words; each Chinese translation should be concise but complete; zhSummary max 140 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 16 words.",
+    "Use natural boundary wording: whyThisBand = why this exact band fits; whyNotLower = what concrete performance prevents a lower adjacent half-band; whyNotHigher = what concrete limitation blocks the next adjacent half-band.",
+    "Avoid these template phrases unless followed by essay-specific detail: 'related to the prompt', 'clear opinion', 'ideas are general', 'some errors', 'limited vocabulary', 'basic structure'.",
+    "Length limits per criterion: whyThisBand max 60 words; whyNotLower max 40 words; whyNotHigher max 45 words; howToImprove max 45 words; each Chinese translation should be concise but complete; zhSummary max 150 Chinese characters; max 2 positiveEvidence and max 2 limitingEvidence items; each evidence item max 18 words.",
     "Use single quotes around student phrases. Do not use unescaped double quotes inside JSON strings. No markdown and no trailing prose.",
     `Task: ${task}. Criteria: ${names.join(", ")}.`,
     `Frozen score: ${JSON.stringify({ criteria: frozenResult.finalCriteria || frozenResult.criteria, overallBand: frozenResult.overallBand, anchorComparison: frozenResult.anchorComparison, shortReasons: frozenResult.shortReasons })}`,

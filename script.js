@@ -550,6 +550,14 @@
       .criterion-quick-row { border-left: 4px solid rgba(15,118,110,.7); padding: 10px 12px; border-radius: 10px; background: rgba(15,118,110,.055); }
       .criterion-quick-row h5 { margin: 0 0 6px; font-size: .96rem; color: var(--text, #122033); }
       .criterion-quick-row p { margin: 0; line-height: 1.65; }
+      .criterion-visible-evidence { margin: 14px 0 4px; padding: 13px 14px; border: 1px solid rgba(15,118,110,.18); border-radius: 14px; background: linear-gradient(180deg, rgba(240,253,250,.72), rgba(255,255,255,.72)); }
+      .criterion-visible-evidence h5 { margin: 0 0 10px; color: var(--teal, #0f766e); font-size: .95rem; }
+      .criterion-evidence-quotes { display: grid; gap: 9px; margin-bottom: 10px; }
+      .criterion-evidence-quote { border-left: 4px solid rgba(15,118,110,.55); padding: 9px 11px; border-radius: 9px; background: rgba(255,255,255,.72); }
+      .criterion-evidence-quote strong { display: block; margin-bottom: 5px; color: var(--text, #122033); }
+      .criterion-evidence-chips { display: grid; gap: 8px; }
+      .criterion-evidence-chip { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.68); border: 1px solid rgba(15,118,110,.12); }
+      .criterion-evidence-chip > span { display: inline-block; margin-bottom: 4px; font-size: .78rem; font-weight: 900; color: var(--teal, #0f766e); text-transform: uppercase; letter-spacing: .02em; }
       .score-translate-btn { margin-left: 8px; border: 1px solid var(--border, #bfd1de); border-radius: 999px; padding: 5px 11px; background: transparent; cursor: pointer; font-size: .88rem; white-space: nowrap; }
       .score-translation { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(224,242,241,.7); color: var(--muted, #5b7082); line-height: 1.6; }
       .hidden-score-translation { display: none; }
@@ -1101,15 +1109,15 @@
     const field = criterionFieldEn(criterion);
     const current = formatBand(band);
     if (kind === "whyThis") {
-      if (/task response|task achievement/i.test(criterion)) return `This band reflects the current level of task fulfilment: the answer is relevant and partly developed, but the task ideas or bullet points are not yet developed enough for a higher band.`;
+      if (/task response|task achievement/i.test(criterion)) return `This band reflects the current task fulfilment: the answer attempts the task, but the main ideas or required parts need clearer, more specific development.`;
       if (/coherence/i.test(criterion)) return `This band reflects the current organisation: the writing has a basic structure, but paragraph development and sentence links are still limited.`;
       if (/lexical/i.test(criterion)) return `This band reflects the current vocabulary control: the meaning is usually clear, but word choice and collocation are still simple or repetitive.`;
       if (/grammatical/i.test(criterion)) return `This band reflects the current grammar control: the writing is understandable, but sentence range and accuracy are still limited.`;
       return `This criterion is currently around Band ${current}.`;
     }
-    if (kind === "whyLower") return `It is above Band ${lowerBand} because the writing shows enough control in ${field} to communicate the basic message.`;
+    if (kind === "whyLower") return `It is not lower because the writing still shows some assessable control in ${field}, rather than being absent or completely unclear.`;
     if (kind === "whyHigher") {
-      if (/task response|task achievement/i.test(criterion)) return `It is not yet Band ${higherBand} because the response needs fuller development and more specific support.`;
+      if (/task response|task achievement/i.test(criterion)) return `It is not yet Band ${higherBand} because the answer needs more specific reasoning, clearer support, and fuller coverage of the task requirements.`;
       if (/coherence/i.test(criterion)) return `It is not yet Band ${higherBand} because paragraph progression and sentence links need to be clearer and less mechanical.`;
       if (/lexical/i.test(criterion)) return `It is not yet Band ${higherBand} because vocabulary needs more natural collocation, less repetition, and more precise topic words.`;
       if (/grammatical/i.test(criterion)) return `It is not yet Band ${higherBand} because grammar needs more accurate complex sentences and fewer basic errors.`;
@@ -1122,15 +1130,15 @@
   function defaultCriterionChinese(criterion, band, kind, lowerBand, higherBand) {
     const field = criterionFieldZh(criterion);
     if (kind === "whyThis") {
-      if (/task response|task achievement/i.test(criterion)) return `${field}目前这个分数说明：作文基本回应了任务，但观点、例子或 Task 1 的 bullet points 展开还不够充分。`;
+      if (/task response|task achievement/i.test(criterion)) return `${field}目前这个分数说明：文章有回应任务的尝试，但主要观点或必答部分还需要更具体、更充分地展开。`;
       if (/coherence/i.test(criterion)) return `${field}目前这个分数说明：文章有基本结构，但段落内部推进和句子之间的连接还不够清楚。`;
       if (/lexical/i.test(criterion)) return `${field}目前这个分数说明：意思大体清楚，但用词仍偏简单、重复，搭配还不够自然。`;
       if (/grammatical/i.test(criterion)) return `${field}目前这个分数说明：句子基本能看懂，但复杂句准确度和语法控制还需要加强。`;
       return `${field}目前处在 Band ${formatBand(band)} 左右。`;
     }
-    if (kind === "whyLower") return `高于 Band ${lowerBand}，因为${field}已经有基本可理解的内容，不是完全缺失或严重混乱。`;
+    if (kind === "whyLower") return `没有更低，是因为${field}仍然有可评分的表现，并不是完全缺失或完全无法理解。`;
     if (kind === "whyHigher") {
-      if (/task response|task achievement/i.test(criterion)) return `还没到 Band ${higherBand}，因为任务回应需要更完整的展开、更具体的理由或例子。`;
+      if (/task response|task achievement/i.test(criterion)) return `还不能到 Band ${higherBand}，因为任务回应还需要更具体的论证、更清楚的支撑和更完整的必答部分覆盖。`;
       if (/coherence/i.test(criterion)) return `还没到 Band ${higherBand}，因为段落推进和句子衔接还需要更自然、更清楚，不能只靠基础连接词。`;
       if (/lexical/i.test(criterion)) return `还没到 Band ${higherBand}，因为词汇需要更准确的搭配、更少重复，并加入更贴合话题的表达。`;
       if (/grammatical/i.test(criterion)) return `还没到 Band ${higherBand}，因为语法需要更准确的复杂句和更稳定的基础错误控制。`;
@@ -1277,6 +1285,36 @@
       if (!hasMeaningfulContent(quote) && !hasMeaningfulContent(meaning) && !hasMeaningfulContent(zh)) return "";
       return `<div class="quote-evidence bilingual-quote-evidence"><strong>${escapeHtml(quote || "原文片段")}</strong>${bilingualTextHtml(meaning || quote, zh, { heading: "原文证据 / Evidence" })}</div>`;
     }).filter(Boolean).join("");
+  }
+
+
+  function criterionEvidencePreviewHtml(item = {}, context = {}) {
+    const rawEssayEvidence = arr(item.essayEvidence || item.textEvidence || item.evidenceQuotes).filter(hasMeaningfulContent).slice(0, 2);
+    const quoteRows = rawEssayEvidence.map((entry) => {
+      if (typeof entry === "string") return { quote: entry, meaning: "This is direct text evidence used for the criterion judgement.", zh: "这是用于判断该项分数的原文证据。" };
+      return {
+        quote: entry.quote || entry.text || entry.original || "",
+        meaning: entry.meaning || entry.explanation || entry.evidence || "",
+        zh: entry.meaningZh || entry.explanationZh || entry.evidenceZh || entry.translationZh || ""
+      };
+    }).filter((entry) => hasMeaningfulContent(entry.quote) || hasMeaningfulContent(entry.meaning));
+
+    const support = meaningfulArr(item.positiveEvidence || item.supportingEvidence, 2).map((text, index) => ({
+      label: "supports",
+      en: text,
+      zh: zhAt(item.positiveEvidenceZh || item.supportingEvidenceZh, index)
+    }));
+    const limits = meaningfulArr(item.limitingEvidence || item.limitsHigherBand, 2).map((text, index) => ({
+      label: "limits",
+      en: text,
+      zh: zhAt(item.limitingEvidenceZh || item.limitsHigherBandZh, index)
+    }));
+
+    const chips = [...support, ...limits].slice(0, 3).map((entry) => `<div class="criterion-evidence-chip ${escapeHtml(entry.label)}"><span>${entry.label === "supports" ? "支持" : "限制"}</span>${bilingualTextHtml(entry.en, entry.zh, { ...context, heading: "visible evidence" })}</div>`).join("");
+    const quotes = quoteRows.slice(0, 2).map((entry) => `<div class="criterion-evidence-quote"><strong>“${escapeHtml(entry.quote || "原文片段")}”</strong>${bilingualTextHtml(entry.meaning || entry.quote, entry.zh, { ...context, heading: "essay quote evidence" })}</div>`).join("");
+
+    if (!chips && !quotes) return "";
+    return `<div class="criterion-visible-evidence"><h5>本项证据 / Evidence used</h5>${quotes ? `<div class="criterion-evidence-quotes">${quotes}</div>` : ""}${chips ? `<div class="criterion-evidence-chips">${chips}</div>` : ""}</div>`;
   }
 
   function bindScoreUiInteractions() {
@@ -1491,14 +1529,17 @@
         const whyLower = whyLowerPair.en;
         const whyHigher = whyHigherPair.en;
         const improve = improvePair.en;
+        const lowerLabel = Number(band) <= 0 ? "为什么不是不可评分" : `为什么没有更低到 Band ${lowerBand}`;
+        const higherLabel = Number(band) >= 9 ? "为什么已经接近满分" : `为什么还不能到 Band ${higherBand}`;
         const zh = criterionZhSummary(item, {
-          whyThis: "为什么是这个分",
-          whyLower: `为什么高于 Band ${lowerBand}`,
-          whyHigher: `为什么还不到 Band ${higherBand}`
+          whyThis: `为什么是 Band ${formatBand(band)}`,
+          whyLower: lowerLabel,
+          whyHigher: higherLabel
         });
         const supportHtml = evidenceListHtml(item.positiveEvidence || item.supportingEvidence, item.positiveEvidenceZh || item.supportingEvidenceZh, { criterion, band, heading: "支持这个分数的证据" });
         const limitHtml = evidenceListHtml(item.limitingEvidence || item.limitsHigherBand, item.limitingEvidenceZh || item.limitsHigherBandZh, { criterion, band, heading: "限制更高分的证据" });
         const essayHtml = essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes);
+        const evidencePreviewHtml = criterionEvidencePreviewHtml(item, { criterion, band });
         const halfHasContent = hasMeaningfulContent(half.whyAboveLowerBand || half.whyBelowUpperBand || half.whyExactBand || item.candidateBandsConsidered);
         const detailSections = [
           supportHtml ? `<div class="evidence-box"><h5>支持这个分数的证据</h5>${supportHtml}</div>` : "",
@@ -1523,11 +1564,12 @@
           </div>
           <div class="criterion-card-body" id="${cardId}">
             <div class="criterion-quick-grid bilingual-criterion-grid">
-              <div class="criterion-quick-row"><h5>为什么是这个分</h5>${bilingualTextHtml(whyThisPair.en, whyThisPair.zh, { criterion, band, heading: "为什么是这个分" })}</div>
-              <div class="criterion-quick-row"><h5>为什么高于 Band ${escapeHtml(lowerBand)}</h5>${bilingualTextHtml(whyLowerPair.en, whyLowerPair.zh, { criterion, band, heading: "为什么高于低一档" })}</div>
-              <div class="criterion-quick-row"><h5>为什么还不到 Band ${escapeHtml(higherBand)}</h5>${bilingualTextHtml(whyHigherPair.en, whyHigherPair.zh, { criterion, band, heading: "为什么还不到高一档" })}</div>
-              <div class="criterion-quick-row"><h5>怎么提升</h5>${bilingualTextHtml(improvePair.en, improvePair.zh, { criterion, band, heading: "怎么提升" })}</div>
+              <div class="criterion-quick-row"><h5>为什么是 Band ${escapeHtml(formatBand(band))}</h5>${bilingualTextHtml(whyThisPair.en, whyThisPair.zh, { criterion, band, heading: "为什么是这个分" })}</div>
+              <div class="criterion-quick-row"><h5>${escapeHtml(lowerLabel)}</h5>${bilingualTextHtml(whyLowerPair.en, whyLowerPair.zh, { criterion, band, heading: "为什么没有更低" })}</div>
+              <div class="criterion-quick-row"><h5>${escapeHtml(higherLabel)}</h5>${bilingualTextHtml(whyHigherPair.en, whyHigherPair.zh, { criterion, band, heading: "为什么还不能更高" })}</div>
+              <div class="criterion-quick-row"><h5>下一步怎么提 0.5</h5>${bilingualTextHtml(improvePair.en, improvePair.zh, { criterion, band, heading: "怎么提升" })}</div>
             </div>
+            ${evidencePreviewHtml}
             ${hasMeaningfulContent(zh) ? `<details class="criterion-zh-summary"><summary>整项中文总结</summary><div>${escapeHtml(zh)}</div></details>` : ""}
             ${feedbackFailed ? "" : ""}
             ${detailCard}
