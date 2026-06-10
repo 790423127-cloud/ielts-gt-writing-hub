@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-13-highband-near9-review-router";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
 const DISCLAIMER = "This is an AI-generated estimated IELTS high-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -195,6 +195,9 @@ function exact9ReviewPrompt(task, questionPrompt, essay, firstResult, routeReaso
     "If the response is excellent but has any visible limitation in detail, naturalness, precision, sophistication, or development, keep it at 8.5.",
     "Do NOT promote to 9 because of length, formality, paragraphing, or advanced-looking vocabulary.",
     "If this looks like a strong 8.5 rather than unmistakable 9, return keep_8_5 and 8.5-level criteria.",
+    "v8.5.14 anti-inflation rule: if the first pass was exactly Band 8, do not jump to all-9 criteria unless the first pass is clearly and substantially too harsh.",
+    "v8.5.14 anti-inflation rule: a response that is merely clear, complete, polite, fluent, or well organised must not be promoted from 8 directly to 9.",
+    "v8.5.14 anti-inflation rule: for Task 1, a real Band 9 letter should be both fully effective and naturally precise; do not promote ordinary strong Band 8 letters because they are concise and correct.",
     "Do not use all-9 criteria unless the response is genuinely limitation-free for IELTS purposes.",
     "Before promote_to_9, identify why each of the four criteria deserves 9, not just why the writing is excellent.",
     "Do promote to 9 if all four criteria genuinely meet 9-level performance and the response is fully effective for the task.",
@@ -299,17 +302,11 @@ function shouldTriggerExact9Review(task, firstResult) {
     return { triggered: true, reason: "standard-8-5-plus-strong-signal" };
   }
 
-  // v8.5.13 new routing only:
-  // Extreme near-9 samples were held at 8 despite all strong audit signals.
+  // v8.5.14 routing:
+  // Near-9 samples may be held at 8 despite strong audit signals, but ordinary Band 8 must not be promoted.
   // This route only sends them to a second AI review; it does not change the score.
   if (firstResult.finalBand === 8 && signals >= 5 && onlySoftMinorObjections(firstResult)) {
     return { triggered: true, reason: "near9-8-band-soft-objection-review" };
-  }
-
-  // Task 1 letters are often concise; if every high-band audit signal is strong,
-  // allow review from 8 even with mixed minor objections. Still AI-only.
-  if (task === "Task 1" && firstResult.finalBand === 8 && signals >= 5) {
-    return { triggered: true, reason: "task1-concise-near9-review" };
   }
 
   return { triggered: false, reason: `insufficient-signal-${signals}` };
