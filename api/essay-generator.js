@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-14-source-based-teacher-guide";
+const GENERATOR_VERSION = "essay-generator-v3-15-source-based-candidate-selection";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -414,6 +414,26 @@ function normalizeLearningGuide(guideObj = {}) {
   };
 }
 
+function normalizeGeneratedCandidate(value = {}, fallbackTargetBand = null, fallbackTitle = "") {
+  const item = objectOnly(value);
+  return {
+    title: String(item.title || fallbackTitle || "").trim(),
+    targetBand: clampBand(item.targetBand ?? fallbackTargetBand),
+    essay: String(item.essay || item.text || "").trim(),
+    strategy: String(item.strategy || item.rewriteStrategy || "source-based candidate").trim(),
+    preservedContent: textArray(item.preservedContent),
+    changedProblems: textArray(item.changedProblems),
+    whyCloserToTarget: String(item.whyCloserToTarget || item.reason || "").trim(),
+    imitableSentences: textArray(item.imitableSentences || item.usefulSentences),
+    whySourceBasedRevision: String(item.whySourceBasedRevision || "").trim(),
+    sourceBasedChanges: textArray(item.sourceBasedChanges)
+  };
+}
+
+function normalizeGeneratedCandidates(value, fallbackTargetBand = null, fallbackTitle = "") {
+  return asArray(value).map((item) => normalizeGeneratedCandidate(item, fallbackTargetBand, fallbackTitle)).filter((item) => item.essay).slice(0, 3);
+}
+
 function buildGenerationPrompt(body = {}) {
   const task = normalizeRequestedTask(body);
   const context = safeFrozenContext(body);
@@ -452,6 +472,7 @@ function buildGenerationPrompt(body = {}) {
     "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
     "2) revisionPlus05: if the student is below Band 5.0, this must be a Band 5 rescue revision, not a conservative light edit. If the student is Band 5.0 or above, it is a strict +0.5 band revision.",
     "3) revisionPlus10: if the student is below Band 5.0, this must target Band 5.5. If the student is Band 5.0 or above, it is a strict +1.0 band revision.",
+    "Also generate 2 additional source-based candidates for revisionPlus05 and 2 additional source-based candidates for revisionPlus10. The candidates must keep the same student source facts but vary strategy slightly: one safer/simple version, one fuller clearer version. They are candidates for production verification and must not be new model answers.",
     "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
     "Strict target rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 revision must be at least Band 5.0 and the +1.0 revision must be at least Band 5.5. If the current band is 5.0, the +0.5 revision must be at least Band 5.5.",
     "Verification status must be exact: verifiedBand < targetBand means below_target; verifiedBand === targetBand means target_met; verifiedBand > targetBand means target_exceeded. Higher than target is not target_met because this module teaches a specific next-step band.",
@@ -514,6 +535,32 @@ function buildGenerationPrompt(body = {}) {
         studyPoints: ["..."],
         usefulSentences: ["..."]
       },
+      revisionPlus05Candidates: [
+        {
+          title: "Alternative source-based candidate for revisionPlus05",
+          targetBand: targets.targetBandPlus05,
+          essay: essay ? "..." : "",
+          strategy: "source-based rescue | candidate selected | floor raise | soft downshift",
+          preservedContent: ["..."],
+          changedProblems: ["..."],
+          whyCloserToTarget: "...",
+          imitableSentences: ["..."],
+          whySourceBasedRevision: "Explain why this candidate edits the student's source content instead of replacing it."
+        }
+      ],
+      revisionPlus10Candidates: [
+        {
+          title: "Alternative source-based candidate for revisionPlus10",
+          targetBand: targets.targetBandPlus10,
+          essay: essay ? "..." : "",
+          strategy: "source-based stronger candidate",
+          preservedContent: ["..."],
+          changedProblems: ["..."],
+          whyCloserToTarget: "...",
+          imitableSentences: ["..."],
+          whySourceBasedRevision: "Explain why this candidate edits the student's source content instead of replacing it."
+        }
+      ],
       learningGuide: {
         startHere: {
           recommendedFirst: "revisionPlus05 | revisionPlus10 | modelAnswer",
@@ -647,6 +694,8 @@ function normalizeGenerationResult(raw = {}, body = {}) {
   };
 
   const learningGuide = normalizeLearningGuide(guideObj);
+  const revisionPlus05Candidates = normalizeGeneratedCandidates(result.revisionPlus05Candidates || result.plus05Candidates, revisionPlus05.targetBand, "Alternative source-based candidate for revisionPlus05");
+  const revisionPlus10Candidates = normalizeGeneratedCandidates(result.revisionPlus10Candidates || result.plus10Candidates, revisionPlus10.targetBand, "Alternative source-based candidate for revisionPlus10");
 
   const modelAnswerOutline = String(
     result.modelAnswerOutline ||
@@ -678,6 +727,8 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     modelAnswer,
     revisionPlus05,
     revisionPlus10,
+    revisionPlus05Candidates,
+    revisionPlus10Candidates,
     learningGuide,
     modelAnswerOutline,
     revisedEssay: revisionPlus05.essay,
@@ -759,6 +810,13 @@ function verificationLabel(verifiedBand, targetBand) {
   if (verified < target) return "below_target";
   if (verified > target) return "target_exceeded";
   return "target_met";
+}
+
+function generatedBandDistance(verifiedBand, targetBand) {
+  const verified = Number(verifiedBand);
+  const target = Number(targetBand);
+  if (!Number.isFinite(verified) || !Number.isFinite(target)) return Number.POSITIVE_INFINITY;
+  return Math.abs(verified - target);
 }
 
 function verificationMessage(status) {
@@ -1013,6 +1071,75 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
   }
 }
 
+function generatedCandidateEntries(normalized = {}, key) {
+  const base = objectOnly(normalized[key]);
+  const extraKey = key === "revisionPlus05" ? "revisionPlus05Candidates" : (key === "revisionPlus10" ? "revisionPlus10Candidates" : "");
+  const extras = extraKey ? asArray(normalized[extraKey]) : [];
+  const entries = [{ part: base, index: 0, strategy: base.rewriteStrategy || "initial generated version" }];
+  extras.forEach((candidate, index) => {
+    const part = objectOnly(candidate);
+    if (String(part.essay || "").trim()) entries.push({ part, index: index + 1, strategy: part.strategy || "source-based candidate selected" });
+  });
+  const seen = new Set();
+  return entries.filter((entry) => {
+    const essay = String(entry.part.essay || "").trim();
+    if (!essay || seen.has(essay)) return false;
+    seen.add(essay);
+    return true;
+  });
+}
+
+async function verifyGeneratedPartWithCandidates(req, body, normalized, key) {
+  const candidates = generatedCandidateEntries(normalized, key);
+  if (!candidates.length) {
+    const first = await scoreGeneratedEssay(req, body, normalized[key]?.essay, key, normalized[key]?.targetBand);
+    return maybeRewriteGeneratedPart(req, body, normalized, key, first);
+  }
+
+  let closest = null;
+  for (const entry of candidates) {
+    normalized[key] = {
+      ...objectOnly(normalized[key]),
+      ...entry.part,
+      targetBand: clampBand(entry.part.targetBand ?? normalized[key]?.targetBand),
+      candidateIndex: entry.index,
+      candidateCount: candidates.length,
+      rewriteStrategy: entry.strategy
+    };
+    const verification = await scoreGeneratedEssay(req, body, normalized[key].essay, key, normalized[key].targetBand);
+    normalized[key].verification = {
+      ...verification,
+      rewriteAttempted: false,
+      rewriteAttemptCount: 0,
+      exactTargetMet: verification.status === "target_met",
+      candidateIndex: entry.index,
+      candidateCount: candidates.length,
+      rewriteStrategy: entry.strategy
+    };
+    const distance = generatedBandDistance(verification.verifiedBand, normalized[key].targetBand);
+    if (Number.isFinite(distance) && (!closest || distance < closest.distance)) {
+      closest = { part: { ...normalized[key] }, verification: { ...normalized[key].verification }, distance };
+    }
+    if (verification.status === "target_met") return normalized[key].verification;
+  }
+
+  if (closest) {
+    normalized[key] = {
+      ...objectOnly(normalized[key]),
+      ...closest.part,
+      closestVerifiedBand: closest.verification.verifiedBand,
+      distanceFromTarget: Math.round(closest.distance * 2) / 2,
+      rewriteStrategy: closest.verification.status === "target_exceeded" ? "soft downshift" : "floor raise"
+    };
+    return maybeRewriteGeneratedPart(req, body, normalized, key, {
+      ...closest.verification,
+      message: "Selected closest initial candidate before targeted rewrite."
+    });
+  }
+
+  return normalized[key].verification;
+}
+
 async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
   const enabled = body.verifyGeneratedScores !== false;
   if (!enabled) {
@@ -1023,9 +1150,7 @@ async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
   const keys = ["modelAnswer", "revisionPlus05", "revisionPlus10"];
   const results = {};
   for (const key of keys) {
-    const part = objectOnly(normalized[key]);
-    const first = await scoreGeneratedEssay(req, body, part.essay, key, part.targetBand);
-    results[key] = await maybeRewriteGeneratedPart(req, body, normalized, key, first);
+    results[key] = await verifyGeneratedPartWithCandidates(req, body, normalized, key);
   }
 
   const counts = keys.reduce((acc, key) => {

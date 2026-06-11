@@ -324,7 +324,26 @@ function bilingualFallback(value, fallbackEn = "No specific issue was found.") {
   if (value && typeof value === "object") {
     return {
       en: String(value.en || value.english || value.text || fallbackEn).trim(),
-      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || value.reasonZh || value.suggestionZh || "").trim()
+      zh: String(
+        value.zh ||
+        value.chinese ||
+        value.meaningZh ||
+        value.explanationZh ||
+        value.reasonZh ||
+        value.suggestionZh ||
+        value.evidenceZh ||
+        value.issueZh ||
+        value.currentIssueZh ||
+        value.requirementZh ||
+        value.statusZh ||
+        value.nextActionZh ||
+        value.checkMethodZh ||
+        value.actionZh ||
+        value.advice?.zh ||
+        value.whyBetter?.zh ||
+        value.howToUse?.zh ||
+        ""
+      ).trim()
     };
   }
   if (typeof value === "string" && value.trim()) {
@@ -552,6 +571,8 @@ function buildPrompt(body, moduleName) {
     "Keep each string concise. Long explanations increase JSON failure risk.",
     "Every user-facing English explanation, evidence, advice, rule, correction, improved expression, issue, suggestion, requirement, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or matching *Zh field.",
     "Chinese is required, not optional. Do not leave zh, evidenceZh, issueZh, suggestionZh, reasonZh, explanationZh, whyBetter.zh, advice.zh, currentIssueZh, or requirementZh blank when the English field has content.",
+    "For Structure, Cohesion & Task, every taskChecklist item must include requirementZh, statusZh, evidenceZh, issueZh, and suggestionZh whenever the matching English field has content.",
+    "For Structure, Cohesion & Task, every opening, paragraphOrganisation, ending, taskResponse, cohesion issue, and development issue must include currentIssueZh/evidenceZh/suggestionZh/reasonZh where applicable.",
     "Chinese notes must be specific to the student's essay and prompt. Do not write generic text such as 'this sentence needs improvement'.",
     "For evidence fields: keep the evidence quote in English, then explain in evidenceZh what that quote shows and why it matters for the IELTS task.",
     "If you cannot find a relevant issue for a field, use an empty English field and an empty Chinese field instead of returning English-only content.",

@@ -2108,15 +2108,56 @@
     return { en: en || "", zh: zh || "" };
   }
 
+  function zhTextFrom(...values) {
+    for (const value of values) {
+      if (!hasMeaningfulContent(value)) continue;
+      if (typeof value === "string" || typeof value === "number") return String(value).trim();
+      if (Array.isArray(value)) {
+        const nested = zhTextFrom(...value);
+        if (nested) return nested;
+        continue;
+      }
+      if (typeof value === "object") {
+        const nested = zhTextFrom(
+          value.zh,
+          value.chinese,
+          value.meaningZh,
+          value.explanationZh,
+          value.reasonZh,
+          value.suggestionZh,
+          value.translationZh,
+          value.evidenceZh,
+          value.issueZh,
+          value.problemZh,
+          value.currentIssueZh,
+          value.requirementZh,
+          value.statusZh,
+          value.whyBetterZh,
+          value.howToUseZh,
+          value.nextActionZh,
+          value.checkMethodZh,
+          value.actionZh,
+          value.improvedZh,
+          value.betterZh,
+          value.advice && value.advice.zh,
+          value.whyBetter && value.whyBetter.zh,
+          value.howToUse && value.howToUse.zh
+        );
+        if (nested) return nested;
+      }
+    }
+    return "";
+  }
+
   function pairHtml(pair) {
     if (!hasMeaningfulContent(pair)) return "";
     if (typeof pair === "string") {
-      return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p>${missingChineseNoteHtml()}</div>`;
+      return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p></div>`;
     }
     const en = pair.en || pair.english || pair.text || pair.label || pair.value || "";
-    const zh = pair.zh || pair.chinese || pair.meaningZh || pair.explanationZh || pair.reasonZh || pair.suggestionZh || pair.translationZh || "";
+    const zh = zhTextFrom(pair);
     if (!hasMeaningfulContent(en) && !hasMeaningfulContent(zh)) return "";
-    return `<div class="learning-bilingual-block">${hasMeaningfulContent(zh) ? `<p class="learning-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}${!hasMeaningfulContent(zh) && hasMeaningfulContent(en) ? missingChineseNoteHtml() : ""}</div>`;
+    return `<div class="learning-bilingual-block">${hasMeaningfulContent(zh) ? `<p class="learning-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}</div>`;
   }
 
   function learningText(value) {
@@ -2147,10 +2188,9 @@
     let zh = zhValue;
     if (value && typeof value === "object") {
       en = value.en || value.english || value.text || value.value || "";
-      zh = value.zh || value.chinese || value.meaningZh || value.translationZh || value.translation || value.chineseMeaning || zhValue || "";
+      zh = zhTextFrom(zhValue, value, value.translation, value.chineseMeaning);
     }
-    const shouldShowZh = hasMeaningfulContent(en) || hasMeaningfulContent(zh);
-    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(zh) ? `<p class="learning-value-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}${shouldShowZh && !hasMeaningfulContent(zh) ? missingChineseNoteHtml() : ""}</div>`;
+    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(zh) ? `<p class="learning-value-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}</div>`;
   }
 
   function tagListHtml(tags) {
@@ -2468,13 +2508,16 @@
       const rewrite = v.rewriteAttempted ? "；已尝试自动重写" : "";
       const rewriteCount = Number.isFinite(Number(v.rewriteAttemptCount)) ? `；重写次数：${Number(v.rewriteAttemptCount)}` : "";
       const strategy = v.rewriteStrategy || obj?.rewriteStrategy ? `；策略：${v.rewriteStrategy || obj.rewriteStrategy}` : "";
+      const candidateInfo = Number.isFinite(Number(v.candidateCount || obj?.candidateCount)) && Number(v.candidateCount || obj?.candidateCount) > 1
+        ? `；候选：${Number(v.candidateIndex ?? obj?.selectedCandidateIndex ?? obj?.candidateIndex ?? 0) + 1}/${Number(v.candidateCount || obj.candidateCount)}`
+        : "";
       const exact = v.exactTargetMet === true ? "；精确达到目标：是" : (v.exactTargetMet === false ? "；精确达到目标：否" : "");
       const closest = v.closestVersionUsed || v.status === "closest_available"
         ? `；最终使用最接近版本${Number.isFinite(Number(v.closestVerifiedBand)) ? `（Band ${formatBand(v.closestVerifiedBand)}）` : ""}`
         : "";
       const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `；距离目标：${formatBand(v.distanceFromTarget)}` : "";
       const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
-      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
+      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
     };
     const card = (title, subtitle, essayText, explanationHtml, actionsHtml = "") => `
       <details class="score-accordion generated-essay-card">
@@ -2781,6 +2824,25 @@
     return Math.abs(verified - target);
   }
 
+  function generatedCandidateEntries(result = {}, key) {
+    const base = result[key] || {};
+    const extraKey = key === "revisionPlus05" ? "revisionPlus05Candidates" : (key === "revisionPlus10" ? "revisionPlus10Candidates" : "");
+    const extras = extraKey && Array.isArray(result[extraKey]) ? result[extraKey] : [];
+    const entries = [{ part: base, index: 0, strategy: base.rewriteStrategy || "initial generated version" }];
+    extras.forEach((candidate, index) => {
+      if (candidate && String(candidate.essay || "").trim()) {
+        entries.push({ part: candidate, index: index + 1, strategy: candidate.strategy || "source-based candidate selected" });
+      }
+    });
+    const seen = new Set();
+    return entries.filter((entry) => {
+      const essay = String(entry.part?.essay || "").trim();
+      if (!essay || seen.has(essay)) return false;
+      seen.add(essay);
+      return true;
+    });
+  }
+
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
     const maxRewriteAttempts = 6;
     const part = result[key] || {};
@@ -2819,6 +2881,73 @@
     renderRevisionResult(result);
 
     let lastVerification = null;
+    const initialCandidates = generatedCandidateEntries(result, key);
+    if (initialCandidates.length > 1) {
+      result.verification.summary = `正在验证 ${generatedPartChineseName(key)} 的 ${initialCandidates.length} 个候选版本，优先选择精确目标分。`;
+      renderRevisionResult(result);
+      for (const entry of initialCandidates) {
+        result[key] = {
+          ...(result[key] || {}),
+          ...(entry.part || {}),
+          targetBand,
+          candidateIndex: entry.index,
+          candidateCount: initialCandidates.length,
+          rewriteStrategy: entry.strategy || "candidate selected"
+        };
+        try {
+          lastVerification = await scoreGeneratedEssayClientSide(result, key, label);
+          result[key].verification = {
+            ...lastVerification,
+            rewriteAttempted: false,
+            rewriteAttemptCount: 0,
+            rewriteStrategy: entry.strategy || "candidate selected",
+            exactTargetMet: lastVerification.status === "target_met",
+            candidateIndex: entry.index,
+            candidateCount: initialCandidates.length
+          };
+          rememberClosest();
+          renderRevisionResult(result);
+          if (lastVerification.status === "target_met") return result[key].verification;
+        } catch (error) {
+          result[key].verification = {
+            enabled: true,
+            ok: false,
+            label,
+            router: "grade-ielts-production-router",
+            targetBand: Number.isFinite(targetBand) ? targetBand : null,
+            verifiedBand: null,
+            status: "verification_failed",
+            message: "候选版本验证失败，继续检查其他候选或进入重写。",
+            candidateIndex: entry.index,
+            candidateCount: initialCandidates.length,
+            error: String(error.message || error).slice(0, 500)
+          };
+          renderRevisionResult(result);
+        }
+      }
+      if (closest) {
+        result[key] = {
+          ...(result[key] || {}),
+          ...(closest.part || {}),
+          essay: closest.essay || result[key]?.essay || "",
+          targetBand,
+          candidateCount: initialCandidates.length,
+          selectedCandidateIndex: closest.part?.candidateIndex ?? result[key]?.candidateIndex ?? 0,
+          rewriteStrategy: closest.verification?.status === "target_exceeded" ? "soft downshift" : "floor raise"
+        };
+        result[key].verification = {
+          ...(closest.verification || {}),
+          rewriteAttempted: false,
+          rewriteAttemptCount: 0,
+          exactTargetMet: false,
+          closestVerifiedBand: closest.verification?.verifiedBand,
+          distanceFromTarget: Number.isFinite(closest.distance) ? Math.round(closest.distance * 2) / 2 : null,
+          rewriteStrategy: result[key].rewriteStrategy,
+          message: "已选择最接近目标的候选版本，继续按验证结果定向重写。"
+        };
+        renderRevisionResult(result);
+      }
+    }
     for (let attempt = 0; attempt <= maxRewriteAttempts; attempt += 1) {
       try {
         lastVerification = await scoreGeneratedEssayClientSide(result, key, label);

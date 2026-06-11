@@ -113,15 +113,50 @@ async function rewritePart(key, essay, targetBand, verification) {
   return part;
 }
 
+function candidateEntries(data, key) {
+  const extraKey = key === "revisionPlus05" ? "revisionPlus05Candidates" : (key === "revisionPlus10" ? "revisionPlus10Candidates" : "");
+  const extras = extraKey && Array.isArray(data[extraKey]) ? data[extraKey] : [];
+  const entries = [{ part: data[key] || {}, index: 0, strategy: "initial generated version" }];
+  extras.forEach((candidate, index) => {
+    if (candidate && candidate.essay) entries.push({ part: candidate, index: index + 1, strategy: candidate.strategy || "source-based candidate selected" });
+  });
+  const seen = new Set();
+  return entries.filter((entry) => {
+    const essay = String(entry.part && entry.part.essay || "").trim();
+    if (!essay || seen.has(essay)) return false;
+    seen.add(essay);
+    return true;
+  });
+}
+
 async function verifyWithRegeneration(data, key) {
   let part = data[key] || {};
   const targetBand = part.targetBand;
   let rewriteCount = 0;
-  let verification = await verifyPart(key, part.essay, targetBand);
-  let closest = Number.isFinite(bandDistance(verification.verifiedBand, targetBand))
-    ? { part: { ...part }, verification: { ...verification }, distance: bandDistance(verification.verifiedBand, targetBand) }
-    : null;
-  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 20) {
+  let verification = null;
+  let closest = null;
+  const candidates = candidateEntries(data, key);
+  for (const entry of candidates) {
+    data[key] = { ...(data[key] || {}), ...(entry.part || {}), targetBand, candidateIndex: entry.index, candidateCount: candidates.length, rewriteStrategy: entry.strategy };
+    verification = await verifyPart(key, data[key].essay, targetBand);
+    const distance = bandDistance(verification.verifiedBand, targetBand);
+    if (Number.isFinite(distance) && (!closest || distance < closest.distance)) {
+      closest = { part: { ...data[key] }, verification: { ...verification }, distance };
+    }
+    console.log(`${key}: candidate ${entry.index + 1}/${candidates.length}`, { verifiedBand: verification.verifiedBand, status: verification.status, strategy: entry.strategy });
+    if (verification.status === "target_met") {
+      data[key].verification = { ...verification, rewriteAttempted: false, rewriteAttemptCount: 0, exactTargetMet: true, candidateIndex: entry.index, candidateCount: candidates.length };
+      return data[key].verification;
+    }
+  }
+  if (closest) {
+    data[key] = { ...(data[key] || {}), ...closest.part };
+    verification = closest.verification;
+  }
+  if (!verification) {
+    verification = await verifyPart(key, part.essay, targetBand);
+  }
+  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 6) {
     rewriteCount += 1;
     const reason = verification.status === "target_exceeded" ? `above exact target (${verification.verifiedBand} > ${targetBand})` : `below exact target (${verification.verifiedBand} < ${targetBand})`;
     console.log(`${key}: ${reason}, rewriting attempt ${rewriteCount}...`);
@@ -156,7 +191,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("source-based escalation and downshift lock: if Band 5 rescue remains 4.5, rebuild; if it remains 6.0, simplify/lock down to Band 5 style; max attempts = 20");
+  console.log("source-based candidate strategy: verify initial + candidates first, then targeted floor raise / soft downshift; max rewrite attempts = 6");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {
