@@ -2507,6 +2507,7 @@
     const verificationBlock = (obj) => {
       const v = obj?.verification || {};
       if (!v.enabled) return "";
+      const safeStatusClass = String(v.status || "unknown").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
       const target = Number.isFinite(Number(v.targetBand || obj?.targetBand)) ? `Band ${formatBand(v.targetBand || obj?.targetBand)}` : "目标未指定";
       const verified = Number.isFinite(Number(v.verifiedBand)) ? `Band ${formatBand(v.verifiedBand)}` : "暂无";
       const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `；首次验证：Band ${formatBand(v.firstVerifiedBand)}` : "";
@@ -2522,7 +2523,7 @@
         : "";
       const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `；距离目标：${formatBand(v.distanceFromTarget)}` : "";
       const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
-      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
+      return `<div class="score-flow-note generated-verification-note status-${escapeHtml(safeStatusClass)}"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
     };
     const candidateHistoryBlock = (obj) => {
       const history = Array.isArray(obj?.candidateHistory) ? obj.candidateHistory : [];
@@ -2530,7 +2531,9 @@
       return `<details class="score-accordion generated-candidate-history">
         <summary>候选历史 / Candidate history <span class="muted">${history.length} items</span></summary>
         <div class="score-accordion-body generated-candidate-grid">
-          ${history.map((item) => `<article class="generated-candidate-item ${item.selected ? "is-selected" : ""}">
+          ${history.map((item) => {
+            const statusClass = String(item.status || "unknown").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+            return `<article class="generated-candidate-item status-${escapeHtml(statusClass)} ${item.selected ? "is-selected" : ""}">
             <div class="generated-candidate-title">${escapeHtml(item.candidateId || item.id || "candidate")}${item.selected ? " · 已采用" : ""}</div>
             <p><strong>Target:</strong> ${escapeHtml(Number.isFinite(Number(item.targetBand)) ? `Band ${formatBand(item.targetBand)}` : "-")}</p>
             <p><strong>Verified:</strong> ${escapeHtml(Number.isFinite(Number(item.verifiedBand)) ? `Band ${formatBand(item.verifiedBand)}` : "-")}</p>
@@ -2538,7 +2541,8 @@
             <p><strong>Strategy:</strong> ${escapeHtml(item.strategy || "-")}</p>
             ${item.whySelected ? `<p class="is-corrected"><strong>Why selected:</strong> ${escapeHtml(item.whySelected)}</p>` : ""}
             ${item.whyRejected ? `<p class="muted"><strong>Why rejected:</strong> ${escapeHtml(item.whyRejected)}</p>` : ""}
-          </article>`).join("")}
+          </article>`;
+          }).join("")}
         </div>
       </details>`;
     };
