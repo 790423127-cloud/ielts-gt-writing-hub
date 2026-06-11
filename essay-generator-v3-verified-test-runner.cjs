@@ -127,7 +127,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("strict target window rule: Band 5 rescue should verify inside 5.0-5.5; max rewrite/downshift attempts = 6");
+  console.log("strict Band 5 checklist rescue rule: below Band 5 must satisfy Band 5 rescue checklist; max attempts = 6");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {

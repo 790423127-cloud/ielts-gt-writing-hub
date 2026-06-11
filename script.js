@@ -2491,7 +2491,7 @@
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版以 Band 5.0 保底为目标；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写，超过目标 0.5 以上会降档，因为太高也不适合作为当前阶段学习版。</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版必须按 Band 5 保底清单重写，不是轻微润色；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写，超过目标 0.5 以上会降档，因为太高也不适合作为当前阶段学习版。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
           ${card(plus05Title, verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", isBand5Rescue ? "复制 Band 5 保底版" : "复制 +0.5 修改版")}${applyButton("plus05", isBand5Rescue ? "应用 Band 5 保底版到作文输入区" : "应用 +0.5 到作文输入区")}`)}
           ${card(plus10Title, verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", isBand5Rescue ? "复制 Band 5.5 提升版" : "复制 +1.0 修改版")}${applyButton("plus10", isBand5Rescue ? "应用 Band 5.5 提升版到作文输入区" : "应用 +1.0 到作文输入区")}`)}
