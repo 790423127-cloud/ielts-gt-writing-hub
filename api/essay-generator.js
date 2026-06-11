@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-9-band5-checklist-rescue";
+const GENERATOR_VERSION = "essay-generator-v3-11-source-based-band5-rescue";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -194,6 +194,30 @@ function generationTargetsForContext(context = {}) {
 }
 
 
+function sourceBasedRevisionRules(task) {
+  const common = [
+    "Source-based revision rules:",
+    "1. revisionPlus05 and revisionPlus10 must be based on the student's original essay, not a new generic model answer.",
+    "2. Preserve the student's real situation, facts, relationship, reason, request/position, and main ideas.",
+    "3. You may reorganise paragraphs, clarify vague points, fix weak wording, and add only minimal details that are directly implied by the prompt or the student's text.",
+    "4. Do not invent a different scenario, different examples, different job, different course, different people, different opinion, or new supporting ideas unrelated to the original.",
+    "5. The revised answer should still feel like the student's essay improved to the target level.",
+    "6. The modelAnswer may be question-based and independent; this source-based rule applies especially to revisionPlus05 and revisionPlus10.",
+    "7. If an added detail is needed for task completion, keep it modest, realistic, and directly connected to the original essay."
+  ];
+  if (task === "Task 1") {
+    common.push(
+      "For Task 1 letters: keep the same sender, recipient, purpose, request, schedule/course details, and benefit idea unless the original is unclear; clarify them rather than replacing them."
+    );
+  } else {
+    common.push(
+      "For Task 2 essays: keep the same basic position and main argument direction unless the original position is missing; clarify it rather than replacing it."
+    );
+  }
+  return common.join("\\n");
+}
+
+
 function band5ChecklistForTask(task) {
   if (task === "Task 1") {
     return [
@@ -204,8 +228,8 @@ function band5ChecklistForTask(task) {
       "4. The benefit/explanation bullet must be concrete, not vague. Use realistic details from the prompt.",
       "5. Use clear 4-paragraph organisation: purpose, reason/situation, requested change, benefit plus polite ending.",
       "6. Tone must match the relationship and prompt. For a manager, use polite semi-formal/formal language.",
-      "7. Grammar should be simple but controlled. Prefer clear accurate sentences over ambitious complex sentences.",
-      "8. Replace low-band expressions with natural Band 5 expressions, but avoid Band 7+ sophistication."
+      "7. Grammar should mainly use simple, understandable sentences. It does not need to be error-free; minor awkwardness is acceptable if meaning is clear.",
+      "8. Keep vocabulary basic and natural. Avoid serious meaning-blocking low-band expressions, but do not over-polish into Band 6/7 language."
     ].join("\\n");
   }
   return [
@@ -216,8 +240,8 @@ function band5ChecklistForTask(task) {
     "4. Add one simple, relevant example when it helps the argument.",
     "5. Use basic but clear linking: firstly, for example, therefore, however, in conclusion.",
     "6. Conclusion must summarise the answer, not add a new idea.",
-    "7. Grammar should be simple but controlled. Avoid long risky sentences.",
-    "8. Vocabulary should be natural and topic-specific enough for Band 5, not advanced or literary."
+    "7. Grammar should mainly use simple, understandable sentences. It does not need to be error-free; minor awkwardness is acceptable if meaning is clear.",
+    "8. Vocabulary should be basic, clear, and topic-relevant. Avoid advanced or literary phrasing that would push the answer toward Band 6+."
   ].join("\\n");
 }
 
@@ -264,6 +288,7 @@ function buildGenerationPrompt(body = {}) {
   const targets = generationTargetsForContext(context);
   const rescue = band5RescueContext(context);
   const band5Checklist = band5ChecklistForTask(task);
+  const sourceRules = sourceBasedRevisionRules(task);
   const prompt = body.questionPrompt || body.prompt || body.promptText || "";
   const essay = String(body.essay || "").trim();
 
@@ -284,7 +309,7 @@ function buildGenerationPrompt(body = {}) {
       ].join("\n");
 
   const essayInstruction = essay
-    ? "The student essay is provided. Generate TWO revised versions based on the student's essay: one aimed at about +0.5 band, and one aimed at about +1.0 band. Preserve the student's core meaning, topic, and main ideas."
+    ? "The student essay is provided. Generate TWO revised versions based on the student\'s essay. They must be source-based revisions, not new generic essays. Preserve the student\'s core meaning, topic, facts, examples, and main ideas while improving task completion, clarity, paragraphing, grammar control, and wording."
     : "No student essay was provided. Leave revisionPlus05.essay and revisionPlus10.essay empty, but still provide the question-based model answer and learning guide.";
 
   return [
@@ -327,8 +352,9 @@ function buildGenerationPrompt(body = {}) {
         title: rescue.rescueRevisionTitle,
         targetBand: targets.targetBandPlus05,
         essay: essay ? "..." : "",
-        whyItIsPlus05: rescue.belowBand5 ? "Explain how this version satisfies the Band 5 checklist: purpose, bullet coverage, specific request, concrete benefit, paragraphing, tone, and simple accurate grammar." : "Explain why this is about +0.5 band higher.",
+        whyItIsPlus05: rescue.belowBand5 ? "Explain how this version satisfies a realistic Band 5 checklist: clear purpose, bullet coverage, specific request, concrete benefit, clear paragraphing, suitable tone, simple understandable grammar, and not over-polished Band 6 language." : "Explain why this is about +0.5 band higher.",
         whatChanged: ["..."],
+        sourceBasedChanges: ["List which original ideas/sentences were preserved and improved"],
         studyPoints: ["..."],
         usefulSentences: ["..."]
       },
@@ -338,6 +364,7 @@ function buildGenerationPrompt(body = {}) {
         essay: essay ? "..." : "",
         whyItIsPlus10: "...",
         whatChangedFromPlus05: ["..."],
+        sourceBasedChanges: ["List which original ideas/sentences were preserved and improved"],
         studyPoints: ["..."],
         usefulSentences: ["..."]
       },
@@ -411,6 +438,7 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     essay: String(plus05Obj.essay || result.revisedEssayPlus05 || result.revisedEssay || legacy.revisedEssay || result.revision || result.improvedEssay || "").trim(),
     whyItIsPlus05: String(plus05Obj.whyItIsPlus05 || result.whyPlus05 || "").trim(),
     whatChanged: textArray(plus05Obj.whatChanged),
+    sourceBasedChanges: textArray(plus05Obj.sourceBasedChanges),
     studyPoints: textArray(plus05Obj.studyPoints),
     usefulSentences: textArray(plus05Obj.usefulSentences)
   };
@@ -421,6 +449,7 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     essay: String(plus10Obj.essay || result.revisedEssayPlus10 || "").trim(),
     whyItIsPlus10: String(plus10Obj.whyItIsPlus10 || result.whyPlus10 || "").trim(),
     whatChangedFromPlus05: textArray(plus10Obj.whatChangedFromPlus05 || plus10Obj.whatChanged),
+    sourceBasedChanges: textArray(plus10Obj.sourceBasedChanges),
     studyPoints: textArray(plus10Obj.studyPoints),
     usefulSentences: textArray(plus10Obj.usefulSentences)
   };
@@ -686,6 +715,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
   const rescue = band5RescueContext(safeFrozenContext(body));
   const isBand5Rescue = rescue.belowBand5 && key === "revisionPlus05";
   const band5Checklist = band5ChecklistForTask(task);
+  const sourceRules = sourceBasedRevisionRules(task);
   const targetMaxBand = targetBand == null ? null : clampBand(targetBand + 0.5);
   const rewriteDirection = verificationStatus === "target_exceeded"
     ? "DOWNGRADE: The generated answer scored too high for this learning slot. Make it simpler and closer to the target, while staying at or above the target."
@@ -695,6 +725,8 @@ function buildRewritePrompt(body, normalized, key, verification) {
     "You are revising one generated IELTS General Training practice answer after production-router verification.",
     "This is NOT scoring the user's original essay. Do not change any frozen user score.",
     "Your job is to rewrite ONLY the selected generated answer so that it better matches the stated target band while remaining learnable for the student.",
+    "The rewritten answer must remain based on the student\'s original essay and the previous generated answer. Do not create a new generic model answer.",
+    sourceRules,
     "Do not use over-advanced Band 8/9 language for a Band 5 target. Improve task coverage, specificity, paragraphing, cohesion, and safe grammar first.",
     "Return strict JSON only. No markdown, no code fences, no comments.",
     `Selected generated answer: ${spec.label}`,
@@ -706,10 +738,11 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Rewrite direction: ${rewriteDirection}`,
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
     "The learning slot has a target window, not just a minimum. For a Band 5 rescue slot, a production verification of Band 6.0 is too high and should be rewritten down toward Band 5.0-5.5.",
-    isBand5Rescue ? "This is the Band 5 rescue revision. It must satisfy the checklist below. Do not produce another light edit that stays at Band 4.5." : "",
+    isBand5Rescue ? "This is the Band 5 rescue revision. It must satisfy the checklist below. It must be a source-based rescue rewrite: stronger than the original, but still clearly derived from the student\'s original facts, request, reason, and benefit idea." : "",
+    isBand5Rescue ? "Realistic Band 5 rule: the answer should be clear and complete but still simple. It can contain basic vocabulary, simple grammar, some repetition, and minor awkwardness. Do not intentionally add mistakes." : "",
     isBand5Rescue ? band5Checklist : "",
     "If status is below_target, improve task coverage, specificity, paragraphing, cohesion, and basic grammar. For Task 1, make the request concrete and the benefit specific. For Task 2, make the position and body paragraph development clearer.",
-    "If status is target_exceeded, simplify vocabulary and sentence complexity, reduce over-polished phrasing, keep the task fully covered, and aim for a clear Band 5.0-5.5 learner version.",
+    "If status is target_exceeded, keep the task fully covered but simplify vocabulary, shorten sentence structures, reduce sophisticated collocations, remove over-polished phrasing, and aim for a clear realistic Band 5.0-5.5 learner version.",
     "Output JSON shape:",
     JSON.stringify({ [spec.objectName]: { ...spec.jsonShape, targetBand } }, null, 2),
     "Context prompt:",
@@ -719,7 +752,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
     "Generated answer that needs revision:",
     clipText(part.essay || "", 5000),
     "Rewrite quality requirement:",
-    isBand5Rescue ? "Return a complete Band 5 rescue revision, not a sentence-by-sentence micro-edit. It must be clearly stronger than the original but not over-advanced." : "Return a complete revised generated answer for the target window."
+    isBand5Rescue ? "Return a complete realistic Band 5 rescue revision, not a sentence-by-sentence micro-edit. It must be clearly stronger than the original, but still simple and not over-polished." : "Return a complete revised generated answer for the target window."
   ].join("\n\n");
 }
 
