@@ -3152,3 +3152,231 @@ input,select{min-height:48px}
   .topbar h1{font-size:26px}
   .learning-tab{min-width:185px}
 }
+
+/* Premium score report refinement: formal report feel without touching scoring logic */
+body.premium-studio-app-v2 .grading-results{
+  gap:18px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 20px;
+  border:1px solid rgba(15,118,110,.14);
+  border-radius:24px;
+  background:linear-gradient(135deg, rgba(15,118,110,.06), rgba(255,255,255,.98));
+  box-shadow:0 16px 34px rgba(15,23,42,.05);
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-heading{
+  min-width:0;
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-heading h4{
+  margin:2px 0 8px;
+  font-size:1.16rem;
+  line-height:1.25;
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-note{
+  margin:0;
+  color:var(--muted);
+  line-height:1.6;
+  max-width:820px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end;
+  align-items:flex-start;
+  max-width:min(520px, 100%);
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:36px;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(15,118,110,.16);
+  background:rgba(248,250,252,.92);
+  color:var(--ink);
+  font-weight:850;
+  line-height:1.25;
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-chip--task{
+  background:rgba(15,118,110,.10);
+  color:var(--teal);
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-chip--source{
+  background:rgba(49,95,159,.08);
+  color:var(--blue);
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-chip--route{
+  background:rgba(164,93,0,.08);
+  color:var(--amber);
+}
+
+body.premium-studio-app-v2 .grading-results .score-report-chip--audit{
+  background:rgba(15,118,110,.08);
+  color:var(--teal);
+}
+
+body.premium-studio-app-v2 .grading-results .overall-card-hero{
+  padding:20px 22px;
+}
+
+body.premium-studio-app-v2 .grading-results .overall-card-hero h4{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:14px;
+  font-size:1rem;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+}
+
+body.premium-studio-app-v2 .grading-results .overall-card-hero h4::after{
+  content:"Exam score overview";
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(15,118,110,.16);
+  background:rgba(15,118,110,.06);
+  color:var(--teal);
+  font-size:.76rem;
+  font-weight:900;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+
+body.premium-studio-app-v2 .grading-results .overall-card-main{
+  gap:20px;
+}
+
+body.premium-studio-app-v2 .grading-results .overall-score-panel{
+  background:linear-gradient(135deg, rgba(15,118,110,.10), rgba(255,255,255,.98));
+  border-color:rgba(15,118,110,.18);
+}
+
+body.premium-studio-app-v2 .grading-results .overall-score span{
+  min-width:90px;
+  min-height:70px;
+  font-size:2.2rem;
+}
+
+body.premium-studio-app-v2 .grading-results .overall-disclaimer-card{
+  background:linear-gradient(135deg, rgba(164,93,0,.08), rgba(255,255,255,.98));
+  border-color:rgba(164,93,0,.16);
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-report-grid{
+  margin-top:0;
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-report-intro{
+  grid-column:1/-1;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding:16px 18px;
+  border:1px solid rgba(15,118,110,.12);
+  border-radius:20px;
+  background:linear-gradient(135deg, rgba(15,118,110,.05), rgba(255,255,255,.97));
+  box-shadow:0 12px 26px rgba(15,23,42,.04);
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-report-intro h4{
+  margin:2px 0 6px;
+  font-size:1.05rem;
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-report-intro p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.55;
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-card-preview{
+  padding-inline:18px;
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-score-card{
+  border-color:rgba(15,118,110,.12);
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-card-header{
+  background:linear-gradient(135deg, rgba(248,250,252,.92), rgba(255,255,255,.98));
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-quick-grid{
+  gap:14px;
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-quick-row{
+  border-color:rgba(15,118,110,.16);
+  background:linear-gradient(180deg, rgba(15,118,110,.06), rgba(255,255,255,.98));
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-visible-evidence{
+  background:linear-gradient(180deg, rgba(240,253,250,.88), rgba(255,255,255,.96));
+  border-color:rgba(15,118,110,.16);
+}
+
+body.premium-studio-app-v2 .grading-results .criterion-zh-summary{
+  border-radius:16px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-accordion{
+  border-color:rgba(15,118,110,.14);
+}
+
+body.premium-studio-app-v2 .grading-results .score-accordion summary{
+  min-height:62px;
+  padding-inline:18px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-accordion-body{
+  padding:18px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-detail-card{
+  border-radius:18px;
+}
+
+body.premium-studio-app-v2 .grading-results .score-flow-note,
+body.premium-studio-app-v2 .grading-results .ai-warning{
+  border-radius:18px;
+}
+
+@media(max-width:760px){
+  body.premium-studio-app-v2 .grading-results .score-report-header{
+    flex-direction:column;
+  }
+  body.premium-studio-app-v2 .grading-results .score-report-meta{
+    justify-content:flex-start;
+  }
+  body.premium-studio-app-v2 .grading-results .criterion-report-intro{
+    flex-direction:column;
+  }
+  body.premium-studio-app-v2 .grading-results .overall-card-hero h4{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  body.premium-studio-app-v2 .grading-results .overall-card-hero h4::after{
+    width:100%;
+    justify-content:center;
+  }
+}

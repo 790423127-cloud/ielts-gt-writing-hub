@@ -1697,6 +1697,62 @@
     return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已生成，不会改变分数。")}</div>`;
   }
 
+  function humanizeScoreSourceTag(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const normalized = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+    const lower = normalized.toLowerCase();
+    const mapping = [
+      ["main score", "Main scorer"],
+      ["main scorer", "Main scorer"],
+      ["main", "Main scorer"],
+      ["boundary adjudicator v4 3", "Boundary adjudicator"],
+      ["boundary adjudicator", "Boundary adjudicator"],
+      ["boundary", "Boundary adjudicator"],
+      ["highband", "Highband"],
+      ["lowband", "Lowband"],
+      ["production router", "Production router"],
+      ["router", "Production router"]
+    ];
+    for (const [needle, label] of mapping) {
+      if (lower === needle) return label;
+    }
+    return normalized.replace(/\b([a-z])/g, (match) => match.toUpperCase());
+  }
+
+  function renderScoreReportHeader(result = {}, finalBand = null) {
+    const taskLabel = String(result.task || selected?.task || "").trim() || "Task";
+    const taskType = String(result.taskTypeDetected || result.taskType || "").trim();
+    const finalSource = String(result.finalSource || result.scoreSource || result.system || result.scoreCalculation?.source || "").trim();
+    const routeDecision = String(result.routeDecision || result.routeZone || result.scoreCalculation?.routeDecision || "").trim();
+    const routeZone = String(result.routeZone || result.scoreCalculation?.routeZone || "").trim();
+    const reuseAudit = result.boundaryMainReuseAudit || result.scoreCoreMeta?.boundaryMainReuseAudit || {};
+    const reuseLabel = reuseAudit.mainReusedFromRouter === true
+      ? "Boundary reused frozen main result"
+      : reuseAudit.mainReusedFromRouter === false
+        ? "Boundary scored independently"
+        : "";
+    const sourceLabel = humanizeScoreSourceTag(finalSource) || "Production router";
+    const routeLabel = humanizeScoreSourceTag(routeDecision || routeZone) || "Standard route";
+    const friendlyTaskType = taskType.replace(/^task\s*(\d)$/i, "Task $1").replace(/^task(\d)$/i, "Task $1");
+    const taskTypeLabel = friendlyTaskType ? `Detected ${friendlyTaskType}` : taskLabel;
+    const bandText = Number.isFinite(Number(finalBand)) ? `Band ${formatBand(finalBand)}` : "Band -";
+    const note = "考试评分 = 当前输入框原文的分数；生成验证 = AI 生成版本通过 production router 验证得到的分数，不会改变原文分数。";
+    return `<section class="score-report-header" aria-label="Score report overview">
+      <div class="score-report-heading">
+        <p class="kicker">Score Report</p>
+        <h4>${escapeHtml(bandText)} · IELTS Writing Report</h4>
+        <p class="score-report-note">${escapeHtml(note)}</p>
+      </div>
+      <div class="score-report-meta" aria-label="Score report metadata">
+        <span class="score-report-chip score-report-chip--task" title="${escapeHtml(taskLabel)}">${escapeHtml(taskTypeLabel)}</span>
+        ${finalSource ? `<span class="score-report-chip score-report-chip--source" title="${escapeHtml(finalSource)}">Final source: ${escapeHtml(sourceLabel)}</span>` : ""}
+        ${(routeDecision || routeZone) ? `<span class="score-report-chip score-report-chip--route" title="${escapeHtml([routeDecision, routeZone].filter(Boolean).join(" / "))}">Route: ${escapeHtml(routeLabel)}</span>` : ""}
+        ${reuseLabel ? `<span class="score-report-chip score-report-chip--audit">${escapeHtml(reuseLabel)}</span>` : ""}
+      </div>
+    </section>`;
+  }
+
   function compactCriterionPreviewText(text, max = 170) {
     const raw = cleanUserFeedbackText(text);
     if (!raw) return "";
@@ -1779,7 +1835,15 @@
     const impossibleZeroWarning = entries.some(([, band]) => Number(band) === 0) && !/hard-zero|skipped_hard_zero|not_rateable/i.test(JSON.stringify(result.scoreCoreMeta || {}) + JSON.stringify(result.feedbackStatus || {}) + JSON.stringify(result.localSignals?.hardZeroGate || {}))
       ? `<div class="ai-warning feedback-status-warning"><strong>评分异常：</strong>系统收到 Band 0，但该回答可能并非空白/非英文/明确放弃作答。请重新评分；新版后端会阻止这种假 0 分冻结。</div>`
       : "";
-    return `${impossibleZeroWarning}<section class="criterion-card-grid" aria-label="四项评分说明">
+    const reportIntro = `<div class="criterion-report-intro">
+      <div>
+        <p class="kicker">Four Criteria</p>
+        <h4>四项评分卡 / Criterion Score Cards</h4>
+      </div>
+      <p>每张卡只保留最关键的原文证据、扣分原因和下一步提升方向；逐句修改和学习路线留给下方的 Detailed Feedback / Learning Feedback。</p>
+    </div>`;
+    return `${impossibleZeroWarning}<section class="criterion-card-grid criterion-report-grid" aria-label="四项评分说明">
+      ${reportIntro}
       <div class="criterion-compact-toolbar">
         <button type="button" data-criterion-expand-all>全部展开</button>
         <button type="button" data-criterion-collapse-all>全部收起</button>
@@ -2378,6 +2442,7 @@
     const disclaimerZh = result.disclaimerZh || result.disclaimerChinese || "AI 生成的估分，仅供参考，并非官方雅思成绩。";
     const html = `
       ${renderScoringProgressPanel(latestScoringProgress, false)}
+      ${renderScoreReportHeader(result, finalBand)}
       <section class="overall-card overall-card-hero">
         <h4>Overall estimated band</h4>
         <div class="overall-card-main">
