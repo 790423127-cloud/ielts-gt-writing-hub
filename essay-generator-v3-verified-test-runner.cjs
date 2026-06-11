@@ -41,7 +41,6 @@ function statusFor(verifiedBand, targetBand) {
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
   if (verified >= target) return "target_met";
-  if (verified + 0.5 >= target) return "near_target";
   return "below_target";
 }
 
@@ -90,6 +89,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
+  console.log("strict minimum target rule: below target = failure, no near_target success");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {

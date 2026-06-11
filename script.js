@@ -2405,8 +2405,8 @@
 
     const verificationStatusText = (status) => ({
       target_met: "已达到目标",
-      near_target: "接近目标，但还不稳定",
-      below_target: "低于目标，系统已尝试自动重写",
+      near_target: "未达到严格目标",
+      below_target: "未达到目标，不能算 +0.5 / +1.0 成功",
       verification_failed: "验证失败",
       verification_running: "正在验证",
       empty_essay: "无文本可验证",
@@ -2485,7 +2485,7 @@
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成只高 0.5–1.0 分、能学得会的版本，并用生产评分路由验证目标分。</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成至少高 0.5–1.0 分、能学得会的版本，并用生产评分路由严格验证：低于目标不能算成功。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
           ${card("② 基于原文修改版 / +0.5 band revision", verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", "复制 +0.5 修改版")}${applyButton("plus05", "应用 +0.5 到作文输入区")}`)}
           ${card("③ 基于原文修改版 / +1.0 band revision", verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", "复制 +1.0 修改版")}${applyButton("plus10", "应用 +1.0 到作文输入区")}`)}
@@ -2558,7 +2558,6 @@
     const target = Number(targetBand);
     if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
     if (verified >= target) return "target_met";
-    if (verified + 0.5 >= target) return "near_target";
     return "below_target";
   }
 
@@ -2569,7 +2568,7 @@
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
-    return `生产评分验证完成：达到目标 ${counts.target_met || 0} 项，接近目标 ${counts.near_target || 0} 项，低于目标 ${counts.below_target || 0} 项，失败 ${counts.verification_failed || 0} 项。`;
+    return `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项。`;
   }
 
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
@@ -2626,12 +2625,10 @@
         verifiedBand,
         status,
         message: status === "target_met"
-          ? "生产评分验证已达到目标分。"
-          : status === "near_target"
-            ? "生产评分验证接近目标，但还不稳定。"
-            : status === "below_target"
-              ? "生产评分验证低于目标。"
-              : "生产评分验证暂不可用。",
+          ? "生产评分验证已达到严格目标分。"
+          : status === "below_target"
+            ? "生产评分验证低于严格目标；这个版本不能算真正的 +0.5 / +1.0 修改版，请重新生成。"
+            : "生产评分验证暂不可用。",
         criterionBands: score.finalCriteria || score.criteria || null,
         source: score.finalSource || score.scoreSource || score.system || "production-router"
       };
@@ -2666,7 +2663,7 @@
       };
       renderRevisionResult(result);
     }
-    setGradingStatus("作文生成完成，生产评分验证完成。", "done");
+    setGradingStatus("作文生成完成，严格生产评分验证完成。", "done");
     return result;
   }
 

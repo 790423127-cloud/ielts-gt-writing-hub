@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-verified-target-band-production-router";
+const GENERATOR_VERSION = "essay-generator-v3-3-strict-minimum-target-verification";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -166,29 +166,31 @@ function generationTargetsForContext(context = {}) {
   if (!Number.isFinite(currentBand)) {
     return {
       currentBand: null,
-      targetBandModel: null,
-      targetBandPlus05: null,
-      targetBandPlus10: null,
-      levelInstruction: "No frozen band is available. Keep all generated answers learner-realistic, practical, and not unrealistically advanced."
+      targetBandModel: 5.5,
+      targetBandPlus05: 5.0,
+      targetBandPlus10: 5.5,
+      minimumTargetRule: "No frozen band is available. Use strict minimum targets: +0.5 revision at least Band 5.0, +1.0 revision/model at least Band 5.5.",
+      levelInstruction: "No frozen band is available. Generate at least Band 5.0 for the +0.5 revision and at least Band 5.5 for the +1.0/model answer, while keeping language learnable and practical."
     };
   }
 
-  const targetBandPlus05 = clampBand(currentBand + 0.5);
-  const targetBandPlus10 = clampBand(currentBand + 1.0);
-  const targetBandModel = currentBand < 7.5 ? targetBandPlus10 : targetBandPlus05;
+  const targetBandPlus05 = clampBand(Math.max(5.0, currentBand + 0.5));
+  const targetBandPlus10 = clampBand(Math.max(targetBandPlus05 + 0.5, currentBand + 1.0));
+  const targetBandModel = clampBand(Math.max(targetBandPlus10, 5.5));
+  const minimumTargetRule = `Strict target rule: if current band is ${currentBand.toFixed(1)}, the +0.5 revision must verify at no less than Band ${targetBandPlus05.toFixed(1)}, and the +1.0 revision/model answer must verify at no less than Band ${targetBandPlus10.toFixed(1)}. Anything below target is NOT acceptable.`;
 
   let levelInstruction = "";
   if (currentBand < 5) {
-    levelInstruction = "The student is below Band 5. Use clear, simple, learnable sentences. Improve task coverage, basic paragraphing, grammar accuracy, and useful everyday vocabulary. Do not use advanced academic language.";
+    levelInstruction = "The student is below Band 5, but generated practice answers must not stay at the same level. The +0.5 revision must be at least Band 5.0. Improve task coverage, paragraph clarity, basic grammar accuracy, and useful everyday vocabulary. Keep language learnable, but make the answer strong enough to pass production verification at the target band.";
   } else if (currentBand < 6.5) {
-    levelInstruction = "The student is around Band 5 to 6. Use moderately improved but still learnable language. Avoid native-speaker-only phrasing. Focus on clearer task response, paragraph development, and safer sentence control.";
+    levelInstruction = "The student is around Band 5 to 6. The generated answers must be at least 0.5 band higher than the current score. Use moderately improved but still learnable language. Focus on clearer task response, paragraph development, safer grammar, and more natural collocation.";
   } else if (currentBand < 7.5) {
-    levelInstruction = "The student is around Band 6.5 to 7. Use stronger but still practical IELTS language. Focus on precision, development, cohesion, and controlled complex sentences.";
+    levelInstruction = "The student is around Band 6.5 to 7. Generate stronger but still practical IELTS language. Focus on precision, development, cohesion, and controlled complex sentences.";
   } else {
     levelInstruction = "The student is already high band. The model answer can be sophisticated, but learning notes must remain practical and explainable.";
   }
 
-  return { currentBand, targetBandModel, targetBandPlus05, targetBandPlus10, levelInstruction };
+  return { currentBand, targetBandModel, targetBandPlus05, targetBandPlus10, minimumTargetRule, levelInstruction };
 }
 
 
@@ -241,7 +243,8 @@ function buildGenerationPrompt(body = {}) {
     "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
     "2) revisionPlus05: a revised version based on the student's essay, aiming for about +0.5 band improvement.",
     "3) revisionPlus10: a revised version based on the student's essay, aiming for about +1.0 band improvement.",
-    "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to survive the production scoring router verification for the stated target band.",
+    "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
+    "Strict target rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 revision must be at least Band 5.0 and the +1.0 revision must be at least Band 5.5. If the current band is 5.0, the +0.5 revision must be at least Band 5.5.",
     "Explain WHY each version is higher and WHAT the student should learn from it.",
     "Do not tell the student to memorize entire essays. Focus on structure, task coverage, useful sentences, grammar control, and paragraph development.",
     taskSpecific,
@@ -304,6 +307,7 @@ function buildGenerationPrompt(body = {}) {
     `Prompt: ${clipText(prompt, 2400)}`,
     `Current frozen band used only as level reference: ${targets.currentBand == null ? "unknown" : bandLabel(targets.currentBand)}`,
     `Target model answer band: ${targets.targetBandModel == null ? "learner-realistic" : bandLabel(targets.targetBandModel)}`,
+    `Minimum target rule: ${targets.minimumTargetRule || "Generated answers must verify at or above their target band."}`,
     `Target +0.5 revised band: ${targets.targetBandPlus05 == null ? "learner-realistic +0.5" : bandLabel(targets.targetBandPlus05)}`,
     `Target +1.0 revised band: ${targets.targetBandPlus10 == null ? "learner-realistic +1.0" : bandLabel(targets.targetBandPlus10)}`,
     `Frozen score/current result for level reference only: ${JSON.stringify({
@@ -482,14 +486,13 @@ function verificationLabel(verifiedBand, targetBand) {
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
   if (verified >= target) return "target_met";
-  if (verified + 0.5 >= target) return "near_target";
   return "below_target";
 }
 
 function verificationMessage(status) {
   if (status === "target_met") return "生产评分验证已达到目标分。";
-  if (status === "near_target") return "生产评分验证接近目标，但还不稳定。";
-  if (status === "below_target") return "生产评分验证低于目标，需要重写或降低目标。";
+  if (status === "near_target") return "生产评分验证低于严格目标，不能算成功。";
+  if (status === "below_target") return "生产评分验证低于严格目标，需要重新生成或重写。";
   return "生产评分验证暂不可用。";
 }
 
@@ -636,7 +639,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Target band: ${targetBand == null ? "learner-realistic" : bandLabel(targetBand)}`,
     `Production-router verified band: ${verifiedBand == null ? "unavailable" : bandLabel(verifiedBand)}`,
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
-    "If the verified band is below target, improve the generated answer enough to reach the target, but do not make it unrealistic for the student's level.",
+    "If the verified band is below target, this is a failure, not near success. Improve the generated answer enough to verify at or above the exact target band, but do not make it unrealistic for the student's level.",
     "Output JSON shape:",
     JSON.stringify({ [spec.objectName]: { ...spec.jsonShape, targetBand } }, null, 2),
     "Context prompt:",
@@ -717,7 +720,7 @@ async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
     nearTarget: counts.near_target || 0,
     belowTarget: counts.below_target || 0,
     verificationFailed: counts.verification_failed || 0,
-    summary: `生产评分验证完成：达到目标 ${counts.target_met || 0} 项，接近目标 ${counts.near_target || 0} 项，低于目标 ${counts.below_target || 0} 项。`,
+    summary: `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项。`,
     items: results
   };
 
