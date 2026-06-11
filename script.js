@@ -22,15 +22,14 @@
   const DEFAULT_GRADING_ENDPOINT = "/api/grade-ielts-production-router";
 
   const LEARNING_FEEDBACK_MODULES = [
-    { key: "structureCohesion", label: "结构与衔接", en: "Structure & Cohesion" },
-    { key: "spellingWordForm", label: "拼写和词形", en: "Spelling & Word Form" },
-    { key: "grammar", label: "语法诊断", en: "Grammar" },
-    { key: "vocabularyCollocation", label: "词汇选择和搭配", en: "Vocabulary & Collocation" },
-    { key: "sentenceCorrections", label: "逐句批改", en: "Sentence Correction" },
-    { key: "betterExpressions", label: "更好表达", en: "Better Expression" }
+    { key: "overview", label: "全文总览", en: "Overview" },
+    { key: "sentenceUpgrade", label: "逐句升级", en: "Sentence Upgrade" },
+    { key: "grammarWordFormSpelling", label: "语法词形", en: "Grammar, Word Form & Spelling" },
+    { key: "structureCohesionTask", label: "结构衔接", en: "Structure, Cohesion & Task" },
+    { key: "expressionBank", label: "表达积累", en: "Expression Bank" }
   ];
   let latestLearningFeedback = {};
-  let activeLearningFeedbackModule = "sentenceCorrections";
+  let activeLearningFeedbackModule = "sentenceUpgrade";
 
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -276,7 +275,7 @@
   function resetGradingPanel() {
     latestScoreResult = null;
     latestLearningFeedback = {};
-    activeLearningFeedbackModule = "sentenceCorrections";
+    activeLearningFeedbackModule = "sentenceUpgrade";
     if (els.gradingResults) els.gradingResults.innerHTML = "";
     if (els.gradingStatus) { els.gradingStatus.textContent = ""; els.gradingStatus.dataset.state = ""; }
     if (els.revisionCompareArea) els.revisionCompareArea.classList.add("hidden");
@@ -2085,6 +2084,8 @@
       prompt: selected?.prompt || "",
       questionPrompt: selected?.prompt || "",
       promptText: selected?.prompt || "",
+      task1BulletPoints: lockedTask === "Task 1" ? extractBulletPointsFromPrompt(selected?.prompt) : [],
+      task2QuestionProfile: lockedTask === "Task 2" ? buildTask2QuestionProfile(selected?.prompt) : null,
       essay,
       wordCount: countWords(essay),
       frozenScore: frozenScoreForFeedback(),
@@ -2097,10 +2098,23 @@
     if (typeof pair === "string") {
       return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p><p class="learning-zh">${escapeHtml(fallback)}</p></div>`;
     }
-    const en = pair.en || pair.english || pair.text || pair.label || "";
-    const zh = pair.zh || pair.chinese || pair.meaningZh || pair.explanationZh || "";
+    const en = pair.en || pair.english || pair.text || pair.label || pair.value || "";
+    const zh = pair.zh || pair.chinese || pair.meaningZh || pair.explanationZh || pair.translationZh || "";
     if (!hasMeaningfulContent(en) && !hasMeaningfulContent(zh)) return "";
-    return `<div class="learning-bilingual-block">${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}<p class="learning-zh">${escapeHtml(zh || fallback)}</p></div>`;
+    return `<div class="learning-bilingual-block">${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}${hasMeaningfulContent(zh) || hasMeaningfulContent(en) ? `<p class="learning-zh">${escapeHtml(zh || fallback)}</p>` : ""}</div>`;
+  }
+
+  function learningText(value) {
+    if (value == null) return "";
+    if (typeof value === "string" || typeof value === "number") return String(value).trim();
+    if (typeof value === "object") return String(value.zh || value.chinese || value.en || value.english || value.text || value.value || "").trim();
+    return "";
+  }
+
+  function learningArray(value, limit = 12) {
+    if (Array.isArray(value)) return value.filter(hasMeaningfulContent).slice(0, limit);
+    if (hasMeaningfulContent(value)) return [value].slice(0, limit);
+    return [];
   }
 
   function pickZhFromItem(item, keys = []) {
@@ -2121,85 +2135,116 @@
       zh = value.zh || value.chinese || value.meaningZh || value.translationZh || value.translation || value.chineseMeaning || zhValue || "";
     }
     const shouldShowZh = hasMeaningfulContent(en) || hasMeaningfulContent(zh);
-    return `<div class="learning-value ${cls}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}${shouldShowZh ? `<p class="learning-value-zh">${escapeHtml(zh || "中文释义暂缺：请重新生成该模块。")}</p>` : ""}</div>`;
+    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}${shouldShowZh ? `<p class="learning-value-zh">${escapeHtml(zh || "中文释义暂缺：请重新生成该模块。")}</p>` : ""}</div>`;
   }
 
   function tagListHtml(tags) {
-    const list = arr(tags).filter(hasMeaningfulContent).slice(0, 6);
+    const list = learningArray(tags, 8);
     if (!list.length) return "";
     return `<div class="learning-tag-row">${list.map((tag) => {
       if (typeof tag === "string") return `<span class="learning-error-tag">${escapeHtml(tag)}</span>`;
-      const en = tag.en || tag.english || "";
-      const zh = tag.zh || tag.chinese || "";
+      const en = tag.en || tag.english || tag.type || "";
+      const zh = tag.zh || tag.chinese || tag.label || "";
       return `<span class="learning-error-tag">${escapeHtml(zh || en)}${en && zh ? ` / ${escapeHtml(en)}` : ""}</span>`;
     }).join("")}</div>`;
   }
 
-  function renderStructureCohesionModule(result) {
-    const map = arr(result.paragraphMap).slice(0, 8);
-    const problems = arr(result.cohesionProblems).slice(0, 8);
+  function learningListHtml(title, items, limit = 8) {
+    const list = learningArray(items, limit);
+    if (!list.length) return "";
+    return `<div class="learning-card-list"><h4>${escapeHtml(title)}</h4>${list.map((item) => {
+      if (typeof item === "string") return `<article class="learning-card">${escapeHtml(item)}</article>`;
+      const titleText = item.title || item.problem || item.focus || item.point || item.type || item.label || "";
+      const parts = [
+        titleText ? `<div class="learning-card-title">${escapeHtml(learningText(titleText))}</div>` : "",
+        pairHtml(item.problem || item.issue || item.focus || item.point || item.summary),
+        simpleValueHtml("原文证据 / Evidence", item.evidence || item.original || item.fromEssay || item.example, "", item.evidenceZh || item.originalZh || item.exampleZh),
+        pairHtml(item.whyMatters || item.reason || item.why || item.explanation),
+        pairHtml(item.nextAction || item.action || item.checkMethod || item.suggestion)
+      ].filter(Boolean).join("");
+      return `<article class="learning-card">${parts || `<pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>`}</article>`;
+    }).join("")}</div>`;
+  }
+
+  function renderOverviewModule(result = {}) {
     return `${pairHtml(result.summary)}
-      ${map.length ? `<div class="learning-card-list"><h4>段落地图 / Paragraph Map</h4>${map.map((item) => `<article class="learning-card"><div class="learning-card-title">Paragraph ${escapeHtml(item.paragraph || "-")}</div>${pairHtml(item.function)}${pairHtml(item.diagnosis)}${pairHtml(item.suggestion)}</article>`).join("")}</div>` : ""}
-      ${problems.length ? `<div class="learning-card-list"><h4>衔接问题 / Cohesion Problems</h4>${problems.map((item) => `<article class="learning-card">${pairHtml(item.problem)}${pairHtml(item.example)}${pairHtml(item.fix)}</article>`).join("")}</div>` : ""}
+      ${learningListHtml("最影响本文的具体问题 / Top specific problems", result.topProblems, 5)}
+      ${learningListHtml("错误类型统计 / Error summary", result.errorSummary, 8)}
+      ${learningListHtml("下一篇优先练什么 / Next practice focus", result.nextPracticeFocus, 6)}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
-  function renderSpellingWordFormModule(result) {
-    const items = arr(result.items).slice(0, 10);
+  function renderSentenceUpgradeModule(result = {}) {
+    const cards = learningArray(result.sentenceCards || result.sentences, 12);
     return `${pairHtml(result.summary)}
-      ${items.length ? `<div class="learning-card-list">${items.map((item) => `<article class="learning-card"><div class="learning-correction-row">${simpleValueHtml("原文 / Original", item.original, "", pickZhFromItem(item, ["originalZh", "originalTranslationZh", "originalChinese", "originalMeaningZh", "translations.original", "translation.original"]))}${simpleValueHtml("正确形式 / Correction", item.correction, "is-corrected", pickZhFromItem(item, ["correctionZh", "correctionTranslationZh", "correctionChinese", "correctionMeaningZh", "translations.correction", "translation.correction"]))}</div><p class="learning-mini-label">${escapeHtml(item.type || "word_form")}</p>${pairHtml(item.explanation)}${pairHtml(item.memoryTip)}</article>`).join("")}</div>` : `<p class="muted">没有发现明显拼写或词形问题。</p>`}
+      ${cards.length ? `<div class="learning-card-list sentence-correction-list">${cards.map((item, index) => {
+        const noError = item.hasClearError === false || item.noClearError === true;
+        const title = noError ? `Sentence ${escapeHtml(item.index || index + 1)} · 无明显错误，做表达升级` : `Sentence ${escapeHtml(item.index || index + 1)}`;
+        return `<article class="learning-card">
+          <div class="learning-card-title">${title}</div>
+          ${tagListHtml(item.issueTags || item.errorTags || item.problemTags)}
+          ${simpleValueHtml("原句 / Original", item.original, "", item.originalZh || item.originalTranslationZh)}
+          ${simpleValueHtml("最低修正版 / Minimal correction", item.minimalCorrection || item.corrected, "is-corrected", item.minimalCorrectionZh || item.correctedZh)}
+          ${simpleValueHtml("+0.5–1 分升级版 / Next-step upgraded version", item.upgradedVersion || item.improvedVersion, "is-upgraded", item.upgradedVersionZh || item.improvedVersionZh)}
+          ${pairHtml(item.whyBetter || item.explanation || item.reason)}
+          ${pairHtml(item.learnThis || item.usefulPattern || item.pattern)}
+        </article>`;
+      }).join("")}</div>` : `<p class="muted">没有可显示的逐句升级内容。</p>`}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
-  function renderGrammarModule(result) {
-    const items = arr(result.items).slice(0, 10);
+  function renderGrammarWordFormSpellingModule(result = {}) {
+    const grammar = learningArray(result.grammarErrors, 80);
+    const wordForm = learningArray(result.wordFormErrors || result.wordFormAndPartOfSpeechErrors, 60);
+    const spelling = learningArray(result.spellingQuickFix || result.spellingErrors, 80);
+    const focus = learningArray(result.learningFocus || result.grammarLearningFocus, 8);
+    const grammarRows = grammar.length ? `<details class="score-accordion learning-subsection" open><summary>全部语法错误 / All grammar errors <span class="muted">${grammar.length} items</span></summary><div class="score-accordion-body learning-card-list">${grammar.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.errorType || item.type || `Grammar error ${index + 1}`)}</div>${simpleValueHtml("原文 / Original", item.original || item.evidence, "", item.originalZh)}${simpleValueHtml("正确写法 / Corrected", item.corrected || item.correction, "is-corrected", item.correctedZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : `<p class="muted">没有发现明确语法错误。</p>`;
+    const wordRows = wordForm.length ? `<details class="score-accordion learning-subsection"><summary>全部词形/词性错误 / Word form & part of speech <span class="muted">${wordForm.length} items</span></summary><div class="score-accordion-body learning-card-list">${wordForm.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.errorType || item.type || `Word-form issue ${index + 1}`)}</div>${simpleValueHtml("原文 / Original", item.original || item.wrong, "", item.originalZh)}${simpleValueHtml("正确 / Correct", item.corrected || item.correct, "is-corrected", item.correctedZh || item.correctZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : "";
+    const spellingRows = spelling.length ? `<details class="score-accordion learning-subsection"><summary>拼写速查 / Spelling quick fix <span class="muted">${spelling.length} items</span></summary><div class="score-accordion-body"><div class="learning-spelling-grid">${spelling.map((item) => `<div class="learning-spelling-row"><strong>${escapeHtml(item.wrong || item.original || "")}</strong><span>→</span><strong class="is-corrected">${escapeHtml(item.correct || item.correction || "")}</strong><small>${escapeHtml(item.note || item.reason || "拼写错误")}</small></div>`).join("")}</div></div></details>` : "";
+    const focusRows = focus.length ? `<details class="score-accordion learning-subsection" open><summary>本篇语法学习重点 / Grammar focus</summary><div class="score-accordion-body learning-card-list">${focus.map((item) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.point || item.focus || item.ruleName || "Grammar focus")}</div>${simpleValueHtml("本篇例子 / Example", item.example, "", item.exampleZh)}${pairHtml(item.rule || item.explanation)}${pairHtml(item.checkMethod || item.practiceTip)}</article>`).join("")}</div></details>` : "";
+    return `${pairHtml(result.summary)}${grammarRows}${wordRows}${spellingRows}${focusRows}${pairHtml(result.priorityAdvice)}`;
+  }
+
+  function renderStructureCohesionTaskModule(result = {}) {
+    const sectionCard = (title, obj) => {
+      if (!hasMeaningfulContent(obj)) return "";
+      return `<article class="learning-card"><div class="learning-card-title">${escapeHtml(title)}</div>${simpleValueHtml("你的问题 / Your current issue", obj.currentIssue || obj.issue || obj.current, "", obj.currentIssueZh || obj.issueZh)}${simpleValueHtml("建议写法 / Suggested version", obj.suggestedVersion || obj.suggestion || obj.improved, "is-upgraded", obj.suggestedVersionZh || obj.suggestionZh)}${pairHtml(obj.whyBetter || obj.why || obj.reason)}${pairHtml(obj.howToUse || obj.nextStep)}</article>`;
+    };
+    const cohesionIssues = learningArray(result.cohesion?.issues || result.cohesionIssues, 6);
+    const developmentIssues = learningArray(result.development?.issues || result.developmentIssues, 6);
     return `${pairHtml(result.summary)}
-      ${items.length ? `<div class="learning-card-list">${items.map((item) => `<article class="learning-card">${pairHtml(item.errorType)}<div class="learning-correction-row">${simpleValueHtml("原句 / Original", item.originalSentence, "", pickZhFromItem(item, ["originalSentenceZh", "originalZh", "originalTranslationZh", "originalChinese", "originalMeaningZh", "translations.originalSentence", "translations.original", "translation.original"]))}${simpleValueHtml("修改 / Corrected", item.correctedSentence, "is-corrected", pickZhFromItem(item, ["correctedSentenceZh", "correctedZh", "correctedTranslationZh", "correctedChinese", "correctedMeaningZh", "translations.correctedSentence", "translations.corrected", "translation.corrected"]))}</div>${pairHtml(item.explanation)}${pairHtml(item.rule)}</article>`).join("")}</div>` : `<p class="muted">没有发现需要优先处理的明显语法问题。</p>`}
+      <div class="learning-card-list">
+        ${sectionCard("开头 Opening", result.opening)}
+        ${sectionCard("段落结构 Paragraph organisation", result.paragraphOrganisation || result.paragraphOrganization)}
+        ${cohesionIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">衔接 Cohesion</div>${simpleValueHtml("原来的连接 / Original link", item.original || item.current, "", item.originalZh)}${simpleValueHtml("更好的连接 / Better link", item.improved || item.better, "is-upgraded", item.improvedZh || item.betterZh)}${pairHtml(item.whyBetter || item.reason)}</article>`).join("")}
+        ${developmentIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">内容展开 Development</div>${simpleValueHtml("原内容 / Original content", item.original || item.current, "", item.originalZh)}${simpleValueHtml("如何展开 / Better development", item.improved || item.better || item.suggestion, "is-upgraded", item.improvedZh || item.betterZh)}${pairHtml(item.whyBetter || item.reason)}</article>`).join("")}
+        ${sectionCard("结尾 Ending", result.ending)}
+        ${sectionCard("任务回应 Task response / achievement", result.taskResponse)}
+      </div>
+      ${learningListHtml("任务覆盖细节 / Task coverage details", result.taskResponse?.coverage || result.coverage, 8)}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
-  function renderVocabularyCollocationModule(result) {
-    const items = arr(result.items).slice(0, 10);
+  function renderExpressionBankModule(result = {}) {
+    const expressions = learningArray(result.usefulExpressions || result.expressions, 8);
+    const avoid = learningArray(result.avoidForNow || result.avoid, 5);
     return `${pairHtml(result.summary)}
-      ${items.length ? `<div class="learning-card-list">${items.map((item) => `<article class="learning-card">${pairHtml(item.problemType)}<div class="learning-correction-row">${simpleValueHtml("原表达 / Original", item.original, "", pickZhFromItem(item, ["originalZh", "originalTranslationZh", "originalChinese", "originalMeaningZh", "translations.original", "translation.original"]))}${simpleValueHtml("更自然表达 / Better", item.better, "is-corrected", pickZhFromItem(item, ["betterZh", "betterTranslationZh", "betterChinese", "betterMeaningZh", "correctionZh", "translations.better", "translation.better"]))}</div>${pairHtml(item.explanation)}${pairHtml(item.bandEffect)}</article>`).join("")}</div>` : `<p class="muted">没有发现需要优先处理的明显搭配问题。</p>`}
-      ${pairHtml(result.priorityAdvice)}`;
-  }
-
-  function renderSentenceCorrectionsModule(result) {
-    const items = arr(result.sentences).slice(0, 14);
-    return `${pairHtml(result.summary)}
-      ${items.length ? `<div class="learning-card-list sentence-correction-list">${items.map((item) => `<article class="learning-card"><div class="learning-card-title">Sentence ${escapeHtml(item.index || "-")}</div>${simpleValueHtml("原句 / Original", item.original, "", pickZhFromItem(item, ["originalZh", "originalTranslationZh", "originalChinese", "originalMeaningZh", "translations.original", "translation.original"]))}${simpleValueHtml("最小修改 / Minimal correction", item.minimalCorrection, "is-corrected", pickZhFromItem(item, ["minimalCorrectionZh", "minimalCorrectionTranslationZh", "correctedZh", "correctedTranslationZh", "minimalChinese", "minimalMeaningZh", "translations.minimalCorrection", "translations.corrected", "translation.minimalCorrection"]))}${simpleValueHtml((item.improvementStatus === "no_upgrade_needed" || item.upgradeStatus === "no_upgrade_needed") ? "升级表达 / Improved version（无需升级）" : "升级表达（目标提高0.5–1分）/ Next-step improved version", item.improvedVersion, "is-upgraded", pickZhFromItem(item, ["improvedVersionZh", "improvedVersionTranslationZh", "improvedTranslationZh", "improvedChinese", "improvedMeaningZh", "translations.improvedVersion", "translations.improved", "translation.improvedVersion"]))}${pairHtml(item.explanation)}${tagListHtml(item.errorTags)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的逐句批改内容。</p>`}
-      ${pairHtml(result.priorityAdvice)}`;
-  }
-
-  function labelledPairHtml(title, pair) {
-    const inner = pairHtml(pair);
-    if (!inner) return "";
-    return `<div class="learning-expression-level"><h5>${escapeHtml(title)}</h5>${inner}</div>`;
-  }
-
-  function renderBetterExpressionsModule(result) {
-    const items = arr(result.items).slice(0, 10);
-    return `${pairHtml(result.summary)}
-      ${items.length ? `<div class="learning-card-list">${items.map((item) => {
-        const targetVersion = item.targetVersion || item.nextStepVersion || item.learnerVersion || item.improvedVersion || item.basicVersion || item.band6Version || item.highBandVersion;
-        const reason = item.reason || item.whyThisHelps || item.bandReason || item.usageNote;
-        return `<article class="learning-card">${simpleValueHtml("原表达 / Original", item.original, "", pickZhFromItem(item, ["originalZh", "originalTranslationZh", "originalChinese", "originalMeaningZh", "translations.original", "translation.original"]))}${pairHtml(item.problem)}<div class="learning-expression-levels">${labelledPairHtml("目标提升表达（提高0.5–1分）/ Target next-step version", targetVersion)}</div>${pairHtml(reason)}${item.usageNote && reason !== item.usageNote ? pairHtml(item.usageNote) : ""}</article>`;
-      }).join("")}</div>` : `<p class="muted">没有可显示的表达升级建议。</p>`}
+      ${expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的表达积累。</p>`}
+      ${avoid.length ? learningListHtml("暂时不要优先模仿 / Avoid for now", avoid, 5) : ""}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
   function renderLearningModuleBody(moduleName, data) {
     const result = data?.moduleResult || data?.result || {};
-    if (!data) return `<div class="learning-empty-state"><p>点击“生成本模块反馈”开始生成。这个区域独立于打分系统；如果你已经完成评分，它会把冻结分数作为参考，但不会修改 Overall 或四项分。</p></div>`;
+    if (!data) return `<div class="learning-empty-state"><p>点击“生成本模块反馈”开始生成。每个区域单独请求 AI，内容必须基于当前题目和你的原文，不使用本地模板生成空泛答案。</p></div>`;
     if (data.status === "loading") return `<div class="learning-loading"><p>正在生成 ${escapeHtml(moduleLabel(moduleName))}，请稍候...</p></div>`;
     if (data.status === "error") return `<div class="learning-error"><p>${escapeHtml(data.error || "反馈生成失败")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
-    if (moduleName === "structureCohesion") return renderStructureCohesionModule(result);
-    if (moduleName === "spellingWordForm") return renderSpellingWordFormModule(result);
-    if (moduleName === "grammar") return renderGrammarModule(result);
-    if (moduleName === "vocabularyCollocation") return renderVocabularyCollocationModule(result);
-    if (moduleName === "sentenceCorrections") return renderSentenceCorrectionsModule(result);
-    if (moduleName === "betterExpressions") return renderBetterExpressionsModule(result);
+    if (data.fallbackUsed) return `<div class="learning-error"><p>${escapeHtml(data.moduleResult?.summary?.zh || "该模块生成格式异常，请重新生成。")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
+    if (moduleName === "overview") return renderOverviewModule(result);
+    if (moduleName === "sentenceUpgrade") return renderSentenceUpgradeModule(result);
+    if (moduleName === "grammarWordFormSpelling") return renderGrammarWordFormSpellingModule(result);
+    if (moduleName === "structureCohesionTask") return renderStructureCohesionTaskModule(result);
+    if (moduleName === "expressionBank") return renderExpressionBankModule(result);
     return `<pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
   }
 
@@ -2209,14 +2254,14 @@
   }
 
   function renderLearningFeedbackHtml() {
-    const active = LEARNING_FEEDBACK_MODULES.some((m) => m.key === activeLearningFeedbackModule) ? activeLearningFeedbackModule : "sentenceCorrections";
+    const active = LEARNING_FEEDBACK_MODULES.some((m) => m.key === activeLearningFeedbackModule) ? activeLearningFeedbackModule : "sentenceUpgrade";
     const activeModule = LEARNING_FEEDBACK_MODULES.find((m) => m.key === active) || LEARNING_FEEDBACK_MODULES[0];
     const body = renderLearningModuleBody(active, latestLearningFeedback[active]);
-    return `<section class="learning-feedback-panel" id="learningFeedbackPanel">
+    return `<section class="learning-feedback-panel learning-feedback-v2-panel" id="learningFeedbackPanel">
       <div class="learning-feedback-head">
         <div>
           <h4>学习反馈 / Learning Feedback</h4>
-          <p>这些模块只生成学习诊断，不重新打分，也不会修改已经冻结的 Overall 或四项分。</p>
+          <p>每个模块单独请求 AI；反馈必须基于当前题目和你的原文，不重新打分，也不修改已经冻结的 Overall 或四项分。</p>
         </div>
         <button class="primary" type="button" data-learning-feedback-generate="${escapeHtml(active)}">生成本模块反馈</button>
       </div>
@@ -2230,7 +2275,7 @@
     </section>`;
   }
 
-  function renderLearningFeedbackPanel() {
+    function renderLearningFeedbackPanel() {
     const panel = document.getElementById("learningFeedbackPanel");
     if (panel) panel.outerHTML = renderLearningFeedbackHtml();
   }

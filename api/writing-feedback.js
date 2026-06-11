@@ -5,86 +5,157 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const FEEDBACK_VERSION = "feedback-v1-4-targeted-next-step-feedback";
+const FEEDBACK_VERSION = "learning-feedback-v2-modular-tutor-panel";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBACK_TIMEOUT_MS) || 150000, 240000));
 
 const MODULES = {
-  structureCohesion: {
-    title: "结构与衔接诊断 / Structure and Cohesion Diagnosis",
-    maxItems: "4 paragraphMap entries and 5 cohesionProblems maximum",
+  overview: {
+    title: "全文问题总览 / Overall Learning Overview",
+    maxTokens: 4200,
+    maxItems: "topProblems 3-5, errorSummary 4-8, nextPracticeFocus 3-6",
     schema: {
       summary: { en: "", zh: "" },
-      paragraphMap: [
-        { paragraph: 1, function: { en: "", zh: "" }, diagnosis: { en: "", zh: "" }, suggestion: { en: "", zh: "" } }
+      topProblems: [
+        { problem: { en: "", zh: "" }, evidence: "", evidenceZh: "", whyMatters: { en: "", zh: "" }, nextAction: { en: "", zh: "" } }
       ],
-      cohesionProblems: [
-        { problem: { en: "", zh: "" }, example: { en: "", zh: "" }, fix: { en: "", zh: "" } }
+      errorSummary: [
+        { type: "grammar | word_form | spelling | cohesion | task_response | vocabulary", count: 0, note: { en: "", zh: "" } }
+      ],
+      nextPracticeFocus: [
+        { focus: { en: "", zh: "" }, reason: { en: "", zh: "" }, action: { en: "", zh: "" } }
       ],
       priorityAdvice: { en: "", zh: "" }
     },
-    instructions: `Diagnose structure, paragraph function, logical progression, referencing, repetition, and linking. For Task 1, focus on letter purpose, bullet-point order, tone/register, and whether the message reads like a real letter. For Task 2, focus on introduction, topic sentences, development, examples, conclusion, and progression. Do not score the essay.`
+    instructions: [
+      "Give a concise overview based on the exact prompt and the student's essay.",
+      "Do not list every error here. Summarise the most important learning priorities.",
+      "Every problem must cite or paraphrase specific evidence from the student's essay or a requirement from the prompt.",
+      "Do not use generic comments such as 'improve grammar' unless you say which grammar pattern and where it appears."
+    ]
   },
-  spellingWordForm: {
-    title: "拼写和词形诊断 / Spelling and Word Form Diagnosis",
-    maxItems: "8 items maximum",
+  sentenceUpgrade: {
+    title: "逐句修改与升级 / Sentence Correction and Upgrade",
+    maxTokens: 6500,
+    maxItems: "8-10 sentenceCards maximum",
     schema: {
       summary: { en: "", zh: "" },
-      items: [
-        { original: "", correction: "", type: "spelling | word_form | plural | verb_form | capitalization", explanation: { en: "", zh: "" }, memoryTip: { en: "", zh: "" } }
+      sentenceCards: [
+        {
+          index: 1,
+          original: "",
+          originalZh: "",
+          hasClearError: true,
+          issueTags: ["spelling | grammar | word_form | collocation | tone | cohesion | no_clear_error"],
+          minimalCorrection: "",
+          minimalCorrectionZh: "",
+          upgradedVersion: "",
+          upgradedVersionZh: "",
+          whyBetter: { en: "", zh: "" },
+          learnThis: { en: "", zh: "" },
+          usefulPattern: { en: "", zh: "" }
+        }
       ],
       priorityAdvice: { en: "", zh: "" }
     },
-    instructions: `Find spelling errors, wrong word forms, noun plural mistakes, verb form errors, adjective/adverb form errors, derived word errors, and capitalization problems. If there are no clear issues, return a bilingual summary and an empty items array. Do not invent errors.`
+    instructions: [
+      "Use real sentences from the student's essay.",
+      "For each selected sentence, provide the original, a minimal correction, and a next-step upgraded version that is only about 0.5 to 1.0 IELTS band above the student's frozen level.",
+      "If the sentence has no clear error, do not invent one. Set hasClearError false and provide a more natural, more formal, or more specific upgraded version.",
+      "For high-level essays with few basic errors, choose 4-6 sentences for high-band refinement rather than forcing corrections.",
+      "Explain why the upgraded version is better with reference to grammar, tone, specificity, cohesion, task fit, or natural collocation.",
+      "Keep sentenceCards concise. Do not rewrite the full essay."
+    ]
   },
-  grammar: {
-    title: "语法诊断 / Grammar Diagnosis",
-    maxItems: "8 items maximum",
+  grammarWordFormSpelling: {
+    title: "语法、词形与拼写 / Grammar, Word Form and Spelling",
+    maxTokens: 7000,
+    maxItems: "all clear grammar errors if possible; concise items only",
     schema: {
       summary: { en: "", zh: "" },
-      items: [
-        { originalSentence: "", correctedSentence: "", errorType: { en: "", zh: "" }, explanation: { en: "", zh: "" }, rule: { en: "", zh: "" } }
+      grammarErrors: [
+        { index: 1, errorType: "article | plural | tense | verb_form | preposition | agreement | clause | sentence_structure | punctuation", original: "", originalZh: "", corrected: "", correctedZh: "", explanation: { en: "", zh: "" }, checkMethod: { en: "", zh: "" } }
+      ],
+      wordFormErrors: [
+        { index: 1, errorType: "noun_form | adjective_form | adverb_form | verb_form | part_of_speech", original: "", originalZh: "", corrected: "", correctedZh: "", explanation: { en: "", zh: "" }, checkMethod: { en: "", zh: "" } }
+      ],
+      spellingQuickFix: [
+        { wrong: "", correct: "", note: "" }
+      ],
+      learningFocus: [
+        { point: "", example: "", exampleZh: "", rule: { en: "", zh: "" }, checkMethod: { en: "", zh: "" } }
       ],
       priorityAdvice: { en: "", zh: "" }
     },
-    instructions: `Identify grammar problems by type: subject-verb agreement, tense, articles, plurals, prepositions, sentence structure, clauses, verb forms, punctuation, fragments, and run-on sentences. Explain the rule in learner-friendly Chinese. Do not score the essay.`
+    instructions: [
+      "This module must identify all clear grammar errors in the essay as far as possible, not only the top few.",
+      "If repeated errors show a pattern, group them under the same learningFocus rule, but still list each clear occurrence in grammarErrors or wordFormErrors.",
+      "Separate spelling from grammar. SpellingQuickFix must be short: wrong word, correct word, brief note only.",
+      "Do not give long spelling lessons. Detailed explanation should be reserved for grammarErrors, wordFormErrors, and sentenceUpgrade.",
+      "Every error must come from the student's actual essay. Do not invent errors.",
+      "If no clear grammar error exists, say so and focus on word-form/spelling or high-level accuracy checks."
+    ]
   },
-  vocabularyCollocation: {
-    title: "词汇选择和搭配诊断 / Vocabulary Choice and Collocation Diagnosis",
-    maxItems: "8 items maximum",
+  structureCohesionTask: {
+    title: "结构、衔接与任务回应 / Structure, Cohesion and Task Response",
+    maxTokens: 5500,
+    maxItems: "specific structure advice only",
     schema: {
       summary: { en: "", zh: "" },
-      items: [
-        { original: "", better: "", problemType: { en: "", zh: "" }, explanation: { en: "", zh: "" }, bandEffect: { en: "", zh: "" } }
-      ],
+      opening: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      paragraphOrganisation: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      cohesion: {
+        issues: [
+          { original: "", originalZh: "", improved: "", improvedZh: "", whyBetter: { en: "", zh: "" } }
+        ]
+      },
+      development: {
+        issues: [
+          { original: "", originalZh: "", improved: "", improvedZh: "", whyBetter: { en: "", zh: "" } }
+        ]
+      },
+      ending: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      taskResponse: {
+        currentIssue: "",
+        suggestedVersion: "",
+        whyBetter: { en: "", zh: "" },
+        coverage: [
+          { requirement: "", status: "covered | partly_covered | missing", evidence: "", advice: { en: "", zh: "" } }
+        ]
+      },
       priorityAdvice: { en: "", zh: "" }
     },
-    instructions: `Find unnatural collocations, inaccurate word choice, Chinglish expressions, over-general vocabulary, repeated words, register problems, and misused advanced words. Give natural IELTS-appropriate alternatives. Do not score the essay.`
+    instructions: [
+      "Teach how to open, organise paragraphs, link ideas, develop content, and end the answer.",
+      "Every suggestion must explain why it is better.",
+      "For Task 1, analyse the letter purpose, relationship/tone, bullet coverage, paragraph order, linking, and closing.",
+      "For Task 2, analyse introduction, position, body paragraph logic, examples, linking, and conclusion.",
+      "Do not repeat grammar/spelling lists here. Mention language errors only if they affect structure, cohesion, task response, or tone.",
+      "Do not use generic templates. Use the exact prompt requirements and the student's original content."
+    ]
   },
-  sentenceCorrections: {
-    title: "逐句批改 / Sentence-by-Sentence Correction",
-    maxItems: "12 sentences maximum; prioritise sentences with errors or improvement value",
+  expressionBank: {
+    title: "表达积累 / Expression Bank",
+    maxTokens: 4200,
+    maxItems: "3-6 usefulExpressions, 0-4 avoidForNow",
     schema: {
       summary: { en: "", zh: "" },
-      sentences: [
-        { index: 1, original: "", originalZh: "", minimalCorrection: "", minimalCorrectionZh: "", improvedVersion: "", improvedVersionZh: "", improvementStatus: "upgraded | no_upgrade_needed", explanation: { en: "", zh: "" }, errorTags: [{ en: "", zh: "" }] }
+      usefulExpressions: [
+        { expression: "", meaningZh: "", situation: { en: "", zh: "" }, pattern: { en: "", zh: "" }, fromEssayOrPrompt: "", whyUseful: { en: "", zh: "" } }
+      ],
+      avoidForNow: [
+        { expression: "", reason: { en: "", zh: "" } }
       ],
       priorityAdvice: { en: "", zh: "" }
     },
-    instructions: `Correct sentence by sentence. Minimal correction should preserve the student's meaning and structure while fixing clear errors. Improved version must be a realistic next-step upgrade for this learner, normally only about 0.5 to 1 IELTS band above the frozen score. Do not make the sentence too advanced, too long, or too native-like for the student's level. If the frozen score is around Band 4-5, use clear simple accurate sentences; around Band 5.5-6.5, use moderately more natural IELTS wording and collocation; around Band 7+, use subtle precision and concision. Avoid weak formulas such as "In this essay, I will discuss" by replacing them with a direct topic sentence, but keep the language learnable. If a sentence is already strong and no useful next-step upgrade is needed, set improvedVersion to the same sentence and set improvementStatus to "no_upgrade_needed". For every original, minimalCorrection, and improvedVersion, provide a clear Chinese translation/meaning in originalZh, minimalCorrectionZh, and improvedVersionZh. Explain every change in Chinese and explain why the improved version is suitable for the student's current level. Do not produce a full model essay and do not score.`
-  },
-  betterExpressions: {
-    title: "更好表达 / Better Expression",
-    maxItems: "8 items maximum",
-    schema: {
-      summary: { en: "", zh: "" },
-      items: [
-        { original: "", originalZh: "", problem: { en: "", zh: "" }, targetVersion: { en: "", zh: "" }, reason: { en: "", zh: "" }, usageNote: { en: "", zh: "" } }
-      ],
-      priorityAdvice: { en: "", zh: "" }
-    },
-    instructions: `Upgrade only expressions that are genuinely weak, vague, repetitive, informal, inaccurate, or unnatural. Do not list sentences that are already natural unless there is a clear improvement. Do not provide three levels and do not jump to Band 7+ language unless the frozen score is already around Band 7. Provide ONE practical targetVersion for each item: an expression that is learnable and normally about 0.5 to 1 IELTS band above the student's frozen score. If the frozen score is around Band 4-5, prefer simple accurate expressions; around Band 5.5-6.5, prefer clear Band 6/6.5 style expressions; around Band 7+, prefer concise natural refinements. Avoid over-advanced vocabulary, idioms, literary phrasing, or long complex sentences. Each English expression must have a Chinese meaning in zh, and reason must explain in Chinese why this version is suitable for the student's current level. Do not generate a full model essay and do not score.`
+    instructions: [
+      "Give only expressions that are relevant to the current prompt and the student's essay.",
+      "Do not provide random universal IELTS phrases.",
+      "The expressions must be learnable for the student's frozen level and normally only 0.5-1.0 band above it.",
+      "Prefer expressions the student could use in the next similar GT Writing task.",
+      "Include Chinese meaning and usage situation."
+    ]
   }
 };
 
@@ -123,6 +194,7 @@ async function readJsonBody(req) {
   for await (const chunk of req) raw += chunk;
   return raw ? JSON.parse(raw) : {};
 }
+
 function normalizeRequestedTask(body = {}) {
   const raw = String(
     body.task ||
@@ -165,25 +237,82 @@ function clipText(text, maxChars) {
   return value.length > maxChars ? `${value.slice(0, maxChars)}...` : value;
 }
 
+function stripBomAndUnsafeChars(text) {
+  return String(text || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+}
+
+function removeCodeFence(text) {
+  const raw = stripBomAndUnsafeChars(text).trim();
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return (fenced ? fenced[1] : raw).trim();
+}
+
+function extractBalancedJson(text) {
+  const raw = removeCodeFence(text);
+  const start = raw.indexOf("{");
+  if (start < 0) return raw;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  const last = raw.lastIndexOf("}");
+  if (last > start) return raw.slice(start, last + 1);
+  return raw.slice(start);
+}
+
+function looseJsonClean(text) {
+  return stripBomAndUnsafeChars(text)
+    .replace(/,\s*([}\]])/g, "$1")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+}
+
 function extractJson(text) {
   const raw = String(text || "").trim();
   if (!raw) throw new Error("Empty AI response");
-  try { return JSON.parse(raw); } catch {}
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced) {
-    try { return JSON.parse(fenced[1]); } catch {}
+
+  const candidates = [
+    raw,
+    removeCodeFence(raw),
+    extractBalancedJson(raw),
+    looseJsonClean(extractBalancedJson(raw))
+  ];
+
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const first = raw.indexOf("{");
-  const last = raw.lastIndexOf("}");
-  if (first >= 0 && last > first) return JSON.parse(raw.slice(first, last + 1));
-  throw new Error("AI did not return valid JSON");
+
+  const err = new Error(`AI did not return valid JSON: ${lastError ? lastError.message : "unknown parse error"}`);
+  err.rawResponse = raw.slice(0, 12000);
+  throw err;
 }
 
 function bilingualFallback(value, fallbackEn = "No specific issue was found.") {
   if (value && typeof value === "object") {
     return {
-      en: String(value.en || value.english || fallbackEn).trim(),
-      zh: String(value.zh || value.chinese || "中文解释暂缺：请重新生成该模块。").trim()
+      en: String(value.en || value.english || value.text || fallbackEn).trim(),
+      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || "中文解释暂缺：请重新生成该模块。").trim()
     };
   }
   if (typeof value === "string" && value.trim()) {
@@ -192,179 +321,102 @@ function bilingualFallback(value, fallbackEn = "No specific issue was found.") {
   return { en: fallbackEn, zh: "中文解释暂缺：请重新生成该模块。" };
 }
 
-function normaliseResult(moduleName, value) {
-  const result = value && typeof value === "object" ? value : {};
-  result.summary = bilingualFallback(result.summary, "The module has completed its diagnosis.");
-  result.priorityAdvice = bilingualFallback(result.priorityAdvice, "Focus on the highest-impact issues first.");
-  if (moduleName === "structureCohesion") {
-    result.paragraphMap = Array.isArray(result.paragraphMap) ? result.paragraphMap.slice(0, 6).map((item, index) => ({
-      paragraph: Number(item.paragraph) || index + 1,
-      function: bilingualFallback(item.function, "Paragraph function"),
-      diagnosis: bilingualFallback(item.diagnosis, "This paragraph has been reviewed."),
-      suggestion: bilingualFallback(item.suggestion, "Improve clarity and progression.")
-    })) : [];
-    result.cohesionProblems = Array.isArray(result.cohesionProblems) ? result.cohesionProblems.slice(0, 8).map((item) => ({
-      problem: bilingualFallback(item.problem, "Cohesion issue"),
-      example: bilingualFallback(item.example, "Example from the essay"),
-      fix: bilingualFallback(item.fix, "Suggested fix")
-    })) : [];
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeModuleResult(moduleName, value) {
+  const result = value && typeof value === "object" ? { ...value } : {};
+  result.summary = bilingualFallback(result.summary, "This module has completed its feedback.");
+  result.priorityAdvice = bilingualFallback(result.priorityAdvice, "Focus on the most useful next step first.");
+
+  if (moduleName === "overview") {
+    result.topProblems = asArray(result.topProblems).slice(0, 6);
+    result.errorSummary = asArray(result.errorSummary).slice(0, 10);
+    result.nextPracticeFocus = asArray(result.nextPracticeFocus).slice(0, 8);
   }
-  if (moduleName === "spellingWordForm") {
-    result.items = Array.isArray(result.items) ? result.items.slice(0, 10).map((item) => ({
-      original: String(item.original || "").trim(),
-      originalZh: String(item.originalZh || item.originalTranslationZh || item.originalChinese || item.originalMeaningZh || "").trim(),
-      correction: String(item.correction || "").trim(),
-      correctionZh: String(item.correctionZh || item.correctionTranslationZh || item.correctionChinese || item.correctionMeaningZh || "").trim(),
-      type: String(item.type || "word_form").trim(),
-      explanation: bilingualFallback(item.explanation, "This form should be corrected."),
-      memoryTip: bilingualFallback(item.memoryTip, "Remember this form as a fixed spelling or word-family pattern.")
-    })).filter((item) => item.original || item.correction) : [];
-  }
-  if (moduleName === "grammar") {
-    result.items = Array.isArray(result.items) ? result.items.slice(0, 10).map((item) => ({
-      originalSentence: String(item.originalSentence || item.original || "").trim(),
-      originalSentenceZh: String(item.originalSentenceZh || item.originalZh || item.originalTranslationZh || item.originalChinese || item.originalMeaningZh || "").trim(),
-      correctedSentence: String(item.correctedSentence || item.corrected || "").trim(),
-      correctedSentenceZh: String(item.correctedSentenceZh || item.correctedZh || item.correctedTranslationZh || item.correctedChinese || item.correctedMeaningZh || "").trim(),
-      errorType: bilingualFallback(item.errorType, "Grammar issue"),
-      explanation: bilingualFallback(item.explanation, "This grammar point needs correction."),
-      rule: bilingualFallback(item.rule, "Use the correct form according to the sentence grammar.")
-    })).filter((item) => item.originalSentence || item.correctedSentence) : [];
-  }
-  if (moduleName === "vocabularyCollocation") {
-    result.items = Array.isArray(result.items) ? result.items.slice(0, 10).map((item) => ({
-      original: String(item.original || "").trim(),
-      originalZh: String(item.originalZh || item.originalTranslationZh || item.originalChinese || item.originalMeaningZh || "").trim(),
-      better: String(item.better || item.correction || "").trim(),
-      betterZh: String(item.betterZh || item.betterTranslationZh || item.correctionZh || item.betterChinese || item.betterMeaningZh || "").trim(),
-      problemType: bilingualFallback(item.problemType, "Vocabulary or collocation issue"),
-      explanation: bilingualFallback(item.explanation, "This expression can be made more natural or precise."),
-      bandEffect: bilingualFallback(item.bandEffect, "More accurate vocabulary can improve Lexical Resource.")
-    })).filter((item) => item.original || item.better) : [];
-  }
-  if (moduleName === "sentenceCorrections") {
-    result.sentences = Array.isArray(result.sentences) ? result.sentences.slice(0, 14).map((item, index) => ({
+
+  if (moduleName === "sentenceUpgrade") {
+    result.sentenceCards = asArray(result.sentenceCards || result.sentences).slice(0, 12).map((item, index) => ({
       index: Number(item.index) || index + 1,
       original: String(item.original || "").trim(),
-      originalZh: String(item.originalZh || item.originalTranslationZh || item.originalChinese || "").trim(),
+      originalZh: String(item.originalZh || item.originalTranslationZh || "").trim(),
+      hasClearError: item.hasClearError === false ? false : true,
+      issueTags: asArray(item.issueTags || item.errorTags || item.problemTags).slice(0, 8),
       minimalCorrection: String(item.minimalCorrection || item.corrected || "").trim(),
-      minimalCorrectionZh: String(item.minimalCorrectionZh || item.correctedZh || item.minimalCorrectionTranslationZh || "").trim(),
-      improvedVersion: String(item.improvedVersion || "").trim(),
-      improvedVersionZh: String(item.improvedVersionZh || item.improvedTranslationZh || item.improvedVersionTranslationZh || item.improvedChinese || item.improvedMeaningZh || "").trim(),
-      improvementStatus: String(item.improvementStatus || item.upgradeStatus || "").trim(),
-      explanation: bilingualFallback(item.explanation, "This sentence has been corrected or improved."),
-      errorTags: Array.isArray(item.errorTags) ? item.errorTags.slice(0, 5).map((tag) => bilingualFallback(tag, "Writing issue")) : []
-    })).filter((item) => item.original || item.minimalCorrection || item.improvedVersion) : [];
+      minimalCorrectionZh: String(item.minimalCorrectionZh || item.correctedZh || "").trim(),
+      upgradedVersion: String(item.upgradedVersion || item.improvedVersion || "").trim(),
+      upgradedVersionZh: String(item.upgradedVersionZh || item.improvedVersionZh || "").trim(),
+      whyBetter: bilingualFallback(item.whyBetter || item.explanation || item.reason, "This version is clearer and more suitable for the task."),
+      learnThis: bilingualFallback(item.learnThis || item.studyPoint || item.usefulPattern, "Learn the sentence pattern and reuse it only when it matches your meaning."),
+      usefulPattern: bilingualFallback(item.usefulPattern || item.pattern, "A useful pattern from this sentence.")
+    })).filter((item) => item.original || item.minimalCorrection || item.upgradedVersion);
   }
-  if (moduleName === "betterExpressions") {
-    result.items = Array.isArray(result.items) ? result.items.slice(0, 10).map((item) => {
-      const target = item.targetVersion || item.nextStepVersion || item.learnerVersion || item.improvedVersion || item.basicVersion || item.band6Version || item.highBandVersion;
-      return {
-        original: String(item.original || "").trim(),
-        originalZh: String(item.originalZh || item.originalTranslationZh || item.originalChinese || item.originalMeaningZh || "").trim(),
-        problem: bilingualFallback(item.problem, "The original expression is weak or unnatural."),
-        targetVersion: bilingualFallback(target, "A clearer expression at the learner's next level"),
-        reason: bilingualFallback(item.reason || item.whyThisHelps || item.bandReason, "This version is clearer and still realistic for the learner's current level."),
-        usageNote: bilingualFallback(item.usageNote, "Use this version when it accurately matches your meaning.")
-      };
-    }).filter((item) => item.original || item.targetVersion.en) : [];
+
+  if (moduleName === "grammarWordFormSpelling") {
+    result.grammarErrors = asArray(result.grammarErrors).map((item, index) => ({
+      index: Number(item.index) || index + 1,
+      errorType: String(item.errorType || item.type || "grammar").trim(),
+      original: String(item.original || item.evidence || "").trim(),
+      originalZh: String(item.originalZh || item.evidenceZh || "").trim(),
+      corrected: String(item.corrected || item.correction || "").trim(),
+      correctedZh: String(item.correctedZh || item.correctionZh || "").trim(),
+      explanation: bilingualFallback(item.explanation || item.reason, "This is a grammar issue."),
+      checkMethod: bilingualFallback(item.checkMethod || item.nextCheck, "Check this grammar pattern when you revise.")
+    })).filter((item) => item.original || item.corrected);
+    result.wordFormErrors = asArray(result.wordFormErrors || result.wordFormAndPartOfSpeechErrors).map((item, index) => ({
+      index: Number(item.index) || index + 1,
+      errorType: String(item.errorType || item.type || "word_form").trim(),
+      original: String(item.original || item.wrong || "").trim(),
+      originalZh: String(item.originalZh || "").trim(),
+      corrected: String(item.corrected || item.correct || item.correction || "").trim(),
+      correctedZh: String(item.correctedZh || item.correctZh || "").trim(),
+      explanation: bilingualFallback(item.explanation || item.reason, "This is a word form or part-of-speech issue."),
+      checkMethod: bilingualFallback(item.checkMethod || item.nextCheck, "Check whether the sentence needs a noun, verb, adjective, or adverb.")
+    })).filter((item) => item.original || item.corrected);
+    result.spellingQuickFix = asArray(result.spellingQuickFix || result.spellingErrors).map((item) => ({
+      wrong: String(item.wrong || item.original || "").trim(),
+      correct: String(item.correct || item.correction || "").trim(),
+      note: String(item.note || item.reason || "spelling").trim()
+    })).filter((item) => item.wrong || item.correct);
+    result.learningFocus = asArray(result.learningFocus || result.grammarLearningFocus).slice(0, 8);
   }
+
+  if (moduleName === "structureCohesionTask") {
+    result.cohesion = result.cohesion && typeof result.cohesion === "object" ? result.cohesion : { issues: asArray(result.cohesionIssues) };
+    result.development = result.development && typeof result.development === "object" ? result.development : { issues: asArray(result.developmentIssues) };
+    result.taskResponse = result.taskResponse && typeof result.taskResponse === "object" ? result.taskResponse : {};
+  }
+
+  if (moduleName === "expressionBank") {
+    result.usefulExpressions = asArray(result.usefulExpressions || result.expressions).slice(0, 8);
+    result.avoidForNow = asArray(result.avoidForNow || result.avoid).slice(0, 5);
+  }
+
   return result;
 }
 
-
-function collectMissingTranslations(moduleName, result) {
-  const jobs = [];
-  const add = (path, text) => {
-    const clean = String(text || "").trim();
-    if (clean) jobs.push({ id: String(jobs.length), path, text: clean });
-  };
-  if (moduleName === "sentenceCorrections") {
-    (result.sentences || []).forEach((item, index) => {
-      if (item.original && !item.originalZh) add(`sentences.${index}.originalZh`, item.original);
-      if (item.minimalCorrection && !item.minimalCorrectionZh) add(`sentences.${index}.minimalCorrectionZh`, item.minimalCorrection);
-      if (item.improvedVersion && !item.improvedVersionZh) add(`sentences.${index}.improvedVersionZh`, item.improvedVersion);
-    });
-  }
-  if (moduleName === "grammar") {
-    (result.items || []).forEach((item, index) => {
-      if (item.originalSentence && !item.originalSentenceZh) add(`items.${index}.originalSentenceZh`, item.originalSentence);
-      if (item.correctedSentence && !item.correctedSentenceZh) add(`items.${index}.correctedSentenceZh`, item.correctedSentence);
-    });
-  }
-  if (moduleName === "spellingWordForm") {
-    (result.items || []).forEach((item, index) => {
-      if (item.original && !item.originalZh) add(`items.${index}.originalZh`, item.original);
-      if (item.correction && !item.correctionZh) add(`items.${index}.correctionZh`, item.correction);
-    });
-  }
-  if (moduleName === "vocabularyCollocation") {
-    (result.items || []).forEach((item, index) => {
-      if (item.original && !item.originalZh) add(`items.${index}.originalZh`, item.original);
-      if (item.better && !item.betterZh) add(`items.${index}.betterZh`, item.better);
-    });
-  }
-  if (moduleName === "betterExpressions") {
-    (result.items || []).forEach((item, index) => {
-      if (item.original && !item.originalZh) add(`items.${index}.originalZh`, item.original);
-    });
-  }
-  return jobs.slice(0, 40);
-}
-
-function setByPath(target, path, value) {
-  const parts = String(path || "").split(".");
-  let cur = target;
-  for (let i = 0; i < parts.length - 1; i += 1) {
-    const key = parts[i];
-    const next = parts[i + 1];
-    if (/^\d+$/.test(next)) cur = cur[key] || (cur[key] = []);
-    else cur = cur[key] || (cur[key] = {});
-  }
-  cur[parts[parts.length - 1]] = String(value || "").trim();
-}
-
-async function backfillMissingTranslations(moduleName, result) {
-  const jobs = collectMissingTranslations(moduleName, result);
-  if (!jobs.length) return result;
-  const prompt = [
-    "Translate the following IELTS writing feedback text into natural, learner-friendly Chinese.",
-    "Return strict JSON only, with this shape: {\"translations\":[{\"id\":\"0\",\"zh\":\"中文\"}]}",
-    "Do not explain. Do not add markdown. Preserve the meaning of each English sentence or phrase.",
-    JSON.stringify({ items: jobs.map(({ id, text }) => ({ id, text })) }, null, 2)
-  ].join("\n\n");
-  try {
-    const raw = await callDeepSeek(prompt);
-    const translations = Array.isArray(raw.translations) ? raw.translations : [];
-    const byId = new Map(translations.map((item) => [String(item.id), String(item.zh || item.chinese || "").trim()]));
-    jobs.forEach((job) => {
-      const zh = byId.get(job.id);
-      if (zh) setByPath(result, job.path, zh);
-    });
-  } catch (error) {
-    result.translationBackfillWarning = `Some Chinese translations were missing and automatic backfill failed: ${String(error.message || error)}`;
-  }
-  return result;
-}
-
-function extractFrozenOverallBand(frozenScore) {
-  if (!frozenScore || typeof frozenScore !== "object") return null;
+function extractFrozenOverallBand(body) {
+  const frozenScore = body.frozenScore;
+  const currentResult = body.currentResult;
   const candidates = [
-    frozenScore.overall,
-    frozenScore.overallBand,
-    frozenScore.finalBand,
-    frozenScore.score,
-    frozenScore.band
+    frozenScore && frozenScore.overall,
+    frozenScore && frozenScore.overallBand,
+    frozenScore && frozenScore.finalBand,
+    frozenScore && frozenScore.score,
+    frozenScore && frozenScore.band,
+    currentResult && currentResult.overallBand,
+    currentResult && currentResult.scoreCalculation && currentResult.scoreCalculation.finalBand
   ];
   for (const value of candidates) {
     const n = Number(value);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n)) return Math.round(n * 2) / 2;
   }
   return null;
 }
 
 function targetUpgradeGuidance(body) {
-  const band = extractFrozenOverallBand(body.frozenScore);
+  const band = extractFrozenOverallBand(body);
   if (!Number.isFinite(band)) {
     return "No frozen score was provided. Use a modest learner-friendly next-step upgrade, not a high-band rewrite.";
   }
@@ -379,66 +431,122 @@ function targetUpgradeGuidance(body) {
 
 function buildPrompt(body, moduleName) {
   const moduleConfig = MODULES[moduleName];
-  const schema = JSON.stringify(moduleConfig.schema, null, 2);
-  const frozenScore = body.frozenScore ? JSON.stringify(body.frozenScore, null, 2) : "null";
   const task = normalizeRequestedTask(body);
+  const frozenScore = JSON.stringify({ frozenScore: body.frozenScore || null, currentResult: body.currentResult ? { overallBand: body.currentResult.overallBand || body.currentResult.scoreCalculation?.finalBand, criteria: body.currentResult.finalCriteria || body.currentResult.criteria } : null }, null, 2);
+  const taskSpecificContext = task === "Task 1"
+    ? JSON.stringify({ task1BulletPoints: body.task1BulletPoints || [], letterStyle: body.letterStyle || "", requirement: "Evaluate purpose, tone, bullet coverage, paragraphing, cohesion, and ending based on this exact GT letter prompt." }, null, 2)
+    : JSON.stringify({ task2QuestionProfile: body.task2QuestionProfile || null, requirement: "Evaluate whether all parts of the exact Task 2 prompt are answered, including position, development, examples, and conclusion." }, null, 2);
+
   return [
     "You are an IELTS General Training writing feedback tutor.",
     "The IELTS score has already been frozen by another system. You are NOT scoring the essay.",
-    "The selected task is locked by the request. Do not reclassify Task 1 and Task 2. If the writing style looks like another task, mention it only as a task-fit issue inside the locked task.",
+    "The selected task is locked by the request. Do not reclassify Task 1 and Task 2.",
+    "Highest priority rule: every piece of feedback must be based on the exact prompt and the student's exact essay. Do not use generic local-template-like advice.",
     "Do not change, estimate, mention, recommend, or recalculate any IELTS score or criterion band.",
-    "Your only job is bilingual learning feedback for the requested module.",
+    "Your only job is targeted learning feedback for the requested module.",
+    "Return VALID JSON only. No markdown, no code fences, no comments, no trailing prose.",
+    "Use only double quotes for JSON strings. Escape any internal double quote as \\\".",
+    "Do not put unescaped newlines inside JSON strings.",
+    "Do not leave dangling commas. Do not omit commas between array elements.",
+    "Keep each string concise. Long explanations increase JSON failure risk.",
     "Every user-facing English explanation, label, advice, example explanation, rule, sentence, correction, improved expression, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or the matching *Zh field.",
-    "Return valid JSON only. No markdown, no code fences, no comments.",
     `Requested module: ${moduleName} - ${moduleConfig.title}`,
     `Item limit: ${moduleConfig.maxItems}`,
-    `Module instructions: ${moduleConfig.instructions}`,
-    "Use simple, practical Chinese explanations for IELTS learners.",
-    "If there are no issues in a category, return an empty items array and a bilingual summary explaining that no major issue was found.",
-    "Preserve the student's original meaning. Do not write a full model essay unless the module explicitly asks for sentence-level improved versions.",
+    `Module instructions: ${moduleConfig.instructions.join(" ")}`,
     "Output JSON must have this shape exactly:",
     JSON.stringify({ ok: true, feedbackVersion: FEEDBACK_VERSION, module: moduleName, moduleTitle: moduleConfig.title, moduleResult: moduleConfig.schema }, null, 2),
     "Context:",
     `Task: ${task}`,
     `Question type: ${body.questionType || body.type || ""}`,
-    `Prompt: ${clipText(body.prompt || body.questionPrompt || body.promptText || "", 1800)}`,
-    `Frozen score for reference only, do not change it: ${frozenScore}`,
+    `Title: ${body.title || ""}`,
+    `Prompt: ${clipText(body.prompt || body.questionPrompt || body.promptText || "", 2200)}`,
+    `Task-specific requirements extracted by local code, for context only: ${taskSpecificContext}`,
+    `Frozen score for level reference only: ${frozenScore}`,
     `Target upgrade level for feedback: ${targetUpgradeGuidance(body)}`,
     `Essay word count: ${countWords(body.essay)}`,
     "Student essay:",
-    clipText(body.essay || "", 6500)
+    clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" ? 6200 : 7000)
   ].join("\n\n");
 }
 
-async function callDeepSeek(prompt) {
+async function postDeepSeek(messages, options = {}) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(DEEPSEEK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        temperature: 0.2,
-        max_tokens: 3000,
-        messages: [
-          { role: "system", content: "Return strict JSON only. Every English explanation must have a paired Chinese zh explanation. Never assign or change IELTS scores." },
-          { role: "user", content: prompt }
-        ]
+        temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0.15,
+        max_tokens: Number.isFinite(Number(options.maxTokens)) ? Number(options.maxTokens) : 5000,
+        messages
       }),
       signal: controller.signal
     });
+
     const text = await response.text();
     let payload = {};
     try { payload = text ? JSON.parse(text) : {}; } catch { payload = { raw: text }; }
     if (!response.ok) throw new Error(`DeepSeek HTTP ${response.status}: ${payload.error?.message || text.slice(0, 300)}`);
-    const content = payload.choices?.[0]?.message?.content || "";
-    return extractJson(content);
+    return payload.choices?.[0]?.message?.content || "";
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function repairJsonWithDeepSeek(badText, errorMessage) {
+  const repairPrompt = [
+    "Repair the following malformed JSON into valid JSON.",
+    "Return ONLY valid JSON. No markdown. No explanation.",
+    "Preserve the original content as much as possible.",
+    "If an array element is broken, either fix it or remove only that broken element.",
+    `Original JSON parse error: ${errorMessage}`,
+    "Malformed JSON:",
+    clipText(badText, 12000)
+  ].join("\n\n");
+
+  const content = await postDeepSeek([
+    { role: "system", content: "You repair malformed JSON. Return valid JSON only." },
+    { role: "user", content: repairPrompt }
+  ], { temperature: 0, maxTokens: 6000 });
+
+  return extractJson(content);
+}
+
+async function callDeepSeek(prompt, moduleName) {
+  const content = await postDeepSeek([
+    { role: "system", content: "Return strict valid JSON only. Every item must be specific to the prompt and student's essay. Never assign or change IELTS scores." },
+    { role: "user", content: prompt }
+  ], { temperature: 0.15, maxTokens: MODULES[moduleName]?.maxTokens || 5000 });
+
+  try {
+    return extractJson(content);
+  } catch (error) {
+    try {
+      return await repairJsonWithDeepSeek(content, error.message);
+    } catch (repairError) {
+      repairError.originalParseError = error.message;
+      throw repairError;
+    }
+  }
+}
+
+function fallbackModuleResult(moduleName, error) {
+  return {
+    summary: {
+      en: "This module could not be generated reliably because the AI response was not valid JSON.",
+      zh: "这个模块暂时没有可靠生成，因为 AI 返回格式异常。请点击重新生成。"
+    },
+    priorityAdvice: {
+      en: "Retry this module. The frozen score is unchanged.",
+      zh: "请重新生成该模块。已经冻结的分数不会被修改。"
+    },
+    generationWarning: String(error && (error.message || error) || "unknown error").slice(0, 500)
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -448,34 +556,59 @@ module.exports = async function handler(req, res) {
     res.end();
     return;
   }
+
   if (req.method !== "POST") {
     return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   }
+
   try {
     const body = normalizeIncomingBody(await readJsonBody(req));
     const moduleName = String(body.module || "").trim();
     const essay = String(body.essay || "").trim();
+
     if (!MODULES[moduleName]) {
       return sendJson(req, res, 400, { ok: false, error: "Unsupported feedback module", supportedModules: Object.keys(MODULES) });
     }
+
     if (!essay) return sendJson(req, res, 400, { ok: false, error: "Essay is required" });
-    const raw = await callDeepSeek(buildPrompt(body, moduleName));
-    const moduleResult = await backfillMissingTranslations(moduleName, normaliseResult(moduleName, raw.moduleResult || raw.result || raw));
-    return sendJson(req, res, 200, {
-      ok: true,
-      feedbackVersion: FEEDBACK_VERSION,
-      module: moduleName,
-      moduleTitle: MODULES[moduleName].title,
-      task: normalizeRequestedTask(body),
-      taskLocked: true,
-      system: "writing-feedback",
-      wordCount: countWords(essay),
-      scoreUnaffected: true,
-      feedbackOnly: true,
-      systemFeedback: { status: "generated", scoreChanged: false, message: "学习反馈已生成；没有调用评分流程，也没有改变已冻结分数。" },
-      moduleResult
-    });
+
+    try {
+      const raw = await callDeepSeek(buildPrompt(body, moduleName), moduleName);
+      const moduleResult = normalizeModuleResult(moduleName, raw.moduleResult || raw.result || raw);
+      return sendJson(req, res, 200, {
+        ok: true,
+        feedbackVersion: FEEDBACK_VERSION,
+        module: moduleName,
+        moduleTitle: MODULES[moduleName].title,
+        task: normalizeRequestedTask(body),
+        taskLocked: true,
+        system: "learning-feedback-v2",
+        wordCount: countWords(essay),
+        scoreUnaffected: true,
+        feedbackOnly: true,
+        systemFeedback: { status: "generated", scoreChanged: false, message: "学习反馈已生成；没有调用评分流程，也没有改变已冻结分数。" },
+        moduleResult
+      });
+    } catch (error) {
+      return sendJson(req, res, 200, {
+        ok: true,
+        feedbackVersion: FEEDBACK_VERSION,
+        module: moduleName,
+        moduleTitle: MODULES[moduleName].title,
+        task: normalizeRequestedTask(body),
+        taskLocked: true,
+        system: "learning-feedback-v2",
+        wordCount: countWords(essay),
+        scoreUnaffected: true,
+        feedbackOnly: true,
+        fallbackUsed: true,
+        systemFeedback: { status: "fallback", scoreChanged: false, message: "该学习反馈模块返回格式异常，系统已保留重新生成入口。分数没有改变。" },
+        moduleResult: fallbackModuleResult(moduleName, error)
+      });
+    }
   } catch (error) {
     return sendJson(req, res, 500, { ok: false, error: "Feedback generation failed", detail: String(error.message || error) });
   }
 };
+
+module.exports.config = { maxDuration: 300 };

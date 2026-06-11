@@ -1906,3 +1906,44 @@ select#typeFilter{
 /* Feedback v1.4: next-step expression emphasis */
 .learning-expression-level h5{color:var(--teal);}
 .learning-value.is-upgraded .learning-value-zh{border-left-color:var(--blue);}
+
+
+/* Learning Feedback v2 modular tutor panel */
+.learning-feedback-v2-panel .learning-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.learning-feedback-v2-panel .learning-tab {
+  min-width: 150px;
+}
+.learning-feedback-v2-panel .learning-subsection {
+  margin-top: 12px;
+}
+.learning-feedback-v2-panel .learning-spelling-grid {
+  display: grid;
+  gap: 8px;
+}
+.learning-feedback-v2-panel .learning-spelling-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr) minmax(160px, 1.4fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.72);
+}
+.learning-feedback-v2-panel .learning-spelling-row .is-corrected,
+.learning-feedback-v2-panel .is-corrected .learning-value-en,
+.learning-feedback-v2-panel .is-upgraded .learning-value-en {
+  color: var(--teal, #0f766e);
+}
+.learning-feedback-v2-panel .learning-spelling-row small {
+  color: var(--muted, #5b7082);
+}
+@media (max-width: 760px) {
+  .learning-feedback-v2-panel .learning-spelling-row {
+    grid-template-columns: 1fr;
+  }
+}
