@@ -284,7 +284,8 @@
   function selectPrompt(id) {
     selected = prompts.find((p) => p.id === id);
     if (!selected) return;
-    location.hash = id;
+    localStorage.setItem(SPA_PROMPT_KEY, id);
+    navigateToView("writing");
     els.emptyState?.classList.add("hidden");
     els.practiceView?.classList.remove("hidden");
     if (els.metaTags) els.metaTags.innerHTML = tag(selected.book, "book") + tag(selected.test, "book") + tag(selected.task, selected.task === "Task 1" ? "task1" : "task2") + tag(selected.type, "type");
@@ -2467,6 +2468,7 @@
       ${renderScoreCalibration(result)}`;
     if (els.gradingResults) els.gradingResults.innerHTML = html;
     bindScoreUiInteractions();
+    syncSpaOutputPanels();
   }
   function renderRevisionResult(result = {}) {
     if (!els.gradingResults) return;
@@ -2774,6 +2776,7 @@
         showStatus("已应用到作文输入区");
       }
     });
+    syncSpaOutputPanels();
   }
 
 
@@ -3244,6 +3247,7 @@
       }));
       if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
       renderRevisionResult(revision);
+      navigateToView("model-revision");
       setGradingStatus("作文生成完成，正在用生产评分路由验证生成版本。", "loading");
       verifyGeneratedEssaysClientSide(revision).catch((verifyError) => {
         setGradingStatus(essayGeneratorErrorMessage(verifyError), "error");
@@ -3286,12 +3290,14 @@
       latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
       renderScoreResult(resultWithRequiredFeedback);
+      navigateToView("score-report");
       setGradingStatus("批改完成：核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
       const failedStep = latestScoringProgress?.currentStep ? Math.max(0, latestScoringProgress.currentStep - 1) : 1;
       updateScoringProgress(failedStep, "error", failedStep >= 5 ? "详细反馈生成失败。" : "评分流程执行失败。", error);
       setGradingStatus(friendlyScoringError(error), "error");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
+      navigateToView("score-report");
     } finally {
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }
       if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = false;
@@ -3573,7 +3579,116 @@
     resetMockExam(true);
   }
 
+
+  const SPA_VIEW_KEY = "ielts-gt-writing-hub:lastView";
+  const SPA_PROMPT_KEY = "ielts-gt-writing-hub:lastPromptId";
+  const SPA_VIEWS = ["dashboard", "practice", "writing", "score-report", "model-revision", "feedback", "collection"];
+
+  function normalizeSpaView(hash = window.location.hash) {
+    const raw = String(hash || "").replace(/^#\/?/, "").split("?")[0].trim();
+    if (!raw) return "dashboard";
+    if (SPA_VIEWS.includes(raw)) return raw;
+    return "dashboard";
+  }
+
+  function setActiveView(viewName = "dashboard") {
+    const view = SPA_VIEWS.includes(viewName) ? viewName : "dashboard";
+    document.querySelectorAll("[data-app-view]").forEach((node) => {
+      const active = node.dataset.appView === view;
+      node.classList.toggle("is-active", active);
+      node.setAttribute("aria-hidden", active ? "false" : "true");
+    });
+    document.querySelectorAll("[data-view-target]").forEach((node) => {
+      const active = node.dataset.viewTarget === view;
+      node.classList.toggle("active", active);
+      if (node.tagName === "A") node.setAttribute("aria-current", active ? "page" : "false");
+    });
+    localStorage.setItem(SPA_VIEW_KEY, view);
+    syncSpaOutputPanels();
+  }
+
+  function navigateToView(viewName = "dashboard", options = {}) {
+    const view = SPA_VIEWS.includes(viewName) ? viewName : "dashboard";
+    const targetHash = `#/${view}`;
+    if (window.location.hash !== targetHash) {
+      if (options.replace) window.history.replaceState(null, "", targetHash);
+      else window.location.hash = targetHash;
+    }
+    setActiveView(view);
+  }
+
+  function syncSpaOutputPanels() {
+    const scoreEmpty = $("scoreReportEmpty");
+    if (scoreEmpty && els.gradingResults) {
+      const hasScoreContent = Boolean(els.gradingResults.innerHTML.trim());
+      scoreEmpty.classList.toggle("hidden", hasScoreContent);
+    }
+
+    const modelMount = $("modelRevisionResults");
+    const modelEmpty = $("modelRevisionEmpty");
+    if (modelMount && els.gradingResults) {
+      const generatedBlocks = [...els.gradingResults.querySelectorAll(".generated-writing-learning-block")];
+      if (generatedBlocks.length) {
+        modelMount.innerHTML = "";
+        generatedBlocks.forEach((block) => modelMount.appendChild(block));
+        modelEmpty?.classList.add("hidden");
+      } else if (!modelMount.innerHTML.trim()) {
+        modelEmpty?.classList.remove("hidden");
+      }
+    }
+
+    const feedbackMount = $("learningFeedbackMount");
+    const feedbackEmpty = $("feedbackEmpty");
+    const learningPanel = document.getElementById("learningFeedbackPanel");
+    if (feedbackMount && learningPanel && learningPanel.parentElement !== feedbackMount) {
+      feedbackMount.innerHTML = "";
+      feedbackMount.appendChild(learningPanel);
+      feedbackEmpty?.classList.add("hidden");
+    } else if (feedbackMount && !feedbackMount.innerHTML.trim()) {
+      feedbackEmpty?.classList.remove("hidden");
+    }
+  }
+
+  function bindSpaNavigation() {
+    document.querySelectorAll("[data-view-target]").forEach((node) => {
+      if (node.dataset.spaNavBound === "true") return;
+      node.dataset.spaNavBound = "true";
+      node.addEventListener("click", (event) => {
+        const view = node.dataset.viewTarget;
+        if (!view) return;
+        event.preventDefault();
+        navigateToView(view);
+      });
+    });
+
+    window.addEventListener("hashchange", () => {
+      const rawHash = window.location.hash.replace("#", "");
+      if (rawHash && prompts.some((p) => p.id === rawHash)) {
+        selectPrompt(rawHash);
+        return;
+      }
+      setActiveView(normalizeSpaView(window.location.hash));
+    });
+
+    document.addEventListener("click", (event) => {
+      const inFeedbackMount = event.target.closest("#learningFeedbackMount");
+      if (!inFeedbackMount) return;
+      const learningTab = event.target.closest("[data-learning-feedback-tab]");
+      if (learningTab) {
+        activeLearningFeedbackModule = learningTab.dataset.learningFeedbackTab;
+        renderLearningFeedbackPanel();
+        syncSpaOutputPanels();
+      }
+      const learningGenerate = event.target.closest("[data-learning-feedback-generate]");
+      if (learningGenerate) {
+        generateLearningFeedback(learningGenerate.dataset.learningFeedbackGenerate);
+      }
+    });
+  }
+
+
   function bind() {
+    bindSpaNavigation();
     [els.bookFilter, els.testFilter, els.typeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
     els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); renderList(); });
     els.searchInput?.addEventListener("input", renderList);
@@ -3616,7 +3731,18 @@
     if (els.themeBtn) els.themeBtn.textContent = theme === "dark" ? "浅色模式" : "深色模式";
     renderList();
     const fromHash = location.hash.replace("#", "");
-    if (fromHash && prompts.some((p) => p.id === fromHash)) selectPrompt(fromHash);
+    const viewFromHash = normalizeSpaView(location.hash);
+    if (fromHash && prompts.some((p) => p.id === fromHash)) {
+      selectPrompt(fromHash);
+    } else {
+      const lastPromptId = localStorage.getItem(SPA_PROMPT_KEY) || "";
+      const shouldRestorePrompt = ["writing", "score-report", "model-revision", "feedback", "collection"].includes(viewFromHash);
+      if (shouldRestorePrompt && lastPromptId && prompts.some((p) => p.id === lastPromptId)) {
+        selectPrompt(lastPromptId);
+        if (location.hash !== `#/${viewFromHash}`) history.replaceState(null, "", `#/${viewFromHash}`);
+      }
+      setActiveView(viewFromHash);
+    }
   }
 
   init();
