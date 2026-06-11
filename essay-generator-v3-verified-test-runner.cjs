@@ -127,7 +127,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("source-based escalation rule: if Band 5 rescue remains 4.5 after repeated attempts, rebuild from the original content source; max attempts = 6");
+  console.log("source-based escalation and downshift lock: if Band 5 rescue remains 4.5, rebuild; if it remains 6.0, simplify/lock down to Band 5 style; max attempts = 6");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {
