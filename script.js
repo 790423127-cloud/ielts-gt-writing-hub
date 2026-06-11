@@ -2345,6 +2345,7 @@
   }
   function renderRevisionResult(result = {}) {
     if (!els.gradingResults) return;
+    els.gradingResults.querySelectorAll(".generated-writing-learning-block").forEach((node) => node.remove());
 
     const taskLabel = result.task || lockedTaskForSelected();
     const toText = (value) => String(value || "").trim();
@@ -2407,6 +2408,7 @@
       near_target: "接近目标，但还不稳定",
       below_target: "低于目标，系统已尝试自动重写",
       verification_failed: "验证失败",
+      verification_running: "正在验证",
       empty_essay: "无文本可验证",
       verification_unavailable: "验证不可用"
     })[status] || "验证结果未知";
@@ -2532,6 +2534,145 @@
   }
 
 
+  function extractBandFromGeneratedVerificationResult(result = {}) {
+    const candidates = [
+      result.finalBand,
+      result.overallBand,
+      result.estimatedBand,
+      result.score,
+      result.band,
+      result.scoreCalculation && result.scoreCalculation.finalBand,
+      result.scoreCalculation && result.scoreCalculation.overallBand,
+      result.visibleScore && result.visibleScore.finalBand,
+      result.visibleScore && result.visibleScore.overallBand
+    ];
+    for (const value of candidates) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0 && n <= 9) return Math.round(n * 2) / 2;
+    }
+    return null;
+  }
+
+  function generatedVerificationStatus(verifiedBand, targetBand) {
+    const verified = Number(verifiedBand);
+    const target = Number(targetBand);
+    if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
+    if (verified >= target) return "target_met";
+    if (verified + 0.5 >= target) return "near_target";
+    return "below_target";
+  }
+
+  function generatedVerificationSummary(result = {}) {
+    const keys = ["modelAnswer", "revisionPlus05", "revisionPlus10"];
+    const counts = keys.reduce((acc, key) => {
+      const status = result[key]?.verification?.status || "unknown";
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+    return `生产评分验证完成：达到目标 ${counts.target_met || 0} 项，接近目标 ${counts.near_target || 0} 项，低于目标 ${counts.below_target || 0} 项，失败 ${counts.verification_failed || 0} 项。`;
+  }
+
+  async function verifyOneGeneratedEssayClientSide(result, key, label) {
+    const part = result[key] || {};
+    const essay = String(part.essay || "").trim();
+    const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
+    part.verification = {
+      enabled: true,
+      ok: false,
+      label,
+      router: "grade-ielts-production-router",
+      targetBand: Number.isFinite(targetBand) ? targetBand : null,
+      verifiedBand: null,
+      status: "verification_running",
+      message: "正在使用生产评分路由验证生成作文。"
+    };
+    result[key] = part;
+    result.verification = {
+      ...(result.verification || {}),
+      enabled: true,
+      router: "grade-ielts-production-router",
+      mode: "client-side-production-verification",
+      summary: "正在使用生产评分路由验证生成作文。"
+    };
+    renderRevisionResult(result);
+
+    if (!essay) {
+      part.verification = {
+        ...part.verification,
+        ok: false,
+        status: "empty_essay",
+        message: "没有可验证的生成文本。"
+      };
+      return part.verification;
+    }
+
+    try {
+      const scoreEndpoint = String(els.gradingEndpointInput?.value || DEFAULT_GRADING_ENDPOINT || "/api/grade-ielts-production-router").trim() || "/api/grade-ielts-production-router";
+      const payload = gradingPayload({
+        essay,
+        wordCount: countWords(essay),
+        mode: "score",
+        aiStage: "generated-answer-client-production-verification",
+        generationVerification: true,
+        generatedAnswerLabel: key,
+        generatedTargetBand: Number.isFinite(targetBand) ? targetBand : null,
+        currentResult: null,
+        frozenScore: null
+      });
+      const score = await postStage(scoreEndpoint, payload);
+      const verifiedBand = extractBandFromGeneratedVerificationResult(score);
+      const status = generatedVerificationStatus(verifiedBand, targetBand);
+      part.verification = {
+        ...part.verification,
+        ok: true,
+        verifiedBand,
+        status,
+        message: status === "target_met"
+          ? "生产评分验证已达到目标分。"
+          : status === "near_target"
+            ? "生产评分验证接近目标，但还不稳定。"
+            : status === "below_target"
+              ? "生产评分验证低于目标。"
+              : "生产评分验证暂不可用。",
+        criterionBands: score.finalCriteria || score.criteria || null,
+        source: score.finalSource || score.scoreSource || score.system || "production-router"
+      };
+      return part.verification;
+    } catch (error) {
+      part.verification = {
+        ...part.verification,
+        ok: false,
+        verifiedBand: null,
+        status: "verification_failed",
+        message: "生产评分验证失败；生成作文仍然可用，但目标分未验证。",
+        error: String(error.message || error).slice(0, 500)
+      };
+      return part.verification;
+    }
+  }
+
+  async function verifyGeneratedEssaysClientSide(result = {}) {
+    const keys = [
+      ["modelAnswer", "question-based model answer"],
+      ["revisionPlus05", "+0.5 revised version"],
+      ["revisionPlus10", "+1.0 revised version"]
+    ];
+    for (const [key, label] of keys) {
+      await verifyOneGeneratedEssayClientSide(result, key, label);
+      result.verification = {
+        ...(result.verification || {}),
+        enabled: true,
+        router: "grade-ielts-production-router",
+        mode: "client-side-production-verification",
+        summary: generatedVerificationSummary(result)
+      };
+      renderRevisionResult(result);
+    }
+    setGradingStatus("作文生成完成，生产评分验证完成。", "done");
+    return result;
+  }
+
+
   async function generateEssayOnly() {
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
     const endpoint = essayGeneratorEndpointFromGradingEndpoint();
@@ -2547,11 +2688,15 @@
         aiStage: "essay-generator",
         mode: "generation_only",
         currentResult: safeCurrentResultForTask(lockedTask),
-        frozenScore: frozenScoreForFeedback()
+        frozenScore: frozenScoreForFeedback(),
+        verifyGeneratedScores: false
       }));
       if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
       renderRevisionResult(revision);
-      setGradingStatus("作文生成完成。评分没有改变。", "done");
+      setGradingStatus("作文生成完成，正在用生产评分路由验证生成版本。", "loading");
+      verifyGeneratedEssaysClientSide(revision).catch((verifyError) => {
+        setGradingStatus(`作文已生成，但生产验证失败：${verifyError.message}`, "error");
+      });
     } catch (error) {
       setGradingStatus(`作文生成失败：${error.message}`, "error");
       if (els.gradingResults) els.gradingResults.insertAdjacentHTML("beforeend", `<section class="grading-section error-details"><h4>作文生成错误</h4><pre>${escapeHtml(error.stack || error.message || error)}</pre></section>`);
