@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-11-source-based-band5-rescue";
+const GENERATOR_VERSION = "essay-generator-v3-12-source-based-rescue-escalation";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -215,6 +215,40 @@ function sourceBasedRevisionRules(task) {
     );
   }
   return common.join("\\n");
+}
+
+
+function band5RescueEscalationRules(task) {
+  if (task === "Task 1") {
+    return [
+      "Escalation mode for repeated Band 4.5 verification:",
+      "The previous source-based rescue attempts still scored Band 4.5. This usually means the answer is too close to the weak original structure.",
+      "Now rebuild the letter from the student's original content source, while preserving the same scenario, request, reason, and benefit idea.",
+      "Do NOT merely polish sentences. Re-plan the answer with clear Band 5 task achievement.",
+      "Task 1 required output:",
+      "1. 150-170 words unless the prompt clearly needs less.",
+      "2. Paragraph 1: clear purpose of the letter.",
+      "3. Paragraph 2: explain the course and why hours must change.",
+      "4. Paragraph 3: state the exact requested working schedule/change.",
+      "5. Paragraph 4: explain how the employer/restaurant benefits, using the student's benefit idea.",
+      "6. Paragraph 5: polite closing.",
+      "7. Keep language simple and learnable; do not use polished Band 6/7 wording.",
+      "8. Minor learner-like simplicity is acceptable; serious errors that block meaning are not."
+    ].join("\\n");
+  }
+  return [
+    "Escalation mode for repeated Band 4.5 verification:",
+    "The previous source-based rescue attempts still scored Band 4.5. This usually means the answer is too close to the weak original structure.",
+    "Now rebuild the essay from the student's original ideas, while preserving the same position and main idea direction.",
+    "Do NOT merely polish sentences. Re-plan the answer with clear Band 5 task response.",
+    "Task 2 required output:",
+    "1. Introduction: answer the question directly.",
+    "2. Body 1: first main idea with simple explanation.",
+    "3. Body 2: second main idea or simple example.",
+    "4. Conclusion: short clear answer.",
+    "5. Keep language simple and learnable; do not use polished Band 6/7 wording.",
+    "6. Minor learner-like simplicity is acceptable; serious errors that block meaning are not."
+  ].join("\\n");
 }
 
 
@@ -716,6 +750,9 @@ function buildRewritePrompt(body, normalized, key, verification) {
   const isBand5Rescue = rescue.belowBand5 && key === "revisionPlus05";
   const band5Checklist = band5ChecklistForTask(task);
   const sourceRules = sourceBasedRevisionRules(task);
+  const rewriteAttemptCount = Number(body.rewriteAttemptCount || body.attemptNumber || 0);
+  const escalationMode = isBand5Rescue && verificationStatus === "below_target" && rewriteAttemptCount >= 3;
+  const escalationRules = band5RescueEscalationRules(task);
   const targetMaxBand = targetBand == null ? null : clampBand(targetBand + 0.5);
   const rewriteDirection = verificationStatus === "target_exceeded"
     ? "DOWNGRADE: The generated answer scored too high for this learning slot. Make it simpler and closer to the target, while staying at or above the target."
@@ -735,12 +772,16 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Production-router verified band: ${verifiedBand == null ? "unavailable" : bandLabel(verifiedBand)}`,
     `Target window: ${targetBand == null ? "unavailable" : `${bandLabel(targetBand)} to ${bandLabel(targetMaxBand)}`}`,
     `Production-router verification status: ${verificationStatus}`,
+    `Rewrite attempt number: ${rewriteAttemptCount}`,
+    `Escalation mode active: ${escalationMode ? "YES" : "NO"}`,
     `Rewrite direction: ${rewriteDirection}`,
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
     "The learning slot has a target window, not just a minimum. For a Band 5 rescue slot, a production verification of Band 6.0 is too high and should be rewritten down toward Band 5.0-5.5.",
     isBand5Rescue ? "This is the Band 5 rescue revision. It must satisfy the checklist below. It must be a source-based rescue rewrite: stronger than the original, but still clearly derived from the student\'s original facts, request, reason, and benefit idea." : "",
     isBand5Rescue ? "Realistic Band 5 rule: the answer should be clear and complete but still simple. It can contain basic vocabulary, simple grammar, some repetition, and minor awkwardness. Do not intentionally add mistakes." : "",
     isBand5Rescue ? band5Checklist : "",
+    escalationMode ? escalationRules : "",
+    escalationMode ? "Because repeated attempts stayed below target, source-based now means content-source-based, not sentence-structure-based. Preserve the student\'s facts and ideas, but rebuild weak paragraphing and sentence choices enough to pass Band 5." : "",
     "If status is below_target, improve task coverage, specificity, paragraphing, cohesion, and basic grammar. For Task 1, make the request concrete and the benefit specific. For Task 2, make the position and body paragraph development clearer.",
     "If status is target_exceeded, keep the task fully covered but simplify vocabulary, shorten sentence structures, reduce sophisticated collocations, remove over-polished phrasing, and aim for a clear realistic Band 5.0-5.5 learner version.",
     "Output JSON shape:",
@@ -752,7 +793,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
     "Generated answer that needs revision:",
     clipText(part.essay || "", 5000),
     "Rewrite quality requirement:",
-    isBand5Rescue ? "Return a complete realistic Band 5 rescue revision, not a sentence-by-sentence micro-edit. It must be clearly stronger than the original, but still simple and not over-polished." : "Return a complete revised generated answer for the target window."
+    escalationMode ? "Return a complete rebuilt source-based Band 5 rescue answer. It must preserve the student\'s content and scenario, but it does NOT need to preserve weak original sentence structure." : (isBand5Rescue ? "Return a complete realistic Band 5 rescue revision, not a sentence-by-sentence micro-edit. It must be clearly stronger than the original, but still simple and not over-polished." : "Return a complete revised generated answer for the target window.")
   ].join("\n\n");
 }
 
@@ -883,6 +924,8 @@ async function generateClientSideRewritePart(body) {
     rewriteGeneratedPart: key,
     targetBand,
     previousVerifiedBand: verifiedBand,
+    rewriteAttemptCount: Number(body.rewriteAttemptCount || body.attemptNumber || 0),
+    escalationMode: Boolean(Number(body.rewriteAttemptCount || body.attemptNumber || 0) >= 3 && key === "revisionPlus05" && verification.status === "below_target"),
     rewrittenPart: normalized[key],
     [key]: normalized[key],
     systemFeedback: {
