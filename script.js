@@ -2377,6 +2377,11 @@
       usefulSentences: []
     };
 
+    const isBand5Rescue = Number.isFinite(Number(result.currentBand)) && Number(result.currentBand) < 5;
+    const plus05Title = isBand5Rescue ? "② Band 5 保底修改版 / Band 5 rescue revision" : "② 基于原文修改版 / +0.5 band revision";
+    const plus05WhyTitle = isBand5Rescue ? "为什么这是 Band 5 保底版" : "为什么大约高 0.5 分";
+    const plus10Title = isBand5Rescue ? "③ Band 5.5 提升版 / Band 5.5 stronger revision" : "③ 基于原文修改版 / +1.0 band revision";
+
     const plus10 = result.revisionPlus10 || {
       targetBand: result.targetBandPlus10,
       essay: "",
@@ -2405,6 +2410,7 @@
 
     const verificationStatusText = (status) => ({
       target_met: "已达到目标",
+      target_exceeded: "超过目标，可能偏难",
       near_target: "未达到严格目标",
       below_target: "未达到目标，不能算 +0.5 / +1.0 成功",
       verification_failed: "验证失败",
@@ -2453,7 +2459,7 @@
 
     const plus05Explanation = `
       ${verificationBlock(plus05)}
-      ${toText(plus05.whyItIsPlus05) ? `<div class="score-flow-note"><strong>为什么大约高 0.5 分：</strong>${escapeHtml(plus05.whyItIsPlus05)}</div>` : ""}
+      ${toText(plus05.whyItIsPlus05) ? `<div class="score-flow-note"><strong>${escapeHtml(plus05WhyTitle)}：</strong>${escapeHtml(plus05.whyItIsPlus05)}</div>` : ""}
       ${listBlock("主要改了什么", plus05.whatChanged)}
       ${listBlock("你下次最应该先学什么", plus05.studyPoints)}
       ${listBlock("可模仿句子", plus05.usefulSentences)}
@@ -2485,10 +2491,10 @@
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成至少高 0.5–1.0 分、能学得会的版本，并用生产评分路由严格验证：低于目标不能算成功。</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版以 Band 5.0 保底为目标；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证：低于目标不能算成功，超过目标 0.5 以上会提示可能偏难。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
-          ${card("② 基于原文修改版 / +0.5 band revision", verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", "复制 +0.5 修改版")}${applyButton("plus05", "应用 +0.5 到作文输入区")}`)}
-          ${card("③ 基于原文修改版 / +1.0 band revision", verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", "复制 +1.0 修改版")}${applyButton("plus10", "应用 +1.0 到作文输入区")}`)}
+          ${card(plus05Title, verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", isBand5Rescue ? "复制 Band 5 保底版" : "复制 +0.5 修改版")}${applyButton("plus05", isBand5Rescue ? "应用 Band 5 保底版到作文输入区" : "应用 +0.5 到作文输入区")}`)}
+          ${card(plus10Title, verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", isBand5Rescue ? "复制 Band 5.5 提升版" : "复制 +1.0 修改版")}${applyButton("plus10", isBand5Rescue ? "应用 Band 5.5 提升版到作文输入区" : "应用 +1.0 到作文输入区")}`)}
           ${guideHtml}
         </div>
       </details>
@@ -2557,8 +2563,9 @@
     const verified = Number(verifiedBand);
     const target = Number(targetBand);
     if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
-    if (verified >= target) return "target_met";
-    return "below_target";
+    if (verified < target) return "below_target";
+    if (verified > target + 0.5) return "target_exceeded";
+    return "target_met";
   }
 
   function generatedVerificationSummary(result = {}) {
@@ -2569,7 +2576,7 @@
       return acc;
     }, {});
     const rewrites = keys.reduce((sum, key) => sum + (Number(result[key]?.rewriteAttemptCount) || 0), 0);
-    return `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写 ${rewrites} 次。`;
+    return `严格生产评分验证完成：理想达标 ${counts.target_met || 0} 项，超过目标偏难 ${counts.target_exceeded || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写 ${rewrites} 次。`;
   }
 
   function generatedPartChineseName(key) {
@@ -2618,9 +2625,11 @@
       status,
       message: status === "target_met"
         ? "生产评分验证已达到严格目标分。"
-        : status === "below_target"
-          ? `生产评分验证低于严格目标；${generatedPartChineseName(key)}将自动重写。`
-          : "生产评分验证暂不可用。",
+        : status === "target_exceeded"
+          ? "生产评分验证已超过目标 0.5 以上，达标但可能偏难。"
+          : status === "below_target"
+            ? `生产评分验证低于严格目标；${generatedPartChineseName(key)}将自动重写。`
+            : "生产评分验证暂不可用。",
       criterionBands: score.finalCriteria || score.criteria || null,
       source: score.finalSource || score.scoreSource || score.system || "production-router"
     };

@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-4-strict-minimum-target-regeneration";
+const GENERATOR_VERSION = "essay-generator-v3-5-band5-rescue-window";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -194,6 +194,28 @@ function generationTargetsForContext(context = {}) {
 }
 
 
+function band5RescueContext(context = {}) {
+  const currentBand = extractFrozenBandFromContext(context);
+  const belowBand5 = Number.isFinite(currentBand) && currentBand < 5.0;
+  return {
+    currentBand,
+    belowBand5,
+    rescueRevisionTitle: belowBand5 ? "Band 5 rescue revision" : "Revised version: +0.5 band",
+    plus10Title: belowBand5 ? "Band 5.5 stronger revision" : "Revised version: +1.0 band",
+    rescueRule: belowBand5
+      ? "Because the student's current level is below Band 5.0, the first revised version is NOT a light edit. It is a Band 5 rescue rewrite. It must be based on the student's ideas, but it may reorganise paragraphs, clarify the request, add necessary concrete details, improve task coverage, replace low-band expressions, and simplify grammar so that production-router verification can reach at least Band 5.0."
+      : "Use the normal strict upgrade rule: the +0.5 revision must verify at current band +0.5, and the +1.0 revision must verify at current band +1.0."
+  };
+}
+
+function targetWindowForGeneratedPart(key, targetBand) {
+  const target = clampBand(targetBand);
+  if (target == null) return { minBand: null, idealMaxBand: null };
+  if (key === "revisionPlus05") return { minBand: target, idealMaxBand: clampBand(target + 0.5) };
+  return { minBand: target, idealMaxBand: clampBand(target + 0.5) };
+}
+
+
 function extractJson(text) {
   const raw = String(text || "").trim();
   if (!raw) throw new Error("Empty AI response");
@@ -212,6 +234,7 @@ function buildGenerationPrompt(body = {}) {
   const task = normalizeRequestedTask(body);
   const context = safeFrozenContext(body);
   const targets = generationTargetsForContext(context);
+  const rescue = band5RescueContext(context);
   const prompt = body.questionPrompt || body.prompt || body.promptText || "";
   const essay = String(body.essay || "").trim();
 
@@ -241,8 +264,8 @@ function buildGenerationPrompt(body = {}) {
     "Use frozen score/current result only as a language-level reference for generating learnable writing.",
     "Generate exactly THREE learning outputs:",
     "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
-    "2) revisionPlus05: a revised version based on the student's essay, aiming for about +0.5 band improvement.",
-    "3) revisionPlus10: a revised version based on the student's essay, aiming for about +1.0 band improvement.",
+    "2) revisionPlus05: if the student is below Band 5.0, this must be a Band 5 rescue revision, not a conservative light edit. If the student is Band 5.0 or above, it is a strict +0.5 band revision.",
+    "3) revisionPlus10: if the student is below Band 5.0, this must target Band 5.5. If the student is Band 5.0 or above, it is a strict +1.0 band revision.",
     "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
     "Strict target rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 revision must be at least Band 5.0 and the +1.0 revision must be at least Band 5.5. If the current band is 5.0, the +0.5 revision must be at least Band 5.5.",
     "Explain WHY each version is higher and WHAT the student should learn from it.",
@@ -272,16 +295,16 @@ function buildGenerationPrompt(body = {}) {
         usefulSentences: ["..."]
       },
       revisionPlus05: {
-        title: "Revised version: +0.5 band",
+        title: rescue.rescueRevisionTitle,
         targetBand: targets.targetBandPlus05,
         essay: essay ? "..." : "",
-        whyItIsPlus05: "...",
+        whyItIsPlus05: rescue.belowBand5 ? "Explain why this is a Band 5 rescue version and what was changed to make it reach Band 5." : "Explain why this is about +0.5 band higher.",
         whatChanged: ["..."],
         studyPoints: ["..."],
         usefulSentences: ["..."]
       },
       revisionPlus10: {
-        title: "Revised version: +1.0 band",
+        title: rescue.plus10Title,
         targetBand: targets.targetBandPlus10,
         essay: essay ? "..." : "",
         whyItIsPlus10: "...",
@@ -310,6 +333,7 @@ function buildGenerationPrompt(body = {}) {
     `Minimum target rule: ${targets.minimumTargetRule || "Generated answers must verify at or above their target band."}`,
     `Target +0.5 revised band: ${targets.targetBandPlus05 == null ? "learner-realistic +0.5" : bandLabel(targets.targetBandPlus05)}`,
     `Target +1.0 revised band: ${targets.targetBandPlus10 == null ? "learner-realistic +1.0" : bandLabel(targets.targetBandPlus10)}`,
+    `Band 5 rescue rule: ${rescue.rescueRule}`,
     `Frozen score/current result for level reference only: ${JSON.stringify({
       frozenScore: context.frozenScore,
       currentResult: context.currentResult ? {
@@ -594,7 +618,7 @@ function generatedPartSpec(key) {
       label: "+1.0 revised version based on the student's essay",
       objectName: "revisionPlus10",
       jsonShape: {
-        title: "Revised version: +1.0 band",
+        title: rescue.plus10Title,
         targetBand: 0,
         essay: "...",
         whyItIsPlus10: "...",
@@ -627,6 +651,8 @@ function buildRewritePrompt(body, normalized, key, verification) {
   const targetBand = clampBand(part.targetBand || verification.targetBand);
   const verifiedBand = clampBand(verification.verifiedBand);
   const criterionBands = verification.criterionBands || {};
+  const rescue = band5RescueContext(safeFrozenContext(body));
+  const isBand5Rescue = rescue.belowBand5 && key === "revisionPlus05";
 
   return [
     "You are revising one generated IELTS General Training practice answer after production-router verification.",

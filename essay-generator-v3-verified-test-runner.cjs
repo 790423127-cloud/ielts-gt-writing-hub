@@ -125,7 +125,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("strict minimum target rule: below Band 5 starts from target 5.0; below target triggers regeneration");
+  console.log("strict Band 5 rescue rule: below Band 5 starts from Band 5.0 rescue; target_exceeded means useful but may be harder");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {
