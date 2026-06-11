@@ -3537,7 +3537,7 @@
   // This is display-only. It does not change scoring, generation, or feedback logic.
   function applyProductionUiV2Classes() {
     if (!document || !document.body) return;
-    document.body.classList.add("production-ui-v2", "ui-rebuild-v4");
+    document.body.classList.add("production-ui-v2");
 
     const add = (selector, className) => {
       document.querySelectorAll(selector).forEach((node) => node.classList.add(className));
