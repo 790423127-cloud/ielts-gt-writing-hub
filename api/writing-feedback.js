@@ -13,15 +13,22 @@ const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBA
 const MODULES = {
   overview: {
     title: "全文问题总览 / Overall Learning Overview",
-    maxTokens: 4200,
+    maxTokens: 5200,
     maxItems: "topProblems 3-5, errorSummary 4-8, nextPracticeFocus 3-6",
     schema: {
       summary: { en: "", zh: "" },
       topProblems: [
-        { problem: { en: "", zh: "" }, evidence: "", evidenceZh: "", whyMatters: { en: "", zh: "" }, nextAction: { en: "", zh: "" } }
+        {
+          problem: { en: "", zh: "" },
+          evidence: "exact sentence, phrase, paragraph, or task requirement from the essay/prompt",
+          evidenceZh: "",
+          whyMatters: { en: "", zh: "" },
+          nextPractice: { en: "", zh: "" },
+          priority: "high | medium | low"
+        }
       ],
       errorSummary: [
-        { type: "grammar | word_form | spelling | cohesion | task_response | vocabulary", count: 0, note: { en: "", zh: "" } }
+        { type: "grammar | word_form | spelling | cohesion | task_response | vocabulary | tone", count: 0, note: { en: "", zh: "" } }
       ],
       nextPracticeFocus: [
         { focus: { en: "", zh: "" }, reason: { en: "", zh: "" }, action: { en: "", zh: "" } }
@@ -29,25 +36,26 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "Give a concise overview based on the exact prompt and the student's essay.",
-      "Do not list every error here. Summarise the most important learning priorities.",
-      "Every problem must cite or paraphrase specific evidence from the student's essay or a requirement from the prompt.",
-      "Do not use generic comments such as 'improve grammar' unless you say which grammar pattern and where it appears."
+      "Give the learner a Chinese-first overview with English support.",
+      "Identify the 3-5 problems that most affect the frozen score. Do not add generic comments.",
+      "Every topProblems item must include evidence copied or closely quoted from the student's essay, or a specific missing task requirement from the prompt.",
+      "For every problem, explain why it affects IELTS Writing scores and what the learner should practise next.",
+      "Use the frozen score and criterion feedback only as context. Do not change or recalculate any score."
     ]
   },
   sentenceUpgrade: {
-    title: "逐句修改与升级 / Sentence Correction and Upgrade",
-    maxTokens: 6500,
-    maxItems: "8-10 sentenceCards maximum",
+    title: "逐句修改与升级 / Sentence-by-Sentence Correction and Upgrade",
+    maxTokens: 9000,
+    maxItems: "analyse the essay sentence by sentence when possible; concise cards",
     schema: {
       summary: { en: "", zh: "" },
       sentenceCards: [
         {
           index: 1,
-          original: "",
+          original: "exact original sentence from the student's essay",
           originalZh: "",
           hasClearError: true,
-          issueTags: ["spelling | grammar | word_form | collocation | tone | cohesion | no_clear_error"],
+          issueTags: ["spelling | grammar | word_form | collocation | tone | cohesion | task_fit | expression_upgrade | no_clear_error"],
           minimalCorrection: "",
           minimalCorrectionZh: "",
           upgradedVersion: "",
@@ -60,18 +68,17 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "Use real sentences from the student's essay.",
-      "For each selected sentence, provide the original, a minimal correction, and a next-step upgraded version that is only about 0.5 to 1.0 IELTS band above the student's frozen level.",
-      "If the sentence has no clear error, do not invent one. Set hasClearError false and provide a more natural, more formal, or more specific upgraded version.",
-      "For high-level essays with few basic errors, choose 4-6 sentences for high-band refinement rather than forcing corrections.",
-      "Explain why the upgraded version is better with reference to grammar, tone, specificity, cohesion, task fit, or natural collocation.",
-      "Keep sentenceCards concise. Do not rewrite the full essay."
+      "Analyse the student's essay sentence by sentence as far as practical. Use the original order.",
+      "Each card must include: original sentence, issue labels, minimal correction, a 0.5-1.0 band higher upgraded version, why it is better, and a useful pattern the learner can imitate.",
+      "If a sentence has no obvious error, set hasClearError false and provide an expression upgrade. Do not invent an error.",
+      "The upgraded version must match the frozen score level plus only 0.5-1.0 band. Do not produce Band 8/9 style language for a low or mid-band learner.",
+      "Do not rewrite the whole essay as one block. Keep each card concise and evidence-based."
     ]
   },
   grammarWordFormSpelling: {
     title: "语法、词形与拼写 / Grammar, Word Form and Spelling",
-    maxTokens: 7000,
-    maxItems: "all clear grammar errors if possible; concise items only",
+    maxTokens: 8500,
+    maxItems: "list all clear grammar/word-form/spelling errors when possible",
     schema: {
       summary: { en: "", zh: "" },
       grammarErrors: [
@@ -89,20 +96,22 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "This module must identify all clear grammar errors in the essay as far as possible, not only the top few.",
-      "If repeated errors show a pattern, group them under the same learningFocus rule, but still list each clear occurrence in grammarErrors or wordFormErrors.",
-      "Separate spelling from grammar. SpellingQuickFix must be short: wrong word, correct word, brief note only.",
-      "Do not give long spelling lessons. Detailed explanation should be reserved for grammarErrors, wordFormErrors, and sentenceUpgrade.",
-      "Every error must come from the student's actual essay. Do not invent errors.",
-      "If no clear grammar error exists, say so and focus on word-form/spelling or high-level accuracy checks."
+      "Find all clear grammar, word-form, and spelling errors in the student's essay as far as possible.",
+      "Every item must use text from the student's essay. Do not invent errors.",
+      "For grammar and word-form errors, give the wrong original text, corrected text, short Chinese explanation, and a practical checking method.",
+      "Keep spellingQuickFix brief: wrong -> correct + short reason. Do not repeat long sentence-upgrade explanations here.",
+      "If the essay is strong and has few errors, say so and focus on accuracy checks rather than forcing fake errors."
     ]
   },
   structureCohesionTask: {
     title: "结构、衔接与任务回应 / Structure, Cohesion and Task Response",
-    maxTokens: 5500,
-    maxItems: "specific structure advice only",
+    maxTokens: 6500,
+    maxItems: "Task 1 or Task 2 specific task-response checks only",
     schema: {
       summary: { en: "", zh: "" },
+      taskChecklist: [
+        { requirement: "", status: "covered | partly_covered | missing", evidence: "", advice: { en: "", zh: "" } }
+      ],
       opening: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
       paragraphOrganisation: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
       cohesion: {
@@ -127,17 +136,16 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "Teach how to open, organise paragraphs, link ideas, develop content, and end the answer.",
-      "Every suggestion must explain why it is better.",
-      "For Task 1, analyse the letter purpose, relationship/tone, bullet coverage, paragraph order, linking, and closing.",
-      "For Task 2, analyse introduction, position, body paragraph logic, examples, linking, and conclusion.",
-      "Do not repeat grammar/spelling lists here. Mention language errors only if they affect structure, cohesion, task response, or tone.",
-      "Do not use generic templates. Use the exact prompt requirements and the student's original content."
+      "First decide from the locked task only: Task 1 letter or Task 2 essay. Do not mix rules.",
+      "For Task 1, check purpose, recipient relationship/tone, all bullet points, specificity of request/explanation/suggestion, paragraphing, closing, and natural letter format.",
+      "For Task 2, check whether the essay directly answers the prompt, has a clear position when required, has topic sentences, enough explanation, relevant examples, and an effective conclusion.",
+      "Every taskChecklist/coverage item must mention a prompt requirement and evidence from the essay or state what is missing.",
+      "Do not repeat grammar/spelling lists unless the language problem affects task response, cohesion, tone, or clarity."
     ]
   },
   expressionBank: {
     title: "表达积累 / Expression Bank",
-    maxTokens: 4200,
+    maxTokens: 4800,
     maxItems: "3-6 usefulExpressions, 0-4 avoidForNow",
     schema: {
       summary: { en: "", zh: "" },
@@ -150,11 +158,11 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "Give only expressions that are relevant to the current prompt and the student's essay.",
-      "Do not provide random universal IELTS phrases.",
-      "The expressions must be learnable for the student's frozen level and normally only 0.5-1.0 band above it.",
-      "Prefer expressions the student could use in the next similar GT Writing task.",
-      "Include Chinese meaning and usage situation."
+      "Give 3-6 expressions that grow naturally from this exact essay and prompt.",
+      "Expressions must fit the frozen score level and be usable by this learner in a similar IELTS GT task.",
+      "Do not give random universal IELTS phrases or expressions far above the student's current level.",
+      "For each expression, explain Chinese meaning, usage situation, pattern, source connection, and why it is useful.",
+      "Do not translate or rewrite the whole essay."
     ]
   }
 };
@@ -309,16 +317,17 @@ function extractJson(text) {
 }
 
 function bilingualFallback(value, fallbackEn = "No specific issue was found.") {
+  const fallbackZh = "中文解释暂缺：请重新生成该模块。";
   if (value && typeof value === "object") {
     return {
       en: String(value.en || value.english || value.text || fallbackEn).trim(),
-      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || "中文解释暂缺：请重新生成该模块。").trim()
+      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || fallbackZh).trim()
     };
   }
   if (typeof value === "string" && value.trim()) {
-    return { en: value.trim(), zh: "中文解释暂缺：请重新生成该模块。" };
+    return { en: value.trim(), zh: fallbackZh };
   }
-  return { en: fallbackEn, zh: "中文解释暂缺：请重新生成该模块。" };
+  return { en: fallbackEn, zh: fallbackZh };
 }
 
 function asArray(value) {
@@ -432,24 +441,37 @@ function targetUpgradeGuidance(body) {
 function buildPrompt(body, moduleName) {
   const moduleConfig = MODULES[moduleName];
   const task = normalizeRequestedTask(body);
-  const frozenScore = JSON.stringify({ frozenScore: body.frozenScore || null, currentResult: body.currentResult ? { overallBand: body.currentResult.overallBand || body.currentResult.scoreCalculation?.finalBand, criteria: body.currentResult.finalCriteria || body.currentResult.criteria } : null }, null, 2);
+  const frozenScore = JSON.stringify({
+    frozenScore: body.frozenScore || null,
+    currentResult: body.currentResult ? {
+      overallBand: body.currentResult.overallBand || body.currentResult.scoreCalculation?.finalBand,
+      criteria: body.currentResult.finalCriteria || body.currentResult.criteria,
+      criterionCalibration: body.currentResult.criterionCalibration || null,
+      scoreCalibration: body.currentResult.scoreCalibration || null,
+      taskRequirementAnalysis: body.currentResult.taskRequirementAnalysis || null
+    } : null
+  }, null, 2);
   const taskSpecificContext = task === "Task 1"
-    ? JSON.stringify({ task1BulletPoints: body.task1BulletPoints || [], letterStyle: body.letterStyle || "", requirement: "Evaluate purpose, tone, bullet coverage, paragraphing, cohesion, and ending based on this exact GT letter prompt." }, null, 2)
-    : JSON.stringify({ task2QuestionProfile: body.task2QuestionProfile || null, requirement: "Evaluate whether all parts of the exact Task 2 prompt are answered, including position, development, examples, and conclusion." }, null, 2);
+    ? JSON.stringify({ task1BulletPoints: body.task1BulletPoints || [], letterStyle: body.letterStyle || "", requirement: "Use Task 1 GT letter rules only: purpose, tone, recipient relationship, all bullet points, specificity, paragraphing, closing." }, null, 2)
+    : JSON.stringify({ task2QuestionProfile: body.task2QuestionProfile || null, requirement: "Use Task 2 essay rules only: direct answer, position if required, topic sentences, development, examples, conclusion." }, null, 2);
 
   return [
     "You are an IELTS General Training writing feedback tutor.",
     "The IELTS score has already been frozen by another system. You are NOT scoring the essay.",
+    "Do not change, estimate, mention a new score, recommend a different score, or recalculate any IELTS score or criterion band.",
+    "Use the frozen overall band, four criterion bands, criterion feedback, exact prompt, locked task type, and student essay only to explain and teach.",
     "The selected task is locked by the request. Do not reclassify Task 1 and Task 2.",
-    "Highest priority rule: every piece of feedback must be based on the exact prompt and the student's exact essay. Do not use generic local-template-like advice.",
-    "Do not change, estimate, mention, recommend, or recalculate any IELTS score or criterion band.",
+    "For Task 1, never apply Task 2 position/argument rules. For Task 2, never apply Task 1 bullet-point letter rules.",
+    "Highest priority rule: every piece of feedback must cite or paraphrase a specific sentence, phrase, paragraph, or task requirement. No generic local-template-like advice.",
+    "Feedback language: bilingual, with Chinese explanation as the main learning support and concise English examples/corrections.",
+    "Do not translate the entire essay. Do not translate or rewrite the whole answer. Only explain targeted feedback items.",
     "Your only job is targeted learning feedback for the requested module.",
     "Return VALID JSON only. No markdown, no code fences, no comments, no trailing prose.",
     "Use only double quotes for JSON strings. Escape any internal double quote as \\\".",
     "Do not put unescaped newlines inside JSON strings.",
     "Do not leave dangling commas. Do not omit commas between array elements.",
     "Keep each string concise. Long explanations increase JSON failure risk.",
-    "Every user-facing English explanation, label, advice, example explanation, rule, sentence, correction, improved expression, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or the matching *Zh field.",
+    "Every user-facing English explanation, advice, rule, correction, improved expression, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or matching *Zh field.",
     `Requested module: ${moduleName} - ${moduleConfig.title}`,
     `Item limit: ${moduleConfig.maxItems}`,
     `Module instructions: ${moduleConfig.instructions.join(" ")}`,
@@ -459,13 +481,13 @@ function buildPrompt(body, moduleName) {
     `Task: ${task}`,
     `Question type: ${body.questionType || body.type || ""}`,
     `Title: ${body.title || ""}`,
-    `Prompt: ${clipText(body.prompt || body.questionPrompt || body.promptText || "", 2200)}`,
+    `Prompt: ${clipText(body.prompt || body.questionPrompt || body.promptText || "", 2600)}`,
     `Task-specific requirements extracted by local code, for context only: ${taskSpecificContext}`,
-    `Frozen score for level reference only: ${frozenScore}`,
+    `Frozen score and frozen criterion feedback for level reference only: ${frozenScore}`,
     `Target upgrade level for feedback: ${targetUpgradeGuidance(body)}`,
     `Essay word count: ${countWords(body.essay)}`,
     "Student essay:",
-    clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" ? 6200 : 7000)
+    clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" ? 9000 : 7600)
   ].join("\n\n");
 }
 
@@ -539,11 +561,11 @@ function fallbackModuleResult(moduleName, error) {
   return {
     summary: {
       en: "This module could not be generated reliably because the AI response was not valid JSON.",
-      zh: "这个模块暂时没有可靠生成，因为 AI 返回格式异常。请点击重新生成。"
+      zh: "该模块返回格式异常，请点击重新生成。已冻结分数不会改变。"
     },
     priorityAdvice: {
       en: "Retry this module. The frozen score is unchanged.",
-      zh: "请重新生成该模块。已经冻结的分数不会被修改。"
+      zh: "请重新生成该模块。这里不会使用本地模板假装生成真实反馈，也不会改动分数。"
     },
     generationWarning: String(error && (error.message || error) || "unknown error").slice(0, 500)
   };
