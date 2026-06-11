@@ -3,29 +3,71 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IELTS General Training Writing Practice Hub</title>
-  <link rel="stylesheet" href="style.css?v=20260611-ui-polish">
+  <title>IELTS GT Writing Hub</title>
+  <link rel="stylesheet" href="style.css?v=20260612-full-redesign">
   <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
 </head>
-<body>
-  <header class="topbar">
-    <div>
-      <p class="kicker">练习 + 复习 + 积累</p>
-      <h1>IELTS General Training Writing Practice Hub</h1>
-      <p class="lead">Cambridge IELTS 15-20 General Training Writing 结构练习库。题目已根据用户提供的学习材料整理录入。</p>
+<body class="full-product-shell">
+  <header class="product-header">
+    <div class="product-header__inner">
+      <a class="brand-lockup" href="#" aria-label="IELTS GT Writing Hub">
+        <span class="brand-mark">GT</span>
+        <span>
+          <strong>IELTS GT Writing Hub</strong>
+          <small>General Training Writing Practice & Feedback</small>
+        </span>
+      </a>
+
+      <nav class="header-status" aria-label="平台状态">
+        <span class="status-pill status-pill--score">Exam scoring</span>
+        <span class="status-pill status-pill--learn">Model & Revision</span>
+        <span class="status-pill status-pill--feedback">Learning feedback</span>
+        <button id="themeBtn" class="secondary theme-toggle" type="button">深色模式</button>
+      </nav>
     </div>
-    <button id="themeBtn" class="secondary" type="button">深色模式</button>
   </header>
 
-  <main class="shell">
-    <section class="stats" aria-label="统计信息">
-      <div class="stat"><strong id="booksStat">6</strong><span>Books</span></div>
-      <div class="stat"><strong id="testsStat">24</strong><span>Tests</span></div>
-      <div class="stat"><strong id="task1Stat">24</strong><span>Task 1 prompts</span></div>
-      <div class="stat"><strong id="task2Stat">24</strong><span>Task 2 prompts</span></div>
+  <main class="app-shell">
+    <section class="hero-section" aria-labelledby="heroTitle">
+      <div class="hero-content">
+        <p class="kicker">IELTS General Training · Writing Platform</p>
+        <h1 id="heroTitle">从真题练习到评分反馈，一站完成 GT 写作训练</h1>
+        <p class="lead">按 Cambridge IELTS General Training 题库组织练习，支持考试评分、作文生成、逐项反馈、句型积累和学习路线。界面专为日常训练和上线使用重新整理。</p>
+        <div class="hero-actions">
+          <a class="primary hero-cta" href="#workspaceStart">开始练习</a>
+          <span class="hero-note">评分与反馈分离：考试评分不会被作文生成结果改变。</span>
+        </div>
+      </div>
+
+      <div class="hero-panel" aria-label="平台能力">
+        <div class="hero-panel__row">
+          <span>Score</span>
+          <strong>AI IELTS band report</strong>
+        </div>
+        <div class="hero-panel__row">
+          <span>Revise</span>
+          <strong>Source-based model & revision</strong>
+        </div>
+        <div class="hero-panel__row">
+          <span>Learn</span>
+          <strong>Teacher-style feedback route</strong>
+        </div>
+      </div>
     </section>
 
-    <section class="filters" aria-label="筛选区">
+    <section class="stats metrics-strip" aria-label="统计信息">
+      <div class="stat metric-card"><strong id="booksStat">6</strong><span>Books</span></div>
+      <div class="stat metric-card"><strong id="testsStat">24</strong><span>Tests</span></div>
+      <div class="stat metric-card"><strong id="task1Stat">24</strong><span>Task 1 prompts</span></div>
+      <div class="stat metric-card"><strong id="task2Stat">24</strong><span>Task 2 prompts</span></div>
+    </section>
+
+    <section class="filters command-center" aria-label="作文选择筛选区">
+      <div class="command-center__title">
+        <p class="kicker">Prompt Library</p>
+        <h2>作文选择区</h2>
+        <p>用 Book、Test、Task 和题型快速定位练习题。</p>
+      </div>
       <label class="wide">
         <span>搜索关键词</span>
         <input id="searchInput" type="search" placeholder="搜索 book、test、题型、标题或题目关键词">
@@ -36,64 +78,61 @@
       <label><span>题型</span><select id="typeFilter"></select></label>
     </section>
 
-    <div class="layout">
-      <section class="panel list-panel">
-        <div class="panel-head">
+    <div id="workspaceStart" class="layout workspace-grid">
+      <aside class="panel list-panel library-panel" aria-label="练习题列表">
+        <div class="panel-head library-head">
           <div>
             <p class="kicker">Practice Library</p>
             <h2>练习入口</h2>
+            <p class="panel-subtitle">选择题目后，右侧会打开完整写作工作台。</p>
           </div>
-          <span id="countLabel" class="muted"></span>
+          <span id="countLabel" class="muted count-chip"></span>
         </div>
         <div id="promptList" class="prompt-list"></div>
-      </section>
+      </aside>
 
-      <section class="panel practice-panel">
-        <div id="emptyState" class="empty">
+      <section class="panel practice-panel editor-panel" aria-label="写作工作台">
+        <div id="emptyState" class="empty empty-state-card">
+          <span class="empty-icon">✍️</span>
           <h2>选择一道题开始练习</h2>
-          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。当前题库已根据用户提供材料整理。</p>
+          <p>左侧按 Cambridge IELTS 15-20、Test 1-4、Task 1/Task 2 组织。选择题目后，这里会显示题目、写作区、评分报告、作文生成和详细反馈。</p>
         </div>
 
-        <article id="practiceView" class="hidden">
-          <div class="practice-top">
-            <div id="metaTags" class="tags"></div>
+        <article id="practiceView" class="hidden practice-workbench">
+          <div class="practice-top workbench-toolbar">
+            <div>
+              <p class="kicker">Current Prompt</p>
+              <div id="metaTags" class="tags"></div>
+            </div>
             <button id="backBtn" class="secondary" type="button">返回列表</button>
           </div>
 
-          <section class="question-card">
+          <section class="question-card prompt-detail-card">
             <p id="sourceStatus" class="kicker"></p>
             <h2 id="practiceTitle"></h2>
             <p id="practicePrompt" class="prompt-text"></p>
           </section>
 
-          <section id="infoGrid" class="info-grid"></section>
+          <section id="infoGrid" class="info-grid prompt-info-grid"></section>
 
-          <section class="card">
+          <section id="quickReference" class="card helper-dock quick-reference-card">
             <div class="card-head">
-              <div><p class="kicker">Timer</p><h3>写作计时器</h3></div>
-              <strong id="timerDisplay" class="timer">20:00</strong>
-            </div>
-            <div class="actions">
-              <button id="timerBtn" class="primary" type="button">开始</button>
-              <button id="resetTimerBtn" class="secondary" type="button">重置</button>
-            </div>
-          </section>
-
-          <section id="quickReference" class="card helper-dock">
-            <div class="card-head">
-              <div><p class="kicker">Quick Reference</p><h3>写作辅助折叠栏</h3></div>
+              <div>
+                <p class="kicker">Quick Reference</p>
+                <h3>写作辅助折叠栏</h3>
+              </div>
               <span class="muted">写作时随时展开查看</span>
             </div>
             <div class="accordion-stack">
-              <details class="accordion">
+              <details class="accordion ui-accordion">
                 <summary>写作结构提示</summary>
                 <div class="accordion-body"><ol id="structureList"></ol></div>
               </details>
-              <details class="accordion">
+              <details class="accordion ui-accordion">
                 <summary>Band 5 / Band 6+ 提示</summary>
                 <div id="bandTips" class="accordion-body"></div>
               </details>
-              <details class="accordion">
+              <details class="accordion ui-accordion">
                 <summary id="phraseTitle">常用句型提示</summary>
                 <div class="accordion-body">
                   <p id="phraseKicker" class="mini-kicker">Useful Phrases</p>
@@ -103,47 +142,94 @@
             </div>
           </section>
 
-          <section class="card">
-            <div class="card-head"><div><p class="kicker">Plan</p><h3>写作前思路整理区</h3></div></div>
-            <div id="planArea" class="plan-grid"></div>
+          <section class="workspace-columns">
+            <section class="card section-card planning-card">
+              <div class="card-head">
+                <div>
+                  <p class="kicker">Plan</p>
+                  <h3>写作前思路整理区</h3>
+                </div>
+              </div>
+              <div id="planArea" class="plan-grid"></div>
+            </section>
+
+            <section class="card section-card notes-card">
+              <div class="card-head">
+                <div>
+                  <p class="kicker">Collection</p>
+                  <h3>常用表达收藏区</h3>
+                </div>
+              </div>
+              <textarea id="favoriteInput" class="notes" placeholder="点击句型可收藏，也可以手动记录高频表达。"></textarea>
+            </section>
           </section>
 
-          <section class="card">
+          <section class="card section-card essay-card">
             <div class="card-head">
-              <div><p class="kicker">My Essay</p><h3>我的作文输入区</h3></div>
+              <div>
+                <p class="kicker">My Essay</p>
+                <h3>我的作文输入区</h3>
+              </div>
               <div class="wordbox"><strong id="wordCount">0</strong><span id="wordTarget">/ 150 words</span></div>
             </div>
+
+            <section class="card timer-card writing-timer-card">
+              <div class="card-head">
+                <div>
+                  <p class="kicker">Timer</p>
+                  <h3>写作计时器</h3>
+                </div>
+                <strong id="timerDisplay" class="timer">20:00</strong>
+              </div>
+              <div class="actions">
+                <button id="timerBtn" class="primary" type="button">开始</button>
+                <button id="resetTimerBtn" class="secondary" type="button">重置</button>
+              </div>
+            </section>
+
             <textarea id="essayInput" class="essay" placeholder="在这里输入你的作文..." spellcheck="true"></textarea>
-            <div class="actions">
+            <div class="actions essay-actions">
               <button id="copyBtn" class="primary" type="button">一键复制作文</button>
               <button id="clearBtn" class="secondary" type="button">清空重写</button>
               <span id="statusText" class="muted"></span>
             </div>
           </section>
 
-          <section id="aiGradingSection" class="card ai-card">
+          <section id="aiGradingSection" class="card ai-card grading-hub-card">
             <div class="card-head">
-              <div><p class="kicker">AI Feedback</p><h3>AI IELTS 批改打分</h3></div>
+              <div>
+                <p class="kicker">AI Feedback</p>
+                <h3>AI IELTS 批改打分</h3>
+                <p class="section-help">考试评分是当前输入框原文的分数；生成验证分只用于验证 AI 生成版本，不会改变原文评分。</p>
+              </div>
               <span id="gradingStatus" class="muted">等待批改</span>
             </div>
-            <label class="endpoint-field">
-              <span class="muted">Grading API Endpoint</span>
-              <input id="gradingEndpointInput" type="url" placeholder="https://your-domain.com/api/grade-ielts-production-router">
-            </label>
-            <label class="endpoint-field">
-              <span class="muted">批改模式</span>
-              <select id="gradingModeSelect">
-                <option value="quick">Quick Check 快速检查</option>
-                <option value="full">Full IELTS Grading 完整评分</option>
-                <option value="revision">Grade + Revision 评分 + 修改版</option>
-              </select>
-            </label>
-            <p class="muted ai-note">不要把 API key 放在前端网页中。此页面只会调用你填写的外部后端接口。</p>
-            <p class="muted ai-note">中文解释只用于帮助理解反馈，不会翻译整篇作文或整个页面。</p>
-            <div class="actions">
+
+            <div class="endpoint-grid">
+              <label class="endpoint-field">
+                <span class="muted">Grading API Endpoint</span>
+                <input id="gradingEndpointInput" type="url" placeholder="https://your-domain.com/api/grade-ielts-production-router">
+              </label>
+              <label class="endpoint-field">
+                <span class="muted">批改模式</span>
+                <select id="gradingModeSelect">
+                  <option value="quick">Quick Check 快速检查</option>
+                  <option value="full">Full IELTS Grading 完整评分</option>
+                  <option value="revision">Grade + Revision 评分 + 修改版</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="notice-grid">
+              <p class="muted ai-note">不要把 API key 放在前端网页中。此页面只会调用你填写的外部后端接口。</p>
+              <p class="muted ai-note">中文解释只用于帮助理解反馈，不会翻译整篇作文或整个页面。</p>
+            </div>
+
+            <div class="actions grading-actions">
               <button id="gradeBtn" class="primary" type="button">开始批改</button>
               <button id="restoreOriginalBtn" class="secondary" type="button">撤回到原文</button>
             </div>
+
             <div id="gradingResults" class="grading-results" aria-live="polite"></div>
             <div id="revisionCompareArea" class="revision-compare hidden">
               <div>
@@ -156,18 +242,13 @@
               </div>
             </div>
           </section>
-
-          <section class="card">
-            <div class="card-head"><div><p class="kicker">Collection</p><h3>我的常用表达收藏区</h3></div></div>
-            <textarea id="favoriteInput" class="notes" placeholder="点击下方句型可收藏，也可以手动记录你的高频表达。"></textarea>
-          </section>
         </article>
       </section>
     </div>
   </main>
 
   <script src="data.js?v=20260604-1"></script>
-  <script src="script.js?v=20260611-ui-polish"></script>
+  <script src="script.js?v=20260612-full-redesign"></script>
   <script src="phrase-compact.js?v=20260603-5"></script>
 </body>
 </html>
