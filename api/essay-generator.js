@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v2-three-step-learnable-upgrade";
+const GENERATOR_VERSION = "essay-generator-v3-verified-target-band-production-router";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -235,13 +235,13 @@ function buildGenerationPrompt(body = {}) {
 
   return [
     "You are an IELTS General Training Writing tutor.",
-    "This endpoint is generation-only. You are NOT scoring the essay and must NOT change any frozen score.",
+    "This endpoint is generation-only. You are NOT scoring the user essay and must NOT change any frozen user score.",
     "Use frozen score/current result only as a language-level reference for generating learnable writing.",
     "Generate exactly THREE learning outputs:",
     "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
     "2) revisionPlus05: a revised version based on the student's essay, aiming for about +0.5 band improvement.",
     "3) revisionPlus10: a revised version based on the student's essay, aiming for about +1.0 band improvement.",
-    "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable.",
+    "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to survive the production scoring router verification for the stated target band.",
     "Explain WHY each version is higher and WHAT the student should learn from it.",
     "Do not tell the student to memorize entire essays. Focus on structure, task coverage, useful sentences, grammar control, and paragraph development.",
     taskSpecific,
@@ -408,9 +408,9 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     revisedEssay: revisionPlus05.essay,
     systemFeedback: {
       system: "essay-generation",
-      status: "generated_three_step_learning_outputs",
+      status: "generated_three_step_learning_outputs_with_optional_production_verification",
       scoreChanged: false,
-      message: "作文生成完成；生成了题目范文、+0.5 修改版、+1.0 修改版和学习说明。分数没有改变。"
+      message: "作文生成完成；生成了题目范文、+0.5 修改版、+1.0 修改版和学习说明。生成文本可使用生产评分路由做目标分验证；用户原分数没有改变。"
     }
   };
 }
@@ -447,6 +447,289 @@ async function callDeepSeek(prompt) {
   }
 }
 
+
+function baseUrlFromRequest(req) {
+  const forwardedHost = req.headers["x-forwarded-host"] || req.headers.host;
+  const host = Array.isArray(forwardedHost) ? forwardedHost[0] : String(forwardedHost || "").trim();
+  if (!host) return "https://ielts-gt-writing-hub.vercel.app";
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : String(forwardedProto || "").trim();
+  const scheme = proto || (/localhost|127\.0\.0\.1/i.test(host) ? "http" : "https");
+  return `${scheme}://${host}`;
+}
+
+function extractBandFromScoreResult(result = {}) {
+  const candidates = [
+    result.finalBand,
+    result.overallBand,
+    result.estimatedBand,
+    result.score,
+    result.band,
+    result.scoreCalculation && result.scoreCalculation.finalBand,
+    result.scoreCalculation && result.scoreCalculation.overallBand,
+    result.visibleScore && result.visibleScore.finalBand,
+    result.visibleScore && result.visibleScore.overallBand
+  ];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0 && n <= 9) return Math.round(n * 2) / 2;
+  }
+  return null;
+}
+
+function verificationLabel(verifiedBand, targetBand) {
+  const verified = Number(verifiedBand);
+  const target = Number(targetBand);
+  if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
+  if (verified >= target) return "target_met";
+  if (verified + 0.5 >= target) return "near_target";
+  return "below_target";
+}
+
+function verificationMessage(status) {
+  if (status === "target_met") return "生产评分验证已达到目标分。";
+  if (status === "near_target") return "生产评分验证接近目标，但还不稳定。";
+  if (status === "below_target") return "生产评分验证低于目标，需要重写或降低目标。";
+  return "生产评分验证暂不可用。";
+}
+
+async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
+  const essay = String(essayText || "").trim();
+  if (!essay) {
+    return {
+      enabled: true,
+      ok: false,
+      label,
+      targetBand: clampBand(targetBand),
+      verifiedBand: null,
+      status: "empty_essay",
+      message: "没有可验证的生成文本。"
+    };
+  }
+
+  const endpoint = `${baseUrlFromRequest(req)}/api/grade-ielts-production-router`;
+  const payload = {
+    ...body,
+    ...{
+      essay,
+      wordCount: countWords(essay),
+      mode: "score",
+      aiStage: "generated-answer-production-verification",
+      generationVerification: true,
+      generatedAnswerLabel: label,
+      generatedTargetBand: clampBand(targetBand),
+      currentResult: null,
+      frozenScore: null
+    }
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    if (!response.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
+    const verifiedBand = extractBandFromScoreResult(data);
+    const status = verificationLabel(verifiedBand, targetBand);
+    return {
+      enabled: true,
+      ok: true,
+      label,
+      router: "grade-ielts-production-router",
+      targetBand: clampBand(targetBand),
+      verifiedBand,
+      status,
+      message: verificationMessage(status),
+      criterionBands: data.finalCriteria || data.criteria || null,
+      source: data.finalSource || data.scoreSource || data.system || "production-router"
+    };
+  } catch (error) {
+    return {
+      enabled: true,
+      ok: false,
+      label,
+      router: "grade-ielts-production-router",
+      targetBand: clampBand(targetBand),
+      verifiedBand: null,
+      status: "verification_failed",
+      message: "生产评分验证失败；生成作文仍然可用，但目标分未验证。",
+      error: String(error.message || error).slice(0, 500)
+    };
+  }
+}
+
+function shouldRewriteForTarget(verification = {}) {
+  const target = Number(verification.targetBand);
+  const verified = Number(verification.verifiedBand);
+  if (!verification.ok) return false;
+  if (!Number.isFinite(target) || !Number.isFinite(verified)) return false;
+  return verified < target;
+}
+
+function generatedPartSpec(key) {
+  if (key === "modelAnswer") {
+    return {
+      label: "question-based model answer",
+      objectName: "modelAnswer",
+      jsonShape: {
+        title: "Question-based model answer",
+        targetBand: 0,
+        essay: "...",
+        whyThisIsLearnable: "...",
+        whyHigherThanUserEssay: "...",
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      }
+    };
+  }
+  if (key === "revisionPlus10") {
+    return {
+      label: "+1.0 revised version based on the student's essay",
+      objectName: "revisionPlus10",
+      jsonShape: {
+        title: "Revised version: +1.0 band",
+        targetBand: 0,
+        essay: "...",
+        whyItIsPlus10: "...",
+        whatChangedFromPlus05: ["..."],
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      }
+    };
+  }
+  return {
+    label: "+0.5 revised version based on the student's essay",
+    objectName: "revisionPlus05",
+    jsonShape: {
+      title: "Revised version: +0.5 band",
+      targetBand: 0,
+      essay: "...",
+      whyItIsPlus05: "...",
+      whatChanged: ["..."],
+      studyPoints: ["..."],
+      usefulSentences: ["..."]
+    }
+  };
+}
+
+function buildRewritePrompt(body, normalized, key, verification) {
+  const task = normalizeRequestedTask(body);
+  const part = objectOnly(normalized[key]);
+  const spec = generatedPartSpec(key);
+  const prompt = body.questionPrompt || body.prompt || body.promptText || "";
+  const targetBand = clampBand(part.targetBand || verification.targetBand);
+  const verifiedBand = clampBand(verification.verifiedBand);
+  const criterionBands = verification.criterionBands || {};
+
+  return [
+    "You are revising one generated IELTS General Training practice answer after production-router verification.",
+    "This is NOT scoring the user's original essay. Do not change any frozen user score.",
+    "Your job is to rewrite ONLY the selected generated answer so that it better matches the stated target band while remaining learnable for the student.",
+    "Do not use over-advanced Band 8/9 language for a Band 5 target. Improve task coverage, specificity, paragraphing, cohesion, and safe grammar first.",
+    "Return strict JSON only. No markdown, no code fences, no comments.",
+    `Selected generated answer: ${spec.label}`,
+    `Task: ${task}`,
+    `Target band: ${targetBand == null ? "learner-realistic" : bandLabel(targetBand)}`,
+    `Production-router verified band: ${verifiedBand == null ? "unavailable" : bandLabel(verifiedBand)}`,
+    `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
+    "If the verified band is below target, improve the generated answer enough to reach the target, but do not make it unrealistic for the student's level.",
+    "Output JSON shape:",
+    JSON.stringify({ [spec.objectName]: { ...spec.jsonShape, targetBand } }, null, 2),
+    "Context prompt:",
+    clipText(prompt, 2200),
+    "Student original essay:",
+    clipText(body.essay || "", 5000),
+    "Generated answer that needs revision:",
+    clipText(part.essay || "", 5000)
+  ].join("\n\n");
+}
+
+function mergeRewrittenPart(normalized, key, rawRewrite) {
+  const spec = generatedPartSpec(key);
+  const incoming = objectOnly(rawRewrite[spec.objectName] || rawRewrite[key] || rawRewrite);
+  const current = objectOnly(normalized[key]);
+  normalized[key] = { ...current, ...incoming, targetBand: clampBand(incoming.targetBand ?? current.targetBand) };
+  return normalized;
+}
+
+async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerification) {
+  if (!shouldRewriteForTarget(firstVerification)) {
+    normalized[key].verification = firstVerification;
+    normalized[key].rewriteAttempted = false;
+    return normalized[key].verification;
+  }
+
+  try {
+    const rewritePrompt = buildRewritePrompt(body, normalized, key, firstVerification);
+    const rawRewrite = await callDeepSeek(rewritePrompt);
+    mergeRewrittenPart(normalized, key, rawRewrite);
+    const secondVerification = await scoreGeneratedEssay(req, body, normalized[key].essay, key, normalized[key].targetBand);
+    normalized[key].verification = {
+      ...secondVerification,
+      firstVerifiedBand: firstVerification.verifiedBand,
+      firstStatus: firstVerification.status,
+      rewriteAttempted: true
+    };
+    normalized[key].rewriteAttempted = true;
+    return normalized[key].verification;
+  } catch (error) {
+    normalized[key].verification = {
+      ...firstVerification,
+      rewriteAttempted: true,
+      rewriteFailed: true,
+      rewriteError: String(error.message || error).slice(0, 500),
+      message: `${firstVerification.message} 自动重写尝试失败；请手动查看目标分和验证分差距。`
+    };
+    normalized[key].rewriteAttempted = true;
+    return normalized[key].verification;
+  }
+}
+
+async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
+  const enabled = body.verifyGeneratedScores !== false;
+  if (!enabled) {
+    normalized.verification = { enabled: false, summary: "生成作文验证已关闭。" };
+    return normalized;
+  }
+
+  const keys = ["modelAnswer", "revisionPlus05", "revisionPlus10"];
+  const results = {};
+  for (const key of keys) {
+    const part = objectOnly(normalized[key]);
+    const first = await scoreGeneratedEssay(req, body, part.essay, key, part.targetBand);
+    results[key] = await maybeRewriteGeneratedPart(req, body, normalized, key, first);
+  }
+
+  const counts = keys.reduce((acc, key) => {
+    const status = results[key]?.status || "unknown";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  normalized.verification = {
+    enabled: true,
+    router: "grade-ielts-production-router",
+    targetMet: counts.target_met || 0,
+    nearTarget: counts.near_target || 0,
+    belowTarget: counts.below_target || 0,
+    verificationFailed: counts.verification_failed || 0,
+    summary: `生产评分验证完成：达到目标 ${counts.target_met || 0} 项，接近目标 ${counts.near_target || 0} 项，低于目标 ${counts.below_target || 0} 项。`,
+    items: results
+  };
+
+  normalized.systemFeedback = {
+    ...normalized.systemFeedback,
+    status: "generated_and_verified_with_production_router",
+    message: "作文生成完成，并已使用生产评分路由验证目标分。用户原分数没有改变。"
+  };
+
+  return normalized;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") {
     Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
@@ -463,7 +746,9 @@ module.exports = async function handler(req, res) {
       return sendJson(req, res, 400, { ok: false, error: "Prompt is required for essay generation" });
     }
     const raw = await callDeepSeek(buildGenerationPrompt(body));
-    return sendJson(req, res, 200, normalizeGenerationResult(raw, body));
+    const normalized = normalizeGenerationResult(raw, body);
+    const verified = await verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized);
+    return sendJson(req, res, 200, verified);
   } catch (error) {
     return sendJson(req, res, 500, { ok: false, error: "Essay generation failed", detail: String(error.message || error), system: "essay-generation" });
   }

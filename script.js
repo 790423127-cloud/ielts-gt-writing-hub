@@ -2402,6 +2402,35 @@
     const copyButton = (id, label) => `<button class="secondary" type="button" data-copy-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
     const applyButton = (id, label) => `<button class="secondary" type="button" data-apply-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
 
+    const verificationStatusText = (status) => ({
+      target_met: "已达到目标",
+      near_target: "接近目标，但还不稳定",
+      below_target: "低于目标，系统已尝试自动重写",
+      verification_failed: "验证失败",
+      empty_essay: "无文本可验证",
+      verification_unavailable: "验证不可用"
+    })[status] || "验证结果未知";
+
+    const verificationBandText = (obj, fallbackTarget) => {
+      const target = obj?.targetBand || fallbackTarget;
+      const verified = obj?.verification?.verifiedBand;
+      const targetText = Number.isFinite(Number(target)) ? `目标：Band ${formatBand(target)}` : "目标：可学习提升";
+      const verifiedText = Number.isFinite(Number(verified)) ? `生产验证：Band ${formatBand(verified)}` : "生产验证：暂无";
+      const status = obj?.verification?.status ? `状态：${verificationStatusText(obj.verification.status)}` : "";
+      return [targetText, verifiedText, status].filter(Boolean).join(" · ");
+    };
+
+    const verificationBlock = (obj) => {
+      const v = obj?.verification || {};
+      if (!v.enabled) return "";
+      const target = Number.isFinite(Number(v.targetBand || obj?.targetBand)) ? `Band ${formatBand(v.targetBand || obj?.targetBand)}` : "目标未指定";
+      const verified = Number.isFinite(Number(v.verifiedBand)) ? `Band ${formatBand(v.verifiedBand)}` : "暂无";
+      const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `；初次验证：Band ${formatBand(v.firstVerifiedBand)}` : "";
+      const rewrite = v.rewriteAttempted ? "；已尝试自动重写" : "";
+      const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
+      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${err}</div>`;
+    };
+
     const card = (title, subtitle, essayText, explanationHtml, actionsHtml = "") => `
       <details class="score-accordion generated-essay-card">
         <summary>${escapeHtml(title)} <span class="muted">${escapeHtml(subtitle)}</span></summary>
@@ -2413,6 +2442,7 @@
       </details>`;
 
     const modelExplanation = `
+      ${verificationBlock(model)}
       ${toText(model.whyThisIsLearnable) ? `<div class="score-flow-note"><strong>为什么这篇适合你学：</strong>${escapeHtml(model.whyThisIsLearnable)}</div>` : ""}
       ${toText(model.whyHigherThanUserEssay) ? `<div class="score-flow-note"><strong>为什么比你的原文更高：</strong>${escapeHtml(model.whyHigherThanUserEssay)}</div>` : ""}
       ${listBlock("这篇范文里要学习什么", model.studyPoints)}
@@ -2420,6 +2450,7 @@
     `;
 
     const plus05Explanation = `
+      ${verificationBlock(plus05)}
       ${toText(plus05.whyItIsPlus05) ? `<div class="score-flow-note"><strong>为什么大约高 0.5 分：</strong>${escapeHtml(plus05.whyItIsPlus05)}</div>` : ""}
       ${listBlock("主要改了什么", plus05.whatChanged)}
       ${listBlock("你下次最应该先学什么", plus05.studyPoints)}
@@ -2427,6 +2458,7 @@
     `;
 
     const plus10Explanation = `
+      ${verificationBlock(plus10)}
       ${toText(plus10.whyItIsPlus10) ? `<div class="score-flow-note"><strong>为什么大约高 1.0 分：</strong>${escapeHtml(plus10.whyItIsPlus10)}</div>` : ""}
       ${listBlock("比 +0.5 版本多提升在哪里", plus10.whatChangedFromPlus05 || plus10.whatChanged)}
       ${listBlock("下一阶段要学习什么", plus10.studyPoints)}
@@ -2450,10 +2482,11 @@
         <div class="score-accordion-body">
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成只高 0.5–1.0 分、能学得会的版本。</div>` : ""}
-          ${card("① 题目范文 / Question-based model answer", `目标：${bandText(model.targetBand || result.targetBandModel)}`, generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
-          ${card("② 基于原文修改版 / +0.5 band revision", `目标：${bandText(plus05.targetBand || result.targetBandPlus05)}`, generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", "复制 +0.5 修改版")}${applyButton("plus05", "应用 +0.5 到作文输入区")}`)}
-          ${card("③ 基于原文修改版 / +1.0 band revision", `目标：${bandText(plus10.targetBand || result.targetBandPlus10)}`, generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", "复制 +1.0 修改版")}${applyButton("plus10", "应用 +1.0 到作文输入区")}`)}
+          ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。系统会生成只高 0.5–1.0 分、能学得会的版本，并用生产评分路由验证目标分。</div>` : ""}
+          ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
+          ${card("② 基于原文修改版 / +0.5 band revision", verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", "复制 +0.5 修改版")}${applyButton("plus05", "应用 +0.5 到作文输入区")}`)}
+          ${card("③ 基于原文修改版 / +1.0 band revision", verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", "复制 +1.0 修改版")}${applyButton("plus10", "应用 +1.0 到作文输入区")}`)}
           ${guideHtml}
         </div>
       </details>
