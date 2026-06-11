@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IELTS GT Writing Hub | Practice, Score, Improve</title>
-  <link rel="stylesheet" href="style.css?v=20260611-premium-studio-v1">
+  <title>IELTS GT Writing Hub | Writing Studio</title>
+  <link rel="stylesheet" href="style.css?v=20260611-premium-studio-v2">
   <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
 </head>
-<body class="premium-studio-app">
+<body class="premium-studio-app premium-studio-app-v2">
   <header class="premium-header" aria-label="IELTS GT Writing Hub">
     <div class="premium-header__inner">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true">GT</div>
-        <div>
+        <div class="brand-copy">
           <p class="kicker brand-kicker">IELTS General Training</p>
-          <h1>Writing Practice Hub</h1>
-          <p class="lead">Cambridge IELTS 15–20 GT Writing studio for practice, scoring, model answers, revisions and teacher-style feedback.</p>
+          <h1>Writing Studio</h1>
+          <p class="lead">A calm, premium IELTS General Training workspace for prompt selection, timed drafting, score reports, model answers, revisions and teacher-style feedback.</p>
         </div>
       </div>
       <div class="header-actions">
@@ -29,8 +29,8 @@
     <section class="hero-dashboard" aria-label="学习平台概览">
       <div class="hero-copy">
         <p class="kicker">Writing Studio</p>
-        <h2>把每一篇作文变成可练习、可评分、可复盘的学习流程。</h2>
-        <p>先选题，再写作；评分结果、四项评分卡、作文生成和详细反馈都会在同一个工作台里完成。</p>
+        <h2>一个页面完成选题、写作、评分、复盘和积累。</h2>
+        <p>先选题，再写作；完成后立刻看到评分结果、四项表现、修改建议、范文与详细反馈。整个流程安静、清楚、像一个正式上线的学习平台。</p>
       </div>
       <section class="stats hero-stats" aria-label="统计信息">
         <div class="stat"><strong id="booksStat">6</strong><span>Books</span></div>
@@ -52,11 +52,11 @@
     </section>
 
     <div class="layout premium-layout">
-      <aside class="panel list-panel library-panel" aria-label="作文选择区">
+      <aside class="panel list-panel library-panel" aria-label="写作题库">
         <div class="panel-head library-head">
           <div>
-            <p class="kicker">Prompt Library</p>
-            <h2>作文选择区</h2>
+            <p class="kicker">Practice Library</p>
+            <h2>题目选择区</h2>
           </div>
           <span id="countLabel" class="muted"></span>
         </div>
@@ -66,8 +66,8 @@
       <section class="panel practice-panel studio-panel">
         <div id="emptyState" class="empty studio-empty">
           <p class="kicker">Ready to start</p>
-          <h2>选择一道题，打开你的写作工作台</h2>
-          <p>左侧题库按 Cambridge IELTS 15–20、Test 1–4、Task 1 / Task 2 整理。选题后，你会进入完整的写作、评分、复盘流程。</p>
+          <h2>选中一道题，打开你的写作工作台。</h2>
+          <p>左侧题库按 Cambridge IELTS 15-20、Test 1-4、Task 1 / Task 2 组织。点开任意题目后，你会进入完整的写作、计时、评分、修订和学习反馈流程。</p>
         </div>
 
         <article id="practiceView" class="hidden studio-workspace">
@@ -90,18 +90,24 @@
             <section class="studio-main-column">
               <section class="card plan-card">
                 <div class="card-head">
-                  <div><p class="kicker">Plan</p><h3>写作前思路整理区</h3></div>
-                  <span class="muted">先想清楚，再动笔</span>
+                  <div>
+                    <p class="kicker">Plan</p>
+                    <h3>写作前思路整理区</h3>
+                  </div>
+                  <span class="muted">先想清楚，再开始写</span>
                 </div>
                 <div id="planArea" class="plan-grid"></div>
               </section>
 
               <section class="card essay-card">
                 <div class="card-head">
-                  <div><p class="kicker">My Essay</p><h3>我的作文输入区</h3></div>
+                  <div>
+                    <p class="kicker">My Essay</p>
+                    <h3>我的作文输入区</h3>
+                  </div>
                   <div class="wordbox"><strong id="wordCount">0</strong><span id="wordTarget">/ 150 words</span></div>
                 </div>
-                <textarea id="essayInput" class="essay" placeholder="在这里输入你的作文..." spellcheck="true"></textarea>
+                <textarea id="essayInput" class="essay" placeholder="在这里输入你的作文……" spellcheck="true"></textarea>
                 <div class="actions essay-actions">
                   <button id="copyBtn" class="primary" type="button">一键复制作文</button>
                   <button id="clearBtn" class="secondary" type="button">清空重写</button>
@@ -110,15 +116,23 @@
               </section>
 
               <section class="card collection-card">
-                <div class="card-head"><div><p class="kicker">Expression Collection</p><h3>我的常用表达收藏区</h3></div></div>
-                <textarea id="favoriteInput" class="notes" placeholder="点击句型可收藏，也可以手动记录你的高频表达。"></textarea>
+                <div class="card-head">
+                  <div>
+                    <p class="kicker">Expression Collection</p>
+                    <h3>我的常用表达收藏区</h3>
+                  </div>
+                </div>
+                <textarea id="favoriteInput" class="notes" placeholder="把你常用的高频表达、好句型或可复用词组记在这里。"></textarea>
               </section>
             </section>
 
             <aside class="studio-side-column">
               <section class="card timer-card">
                 <div class="card-head">
-                  <div><p class="kicker">Timer</p><h3>写作计时器</h3></div>
+                  <div>
+                    <p class="kicker">Timer</p>
+                    <h3>写作计时器</h3>
+                  </div>
                   <strong id="timerDisplay" class="timer">20:00</strong>
                 </div>
                 <div class="actions timer-actions">
@@ -129,8 +143,11 @@
 
               <section id="quickReference" class="card helper-dock quick-reference-card">
                 <div class="card-head">
-                  <div><p class="kicker">Quick Reference</p><h3>写作辅助</h3></div>
-                  <span class="muted">写作时随时展开</span>
+                  <div>
+                    <p class="kicker">Quick Reference</p>
+                    <h3>写作辅助</h3>
+                  </div>
+                  <span class="muted">写作时随时展开查看</span>
                 </div>
                 <div class="accordion-stack">
                   <details class="accordion">
@@ -158,7 +175,7 @@
               <div>
                 <p class="kicker">AI IELTS Report</p>
                 <h3>考试评分与学习反馈</h3>
-                <p class="muted score-explain">考试评分 = 当前输入框原文分数；生成验证 = AI 生成版本的验证分，不会改变原文分数。</p>
+                <p class="muted score-explain">考试评分 = 当前输入框原文的分数；生成验证 = AI 生成版本通过生产评分系统得到的分数，不会改变原文分数。</p>
               </div>
               <span id="gradingStatus" class="muted">等待批改</span>
             </div>
@@ -198,7 +215,7 @@
   </main>
 
   <script src="data.js?v=20260604-1"></script>
-  <script src="script.js?v=20260611-premium-studio-v1"></script>
+  <script src="script.js?v=20260611-premium-studio-v2"></script>
   <script src="phrase-compact.js?v=20260603-5"></script>
 </body>
 </html>
