@@ -2410,7 +2410,7 @@
 
     const verificationStatusText = (status) => ({
       target_met: "已达到目标",
-      target_exceeded: "超过目标，可能偏难",
+      target_exceeded: "超过目标，偏难，需要降档",
       near_target: "未达到严格目标",
       below_target: "未达到目标，不能算 +0.5 / +1.0 成功",
       verification_failed: "验证失败",
@@ -2491,7 +2491,7 @@
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版以 Band 5.0 保底为目标；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证：低于目标不能算成功，超过目标 0.5 以上会提示可能偏难。</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版以 Band 5.0 保底为目标；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写，超过目标 0.5 以上会降档，因为太高也不适合作为当前阶段学习版。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
           ${card(plus05Title, verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", isBand5Rescue ? "复制 Band 5 保底版" : "复制 +0.5 修改版")}${applyButton("plus05", isBand5Rescue ? "应用 Band 5 保底版到作文输入区" : "应用 +0.5 到作文输入区")}`)}
           ${card(plus10Title, verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", isBand5Rescue ? "复制 Band 5.5 提升版" : "复制 +1.0 修改版")}${applyButton("plus10", isBand5Rescue ? "应用 Band 5.5 提升版到作文输入区" : "应用 +1.0 到作文输入区")}`)}
@@ -2576,7 +2576,7 @@
       return acc;
     }, {});
     const rewrites = keys.reduce((sum, key) => sum + (Number(result[key]?.rewriteAttemptCount) || 0), 0);
-    return `严格生产评分验证完成：理想达标 ${counts.target_met || 0} 项，超过目标偏难 ${counts.target_exceeded || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写 ${rewrites} 次。`;
+    return `严格生产评分验证完成：目标窗口内 ${counts.target_met || 0} 项，超过目标窗口 ${counts.target_exceeded || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写/降档 ${rewrites} 次。`;
   }
 
   function generatedPartChineseName(key) {
@@ -2626,7 +2626,7 @@
       message: status === "target_met"
         ? "生产评分验证已达到严格目标分。"
         : status === "target_exceeded"
-          ? "生产评分验证已超过目标 0.5 以上，达标但可能偏难。"
+          ? "生产评分验证超过目标窗口，说明这个版本偏难，需要降档重写。"
           : status === "below_target"
             ? `生产评分验证低于严格目标；${generatedPartChineseName(key)}将自动重写。`
             : "生产评分验证暂不可用。",
@@ -2710,12 +2710,15 @@
         };
         renderRevisionResult(result);
 
-        if (lastVerification.status !== "below_target") return result[key].verification;
+        if (!["below_target", "target_exceeded"].includes(lastVerification.status)) return result[key].verification;
         if (attempt >= maxRewriteAttempts) {
+          const finalStatus = lastVerification.status;
           result[key].verification = {
             ...result[key].verification,
-            status: "below_target",
-            message: `已自动重写 ${maxRewriteAttempts} 次，但仍未达到 Band ${formatBand(targetBand)}。本版本不能作为有效目标分学习范文，请重新生成。`,
+            status: finalStatus,
+            message: finalStatus === "target_exceeded"
+              ? `已自动降档 ${maxRewriteAttempts} 次，但仍高于目标窗口。本版本达标但偏难，不是理想的 Band ${formatBand(targetBand)} 学习版，请重新生成。`
+              : `已自动重写 ${maxRewriteAttempts} 次，但仍未达到 Band ${formatBand(targetBand)}。本版本不能作为有效目标分学习范文，请重新生成。`,
             finalFailedAfterRewrite: true
           };
           renderRevisionResult(result);
@@ -2725,7 +2728,9 @@
         result[key].verification = {
           ...result[key].verification,
           status: "rewrite_running",
-          message: `生产验证低于目标，正在自动重写第 ${attempt + 1} 次。`,
+          message: lastVerification.status === "target_exceeded"
+            ? `生产验证高于目标窗口，正在自动降档重写第 ${attempt + 1} 次。`
+            : `生产验证低于目标，正在自动提高重写第 ${attempt + 1} 次。`,
           rewriteAttempted: true,
           rewriteAttemptCount: attempt + 1
         };

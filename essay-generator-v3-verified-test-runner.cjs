@@ -40,8 +40,9 @@ function statusFor(verifiedBand, targetBand) {
   const verified = Number(verifiedBand);
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
-  if (verified >= target) return "target_met";
-  return "below_target";
+  if (verified < target) return "below_target";
+  if (verified > target + 0.5) return "target_exceeded";
+  return "target_met";
 }
 
 async function postJson(endpoint, payload) {
@@ -108,9 +109,10 @@ async function verifyWithRegeneration(data, key) {
   const targetBand = part.targetBand;
   let rewriteCount = 0;
   let verification = await verifyPart(key, part.essay, targetBand);
-  while (verification.status === "below_target" && rewriteCount < 2) {
+  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 2) {
     rewriteCount += 1;
-    console.log(`${key}: below target (${verification.verifiedBand} < ${targetBand}), rewriting attempt ${rewriteCount}...`);
+    const reason = verification.status === "target_exceeded" ? `above target window (${verification.verifiedBand} > ${targetBand + 0.5})` : `below target (${verification.verifiedBand} < ${targetBand})`;
+    console.log(`${key}: ${reason}, rewriting attempt ${rewriteCount}...`);
     part = await rewritePart(key, part.essay, targetBand, verification);
     data[key] = { ...(data[key] || {}), ...part, rewriteAttempted: true, rewriteAttemptCount: rewriteCount };
     verification = await verifyPart(key, part.essay, targetBand);
@@ -125,7 +127,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("strict Band 5 rescue rule: below Band 5 starts from Band 5.0 rescue; target_exceeded means useful but may be harder");
+  console.log("strict target window rule: Band 5 rescue should verify inside 5.0-5.5; 6.0 is too high and triggers downshift");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {

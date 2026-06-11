@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-5-band5-rescue-window";
+const GENERATOR_VERSION = "essay-generator-v3-6-exact-target-window";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -509,14 +509,15 @@ function verificationLabel(verifiedBand, targetBand) {
   const verified = Number(verifiedBand);
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
-  if (verified >= target) return "target_met";
-  return "below_target";
+  if (verified < target) return "below_target";
+  if (verified > target + 0.5) return "target_exceeded";
+  return "target_met";
 }
 
 function verificationMessage(status) {
-  if (status === "target_met") return "生产评分验证已达到目标分。";
-  if (status === "near_target") return "生产评分验证低于严格目标，不能算成功。";
-  if (status === "below_target") return "生产评分验证低于严格目标，需要重新生成或重写。";
+  if (status === "target_met") return "生产评分验证在目标窗口内。";
+  if (status === "target_exceeded") return "生产评分验证超过目标窗口，达标但偏难，需要降档重写。";
+  if (status === "below_target") return "生产评分验证低于目标，需要提高重写。";
   return "生产评分验证暂不可用。";
 }
 
@@ -651,8 +652,13 @@ function buildRewritePrompt(body, normalized, key, verification) {
   const targetBand = clampBand(part.targetBand || verification.targetBand);
   const verifiedBand = clampBand(verification.verifiedBand);
   const criterionBands = verification.criterionBands || {};
+  const verificationStatus = String(verification.status || verificationLabel(verifiedBand, targetBand));
   const rescue = band5RescueContext(safeFrozenContext(body));
   const isBand5Rescue = rescue.belowBand5 && key === "revisionPlus05";
+  const targetMaxBand = targetBand == null ? null : clampBand(targetBand + 0.5);
+  const rewriteDirection = verificationStatus === "target_exceeded"
+    ? "DOWNGRADE: The generated answer scored too high for this learning slot. Make it simpler and closer to the target, while staying at or above the target."
+    : "UPGRADE: The generated answer scored below target. Improve it enough to reach the target.";
 
   return [
     "You are revising one generated IELTS General Training practice answer after production-router verification.",
@@ -664,8 +670,13 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Task: ${task}`,
     `Target band: ${targetBand == null ? "learner-realistic" : bandLabel(targetBand)}`,
     `Production-router verified band: ${verifiedBand == null ? "unavailable" : bandLabel(verifiedBand)}`,
+    `Target window: ${targetBand == null ? "unavailable" : `${bandLabel(targetBand)} to ${bandLabel(targetMaxBand)}`}`,
+    `Production-router verification status: ${verificationStatus}`,
+    `Rewrite direction: ${rewriteDirection}`,
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
-    "If the verified band is below target, this is a failure, not near success. Improve the generated answer enough to verify at or above the exact target band, but do not make it unrealistic for the student's level.",
+    "The learning slot has a target window, not just a minimum. For a Band 5 rescue slot, a production verification of Band 6.0 is too high and should be rewritten down toward Band 5.0-5.5.",
+    "If status is below_target, improve task coverage, specificity, paragraphing, cohesion, and basic grammar.",
+    "If status is target_exceeded, simplify vocabulary and sentence complexity, reduce over-polished phrasing, keep the task fully covered, and aim for a clear Band 5.0-5.5 learner version.",
     "Output JSON shape:",
     JSON.stringify({ [spec.objectName]: { ...spec.jsonShape, targetBand } }, null, 2),
     "Context prompt:",
@@ -779,11 +790,12 @@ async function generateClientSideRewritePart(body) {
   };
   normalized[key] = { targetBand, essay: failedEssay };
 
+  const incomingVerification = body.verification && typeof body.verification === "object" ? body.verification : {};
   const verification = {
     targetBand,
     verifiedBand,
-    status: "below_target",
-    criterionBands: body.criterionBands || (body.verification && body.verification.criterionBands) || {}
+    status: String(incomingVerification.status || verificationLabel(verifiedBand, targetBand)),
+    criterionBands: body.criterionBands || incomingVerification.criterionBands || {}
   };
 
   const rawRewrite = await callDeepSeek(buildRewritePrompt(body, normalized, key, verification));
@@ -809,7 +821,7 @@ async function generateClientSideRewritePart(body) {
       system: "essay-generation",
       status: "rewritten_generated_part_for_strict_target",
       scoreChanged: false,
-      message: "已针对未达到目标分的生成作文单独重写；用户原分数没有改变。"
+      message: "已针对低于目标或高于目标窗口的生成作文单独重写；用户原分数没有改变。"
     }
   };
 }
