@@ -2672,7 +2672,7 @@
   }
 
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
-    const maxRewriteAttempts = 2;
+    const maxRewriteAttempts = 6;
     const part = result[key] || {};
     const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
     part.verification = {

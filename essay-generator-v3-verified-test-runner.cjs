@@ -109,7 +109,7 @@ async function verifyWithRegeneration(data, key) {
   const targetBand = part.targetBand;
   let rewriteCount = 0;
   let verification = await verifyPart(key, part.essay, targetBand);
-  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 2) {
+  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 6) {
     rewriteCount += 1;
     const reason = verification.status === "target_exceeded" ? `above target window (${verification.verifiedBand} > ${targetBand + 0.5})` : `below target (${verification.verifiedBand} < ${targetBand})`;
     console.log(`${key}: ${reason}, rewriting attempt ${rewriteCount}...`);
@@ -127,7 +127,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("strict target window rule: Band 5 rescue should verify inside 5.0-5.5; 6.0 is too high and triggers downshift");
+  console.log("strict target window rule: Band 5 rescue should verify inside 5.0-5.5; max rewrite/downshift attempts = 6");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {
