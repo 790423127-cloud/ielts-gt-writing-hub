@@ -165,6 +165,28 @@ function extractScore(data) {
   };
 }
 
+function frozenMainFromBody(body, task) {
+  const raw = body.frozenMainResult || body.mainResult || body.mainScoreResult || null;
+  if (!raw || typeof raw !== "object") return null;
+
+  const main = extractScore(raw);
+  const score = roundHalf(body.frozenMainScore ?? main.score);
+  const criteria = body.frozenMainCriteria || main.criteria;
+  const mainTask = normalizeTask(raw.task || raw.scoringTask || raw.requestedTask || raw.selectedTask || main.task || task);
+
+  if (!main.ok || !Number.isFinite(score)) return null;
+  if (mainTask !== task) return null;
+
+  return {
+    ...main,
+    score,
+    criteria,
+    task: mainTask,
+    reusedFromRouter: true,
+    frozenMainSource: "production-router-main-first-pass"
+  };
+}
+
 async function callMainAndLowband(req, body, task, promptText, essayText) {
   const base = getBaseUrl(req);
   const common = {
@@ -188,21 +210,28 @@ async function callMainAndLowband(req, body, task, promptText, essayText) {
 
   const mainUrl = process.env.MAIN_SCORE_ENDPOINT || `${base}/api/grade-ielts`;
   const lowUrl = process.env.LOWBAND_SCORE_ENDPOINT || `${base}/api/grade-ielts-lowband`;
+  const frozenMain = frozenMainFromBody(body, task);
 
   const [mainRaw, lowRaw] = await Promise.all([
-    postJson(mainUrl, common),
+    frozenMain ? Promise.resolve(frozenMain.raw) : postJson(mainUrl, common),
     postJson(lowUrl, common)
   ]);
 
-  const main = extractScore(mainRaw);
+  const main = frozenMain || extractScore(mainRaw);
   const lowband = extractScore(lowRaw);
 
   if (!main.ok) throw new Error(main.error || "Main score endpoint did not return a valid score");
   if (!lowband.ok) throw new Error(lowband.error || "Lowband endpoint did not return a valid score");
 
-  return { main, lowband, mainUrl, lowUrl };
+  return {
+    main,
+    lowband,
+    mainUrl,
+    lowUrl,
+    mainReusedFromRouter: Boolean(frozenMain),
+    mainSource: frozenMain ? "frozen-main-from-production-router" : "fresh-main-called-by-boundary"
+  };
 }
-
 function weakLanguageSignal(criteria, task) {
   const names = criterionNames(task);
   const values = names.map((name) => Number(criteria?.[name])).filter(Number.isFinite);
@@ -504,7 +533,7 @@ module.exports = async function handler(req, res) {
     if (!String(essay).trim()) return sendJson(req, res, 400, { ok: false, error: "Missing essay text" });
 
     const wc = wordCount(essay);
-    const { main, lowband, mainUrl, lowUrl } = await callMainAndLowband(req, body, task, questionPrompt, essay);
+    const { main, lowband, mainUrl, lowUrl, mainReusedFromRouter, mainSource } = await callMainAndLowband(req, body, task, questionPrompt, essay);
     const route = routeDecision(task, wc, main, lowband);
 
     let adjudicator = null;
@@ -543,6 +572,14 @@ module.exports = async function handler(req, res) {
       scoreGap: route.scoreGap,
       main,
       lowband,
+      boundaryMainReuseAudit: {
+        mainReusedFromRouter,
+        mainSource,
+        productionRouterMainFrozen: Boolean(body.productionRouterMainFrozen),
+        note: mainReusedFromRouter
+          ? "Boundary adjudicator reused the production router's first-pass main score and did not call the main scorer again."
+          : "Boundary adjudicator used compatibility mode and called the main scorer itself."
+      },
       adjudicator: adjudicator ? {
         finalBand: adjudicator.finalBand,
         finalCriteria: adjudicator.finalCriteria,
@@ -551,7 +588,7 @@ module.exports = async function handler(req, res) {
         audit: adjudicator.parsed
       } : null,
       endpoints: {
-        main: mainUrl,
+        main: mainReusedFromRouter ? null : mainUrl,
         lowband: lowUrl
       },
       disclaimer: "This is an AI boundary adjudication preview, not an official IELTS score."

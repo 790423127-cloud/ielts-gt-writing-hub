@@ -258,7 +258,14 @@ module.exports = async function handler(req, res) {
     const route = routeReason(mainBand);
 
     if (route.useBoundary) {
-      const boundaryCall = await callJsonWithRetry(endpoints.boundary, requestBody, "boundary adjudicator");
+      const boundaryRequestBody = {
+        ...requestBody,
+        frozenMainResult: main,
+        frozenMainScore: mainBand,
+        frozenMainCriteria: extractCriteria(main),
+        productionRouterMainFrozen: true
+      };
+      const boundaryCall = await callJsonWithRetry(endpoints.boundary, boundaryRequestBody, "boundary adjudicator");
       const boundary = boundaryCall.data;
       const boundaryBand = extractBand(boundary);
       const finalBand = boundaryBand == null ? mainBand : boundaryBand;
@@ -283,6 +290,7 @@ module.exports = async function handler(req, res) {
         highbandScore: null,
         highbandShadowCalled: false,
         highbandConfirmed: false,
+        boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null,
         main,
         boundary,
         highband: null,
