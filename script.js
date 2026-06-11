@@ -303,6 +303,7 @@
     updateWords();
     resetGradingPanel();
     renderList();
+    scheduleProductionUiV2Classes();
     if (innerWidth < 1100) els.practiceView?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -3530,8 +3531,66 @@
     });
   }
 
+
+
+  // Production UI v2: apply modern layout classes to existing static and dynamic DOM.
+  // This is display-only. It does not change scoring, generation, or feedback logic.
+  function applyProductionUiV2Classes() {
+    if (!document || !document.body) return;
+    document.body.classList.add("production-ui-v2");
+
+    const add = (selector, className) => {
+      document.querySelectorAll(selector).forEach((node) => node.classList.add(className));
+    };
+
+    add(".topbar", "app-hero");
+    add(".shell", "app-shell");
+    add(".filters", "filter-console");
+    add(".stats", "metrics-strip");
+    add(".stat", "metric-card");
+    add(".layout", "workspace-grid");
+    add(".panel", "panel-card");
+    add(".list-panel", "library-panel");
+    add(".practice-panel", "editor-panel");
+    add(".card", "section-card");
+    add(".question-card", "prompt-detail-card");
+    add(".prompt-btn", "prompt-select-card");
+    add(".primary", "ui-primary-btn");
+    add(".secondary", "ui-secondary-btn");
+    add(".tag", "ui-tag");
+    add(".grading-section", "report-section");
+    add(".overall-wrap", "overall-report");
+    add(".overall-band", "overall-band-badge");
+    add(".criteria-grid", "criterion-report-grid");
+    add(".criteria-item", "criterion-mini-card");
+    add(".criterion-card-grid", "criterion-report-grid");
+    add(".criterion-score-card", "criterion-report-card");
+    add(".criterion-band-pill", "criterion-band-badge");
+    add(".criterion-card-body", "criterion-report-body");
+    add(".criterion-evidence-details", "criterion-evidence-card");
+    add(".learning-feedback-panel", "teacher-feedback-panel");
+    add(".learning-tabs", "teacher-tabs");
+    add(".learning-tab", "teacher-tab");
+    add(".learning-module-output", "teacher-module-output");
+    add(".revision-block", "revision-report-card");
+    add(".generated-candidate-history", "candidate-timeline-card");
+    add(".generated-candidate-item", "candidate-timeline-item");
+    add(".mock-exam-card", "mock-exam-modern-card");
+    add(".phrase-group", "phrase-card");
+    add(".accordion", "ui-accordion");
+    add(".feedback-collapse", "ui-feedback-collapse");
+  }
+
+  function scheduleProductionUiV2Classes() {
+    applyProductionUiV2Classes();
+    window.setTimeout(applyProductionUiV2Classes, 50);
+    window.setTimeout(applyProductionUiV2Classes, 250);
+    window.setTimeout(applyProductionUiV2Classes, 1000);
+  }
+
   function init() {
     injectScoreStyles();
+    scheduleProductionUiV2Classes();
     initFilters();
     setupGradingModes();
     ensureMockExamPanel();
