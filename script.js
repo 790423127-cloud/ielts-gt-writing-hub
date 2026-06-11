@@ -2473,6 +2473,11 @@
       : result.currentResultUsed
         ? "已使用同一任务的冻结分数作为语言水平参考。"
         : "未使用旧评分结果；将按当前题目生成可学习作文。";
+    const scoreSeparationNote = [
+      "考试评分 = 当前输入框原文的分数。",
+      "生成验证分 = AI 生成版本通过 production router 验证得到的分数。",
+      "生成验证分只用于检查范文/修改版是否适合学习，不会改变原文考试评分。"
+    ].join(" ");
 
     const essayPre = (text, empty = "暂未生成") => `<pre class="generated-essay-text">${escapeHtml(toText(text) || empty)}</pre>`;
     const copyButton = (id, label) => `<button class="secondary" type="button" data-copy-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
@@ -2518,6 +2523,24 @@
       const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `；距离目标：${formatBand(v.distanceFromTarget)}` : "";
       const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
       return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
+    };
+    const candidateHistoryBlock = (obj) => {
+      const history = Array.isArray(obj?.candidateHistory) ? obj.candidateHistory : [];
+      if (!history.length) return "";
+      return `<details class="score-accordion generated-candidate-history">
+        <summary>候选历史 / Candidate history <span class="muted">${history.length} items</span></summary>
+        <div class="score-accordion-body generated-candidate-grid">
+          ${history.map((item) => `<article class="generated-candidate-item ${item.selected ? "is-selected" : ""}">
+            <div class="generated-candidate-title">${escapeHtml(item.candidateId || item.id || "candidate")}${item.selected ? " · 已采用" : ""}</div>
+            <p><strong>Target:</strong> ${escapeHtml(Number.isFinite(Number(item.targetBand)) ? `Band ${formatBand(item.targetBand)}` : "-")}</p>
+            <p><strong>Verified:</strong> ${escapeHtml(Number.isFinite(Number(item.verifiedBand)) ? `Band ${formatBand(item.verifiedBand)}` : "-")}</p>
+            <p><strong>Status:</strong> ${escapeHtml(item.status || "-")}</p>
+            <p><strong>Strategy:</strong> ${escapeHtml(item.strategy || "-")}</p>
+            ${item.whySelected ? `<p class="is-corrected"><strong>Why selected:</strong> ${escapeHtml(item.whySelected)}</p>` : ""}
+            ${item.whyRejected ? `<p class="muted"><strong>Why rejected:</strong> ${escapeHtml(item.whyRejected)}</p>` : ""}
+          </article>`).join("")}
+        </div>
+      </details>`;
     };
     const card = (title, subtitle, essayText, explanationHtml, actionsHtml = "") => `
       <details class="score-accordion generated-essay-card">
@@ -2600,6 +2623,7 @@
 
     const modelExplanation = `
       ${verificationBlock(model)}
+      ${candidateHistoryBlock(model)}
       ${valueBlock("为什么这篇适合学：", model.whyThisIsLearnable)}
       ${valueBlock("为什么比你的原文更高：", model.whyHigherThanUserEssay)}
       ${listBlock("这篇范文里要学习什么", model.studyPoints)}
@@ -2608,6 +2632,7 @@
 
     const plus05Explanation = `
       ${verificationBlock(plus05)}
+      ${candidateHistoryBlock(plus05)}
       ${valueBlock(`${plus05WhyTitle}：`, plus05.whyItIsPlus05)}
       ${sourceBasedExplanation(plus05, plus05.whatChanged)}
       ${listBlock("主要改了什么", plus05.whatChanged)}
@@ -2617,6 +2642,7 @@
 
     const plus10Explanation = `
       ${verificationBlock(plus10)}
+      ${candidateHistoryBlock(plus10)}
       ${valueBlock("为什么大约高 1.0 分：", plus10.whyItIsPlus10)}
       ${sourceBasedExplanation(plus10, plus10.whatChangedFromPlus05 || plus10.whatChanged)}
       ${listBlock("比 +0.5 版本多提升在哪里", plus10.whatChangedFromPlus05 || plus10.whatChanged)}
@@ -2630,6 +2656,7 @@
         <summary>作文生成 / Model and Revision <span class="muted">已生成 3 篇可学习作文，点击展开。</span></summary>
         <div class="score-accordion-body">
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
+          <div class="score-flow-note generated-score-separation"><strong>分数说明：</strong>${escapeHtml(scoreSeparationNote)}</div>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
           ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版必须基于你的原文按真实 Band 5 保底清单重写；如果多次仍卡在 4.5，会升级重构；如果多次被判 6.0，会进入 Band 5 降档锁定：保留内容但减少 polish、复杂句和额外展开；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写，超过目标 0.5 以上会降档，因为太高也不适合作为当前阶段学习版。</div>` : ""}
@@ -2707,6 +2734,27 @@
     if (verified < target) return "below_target";
     if (verified > target) return "target_exceeded";
     return "target_met";
+  }
+
+  function essayGeneratorErrorMessage(error) {
+    const raw = String(error?.message || error || "");
+    const lower = raw.toLowerCase();
+    if (/failed to fetch|networkerror|network request/i.test(raw)) {
+      return "网络请求失败：无法连接作文生成或生产验证接口。请检查 Vercel 部署是否在线、接口地址是否正确。";
+    }
+    if (/json|parse|valid json|malformed/i.test(lower)) {
+      return "AI JSON 格式异常：生成结果格式不完整或无法解析。请重新生成；如果持续出现，说明模型输出被截断。";
+    }
+    if (/production|verification|grade-ielts-production-router|router/i.test(lower)) {
+      return "production router 验证失败：作文已生成，但生成版本的验证分暂时无法确认。原文考试评分不会被改变。";
+    }
+    if (/404|not found|deployment|vercel|application error/i.test(lower)) {
+      return "Vercel 部署或接口路径异常：请确认最新部署已完成，并检查 Grading API Endpoint 是否指向当前项目。";
+    }
+    if (/target|closest|below_target|target_exceeded/i.test(lower)) {
+      return "生成候选未精确命中目标：系统会保留最接近版本，并标明 verifiedBand 与 targetBand 的差距。";
+    }
+    return `作文生成失败：${raw || "未知错误"}`;
   }
 
   function generatedVerificationSummary(result = {}) {
@@ -2843,6 +2891,49 @@
     });
   }
 
+  function candidateHistoryReason(status, verifiedBand, targetBand, selected = false) {
+    if (selected && status === "target_met") return "Exact target matched by production verification.";
+    if (selected) return "Selected as the closest available candidate before targeted rewrite or final closest-version use.";
+    if (status === "below_target") return `Rejected because verified Band ${formatBand(verifiedBand)} is below target Band ${formatBand(targetBand)}.`;
+    if (status === "target_exceeded") return `Rejected because verified Band ${formatBand(verifiedBand)} is above exact target Band ${formatBand(targetBand)}.`;
+    if (status === "verification_failed") return "Rejected because production verification failed for this candidate.";
+    return "Not selected because another candidate was closer to the exact target.";
+  }
+
+  function recordCandidateHistory(result, key, entry = {}, verification = {}, selected = false) {
+    const part = result[key] || {};
+    const targetBand = Number(verification.targetBand || part.targetBand);
+    const item = {
+      candidateId: entry.index === 0 ? "initial" : `candidate-${entry.index}`,
+      targetBand: Number.isFinite(targetBand) ? targetBand : null,
+      verifiedBand: Number.isFinite(Number(verification.verifiedBand)) ? Number(verification.verifiedBand) : null,
+      status: verification.status || "verification_failed",
+      strategy: entry.strategy || part.rewriteStrategy || "candidate selected",
+      selected,
+      whySelected: selected ? candidateHistoryReason(verification.status, verification.verifiedBand, targetBand, true) : "",
+      whyRejected: selected ? "" : candidateHistoryReason(verification.status, verification.verifiedBand, targetBand, false)
+    };
+    part.candidateHistory = Array.isArray(part.candidateHistory) ? [...part.candidateHistory, item] : [item];
+    result[key] = part;
+    return item;
+  }
+
+  function markSelectedCandidateHistory(result, key, selectedId) {
+    const part = result[key] || {};
+    const history = Array.isArray(part.candidateHistory) ? part.candidateHistory : [];
+    if (!history.length) return;
+    part.candidateHistory = history.map((item) => {
+      const selected = item.candidateId === selectedId;
+      return {
+        ...item,
+        selected,
+        whySelected: selected ? candidateHistoryReason(item.status, item.verifiedBand, item.targetBand, true) : "",
+        whyRejected: selected ? "" : (item.whyRejected || candidateHistoryReason(item.status, item.verifiedBand, item.targetBand, false))
+      };
+    });
+    result[key] = part;
+  }
+
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
     const maxRewriteAttempts = 6;
     const part = result[key] || {};
@@ -2905,11 +2996,15 @@
             candidateIndex: entry.index,
             candidateCount: initialCandidates.length
           };
+          recordCandidateHistory(result, key, entry, lastVerification, lastVerification.status === "target_met");
           rememberClosest();
           renderRevisionResult(result);
-          if (lastVerification.status === "target_met") return result[key].verification;
+          if (lastVerification.status === "target_met") {
+            markSelectedCandidateHistory(result, key, entry.index === 0 ? "initial" : `candidate-${entry.index}`);
+            return result[key].verification;
+          }
         } catch (error) {
-          result[key].verification = {
+          const failedVerification = {
             enabled: true,
             ok: false,
             label,
@@ -2922,15 +3017,20 @@
             candidateCount: initialCandidates.length,
             error: String(error.message || error).slice(0, 500)
           };
+          result[key].verification = failedVerification;
+          recordCandidateHistory(result, key, entry, failedVerification, false);
           renderRevisionResult(result);
         }
       }
       if (closest) {
+        const selectedId = closest.part?.candidateIndex === 0 ? "initial" : `candidate-${closest.part?.candidateIndex ?? 0}`;
+        const fullCandidateHistory = Array.isArray(result[key]?.candidateHistory) ? result[key].candidateHistory : [];
         result[key] = {
           ...(result[key] || {}),
           ...(closest.part || {}),
           essay: closest.essay || result[key]?.essay || "",
           targetBand,
+          candidateHistory: fullCandidateHistory,
           candidateCount: initialCandidates.length,
           selectedCandidateIndex: closest.part?.candidateIndex ?? result[key]?.candidateIndex ?? 0,
           rewriteStrategy: closest.verification?.status === "target_exceeded" ? "soft downshift" : "floor raise"
@@ -2945,6 +3045,7 @@
           rewriteStrategy: result[key].rewriteStrategy,
           message: "已选择最接近目标的候选版本，继续按验证结果定向重写。"
         };
+        markSelectedCandidateHistory(result, key, selectedId);
         renderRevisionResult(result);
       }
     }
@@ -3076,10 +3177,10 @@
       renderRevisionResult(revision);
       setGradingStatus("作文生成完成，正在用生产评分路由验证生成版本。", "loading");
       verifyGeneratedEssaysClientSide(revision).catch((verifyError) => {
-        setGradingStatus(`作文已生成，但生产验证失败：${verifyError.message}`, "error");
+        setGradingStatus(essayGeneratorErrorMessage(verifyError), "error");
       });
     } catch (error) {
-      setGradingStatus(`作文生成失败：${error.message}`, "error");
+      setGradingStatus(essayGeneratorErrorMessage(error), "error");
       if (els.gradingResults) els.gradingResults.insertAdjacentHTML("beforeend", `<section class="grading-section error-details"><h4>作文生成错误</h4><pre>${escapeHtml(error.stack || error.message || error)}</pre></section>`);
     } finally {
       if (els.generateRevisionBtn) { els.generateRevisionBtn.disabled = false; els.generateRevisionBtn.textContent = originalText; els.generateRevisionBtn.removeAttribute("aria-busy"); }

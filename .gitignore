@@ -1,2 +1,8 @@
 .vercel
 .env*
+*.zip
+*.log
+*.tmp
+smoke-test-output*.json
+regression-output*.json
+test-output/

@@ -1969,3 +1969,10 @@ select#typeFilter{
 .generated-teacher-guide h4,.generated-teacher-item h5{margin:0 0 10px}
 .generated-teacher-item{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .generated-teacher-item:first-child{border-top:0;padding-top:0;margin-top:0}
+.generated-score-separation{border-left:4px solid var(--blue);background:rgba(49,95,167,.08)}
+.generated-candidate-history{margin:10px 0}
+.generated-candidate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.generated-candidate-item{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:10px;display:grid;gap:6px}
+.generated-candidate-item.is-selected{border-color:var(--teal);box-shadow:0 0 0 2px rgba(15,118,110,.1)}
+.generated-candidate-item p{margin:0;font-size:13px;line-height:1.45}
+.generated-candidate-title{font-weight:850;color:var(--teal)}

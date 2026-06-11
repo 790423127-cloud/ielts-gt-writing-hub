@@ -157,6 +157,10 @@ function textArray(value) {
   return [];
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function objectOnly(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -350,6 +354,17 @@ function extractJson(text) {
   const last = raw.lastIndexOf("}");
   if (first >= 0 && last > first) return JSON.parse(raw.slice(first, last + 1));
   throw new Error("AI did not return valid JSON");
+}
+
+function essayGeneratorErrorKind(error) {
+  const raw = String(error && (error.message || error) || "");
+  const lower = raw.toLowerCase();
+  if (/json|parse|valid json|malformed|unexpected token|unterminated/.test(lower)) return "ai_json_format_error";
+  if (/grade-ielts-production-router|production-router|verification/.test(lower)) return "production_router_verification_failed";
+  if (/target|below_target|target_exceeded|closest/.test(lower)) return "candidate_target_mismatch";
+  if (/fetch|network|abort|timeout/.test(lower)) return "network_or_timeout";
+  if (/vercel|404|not found|application error/.test(lower)) return "vercel_deployment_or_route_error";
+  return "essay_generation_error";
 }
 
 function normalizeLearningGuide(guideObj = {}) {
@@ -1089,6 +1104,50 @@ function generatedCandidateEntries(normalized = {}, key) {
   });
 }
 
+function candidateHistoryReason(status, verifiedBand, targetBand, selected = false) {
+  if (selected && status === "target_met") return "Exact target matched by production verification.";
+  if (selected) return "Selected as the closest available candidate before targeted rewrite or final closest-version use.";
+  if (status === "below_target") return `Rejected because verified Band ${bandLabel(verifiedBand)} is below target Band ${bandLabel(targetBand)}.`;
+  if (status === "target_exceeded") return `Rejected because verified Band ${bandLabel(verifiedBand)} is above exact target Band ${bandLabel(targetBand)}.`;
+  if (status === "verification_failed") return "Rejected because production verification failed for this candidate.";
+  return "Not selected because another candidate was closer to the exact target.";
+}
+
+function recordCandidateHistory(normalized, key, entry = {}, verification = {}, selected = false) {
+  const part = objectOnly(normalized[key]);
+  const targetBand = clampBand(verification.targetBand ?? part.targetBand);
+  const item = {
+    candidateId: entry.index === 0 ? "initial" : `candidate-${entry.index}`,
+    targetBand,
+    verifiedBand: clampBand(verification.verifiedBand),
+    status: String(verification.status || "verification_failed"),
+    strategy: entry.strategy || part.rewriteStrategy || "candidate selected",
+    selected,
+    whySelected: selected ? candidateHistoryReason(verification.status, verification.verifiedBand, targetBand, true) : "",
+    whyRejected: selected ? "" : candidateHistoryReason(verification.status, verification.verifiedBand, targetBand, false)
+  };
+  normalized[key] = { ...part, candidateHistory: [...asArray(part.candidateHistory), item] };
+  return item;
+}
+
+function markSelectedCandidateHistory(normalized, key, selectedId) {
+  const part = objectOnly(normalized[key]);
+  const history = asArray(part.candidateHistory);
+  if (!history.length) return;
+  normalized[key] = {
+    ...part,
+    candidateHistory: history.map((item) => {
+      const selected = item.candidateId === selectedId;
+      return {
+        ...item,
+        selected,
+        whySelected: selected ? candidateHistoryReason(item.status, item.verifiedBand, item.targetBand, true) : "",
+        whyRejected: selected ? "" : (item.whyRejected || candidateHistoryReason(item.status, item.verifiedBand, item.targetBand, false))
+      };
+    })
+  };
+}
+
 async function verifyGeneratedPartWithCandidates(req, body, normalized, key) {
   const candidates = generatedCandidateEntries(normalized, key);
   if (!candidates.length) {
@@ -1116,21 +1175,29 @@ async function verifyGeneratedPartWithCandidates(req, body, normalized, key) {
       candidateCount: candidates.length,
       rewriteStrategy: entry.strategy
     };
+    recordCandidateHistory(normalized, key, entry, verification, verification.status === "target_met");
     const distance = generatedBandDistance(verification.verifiedBand, normalized[key].targetBand);
     if (Number.isFinite(distance) && (!closest || distance < closest.distance)) {
       closest = { part: { ...normalized[key] }, verification: { ...normalized[key].verification }, distance };
     }
-    if (verification.status === "target_met") return normalized[key].verification;
+    if (verification.status === "target_met") {
+      markSelectedCandidateHistory(normalized, key, entry.index === 0 ? "initial" : `candidate-${entry.index}`);
+      return normalized[key].verification;
+    }
   }
 
   if (closest) {
+    const selectedId = closest.part?.candidateIndex === 0 ? "initial" : `candidate-${closest.part?.candidateIndex ?? 0}`;
+    const fullCandidateHistory = asArray(normalized[key]?.candidateHistory);
     normalized[key] = {
       ...objectOnly(normalized[key]),
       ...closest.part,
+      candidateHistory: fullCandidateHistory,
       closestVerifiedBand: closest.verification.verifiedBand,
       distanceFromTarget: Math.round(closest.distance * 2) / 2,
       rewriteStrategy: closest.verification.status === "target_exceeded" ? "soft downshift" : "floor raise"
     };
+    markSelectedCandidateHistory(normalized, key, selectedId);
     return maybeRewriteGeneratedPart(req, body, normalized, key, {
       ...closest.verification,
       message: "Selected closest initial candidate before targeted rewrite."
@@ -1262,7 +1329,19 @@ module.exports = async function handler(req, res) {
     const verified = await verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized);
     return sendJson(req, res, 200, verified);
   } catch (error) {
-    return sendJson(req, res, 500, { ok: false, error: "Essay generation failed", detail: String(error.message || error), system: "essay-generation" });
+    const errorKind = essayGeneratorErrorKind(error);
+    return sendJson(req, res, 500, {
+      ok: false,
+      error: "Essay generation failed",
+      errorKind,
+      detail: String(error.message || error),
+      suggestion: errorKind === "ai_json_format_error"
+        ? "Retry generation. The model returned malformed JSON or an incomplete response."
+        : (errorKind === "production_router_verification_failed"
+          ? "The generated text may exist, but production verification failed. Retry or check the production router deployment."
+          : "Retry later and check the Vercel deployment/runtime logs if the problem continues."),
+      system: "essay-generation"
+    });
   }
 };
 

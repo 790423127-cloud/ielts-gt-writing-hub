@@ -662,16 +662,30 @@ async function callDeepSeek(prompt, moduleName) {
 }
 
 function fallbackModuleResult(moduleName, error) {
+  const raw = String(error && (error.message || error) || "unknown error");
+  const lower = raw.toLowerCase();
+  const errorKind = /json|parse|valid|unexpected token|unterminated/.test(lower)
+    ? "ai_json_format_error"
+    : (/zh|chinese|evidencezh|explanationzh|suggestionzh/.test(lower) ? "missing_chinese_fields" : "feedback_generation_error");
+  const retryAdvice = errorKind === "missing_chinese_fields"
+    ? "Retry this module. The AI returned feedback without enough Chinese helper fields."
+    : "Retry this module. The AI returned malformed JSON or an incomplete response.";
+
   return {
     summary: {
-      en: "This module could not be generated reliably because the AI response was not valid JSON.",
-      zh: "该模块返回格式异常，请点击重新生成。已冻结分数不会改变。"
+      en: errorKind === "missing_chinese_fields"
+        ? "This module could not be shown as complete because the AI did not return enough Chinese helper fields."
+        : "This module could not be generated reliably because the AI response was not valid JSON.",
+      zh: errorKind === "missing_chinese_fields"
+        ? "该模块缺少必要中文解释字段，请重新生成。本次不会改变已经冻结的分数。"
+        : "该模块返回格式异常，请重新生成。本次不会改变已经冻结的分数。"
     },
     priorityAdvice: {
-      en: "Retry this module. The frozen score is unchanged.",
-      zh: "请重新生成该模块。这里不会使用本地模板假装生成真实反馈，也不会改动分数。"
+      en: retryAdvice,
+      zh: "请重新生成该模块。系统不会用本地模板假装生成真实反馈，也不会改动分数。"
     },
-    generationWarning: String(error && (error.message || error) || "unknown error").slice(0, 500)
+    errorKind,
+    generationWarning: raw.slice(0, 500)
   };
 }
 
