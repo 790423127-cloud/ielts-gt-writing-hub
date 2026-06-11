@@ -2612,8 +2612,6 @@
         essay,
         wordCount: countWords(essay),
         mode: "score",
-        aiStage: "generated-answer-client-production-verification",
-        generationVerification: true,
         generatedAnswerLabel: key,
         generatedTargetBand: Number.isFinite(targetBand) ? targetBand : null,
         currentResult: null,

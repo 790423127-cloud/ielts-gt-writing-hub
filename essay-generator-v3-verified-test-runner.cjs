@@ -65,8 +65,6 @@ async function verifyPart(data, key, essay, targetBand) {
     essay,
     wordCount: countWords(essay),
     mode: "score",
-    aiStage: "generated-answer-client-production-verification",
-    generationVerification: true,
     generatedAnswerLabel: key,
     generatedTargetBand: targetBand,
     currentResult: null,
