@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-13-band5-downshift-locked";
+const GENERATOR_VERSION = "essay-generator-v3-14-source-based-teacher-guide";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -174,10 +174,10 @@ function generationTargetsForContext(context = {}) {
     };
   }
 
-  const targetBandPlus05 = clampBand(Math.max(5.0, currentBand + 0.5));
-  const targetBandPlus10 = clampBand(Math.max(targetBandPlus05 + 0.5, currentBand + 1.0));
+  const targetBandPlus05 = currentBand < 5.0 ? 5.0 : clampBand(currentBand + 0.5);
+  const targetBandPlus10 = currentBand < 5.0 ? 5.5 : clampBand(currentBand + 1.0);
   const targetBandModel = clampBand(Math.max(targetBandPlus10, 5.5));
-  const minimumTargetRule = `Strict target rule: if current band is ${currentBand.toFixed(1)}, the +0.5 revision must verify at no less than Band ${targetBandPlus05.toFixed(1)}, and the +1.0 revision/model answer must verify at no less than Band ${targetBandPlus10.toFixed(1)}. Anything below target is NOT acceptable.`;
+  const minimumTargetRule = `Strict exact target rule: if current band is ${currentBand.toFixed(1)}, revisionPlus05 must target exactly Band ${targetBandPlus05.toFixed(1)}, and revisionPlus10 must target exactly Band ${targetBandPlus10.toFixed(1)}. verifiedBand below target is below_target; verifiedBand equal to target is target_met; verifiedBand above target is target_exceeded. Do not call an above-target version target_met.`;
 
   let levelInstruction = "";
   if (currentBand < 5) {
@@ -203,7 +203,9 @@ function sourceBasedRevisionRules(task) {
     "4. Do not invent a different scenario, different examples, different job, different course, different people, different opinion, or new supporting ideas unrelated to the original.",
     "5. The revised answer should still feel like the student's essay improved to the target level.",
     "6. The modelAnswer may be question-based and independent; this source-based rule applies especially to revisionPlus05 and revisionPlus10.",
-    "7. If an added detail is needed for task completion, keep it modest, realistic, and directly connected to the original essay."
+    "7. If an added detail is needed for task completion, keep it modest, realistic, and directly connected to the original essay.",
+    "8. Band 5 rescue is a sub-rule of source-based revision, not an exception. Do not use the Band 5 checklist as permission to replace the student's scenario, relationship, request, position, reasons, examples, or main facts.",
+    "9. First preserve the student's source content, then raise it to the target band. The result must read like the student's own answer has been improved, not like a separate model answer."
   ];
   if (task === "Task 1") {
     common.push(
@@ -296,7 +298,8 @@ function band5ChecklistForTask(task) {
       "5. Use clear 4-paragraph organisation: purpose, reason/situation, requested change, benefit plus polite ending.",
       "6. Tone must match the relationship and prompt. For a manager, use polite semi-formal/formal language.",
       "7. Grammar should mainly use simple, understandable sentences. It does not need to be error-free; minor awkwardness is acceptable if meaning is clear.",
-      "8. Keep vocabulary basic and natural. Avoid serious meaning-blocking low-band expressions, but do not over-polish into Band 6/7 language."
+      "8. Keep vocabulary basic and natural. Avoid serious meaning-blocking low-band expressions, but do not over-polish into Band 6/7 language.",
+      "9. This checklist only helps the student's source content reach Band 5. It must not override the source-based revision rule or create a new letter."
     ].join("\\n");
   }
   return [
@@ -308,7 +311,8 @@ function band5ChecklistForTask(task) {
     "5. Use basic but clear linking: firstly, for example, therefore, however, in conclusion.",
     "6. Conclusion must summarise the answer, not add a new idea.",
     "7. Grammar should mainly use simple, understandable sentences. It does not need to be error-free; minor awkwardness is acceptable if meaning is clear.",
-    "8. Vocabulary should be basic, clear, and topic-relevant. Avoid advanced or literary phrasing that would push the answer toward Band 6+."
+    "8. Vocabulary should be basic, clear, and topic-relevant. Avoid advanced or literary phrasing that would push the answer toward Band 6+.",
+    "9. This checklist only helps the student's source content reach Band 5. It must not override the source-based revision rule or create a new essay."
   ].join("\\n");
 }
 
@@ -322,16 +326,15 @@ function band5RescueContext(context = {}) {
     rescueRevisionTitle: belowBand5 ? "Band 5 rescue revision" : "Revised version: +0.5 band",
     plus10Title: belowBand5 ? "Band 5.5 stronger revision" : "Revised version: +1.0 band",
     rescueRule: belowBand5
-      ? "Because the student's current level is below Band 5.0, the first revised version is NOT a light edit. It is a Band 5 rescue rewrite. It must be based on the student's ideas, but it may reorganise paragraphs, clarify the request, add necessary concrete details, improve task coverage, replace low-band expressions, and simplify grammar so that production-router verification can reach at least Band 5.0."
+      ? "Because the student's current level is below Band 5.0, the first revised version is NOT a light edit. It is a Band 5 rescue rewrite. It must be based on the student's ideas and source facts first, then improved to Band 5.0. It may reorganise paragraphs, clarify the request, add only necessary prompt-related details, improve task coverage, replace low-band expressions, and simplify grammar. It must not replace the student's scenario, relationship, request, reasons, examples, or main meaning with a new model answer."
       : "Use the normal strict upgrade rule: the +0.5 revision must verify at current band +0.5, and the +1.0 revision must verify at current band +1.0."
   };
 }
 
 function targetWindowForGeneratedPart(key, targetBand) {
   const target = clampBand(targetBand);
-  if (target == null) return { minBand: null, idealMaxBand: null };
-  if (key === "revisionPlus05") return { minBand: target, idealMaxBand: clampBand(target + 0.5) };
-  return { minBand: target, idealMaxBand: clampBand(target + 0.5) };
+  if (target == null) return { targetBand: null, exactOnly: true };
+  return { targetBand: target, exactOnly: true };
 }
 
 
@@ -347,6 +350,68 @@ function extractJson(text) {
   const last = raw.lastIndexOf("}");
   if (first >= 0 && last > first) return JSON.parse(raw.slice(first, last + 1));
   throw new Error("AI did not return valid JSON");
+}
+
+function normalizeLearningGuide(guideObj = {}) {
+  const guide = objectOnly(guideObj);
+  const startHere = objectOnly(guide.startHere);
+  const keyDifferences = Array.isArray(guide.keyDifferences)
+    ? guide.keyDifferences.map((item) => {
+        const diff = objectOnly(item);
+        return {
+          title: String(diff.title || "").trim(),
+          originalProblem: String(diff.originalProblem || "").trim(),
+          originalEvidence: String(diff.originalEvidence || "").trim(),
+          revisionEvidence: String(diff.revisionEvidence || "").trim(),
+          whyCloserToTarget: String(diff.whyCloserToTarget || "").trim(),
+          imitationAction: String(diff.imitationAction || "").trim()
+        };
+      }).filter((item) => Object.values(item).some(Boolean))
+    : [];
+  const threeStepStudyPlan = Array.isArray(guide.threeStepStudyPlan)
+    ? guide.threeStepStudyPlan.map((item, index) => {
+        const step = objectOnly(item);
+        return {
+          step: String(step.step || `Step ${index + 1}`).trim(),
+          task: String(step.task || "").trim(),
+          whatToMark: String(step.whatToMark || "").trim(),
+          whatToLearn: String(step.whatToLearn || "").trim(),
+          practice: String(step.practice || "").trim()
+        };
+      }).filter((item) => Object.values(item).some(Boolean))
+    : [];
+  const imitablePatterns = Array.isArray(guide.imitablePatterns)
+    ? guide.imitablePatterns.map((item) => {
+        const pattern = objectOnly(item);
+        return {
+          pattern: String(pattern.pattern || "").trim(),
+          meaningZh: String(pattern.meaningZh || "").trim(),
+          source: String(pattern.source || "").trim(),
+          useCase: String(pattern.useCase || "").trim(),
+          substitutionPractice: String(pattern.substitutionPractice || "").trim(),
+          nextUse: String(pattern.nextUse || "").trim()
+        };
+      }).filter((item) => Object.values(item).some(Boolean))
+    : [];
+
+  return {
+    startHere: {
+      recommendedFirst: String(startHere.recommendedFirst || "").trim(),
+      whyFirst: String(startHere.whyFirst || "").trim(),
+      relationToCurrentLevel: String(startHere.relationToCurrentLevel || "").trim(),
+      whatToStudy: String(startHere.whatToStudy || "").trim(),
+      notPriorityYet: String(startHere.notPriorityYet || "").trim(),
+      targetAccuracyNote: String(startHere.targetAccuracyNote || "").trim()
+    },
+    keyDifferences,
+    threeStepStudyPlan,
+    imitablePatterns,
+    nextWritingReminders: textArray(guide.nextWritingReminders || guide.nextPracticeFocus),
+    doNotDo: textArray(guide.doNotDo || guide.doNotCopyBlindly),
+    mainWeaknesses: textArray(guide.mainWeaknesses),
+    nextPracticeFocus: textArray(guide.nextPracticeFocus),
+    doNotCopyBlindly: textArray(guide.doNotCopyBlindly)
+  };
 }
 
 function buildGenerationPrompt(body = {}) {
@@ -389,6 +454,10 @@ function buildGenerationPrompt(body = {}) {
     "3) revisionPlus10: if the student is below Band 5.0, this must target Band 5.5. If the student is Band 5.0 or above, it is a strict +1.0 band revision.",
     "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
     "Strict target rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 revision must be at least Band 5.0 and the +1.0 revision must be at least Band 5.5. If the current band is 5.0, the +0.5 revision must be at least Band 5.5.",
+    "Verification status must be exact: verifiedBand < targetBand means below_target; verifiedBand === targetBand means target_met; verifiedBand > targetBand means target_exceeded. Higher than target is not target_met because this module teaches a specific next-step band.",
+    "For revisionPlus05 and revisionPlus10, generate source-based revisions. They must preserve the user's scenario, relationship, request or position, main reasons, examples, task facts, and basic order/meaning. They must not become a new model answer.",
+    "For Band 5 rescue, the checklist is subordinate to source-based revision. Do not replace the user's content just to satisfy the checklist. Preserve the user's source content first, then make it clear enough for Band 5.",
+    "When writing learningGuide, write like an IELTS teacher speaking to a Chinese learner. Be concrete: cite original evidence, compare with revision evidence, tell the student which answer to study first, how to study it in three steps, which sentence patterns to imitate, what to check next time, and what not to do. Do not re-score the essay.",
     "Explain WHY each version is higher and WHAT the student should learn from it.",
     "Do not tell the student to memorize entire essays. Focus on structure, task coverage, useful sentences, grammar control, and paragraph development.",
     taskSpecific,
@@ -421,6 +490,11 @@ function buildGenerationPrompt(body = {}) {
         essay: essay ? "..." : "",
         whyItIsPlus05: rescue.belowBand5 ? "Explain how this version satisfies a realistic Band 5 checklist: clear purpose, bullet coverage, specific request, concrete benefit, clear paragraphing, suitable tone, simple understandable grammar, and not over-polished Band 6 language." : "Explain why this is about +0.5 band higher.",
         whatChanged: ["..."],
+        preservedContent: ["List the user's original facts, ideas, request/position, reasons, examples, or bullet-point details preserved in this revision"],
+        changedProblems: ["List the main problems fixed without changing the user's core content"],
+        whyCloserToTarget: "...",
+        imitableSentences: ["..."],
+        whySourceBasedRevision: "Explain why this is a source-based revision, not a new model answer.",
         sourceBasedChanges: ["List which original ideas/sentences were preserved and improved"],
         studyPoints: ["..."],
         usefulSentences: ["..."]
@@ -431,14 +505,55 @@ function buildGenerationPrompt(body = {}) {
         essay: essay ? "..." : "",
         whyItIsPlus10: "...",
         whatChangedFromPlus05: ["..."],
+        preservedContent: ["List the user's original facts, ideas, request/position, reasons, examples, or bullet-point details preserved in this revision"],
+        changedProblems: ["List the main problems fixed without changing the user's core content"],
+        whyCloserToTarget: "...",
+        imitableSentences: ["..."],
+        whySourceBasedRevision: "Explain why this is a source-based revision, not a new model answer.",
         sourceBasedChanges: ["List which original ideas/sentences were preserved and improved"],
         studyPoints: ["..."],
         usefulSentences: ["..."]
       },
       learningGuide: {
-        mainWeaknesses: ["..."],
-        nextPracticeFocus: ["..."],
-        doNotCopyBlindly: ["..."]
+        startHere: {
+          recommendedFirst: "revisionPlus05 | revisionPlus10 | modelAnswer",
+          whyFirst: "Chinese-first teacher explanation of why the student should study this one first.",
+          relationToCurrentLevel: "Explain how this version relates to currentBand.",
+          whatToStudy: "What exactly the student should learn from it.",
+          notPriorityYet: "Which answer is not the first priority and why.",
+          targetAccuracyNote: "If a generated version did not exactly meet target after verification, honestly say it is the closest available version."
+        },
+        keyDifferences: [
+          {
+            title: "Difference title",
+            originalProblem: "Chinese explanation of the original problem.",
+            originalEvidence: "A short quote or phrase from the student's original essay.",
+            revisionEvidence: "A short quote or phrase from revisionPlus05 or revisionPlus10.",
+            whyCloserToTarget: "Why this change is closer to the target band.",
+            imitationAction: "How to imitate this change next time."
+          }
+        ],
+        threeStepStudyPlan: [
+          {
+            step: "Step 1",
+            task: "Detailed Chinese task for the student.",
+            whatToMark: "What to mark when comparing original and revision.",
+            whatToLearn: "What skill to learn.",
+            practice: "Concrete practice action."
+          }
+        ],
+        imitablePatterns: [
+          {
+            pattern: "I am writing to ask if it would be possible to...",
+            meaningZh: "我写信是想询问是否可以……",
+            source: "revisionPlus05",
+            useCase: "Request letters / body paragraph explanation / conclusion, etc.",
+            substitutionPractice: "I am writing to ask if it would be possible to change my working hours.",
+            nextUse: "Tell the student when to use it next time."
+          }
+        ],
+        nextWritingReminders: ["Specific Chinese reminders based on the original essay."],
+        doNotDo: ["Specific Chinese warnings about what not to do at the current level."]
       },
       legacy: {
         modelAnswerOutline: "...",
@@ -505,6 +620,11 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     essay: String(plus05Obj.essay || result.revisedEssayPlus05 || result.revisedEssay || legacy.revisedEssay || result.revision || result.improvedEssay || "").trim(),
     whyItIsPlus05: String(plus05Obj.whyItIsPlus05 || result.whyPlus05 || "").trim(),
     whatChanged: textArray(plus05Obj.whatChanged),
+    preservedContent: textArray(plus05Obj.preservedContent),
+    changedProblems: textArray(plus05Obj.changedProblems),
+    whyCloserToTarget: String(plus05Obj.whyCloserToTarget || "").trim(),
+    imitableSentences: textArray(plus05Obj.imitableSentences),
+    whySourceBasedRevision: String(plus05Obj.whySourceBasedRevision || "").trim(),
     sourceBasedChanges: textArray(plus05Obj.sourceBasedChanges),
     studyPoints: textArray(plus05Obj.studyPoints),
     usefulSentences: textArray(plus05Obj.usefulSentences)
@@ -516,16 +636,17 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     essay: String(plus10Obj.essay || result.revisedEssayPlus10 || "").trim(),
     whyItIsPlus10: String(plus10Obj.whyItIsPlus10 || result.whyPlus10 || "").trim(),
     whatChangedFromPlus05: textArray(plus10Obj.whatChangedFromPlus05 || plus10Obj.whatChanged),
+    preservedContent: textArray(plus10Obj.preservedContent),
+    changedProblems: textArray(plus10Obj.changedProblems),
+    whyCloserToTarget: String(plus10Obj.whyCloserToTarget || "").trim(),
+    imitableSentences: textArray(plus10Obj.imitableSentences),
+    whySourceBasedRevision: String(plus10Obj.whySourceBasedRevision || "").trim(),
     sourceBasedChanges: textArray(plus10Obj.sourceBasedChanges),
     studyPoints: textArray(plus10Obj.studyPoints),
     usefulSentences: textArray(plus10Obj.usefulSentences)
   };
 
-  const learningGuide = {
-    mainWeaknesses: textArray(guideObj.mainWeaknesses),
-    nextPracticeFocus: textArray(guideObj.nextPracticeFocus),
-    doNotCopyBlindly: textArray(guideObj.doNotCopyBlindly)
-  };
+  const learningGuide = normalizeLearningGuide(guideObj);
 
   const modelAnswerOutline = String(
     result.modelAnswerOutline ||
@@ -636,7 +757,7 @@ function verificationLabel(verifiedBand, targetBand) {
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
   if (verified < target) return "below_target";
-  if (verified > target + 0.5) return "target_exceeded";
+  if (verified > target) return "target_exceeded";
   return "target_met";
 }
 
@@ -721,7 +842,7 @@ function shouldRewriteForTarget(verification = {}) {
   const verified = Number(verification.verifiedBand);
   if (!verification.ok) return false;
   if (!Number.isFinite(target) || !Number.isFinite(verified)) return false;
-  return verified < target;
+  return verified !== target;
 }
 
 function generatedPartSpec(key) {
@@ -745,11 +866,17 @@ function generatedPartSpec(key) {
       label: "+1.0 revised version based on the student's essay",
       objectName: "revisionPlus10",
       jsonShape: {
-        title: rescue.plus10Title,
+        title: "Revised version: +1.0 band",
         targetBand: 0,
         essay: "...",
         whyItIsPlus10: "...",
         whatChangedFromPlus05: ["..."],
+        preservedContent: ["..."],
+        changedProblems: ["..."],
+        whyCloserToTarget: "...",
+        imitableSentences: ["..."],
+        whySourceBasedRevision: "...",
+        sourceBasedChanges: ["..."],
         studyPoints: ["..."],
         usefulSentences: ["..."]
       }
@@ -764,6 +891,12 @@ function generatedPartSpec(key) {
       essay: "...",
       whyItIsPlus05: "...",
       whatChanged: ["..."],
+      preservedContent: ["..."],
+      changedProblems: ["..."],
+      whyCloserToTarget: "...",
+      imitableSentences: ["..."],
+      whySourceBasedRevision: "...",
+      sourceBasedChanges: ["..."],
       studyPoints: ["..."],
       usefulSentences: ["..."]
     }
@@ -790,7 +923,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
   const downshiftLockRules = band5DownshiftLockRules(task);
   const targetMaxBand = targetBand == null ? null : clampBand(targetBand + 0.5);
   const rewriteDirection = verificationStatus === "target_exceeded"
-    ? "DOWNGRADE: The generated answer scored too high for this learning slot. Make it simpler and closer to the target, while staying at or above the target."
+    ? "SOFT DOWNSHIFT: The generated answer scored above this exact learning target. Keep all task content and source facts, but reduce polish, complexity, and development until it is closer to the exact target band."
     : "UPGRADE: The generated answer scored below target. Improve it enough to reach the target.";
 
   return [
@@ -805,14 +938,14 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Task: ${task}`,
     `Target band: ${targetBand == null ? "learner-realistic" : bandLabel(targetBand)}`,
     `Production-router verified band: ${verifiedBand == null ? "unavailable" : bandLabel(verifiedBand)}`,
-    `Target window: ${targetBand == null ? "unavailable" : `${bandLabel(targetBand)} to ${bandLabel(targetMaxBand)}`}`,
+    `Exact target: ${targetBand == null ? "unavailable" : bandLabel(targetBand)}`,
     `Production-router verification status: ${verificationStatus}`,
     `Rewrite attempt number: ${rewriteAttemptCount}`,
     `Escalation mode active: ${escalationMode ? "YES" : "NO"}`,
     `Band 5 downshift lock active: ${downshiftLockMode ? "YES" : "NO"}`,
     `Rewrite direction: ${rewriteDirection}`,
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
-    "The learning slot has a target window, not just a minimum. For a Band 5 rescue slot, a production verification of Band 6.0 is too high and should be rewritten down toward Band 5.0-5.5.",
+    "The learning slot has an exact target, not a minimum. If target is Band 5.0 and production verification is Band 5.5 or 6.0, status is target_exceeded and the answer must be softly downshifted. Do not call above-target versions successful.",
     isBand5Rescue ? "This is the Band 5 rescue revision. It must satisfy the checklist below. It must be a source-based rescue rewrite: stronger than the original, but still clearly derived from the student\'s original facts, request, reason, and benefit idea." : "",
     isBand5Rescue ? "Realistic Band 5 rule: the answer should be clear and complete but still simple. It can contain basic vocabulary, simple grammar, some repetition, and minor awkwardness. Do not intentionally add mistakes." : "",
     isBand5Rescue ? band5Checklist : "",
@@ -821,7 +954,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
     downshiftLockMode ? downshiftLockRules : "",
     downshiftLockMode ? "Because repeated attempts exceeded the target, do NOT keep the same polished essay. Produce a shorter, simpler, more modest source-based version while keeping all task requirements clear." : "",
     "If status is below_target, improve task coverage, specificity, paragraphing, cohesion, and basic grammar. For Task 1, make the request concrete and the benefit specific. For Task 2, make the position and body paragraph development clearer.",
-    "If status is target_exceeded, keep the task fully covered but simplify vocabulary, shorten sentence structures, reduce sophisticated collocations, remove over-polished phrasing, and aim for a clear realistic Band 5.0-5.5 learner version.",
+    "If status is target_exceeded, keep the task fully covered and preserve the student's source content, but simplify vocabulary, shorten sentence structures, reduce sophisticated collocations, remove over-polished phrasing, and aim for the exact target band.",
     "Output JSON shape:",
     JSON.stringify({ [spec.objectName]: { ...spec.jsonShape, targetBand } }, null, 2),
     "Context prompt:",
@@ -859,7 +992,9 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
       ...secondVerification,
       firstVerifiedBand: firstVerification.verifiedBand,
       firstStatus: firstVerification.status,
-      rewriteAttempted: true
+      rewriteAttempted: true,
+      rewriteStrategy: firstVerification.status === "target_exceeded" ? "soft downshift" : "floor raise",
+      exactTargetMet: secondVerification.status === "target_met"
     };
     normalized[key].rewriteAttempted = true;
     return normalized[key].verification;
@@ -867,6 +1002,8 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
     normalized[key].verification = {
       ...firstVerification,
       rewriteAttempted: true,
+      rewriteStrategy: firstVerification.status === "target_exceeded" ? "soft downshift" : "floor raise",
+      exactTargetMet: firstVerification.status === "target_met",
       rewriteFailed: true,
       rewriteError: String(error.message || error).slice(0, 500),
       message: `${firstVerification.message} 自动重写尝试失败；请手动查看目标分和验证分差距。`

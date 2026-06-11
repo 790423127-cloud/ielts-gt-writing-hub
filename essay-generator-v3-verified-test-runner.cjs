@@ -41,8 +41,15 @@ function statusFor(verifiedBand, targetBand) {
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
   if (verified < target) return "below_target";
-  if (verified > target + 0.5) return "target_exceeded";
+  if (verified > target) return "target_exceeded";
   return "target_met";
+}
+
+function bandDistance(verifiedBand, targetBand) {
+  const verified = Number(verifiedBand);
+  const target = Number(targetBand);
+  if (!Number.isFinite(verified) || !Number.isFinite(target)) return Number.POSITIVE_INFINITY;
+  return Math.abs(verified - target);
 }
 
 async function postJson(endpoint, payload) {
@@ -85,6 +92,7 @@ async function verifyPart(key, essay, targetBand) {
 }
 
 async function rewritePart(key, essay, targetBand, verification) {
+  const rewriteStrategy = verification.status === "target_exceeded" ? "soft downshift" : "floor raise";
   const payload = {
     ...sample,
     mode: "rewrite_generated_part",
@@ -93,6 +101,7 @@ async function rewritePart(key, essay, targetBand, verification) {
     failedGeneratedEssay: essay,
     targetBand,
     failedVerifiedBand: verification.verifiedBand,
+    rewriteStrategy,
     verification,
     criterionBands: verification.criteria || null,
     verifyGeneratedScores: false
@@ -109,13 +118,33 @@ async function verifyWithRegeneration(data, key) {
   const targetBand = part.targetBand;
   let rewriteCount = 0;
   let verification = await verifyPart(key, part.essay, targetBand);
-  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 6) {
+  let closest = Number.isFinite(bandDistance(verification.verifiedBand, targetBand))
+    ? { part: { ...part }, verification: { ...verification }, distance: bandDistance(verification.verifiedBand, targetBand) }
+    : null;
+  while (["below_target", "target_exceeded"].includes(verification.status) && rewriteCount < 20) {
     rewriteCount += 1;
-    const reason = verification.status === "target_exceeded" ? `above target window (${verification.verifiedBand} > ${targetBand + 0.5})` : `below target (${verification.verifiedBand} < ${targetBand})`;
+    const reason = verification.status === "target_exceeded" ? `above exact target (${verification.verifiedBand} > ${targetBand})` : `below exact target (${verification.verifiedBand} < ${targetBand})`;
     console.log(`${key}: ${reason}, rewriting attempt ${rewriteCount}...`);
     part = await rewritePart(key, part.essay, targetBand, verification);
     data[key] = { ...(data[key] || {}), ...part, rewriteAttempted: true, rewriteAttemptCount: rewriteCount };
     verification = await verifyPart(key, part.essay, targetBand);
+    const distance = bandDistance(verification.verifiedBand, targetBand);
+    if (Number.isFinite(distance) && (!closest || distance < closest.distance)) {
+      closest = { part: { ...data[key] }, verification: { ...verification }, distance };
+    }
+  }
+  if (["below_target", "target_exceeded"].includes(verification.status) && closest) {
+    data[key] = { ...(data[key] || {}), ...closest.part, closestVersionUsed: true };
+    verification = {
+      ...closest.verification,
+      status: "closest_available",
+      secondaryStatus: "not_exact_target",
+      exactTargetMet: false,
+      closestVersionUsed: true,
+      closestVerifiedBand: closest.verification.verifiedBand,
+      distanceFromTarget: Math.round(closest.distance * 2) / 2,
+      message: "Closest version used; exact target was not reached."
+    };
   }
   data[key].verification = { ...verification, rewriteAttempted: rewriteCount > 0, rewriteAttemptCount: rewriteCount };
   return data[key].verification;
@@ -127,7 +156,7 @@ async function run() {
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("source-based escalation and downshift lock: if Band 5 rescue remains 4.5, rebuild; if it remains 6.0, simplify/lock down to Band 5 style; max attempts = 6");
+  console.log("source-based escalation and downshift lock: if Band 5 rescue remains 4.5, rebuild; if it remains 6.0, simplify/lock down to Band 5 style; max attempts = 20");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {

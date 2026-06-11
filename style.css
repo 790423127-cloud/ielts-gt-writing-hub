@@ -1962,3 +1962,9 @@ select#typeFilter{
 .learning-card-list .learning-card pre{white-space:pre-wrap;word-break:break-word;overflow:auto;max-width:100%}
 .learning-error-tag{max-width:100%;white-space:normal}
 @media(max-width:700px){.learning-feedback-panel{padding:14px}.learning-module-output{padding:12px}.learning-card{padding:11px}.learning-tabs{display:grid;grid-template-columns:1fr}.learning-tab{width:100%}}
+
+/* Essay generator teacher-style guide */
+.generated-teacher-guide section{border:1px solid var(--line);border-radius:8px;padding:14px;margin:12px 0;background:var(--soft)}
+.generated-teacher-guide h4,.generated-teacher-item h5{margin:0 0 10px}
+.generated-teacher-item{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.generated-teacher-item:first-child{border-top:0;padding-top:0;margin-top:0}

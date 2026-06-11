@@ -2364,6 +2364,16 @@
       return arr.length ? `<div class="generated-study-list"><h5>${escapeHtml(title)}</h5>${listHtml(arr)}</div>` : "";
     };
 
+    const valueBlock = (title, value) => {
+      const text = toText(value);
+      return text ? `<div class="score-flow-note"><strong>${escapeHtml(title)}</strong>${escapeHtml(text)}</div>` : "";
+    };
+
+    const fieldLine = (label, value) => {
+      const text = toText(value);
+      return text ? `<p><strong>${escapeHtml(label)}</strong>${escapeHtml(text)}</p>` : "";
+    };
+
     const oldModelAnswer = typeof result.modelAnswer === "string" ? result.modelAnswer : "";
     const model = typeof result.modelAnswer === "object" && result.modelAnswer
       ? result.modelAnswer
@@ -2410,16 +2420,17 @@
     const applyButton = (id, label) => `<button class="secondary" type="button" data-apply-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
 
     const verificationStatusText = (status) => ({
-      target_met: "已达到目标",
-      target_exceeded: "超过目标，偏难，需要降档",
-      near_target: "未达到严格目标",
-      below_target: "未达到目标，不能算 +0.5 / +1.0 成功",
+      target_met: "精确达到目标",
+      target_exceeded: "超过目标，不等于达标",
+      closest_available: "使用最接近版本",
+      not_exact_target: "未精确达到目标",
+      below_target: "低于目标",
       verification_failed: "验证失败",
       verification_running: "正在验证",
+      rewrite_running: "正在按目标重写",
       empty_essay: "无文本可验证",
       verification_unavailable: "验证不可用"
     })[status] || "验证结果未知";
-
     const verificationBandText = (obj, fallbackTarget) => {
       const target = obj?.targetBand || fallbackTarget;
       const verified = obj?.verification?.verifiedBand;
@@ -2434,12 +2445,18 @@
       if (!v.enabled) return "";
       const target = Number.isFinite(Number(v.targetBand || obj?.targetBand)) ? `Band ${formatBand(v.targetBand || obj?.targetBand)}` : "目标未指定";
       const verified = Number.isFinite(Number(v.verifiedBand)) ? `Band ${formatBand(v.verifiedBand)}` : "暂无";
-      const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `；初次验证：Band ${formatBand(v.firstVerifiedBand)}` : "";
+      const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `；首次验证：Band ${formatBand(v.firstVerifiedBand)}` : "";
       const rewrite = v.rewriteAttempted ? "；已尝试自动重写" : "";
+      const rewriteCount = Number.isFinite(Number(v.rewriteAttemptCount)) ? `；重写次数：${Number(v.rewriteAttemptCount)}` : "";
+      const strategy = v.rewriteStrategy || obj?.rewriteStrategy ? `；策略：${v.rewriteStrategy || obj.rewriteStrategy}` : "";
+      const exact = v.exactTargetMet === true ? "；精确达到目标：是" : (v.exactTargetMet === false ? "；精确达到目标：否" : "");
+      const closest = v.closestVersionUsed || v.status === "closest_available"
+        ? `；最终使用最接近版本${Number.isFinite(Number(v.closestVerifiedBand)) ? `（Band ${formatBand(v.closestVerifiedBand)}）` : ""}`
+        : "";
+      const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `；距离目标：${formatBand(v.distanceFromTarget)}` : "";
       const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
-      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${err}</div>`;
+      return `<div class="score-flow-note generated-verification-note"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
     };
-
     const card = (title, subtitle, essayText, explanationHtml, actionsHtml = "") => `
       <details class="score-accordion generated-essay-card">
         <summary>${escapeHtml(title)} <span class="muted">${escapeHtml(subtitle)}</span></summary>
@@ -2450,41 +2467,102 @@
         </div>
       </details>`;
 
+    const sourceBasedExplanation = (part, changeItems) => `
+      ${listBlock("保留了原文哪些内容", part.preservedContent || part.sourceBasedChanges)}
+      ${listBlock("改了哪些问题", part.changedProblems || changeItems)}
+      ${valueBlock("为什么更接近目标分数：", part.whyCloserToTarget)}
+      ${listBlock("可以模仿的句子", part.imitableSentences || part.usefulSentences)}
+      ${valueBlock("为什么这不是新范文：", part.whySourceBasedRevision)}
+    `;
+
+    const renderTeacherGuide = (guideData = {}) => {
+      const start = guideData.startHere || {};
+      const differences = Array.isArray(guideData.keyDifferences) ? guideData.keyDifferences : [];
+      const steps = Array.isArray(guideData.threeStepStudyPlan) ? guideData.threeStepStudyPlan : [];
+      const patterns = Array.isArray(guideData.imitablePatterns) ? guideData.imitablePatterns : [];
+      const oldWeaknesses = toArr(guideData.mainWeaknesses);
+      const oldFocus = toArr(guideData.nextPracticeFocus);
+      const oldDont = toArr(guideData.doNotCopyBlindly);
+      const nextReminders = toArr(guideData.nextWritingReminders).length ? toArr(guideData.nextWritingReminders) : oldFocus;
+      const doNotDo = toArr(guideData.doNotDo).length ? toArr(guideData.doNotDo) : oldDont;
+      const startHtml = [
+        fieldLine("先学哪一篇：", start.recommendedFirst),
+        fieldLine("为什么先学它：", start.whyFirst),
+        fieldLine("和你当前水平的关系：", start.relationToCurrentLevel),
+        fieldLine("这篇适合学什么：", start.whatToStudy),
+        fieldLine("暂时不要优先学哪篇：", start.notPriorityYet),
+        fieldLine("目标分诚实说明：", start.targetAccuracyNote)
+      ].filter(Boolean).join("") || `<p>先从最接近你当前水平的修改版开始，再看题目范文。不要直接背整篇 model answer。</p>`;
+      const differencesHtml = differences.length
+        ? differences.map((item, index) => `<div class="generated-teacher-item">
+            <h5>差别 ${index + 1}：${escapeHtml(toText(item.title) || "原文到修改版的关键变化")}</h5>
+            ${fieldLine("原文问题：", item.originalProblem)}
+            ${fieldLine("原文证据：", item.originalEvidence)}
+            ${fieldLine("修改版做法：", item.revisionEvidence)}
+            ${fieldLine("为什么更像目标分：", item.whyCloserToTarget)}
+            ${fieldLine("下次怎么模仿：", item.imitationAction)}
+          </div>`).join("")
+        : listHtml(oldWeaknesses.length ? oldWeaknesses : ["AI 暂未返回逐项差别。请先对比原文和 Band 5 修改版，看写信目的、任务要点和段落是否更清楚。"]);
+      const stepsHtml = steps.length
+        ? steps.map((item, index) => `<div class="generated-teacher-item">
+            <h5>${escapeHtml(toText(item.step) || `Step ${index + 1}`)}</h5>
+            ${fieldLine("具体任务：", item.task)}
+            ${fieldLine("标记什么：", item.whatToMark)}
+            ${fieldLine("学什么：", item.whatToLearn)}
+            ${fieldLine("练习：", item.practice)}
+          </div>`).join("")
+        : `<ol><li>先对比原文和 Band 5 修改版，标出任务点如何补完整。</li><li>抄写并替换 2-3 个关键句型。</li><li>不看范文，用同一道题重新写一遍。</li></ol>`;
+      const patternsHtml = patterns.length
+        ? patterns.map((item) => `<div class="generated-teacher-item">
+            ${fieldLine("句型：", item.pattern)}
+            ${fieldLine("中文意思：", item.meaningZh)}
+            ${fieldLine("来自：", item.source)}
+            ${fieldLine("适用场景：", item.useCase)}
+            ${fieldLine("替换练习：", item.substitutionPractice)}
+            ${fieldLine("下次如何使用：", item.nextUse)}
+          </div>`).join("")
+        : listHtml(toArr(plus05.usefulSentences).concat(toArr(plus10.usefulSentences)).slice(0, 5));
+      return `
+        <details class="score-accordion generated-learning-guide">
+          <summary>学习路线 / How to learn from these answers</summary>
+          <div class="score-accordion-body generated-teacher-guide">
+            <section><h4>1. 你应该先学哪一篇</h4>${startHtml}</section>
+            <section><h4>2. 原文和修改版的关键差别</h4>${differencesHtml}</section>
+            <section><h4>3. 三步学习路线</h4>${stepsHtml}</section>
+            <section><h4>4. 可模仿句型</h4>${patternsHtml}</section>
+            <section><h4>5. 下次写作提醒</h4>${listHtml(nextReminders.length ? nextReminders : ["每个任务点至少写 1-2 句。", "先写清楚目的和主要内容，再考虑更高级表达。"] )}</section>
+            <section><h4>6. 不要做的事</h4>${listHtml(doNotDo.length ? doNotDo : ["不要直接背整篇 modelAnswer。", "不要只改单词，要先学任务回应和段落结构。", "不要把 modelAnswer 当成自己的修改版。"] )}</section>
+          </div>
+        </details>`;
+    };
+
     const modelExplanation = `
       ${verificationBlock(model)}
-      ${toText(model.whyThisIsLearnable) ? `<div class="score-flow-note"><strong>为什么这篇适合你学：</strong>${escapeHtml(model.whyThisIsLearnable)}</div>` : ""}
-      ${toText(model.whyHigherThanUserEssay) ? `<div class="score-flow-note"><strong>为什么比你的原文更高：</strong>${escapeHtml(model.whyHigherThanUserEssay)}</div>` : ""}
+      ${valueBlock("为什么这篇适合学：", model.whyThisIsLearnable)}
+      ${valueBlock("为什么比你的原文更高：", model.whyHigherThanUserEssay)}
       ${listBlock("这篇范文里要学习什么", model.studyPoints)}
       ${listBlock("可模仿句子", model.usefulSentences)}
     `;
 
     const plus05Explanation = `
       ${verificationBlock(plus05)}
-      ${toText(plus05.whyItIsPlus05) ? `<div class="score-flow-note"><strong>${escapeHtml(plus05WhyTitle)}：</strong>${escapeHtml(plus05.whyItIsPlus05)}</div>` : ""}
+      ${valueBlock(`${plus05WhyTitle}：`, plus05.whyItIsPlus05)}
+      ${sourceBasedExplanation(plus05, plus05.whatChanged)}
       ${listBlock("主要改了什么", plus05.whatChanged)}
-      ${listBlock("你下次最应该先学什么", plus05.studyPoints)}
+      ${listBlock("下次优先学什么", plus05.studyPoints)}
       ${listBlock("可模仿句子", plus05.usefulSentences)}
     `;
 
     const plus10Explanation = `
       ${verificationBlock(plus10)}
-      ${toText(plus10.whyItIsPlus10) ? `<div class="score-flow-note"><strong>为什么大约高 1.0 分：</strong>${escapeHtml(plus10.whyItIsPlus10)}</div>` : ""}
+      ${valueBlock("为什么大约高 1.0 分：", plus10.whyItIsPlus10)}
+      ${sourceBasedExplanation(plus10, plus10.whatChangedFromPlus05 || plus10.whatChanged)}
       ${listBlock("比 +0.5 版本多提升在哪里", plus10.whatChangedFromPlus05 || plus10.whatChanged)}
       ${listBlock("下一阶段要学习什么", plus10.studyPoints)}
       ${listBlock("可模仿句子", plus10.usefulSentences)}
     `;
 
-    const guideHtml = `
-      <details class="score-accordion generated-learning-guide">
-        <summary>学习路线 / How to learn from these answers</summary>
-        <div class="score-accordion-body">
-          ${listBlock("你当前最主要的问题", guide.mainWeaknesses)}
-          ${listBlock("下一篇作文优先练什么", guide.nextPracticeFocus)}
-          ${listBlock("不要盲目照抄什么", guide.doNotCopyBlindly)}
-          <div class="score-flow-note"><strong>学习顺序：</strong>先看题目范文的结构，再看 +0.5 修改版学习最容易马上改的地方，最后看 +1.0 修改版作为下一阶段目标。</div>
-        </div>
-      </details>`;
-
+    const guideHtml = renderTeacherGuide(guide);
     const html = `<section class="grading-section revision-block generated-writing-learning-block">
       <details class="score-accordion generated-writing-panel">
         <summary>作文生成 / Model and Revision <span class="muted">已生成 3 篇可学习作文，点击展开。</span></summary>
@@ -2565,7 +2643,7 @@
     const target = Number(targetBand);
     if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
     if (verified < target) return "below_target";
-    if (verified > target + 0.5) return "target_exceeded";
+    if (verified > target) return "target_exceeded";
     return "target_met";
   }
 
@@ -2646,7 +2724,8 @@
       targetBand,
       essay: String(incoming.essay || current.essay || "").trim(),
       rewriteAttempted: true,
-      rewriteAttemptCount: attemptNumber
+      rewriteAttemptCount: attemptNumber,
+      rewriteStrategy: incoming.rewriteStrategy || current.rewriteStrategy || ""
     };
     return result[key];
   }
@@ -2656,6 +2735,7 @@
     if (!endpoint) throw new Error("作文生成接口地址不可用，无法自动重写。 ");
     const part = result[key] || {};
     const lockedTask = lockedTaskForSelected();
+    const rewriteStrategy = verification?.status === "target_exceeded" ? "soft downshift" : "floor raise";
     const rewriteResponse = await postStage(endpoint, gradingPayload({
       mode: "rewrite_generated_part",
       generationMode: "rewrite_generated_part",
@@ -2663,6 +2743,7 @@
       failedGeneratedEssay: String(part.essay || ""),
       targetBand: part.targetBand,
       failedVerifiedBand: verification?.verifiedBand,
+      rewriteStrategy,
       rewriteAttemptCount: attemptNumber,
       attemptNumber,
       verification,
@@ -2674,10 +2755,28 @@
     return mergeRewrittenGeneratedPart(result, key, rewriteResponse, attemptNumber);
   }
 
+  function generatedBandDistance(verifiedBand, targetBand) {
+    const verified = Number(verifiedBand);
+    const target = Number(targetBand);
+    if (!Number.isFinite(verified) || !Number.isFinite(target)) return Number.POSITIVE_INFINITY;
+    return Math.abs(verified - target);
+  }
+
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
     const maxRewriteAttempts = 6;
     const part = result[key] || {};
     const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
+    let closest = null;
+    const rememberClosest = () => {
+      const currentPart = result[key] || {};
+      const verification = currentPart.verification || {};
+      const distance = generatedBandDistance(verification.verifiedBand, targetBand);
+      if (!Number.isFinite(distance)) return;
+      if (!closest || distance < closest.distance) {
+        closest = { essay: String(currentPart.essay || ""), part: { ...currentPart }, verification: { ...verification }, distance };
+      }
+    };
+
     part.verification = {
       enabled: true,
       ok: false,
@@ -2708,37 +2807,60 @@
           ...lastVerification,
           rewriteAttempted: Boolean(result[key].rewriteAttempted),
           rewriteAttemptCount: Number(result[key].rewriteAttemptCount) || 0,
+          rewriteStrategy: result[key].rewriteStrategy || (lastVerification.status === "target_exceeded" ? "soft downshift" : (lastVerification.status === "below_target" ? "floor raise" : "candidate selected")),
+          exactTargetMet: lastVerification.status === "target_met",
           firstVerifiedBand: result[key].verification?.firstVerifiedBand ?? (attempt === 0 ? lastVerification.verifiedBand : result[key].verification?.firstVerifiedBand),
           firstStatus: result[key].verification?.firstStatus ?? (attempt === 0 ? lastVerification.status : result[key].verification?.firstStatus)
         };
+        rememberClosest();
         renderRevisionResult(result);
 
+        if (lastVerification.status === "target_met") return result[key].verification;
         if (!["below_target", "target_exceeded"].includes(lastVerification.status)) return result[key].verification;
         if (attempt >= maxRewriteAttempts) {
-          const finalStatus = lastVerification.status;
-          result[key].verification = {
-            ...result[key].verification,
-            status: finalStatus,
-            message: finalStatus === "target_exceeded"
-              ? `已自动降档 ${maxRewriteAttempts} 次，但仍高于目标窗口。本版本达标但偏难，不是理想的 Band ${formatBand(targetBand)} 学习版，请重新生成。`
-              : `已自动重写 ${maxRewriteAttempts} 次，但仍未达到 Band ${formatBand(targetBand)}。本版本不能作为有效目标分学习范文，请重新生成。`,
-            finalFailedAfterRewrite: true
+          const chosen = closest || { part: result[key], verification: result[key].verification, distance: generatedBandDistance(lastVerification.verifiedBand, targetBand) };
+          result[key] = {
+            ...(result[key] || {}),
+            ...(chosen.part || {}),
+            essay: chosen.essay || result[key]?.essay || "",
+            rewriteAttempted: true,
+            rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts
           };
+          result[key].verification = {
+            ...(chosen.verification || result[key].verification || {}),
+            status: "closest_available",
+            secondaryStatus: "not_exact_target",
+            message: "最终使用最接近版本，但未精确达到目标。",
+            exactTargetMet: false,
+            closestVersionUsed: true,
+            closestVerifiedBand: chosen.verification?.verifiedBand ?? lastVerification.verifiedBand,
+            targetBand: Number.isFinite(targetBand) ? targetBand : null,
+            distanceFromTarget: Number.isFinite(chosen.distance) ? Math.round(chosen.distance * 2) / 2 : null,
+            rewriteAttempted: true,
+            rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts,
+            rewriteStrategy: "closest version used"
+          };
+          result[key].closestVersionUsed = true;
+          result[key].exactTargetMet = false;
+          result[key].rewriteStrategy = "closest version used";
           renderRevisionResult(result);
           return result[key].verification;
         }
 
+        const rewriteStrategy = lastVerification.status === "target_exceeded" ? "soft downshift" : "floor raise";
         result[key].verification = {
           ...result[key].verification,
           status: "rewrite_running",
           message: lastVerification.status === "target_exceeded"
-            ? `生产验证高于目标窗口，正在自动降档重写第 ${attempt + 1} 次。`
-            : `生产验证低于目标，正在自动提高重写第 ${attempt + 1} 次。`,
+            ? `验证分高于精确目标，正在进行 soft downshift 第 ${attempt + 1} 次。`
+            : `验证分低于精确目标，正在进行 floor raise 第 ${attempt + 1} 次。`,
           rewriteAttempted: true,
-          rewriteAttemptCount: attempt + 1
+          rewriteAttemptCount: attempt + 1,
+          rewriteStrategy
         };
         result[key].rewriteAttempted = true;
         result[key].rewriteAttemptCount = attempt + 1;
+        result[key].rewriteStrategy = rewriteStrategy;
         renderRevisionResult(result);
         await rewriteGeneratedEssayPartClientSide(result, key, lastVerification, attempt + 1);
         renderRevisionResult(result);
@@ -2762,7 +2884,6 @@
     }
     return lastVerification;
   }
-
   async function verifyGeneratedEssaysClientSide(result = {}) {
     const keys = [
       ["modelAnswer", "question-based model answer"],
