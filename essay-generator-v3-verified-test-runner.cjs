@@ -57,7 +57,7 @@ async function postJson(endpoint, payload) {
   return data;
 }
 
-async function verifyPart(data, key, essay, targetBand) {
+async function verifyPart(key, essay, targetBand) {
   if (!essay) return { verifiedBand: null, status: "empty_essay" };
   const payload = {
     ...sample,
@@ -83,24 +83,62 @@ async function verifyPart(data, key, essay, targetBand) {
   }
 }
 
+async function rewritePart(key, essay, targetBand, verification) {
+  const payload = {
+    ...sample,
+    mode: "rewrite_generated_part",
+    generationMode: "rewrite_generated_part",
+    rewriteGeneratedPart: key,
+    failedGeneratedEssay: essay,
+    targetBand,
+    failedVerifiedBand: verification.verifiedBand,
+    verification,
+    criterionBands: verification.criteria || null,
+    verifyGeneratedScores: false
+  };
+  const data = await postJson(generatorEndpoint, payload);
+  const part = data[key] || data.rewrittenPart || {};
+  if (!part.essay) throw new Error(`Rewrite for ${key} did not return essay text.`);
+  part.targetBand = targetBand;
+  return part;
+}
+
+async function verifyWithRegeneration(data, key) {
+  let part = data[key] || {};
+  const targetBand = part.targetBand;
+  let rewriteCount = 0;
+  let verification = await verifyPart(key, part.essay, targetBand);
+  while (verification.status === "below_target" && rewriteCount < 2) {
+    rewriteCount += 1;
+    console.log(`${key}: below target (${verification.verifiedBand} < ${targetBand}), rewriting attempt ${rewriteCount}...`);
+    part = await rewritePart(key, part.essay, targetBand, verification);
+    data[key] = { ...(data[key] || {}), ...part, rewriteAttempted: true, rewriteAttemptCount: rewriteCount };
+    verification = await verifyPart(key, part.essay, targetBand);
+  }
+  data[key].verification = { ...verification, rewriteAttempted: rewriteCount > 0, rewriteAttemptCount: rewriteCount };
+  return data[key].verification;
+}
+
 async function run() {
   console.log("Generator endpoint:", generatorEndpoint);
   console.log("Scoring endpoint:", scoringEndpoint);
 
   const data = await postJson(generatorEndpoint, sample);
   console.log("generatorVersion:", data.generatorVersion);
-  console.log("strict minimum target rule: below target = failure, no near_target success");
+  console.log("strict minimum target rule: below Band 5 starts from target 5.0; below target triggers regeneration");
   console.log("currentBand:", data.currentBand);
 
   for (const key of ["modelAnswer", "revisionPlus05", "revisionPlus10"]) {
     const part = data[key] || {};
-    const verification = await verifyPart(data, key, part.essay, part.targetBand);
+    const verification = await verifyWithRegeneration(data, key);
     console.log(key, {
       targetBand: part.targetBand,
       verifiedBand: verification.verifiedBand,
       status: verification.status,
+      rewriteAttempted: Boolean(verification.rewriteAttempted),
+      rewriteAttemptCount: verification.rewriteAttemptCount || 0,
       finalSource: verification.finalSource,
-      hasEssay: Boolean(part.essay),
+      hasEssay: Boolean(data[key] && data[key].essay),
       error: verification.error || ""
     });
   }

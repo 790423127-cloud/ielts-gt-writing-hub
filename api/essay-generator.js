@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-3-strict-minimum-target-verification";
+const GENERATOR_VERSION = "essay-generator-v3-4-strict-minimum-target-regeneration";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -733,6 +733,61 @@ async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
   return normalized;
 }
 
+
+
+async function generateClientSideRewritePart(body) {
+  const key = String(body.rewriteGeneratedPart || body.generatedPartKey || body.partKey || "").trim();
+  if (!["modelAnswer", "revisionPlus05", "revisionPlus10"].includes(key)) {
+    throw new Error("Unsupported rewriteGeneratedPart. Use modelAnswer, revisionPlus05, or revisionPlus10.");
+  }
+
+  const targetBand = clampBand(body.targetBand ?? body.generatedTargetBand ?? body.failedTargetBand);
+  const verifiedBand = clampBand(body.failedVerifiedBand ?? body.verifiedBand ?? (body.verification && body.verification.verifiedBand));
+  const failedEssay = String(body.failedGeneratedEssay || body.generatedEssay || body.previousGeneratedEssay || "").trim();
+  if (!failedEssay) throw new Error("failedGeneratedEssay is required for generated-part rewrite.");
+
+  const normalized = {
+    modelAnswer: { targetBand: key === "modelAnswer" ? targetBand : null, essay: "" },
+    revisionPlus05: { targetBand: key === "revisionPlus05" ? targetBand : null, essay: "" },
+    revisionPlus10: { targetBand: key === "revisionPlus10" ? targetBand : null, essay: "" }
+  };
+  normalized[key] = { targetBand, essay: failedEssay };
+
+  const verification = {
+    targetBand,
+    verifiedBand,
+    status: "below_target",
+    criterionBands: body.criterionBands || (body.verification && body.verification.criterionBands) || {}
+  };
+
+  const rawRewrite = await callDeepSeek(buildRewritePrompt(body, normalized, key, verification));
+  mergeRewrittenPart(normalized, key, rawRewrite);
+  normalized[key].targetBand = targetBand;
+
+  return {
+    ok: true,
+    aiStage: "essay-generator-rewrite-generated-part",
+    generatorVersion: GENERATOR_VERSION,
+    disclaimer: DISCLAIMER,
+    task: normalizeRequestedTask(body),
+    taskLocked: true,
+    generationOnly: true,
+    scoreUnaffected: true,
+    scoreChanged: false,
+    rewriteGeneratedPart: key,
+    targetBand,
+    previousVerifiedBand: verifiedBand,
+    rewrittenPart: normalized[key],
+    [key]: normalized[key],
+    systemFeedback: {
+      system: "essay-generation",
+      status: "rewritten_generated_part_for_strict_target",
+      scoreChanged: false,
+      message: "已针对未达到目标分的生成作文单独重写；用户原分数没有改变。"
+    }
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") {
     Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
@@ -747,6 +802,10 @@ module.exports = async function handler(req, res) {
     const body = normalizeIncomingBody(await readJsonBody(req));
     if (!String(body.prompt || body.questionPrompt || "").trim()) {
       return sendJson(req, res, 400, { ok: false, error: "Prompt is required for essay generation" });
+    }
+    if (body.mode === "rewrite_generated_part" || body.generationMode === "rewrite_generated_part" || body.rewriteGeneratedPart) {
+      const rewritten = await generateClientSideRewritePart(body);
+      return sendJson(req, res, 200, rewritten);
     }
     const raw = await callDeepSeek(buildGenerationPrompt(body));
     const normalized = normalizeGenerationResult(raw, body);

@@ -2568,12 +2568,103 @@
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
-    return `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项。`;
+    const rewrites = keys.reduce((sum, key) => sum + (Number(result[key]?.rewriteAttemptCount) || 0), 0);
+    return `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写 ${rewrites} 次。`;
+  }
+
+  function generatedPartChineseName(key) {
+    if (key === "modelAnswer") return "题目范文";
+    if (key === "revisionPlus10") return "+1.0 修改版";
+    return "+0.5 修改版";
+  }
+
+  async function scoreGeneratedEssayClientSide(result, key, label) {
+    const part = result[key] || {};
+    const essay = String(part.essay || "").trim();
+    const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
+    if (!essay) {
+      return {
+        enabled: true,
+        ok: false,
+        label,
+        router: "grade-ielts-production-router",
+        targetBand: Number.isFinite(targetBand) ? targetBand : null,
+        verifiedBand: null,
+        status: "empty_essay",
+        message: "没有可验证的生成文本。"
+      };
+    }
+
+    const scoreEndpoint = String(els.gradingEndpointInput?.value || DEFAULT_GRADING_ENDPOINT || "/api/grade-ielts-production-router").trim() || "/api/grade-ielts-production-router";
+    const payload = gradingPayload({
+      essay,
+      wordCount: countWords(essay),
+      mode: "score",
+      generatedAnswerLabel: key,
+      generatedTargetBand: Number.isFinite(targetBand) ? targetBand : null,
+      currentResult: null,
+      frozenScore: null
+    });
+    const score = await postStage(scoreEndpoint, payload);
+    const verifiedBand = extractBandFromGeneratedVerificationResult(score);
+    const status = generatedVerificationStatus(verifiedBand, targetBand);
+    return {
+      enabled: true,
+      ok: true,
+      label,
+      router: "grade-ielts-production-router",
+      targetBand: Number.isFinite(targetBand) ? targetBand : null,
+      verifiedBand,
+      status,
+      message: status === "target_met"
+        ? "生产评分验证已达到严格目标分。"
+        : status === "below_target"
+          ? `生产评分验证低于严格目标；${generatedPartChineseName(key)}将自动重写。`
+          : "生产评分验证暂不可用。",
+      criterionBands: score.finalCriteria || score.criteria || null,
+      source: score.finalSource || score.scoreSource || score.system || "production-router"
+    };
+  }
+
+  function mergeRewrittenGeneratedPart(result, key, rewriteResponse, attemptNumber) {
+    const current = result[key] || {};
+    const incoming = rewriteResponse?.[key] || rewriteResponse?.rewrittenPart || rewriteResponse?.generatedPart || {};
+    const targetBand = current.targetBand;
+    result[key] = {
+      ...current,
+      ...incoming,
+      targetBand,
+      essay: String(incoming.essay || current.essay || "").trim(),
+      rewriteAttempted: true,
+      rewriteAttemptCount: attemptNumber
+    };
+    return result[key];
+  }
+
+  async function rewriteGeneratedEssayPartClientSide(result, key, verification, attemptNumber) {
+    const endpoint = essayGeneratorEndpointFromGradingEndpoint();
+    if (!endpoint) throw new Error("作文生成接口地址不可用，无法自动重写。 ");
+    const part = result[key] || {};
+    const lockedTask = lockedTaskForSelected();
+    const rewriteResponse = await postStage(endpoint, gradingPayload({
+      mode: "rewrite_generated_part",
+      generationMode: "rewrite_generated_part",
+      rewriteGeneratedPart: key,
+      failedGeneratedEssay: String(part.essay || ""),
+      targetBand: part.targetBand,
+      failedVerifiedBand: verification?.verifiedBand,
+      verification,
+      criterionBands: verification?.criterionBands || null,
+      currentResult: safeCurrentResultForTask(lockedTask),
+      frozenScore: frozenScoreForFeedback(),
+      verifyGeneratedScores: false
+    }));
+    return mergeRewrittenGeneratedPart(result, key, rewriteResponse, attemptNumber);
   }
 
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
+    const maxRewriteAttempts = 2;
     const part = result[key] || {};
-    const essay = String(part.essay || "").trim();
     const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
     part.verification = {
       enabled: true,
@@ -2585,65 +2676,74 @@
       status: "verification_running",
       message: "正在使用生产评分路由验证生成作文。"
     };
+    part.rewriteAttempted = Boolean(part.rewriteAttempted);
+    part.rewriteAttemptCount = Number(part.rewriteAttemptCount) || 0;
     result[key] = part;
     result.verification = {
       ...(result.verification || {}),
       enabled: true,
       router: "grade-ielts-production-router",
-      mode: "client-side-production-verification",
+      mode: "client-side-production-verification-with-strict-regeneration",
       summary: "正在使用生产评分路由验证生成作文。"
     };
     renderRevisionResult(result);
 
-    if (!essay) {
-      part.verification = {
-        ...part.verification,
-        ok: false,
-        status: "empty_essay",
-        message: "没有可验证的生成文本。"
-      };
-      return part.verification;
-    }
+    let lastVerification = null;
+    for (let attempt = 0; attempt <= maxRewriteAttempts; attempt += 1) {
+      try {
+        lastVerification = await scoreGeneratedEssayClientSide(result, key, label);
+        result[key].verification = {
+          ...lastVerification,
+          rewriteAttempted: Boolean(result[key].rewriteAttempted),
+          rewriteAttemptCount: Number(result[key].rewriteAttemptCount) || 0,
+          firstVerifiedBand: result[key].verification?.firstVerifiedBand ?? (attempt === 0 ? lastVerification.verifiedBand : result[key].verification?.firstVerifiedBand),
+          firstStatus: result[key].verification?.firstStatus ?? (attempt === 0 ? lastVerification.status : result[key].verification?.firstStatus)
+        };
+        renderRevisionResult(result);
 
-    try {
-      const scoreEndpoint = String(els.gradingEndpointInput?.value || DEFAULT_GRADING_ENDPOINT || "/api/grade-ielts-production-router").trim() || "/api/grade-ielts-production-router";
-      const payload = gradingPayload({
-        essay,
-        wordCount: countWords(essay),
-        mode: "score",
-        generatedAnswerLabel: key,
-        generatedTargetBand: Number.isFinite(targetBand) ? targetBand : null,
-        currentResult: null,
-        frozenScore: null
-      });
-      const score = await postStage(scoreEndpoint, payload);
-      const verifiedBand = extractBandFromGeneratedVerificationResult(score);
-      const status = generatedVerificationStatus(verifiedBand, targetBand);
-      part.verification = {
-        ...part.verification,
-        ok: true,
-        verifiedBand,
-        status,
-        message: status === "target_met"
-          ? "生产评分验证已达到严格目标分。"
-          : status === "below_target"
-            ? "生产评分验证低于严格目标；这个版本不能算真正的 +0.5 / +1.0 修改版，请重新生成。"
-            : "生产评分验证暂不可用。",
-        criterionBands: score.finalCriteria || score.criteria || null,
-        source: score.finalSource || score.scoreSource || score.system || "production-router"
-      };
-      return part.verification;
-    } catch (error) {
-      part.verification = {
-        ...part.verification,
-        ok: false,
-        verifiedBand: null,
-        status: "verification_failed",
-        message: "生产评分验证失败；生成作文仍然可用，但目标分未验证。",
-        error: String(error.message || error).slice(0, 500)
-      };
-      return part.verification;
+        if (lastVerification.status !== "below_target") return result[key].verification;
+        if (attempt >= maxRewriteAttempts) {
+          result[key].verification = {
+            ...result[key].verification,
+            status: "below_target",
+            message: `已自动重写 ${maxRewriteAttempts} 次，但仍未达到 Band ${formatBand(targetBand)}。本版本不能作为有效目标分学习范文，请重新生成。`,
+            finalFailedAfterRewrite: true
+          };
+          renderRevisionResult(result);
+          return result[key].verification;
+        }
+
+        result[key].verification = {
+          ...result[key].verification,
+          status: "rewrite_running",
+          message: `生产验证低于目标，正在自动重写第 ${attempt + 1} 次。`,
+          rewriteAttempted: true,
+          rewriteAttemptCount: attempt + 1
+        };
+        result[key].rewriteAttempted = true;
+        result[key].rewriteAttemptCount = attempt + 1;
+        renderRevisionResult(result);
+        await rewriteGeneratedEssayPartClientSide(result, key, lastVerification, attempt + 1);
+        renderRevisionResult(result);
+      } catch (error) {
+        result[key].verification = {
+          enabled: true,
+          ok: false,
+          label,
+          router: "grade-ielts-production-router",
+          targetBand: Number.isFinite(targetBand) ? targetBand : null,
+          verifiedBand: null,
+          status: "verification_failed",
+          message: "生产评分验证或自动重写失败；生成作文仍然可用，但目标分未验证。",
+          rewriteAttempted: Boolean(result[key].rewriteAttempted),
+          rewriteAttemptCount: Number(result[key].rewriteAttemptCount) || 0,
+          error: String(error.message || error).slice(0, 500)
+        };
+        renderRevisionResult(result);
+        return result[key].verification;
+      }
     }
+    return lastVerification;
   }
 
   async function verifyGeneratedEssaysClientSide(result = {}) {
@@ -2658,12 +2758,12 @@
         ...(result.verification || {}),
         enabled: true,
         router: "grade-ielts-production-router",
-        mode: "client-side-production-verification",
+        mode: "client-side-production-verification-with-strict-regeneration",
         summary: generatedVerificationSummary(result)
       };
       renderRevisionResult(result);
     }
-    setGradingStatus("作文生成完成，严格生产评分验证完成。", "done");
+    setGradingStatus("作文生成完成，严格生产评分验证和必要自动重写已完成。", "done");
     return result;
   }
 
