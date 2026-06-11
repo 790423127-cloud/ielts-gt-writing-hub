@@ -2093,15 +2093,30 @@
     };
   }
 
-  function pairHtml(pair, fallback = "中文解释暂缺：请重新生成该模块。") {
+  function missingChineseNoteHtml() {
+    return `<p class="learning-value-note">AI 未返回中文解释，请重新生成该模块。</p>`;
+  }
+
+  function firstMeaningfulValue(...values) {
+    for (const value of values) {
+      if (hasMeaningfulContent(value)) return value;
+    }
+    return "";
+  }
+
+  function bilingualObject(en, zh = "") {
+    return { en: en || "", zh: zh || "" };
+  }
+
+  function pairHtml(pair) {
     if (!hasMeaningfulContent(pair)) return "";
     if (typeof pair === "string") {
-      return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p><p class="learning-zh">${escapeHtml(fallback)}</p></div>`;
+      return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p>${missingChineseNoteHtml()}</div>`;
     }
     const en = pair.en || pair.english || pair.text || pair.label || pair.value || "";
-    const zh = pair.zh || pair.chinese || pair.meaningZh || pair.explanationZh || pair.translationZh || "";
+    const zh = pair.zh || pair.chinese || pair.meaningZh || pair.explanationZh || pair.reasonZh || pair.suggestionZh || pair.translationZh || "";
     if (!hasMeaningfulContent(en) && !hasMeaningfulContent(zh)) return "";
-    return `<div class="learning-bilingual-block">${hasMeaningfulContent(zh) ? `<p class="learning-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}${!hasMeaningfulContent(zh) && hasMeaningfulContent(en) ? `<p class="learning-zh">${escapeHtml(fallback)}</p>` : ""}</div>`;
+    return `<div class="learning-bilingual-block">${hasMeaningfulContent(zh) ? `<p class="learning-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}${!hasMeaningfulContent(zh) && hasMeaningfulContent(en) ? missingChineseNoteHtml() : ""}</div>`;
   }
 
   function learningText(value) {
@@ -2135,7 +2150,7 @@
       zh = value.zh || value.chinese || value.meaningZh || value.translationZh || value.translation || value.chineseMeaning || zhValue || "";
     }
     const shouldShowZh = hasMeaningfulContent(en) || hasMeaningfulContent(zh);
-    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(zh) ? `<p class="learning-value-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}${shouldShowZh && !hasMeaningfulContent(zh) ? `<p class="learning-value-zh">中文解释暂缺：请重新生成该模块。</p>` : ""}</div>`;
+    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(zh) ? `<p class="learning-value-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}${shouldShowZh && !hasMeaningfulContent(zh) ? missingChineseNoteHtml() : ""}</div>`;
   }
 
   function tagListHtml(tags) {
@@ -2155,12 +2170,16 @@
     return `<div class="learning-card-list"><h4>${escapeHtml(title)}</h4>${list.map((item) => {
       if (typeof item === "string") return `<article class="learning-card">${escapeHtml(item)}</article>`;
       const titleText = item.title || item.problem || item.focus || item.point || item.type || item.label || "";
+      const issueZh = firstMeaningfulValue(item.problemZh, item.issueZh, item.focusZh, item.pointZh, item.summaryZh, item.requirementZh, item.statusZh);
+      const evidenceZh = firstMeaningfulValue(item.evidenceZh, item.originalZh, item.exampleZh, item.fromEssayZh, item.advice?.zh, item.explanationZh, item.reasonZh);
+      const whyZh = firstMeaningfulValue(item.whyMattersZh, item.reasonZh, item.whyZh, item.explanationZh, item.advice?.zh);
+      const nextZh = firstMeaningfulValue(item.nextActionZh, item.actionZh, item.checkMethodZh, item.suggestionZh, item.advice?.zh);
       const parts = [
         titleText ? `<div class="learning-card-title">${escapeHtml(learningText(titleText))}</div>` : "",
-        pairHtml(item.problem || item.issue || item.focus || item.point || item.summary),
-        simpleValueHtml("原文证据 / Evidence", item.evidence || item.original || item.fromEssay || item.example, "", item.evidenceZh || item.originalZh || item.exampleZh),
-        pairHtml(item.whyMatters || item.reason || item.why || item.explanation),
-        pairHtml(item.nextAction || item.action || item.checkMethod || item.suggestion)
+        pairHtml(bilingualObject(item.problem || item.issue || item.focus || item.point || item.summary || item.requirement || item.status, issueZh)),
+        simpleValueHtml("原文证据 / Evidence", item.evidence || item.original || item.fromEssay || item.example, "", evidenceZh),
+        pairHtml(bilingualObject(item.whyMatters || item.reason || item.why || item.explanation, whyZh)),
+        pairHtml(bilingualObject(item.nextAction || item.action || item.checkMethod || item.suggestion || item.advice?.en, nextZh))
       ].filter(Boolean).join("");
       return `<article class="learning-card">${parts || `<pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>`}</article>`;
     }).join("")}</div>`;
@@ -2208,7 +2227,7 @@
   function renderStructureCohesionTaskModule(result = {}) {
     const sectionCard = (title, obj) => {
       if (!hasMeaningfulContent(obj)) return "";
-      return `<article class="learning-card"><div class="learning-card-title">${escapeHtml(title)}</div>${simpleValueHtml("当前问题 / Current issue", obj.currentIssue || obj.issue || obj.current, "", obj.currentIssueZh || obj.issueZh)}${simpleValueHtml("建议写法 / Suggested version", obj.suggestedVersion || obj.suggestion || obj.improved, "is-upgraded", obj.suggestedVersionZh || obj.suggestionZh)}${pairHtml(obj.whyBetter || obj.why || obj.reason)}${pairHtml(obj.howToUse || obj.nextStep)}</article>`;
+      return `<article class="learning-card"><div class="learning-card-title">${escapeHtml(title)}</div>${simpleValueHtml("当前问题 / Current issue", obj.currentIssue || obj.issue || obj.current, "", firstMeaningfulValue(obj.currentIssueZh, obj.issueZh, obj.currentZh, obj.explanationZh))}${simpleValueHtml("建议写法 / Suggested version", obj.suggestedVersion || obj.suggestion || obj.improved, "is-upgraded", firstMeaningfulValue(obj.suggestedVersionZh, obj.suggestionZh, obj.improvedZh))}${pairHtml(bilingualObject(obj.whyBetter?.en || obj.whyBetter || obj.why || obj.reason, firstMeaningfulValue(obj.whyBetter?.zh, obj.whyZh, obj.reasonZh, obj.explanationZh)))}${pairHtml(bilingualObject(obj.howToUse?.en || obj.howToUse || obj.nextStep || obj.advice?.en, firstMeaningfulValue(obj.howToUse?.zh, obj.nextStepZh, obj.advice?.zh, obj.suggestionZh)))}</article>`;
     };
     const checklist = learningArray(result.taskChecklist || result.taskResponse?.coverage || result.coverage, 10);
     const cohesionIssues = learningArray(result.cohesion?.issues || result.cohesionIssues, 8);
@@ -2218,8 +2237,8 @@
       <div class="learning-card-list">
         ${sectionCard("开头 / Opening", result.opening)}
         ${sectionCard("段落结构 / Paragraph organisation", result.paragraphOrganisation || result.paragraphOrganization)}
-        ${cohesionIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">衔接 / Cohesion</div>${simpleValueHtml("原来的连接 / Original link", item.original || item.current, "", item.originalZh)}${simpleValueHtml("更好的连接 / Better link", item.improved || item.better, "is-upgraded", item.improvedZh || item.betterZh)}${pairHtml(item.whyBetter || item.reason)}</article>`).join("")}
-        ${developmentIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">内容展开 / Development</div>${simpleValueHtml("原内容 / Original content", item.original || item.current, "", item.originalZh)}${simpleValueHtml("如何展开 / Better development", item.improved || item.better || item.suggestion, "is-upgraded", item.improvedZh || item.betterZh)}${pairHtml(item.whyBetter || item.reason)}</article>`).join("")}
+        ${cohesionIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">衔接 / Cohesion</div>${simpleValueHtml("原来的连接 / Original link", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("更好的连接 / Better link", item.improved || item.better, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
+        ${developmentIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">内容展开 / Development</div>${simpleValueHtml("原内容 / Original content", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("如何展开 / Better development", item.improved || item.better || item.suggestion, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
         ${sectionCard("结尾 / Ending", result.ending)}
         ${sectionCard("任务回应 / Task response or achievement", result.taskResponse)}
       </div>

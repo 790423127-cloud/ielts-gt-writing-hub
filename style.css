@@ -1959,6 +1959,7 @@ select#typeFilter{
 .learning-value{display:grid;gap:6px}
 .learning-value-zh{margin:0!important;color:var(--ink);font-weight:720;line-height:1.6;padding-left:10px;border-left:3px solid var(--teal)}
 .learning-value-en{margin:0!important;color:var(--muted);line-height:1.55}
+.learning-value-note{margin:0!important;color:var(--muted);font-size:12px;line-height:1.45;border-left:2px solid var(--line);padding-left:8px}
 .learning-card-list .learning-card pre{white-space:pre-wrap;word-break:break-word;overflow:auto;max-width:100%}
 .learning-error-tag{max-width:100%;white-space:normal}
 @media(max-width:700px){.learning-feedback-panel{padding:14px}.learning-module-output{padding:12px}.learning-card{padding:11px}.learning-tabs{display:grid;grid-template-columns:1fr}.learning-tab{width:100%}}

@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const FEEDBACK_VERSION = "learning-feedback-v2-modular-tutor-panel";
+const FEEDBACK_VERSION = "learning-feedback-v2-zh-required";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBACK_TIMEOUT_MS) || 150000, 240000));
@@ -110,10 +110,10 @@ const MODULES = {
     schema: {
       summary: { en: "", zh: "" },
       taskChecklist: [
-        { requirement: "", status: "covered | partly_covered | missing", evidence: "", advice: { en: "", zh: "" } }
+        { requirement: "", requirementZh: "", status: "covered | partly_covered | missing", statusZh: "", evidence: "", evidenceZh: "", advice: { en: "", zh: "" } }
       ],
-      opening: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
-      paragraphOrganisation: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      opening: { currentIssue: "", currentIssueZh: "", suggestedVersion: "", suggestedVersionZh: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      paragraphOrganisation: { currentIssue: "", currentIssueZh: "", suggestedVersion: "", suggestedVersionZh: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
       cohesion: {
         issues: [
           { original: "", originalZh: "", improved: "", improvedZh: "", whyBetter: { en: "", zh: "" } }
@@ -124,13 +124,15 @@ const MODULES = {
           { original: "", originalZh: "", improved: "", improvedZh: "", whyBetter: { en: "", zh: "" } }
         ]
       },
-      ending: { currentIssue: "", suggestedVersion: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
+      ending: { currentIssue: "", currentIssueZh: "", suggestedVersion: "", suggestedVersionZh: "", whyBetter: { en: "", zh: "" }, howToUse: { en: "", zh: "" } },
       taskResponse: {
         currentIssue: "",
+        currentIssueZh: "",
         suggestedVersion: "",
+        suggestedVersionZh: "",
         whyBetter: { en: "", zh: "" },
         coverage: [
-          { requirement: "", status: "covered | partly_covered | missing", evidence: "", advice: { en: "", zh: "" } }
+          { requirement: "", requirementZh: "", status: "covered | partly_covered | missing", statusZh: "", evidence: "", evidenceZh: "", advice: { en: "", zh: "" } }
         ]
       },
       priorityAdvice: { en: "", zh: "" }
@@ -140,6 +142,8 @@ const MODULES = {
       "For Task 1, check purpose, recipient relationship/tone, all bullet points, specificity of request/explanation/suggestion, paragraphing, closing, and natural letter format.",
       "For Task 2, check whether the essay directly answers the prompt, has a clear position when required, has topic sentences, enough explanation, relevant examples, and an effective conclusion.",
       "Every taskChecklist/coverage item must mention a prompt requirement and evidence from the essay or state what is missing.",
+      "Every taskChecklist/coverage item must include requirementZh, statusZh, evidenceZh, and advice.zh. evidenceZh must explain in Chinese what the English evidence shows and why it affects Task Achievement/Task Response or Coherence.",
+      "If evidence quotes an English phrase from the essay, keep evidence in English and explain it in evidenceZh. Do not leave evidenceZh blank.",
       "Do not repeat grammar/spelling lists unless the language problem affects task response, cohesion, tone, or clarity."
     ]
   },
@@ -317,21 +321,79 @@ function extractJson(text) {
 }
 
 function bilingualFallback(value, fallbackEn = "No specific issue was found.") {
-  const fallbackZh = "中文解释暂缺：请重新生成该模块。";
   if (value && typeof value === "object") {
     return {
       en: String(value.en || value.english || value.text || fallbackEn).trim(),
-      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || fallbackZh).trim()
+      zh: String(value.zh || value.chinese || value.meaningZh || value.explanationZh || value.reasonZh || value.suggestionZh || "").trim()
     };
   }
   if (typeof value === "string" && value.trim()) {
-    return { en: value.trim(), zh: fallbackZh };
+    return { en: value.trim(), zh: "" };
   }
-  return { en: fallbackEn, zh: fallbackZh };
+  return { en: fallbackEn, zh: "" };
 }
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function stringValue(value) {
+  return String(value || "").trim();
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (value && typeof value === "object") {
+      const nested = firstString(value.zh, value.chinese, value.meaningZh, value.explanationZh, value.reasonZh, value.suggestionZh, value.text, value.en, value.english);
+      if (nested) return nested;
+    } else if (String(value || "").trim()) {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
+function normalizeStructureCoverageItem(item = {}) {
+  const value = item && typeof item === "object" ? item : {};
+  const advice = bilingualFallback(value.advice || value.suggestion || value.nextAction || value.reason, "Give a specific next action for this task requirement.");
+  return {
+    requirement: stringValue(value.requirement || value.taskRequirement || value.promptRequirement || value.point),
+    requirementZh: firstString(value.requirementZh, value.taskRequirementZh, value.promptRequirementZh, value.pointZh),
+    status: stringValue(value.status || value.coverageStatus),
+    statusZh: firstString(value.statusZh, value.coverageStatusZh),
+    evidence: stringValue(value.evidence || value.original || value.fromEssay || value.example),
+    evidenceZh: firstString(value.evidenceZh, value.originalZh, value.exampleZh, value.explanationZh, value.reasonZh, advice.zh),
+    issue: stringValue(value.issue || value.problem || value.currentIssue),
+    issueZh: firstString(value.issueZh, value.problemZh, value.currentIssueZh),
+    suggestion: stringValue(value.suggestion || value.nextAction || value.improvement),
+    suggestionZh: firstString(value.suggestionZh, value.nextActionZh, value.improvementZh, advice.zh),
+    advice
+  };
+}
+
+function normalizeStructureSection(value = {}) {
+  const item = value && typeof value === "object" ? value : {};
+  return {
+    ...item,
+    currentIssue: stringValue(item.currentIssue || item.issue || item.current),
+    currentIssueZh: firstString(item.currentIssueZh, item.issueZh, item.currentZh, item.explanationZh),
+    suggestedVersion: stringValue(item.suggestedVersion || item.suggestion || item.improved),
+    suggestedVersionZh: firstString(item.suggestedVersionZh, item.suggestionZh, item.improvedZh),
+    whyBetter: bilingualFallback(item.whyBetter || item.why || item.reason, "This change improves clarity or task response."),
+    howToUse: bilingualFallback(item.howToUse || item.nextStep || item.advice, "Use this pattern when the same task need appears.")
+  };
+}
+
+function normalizeStructureIssue(value = {}) {
+  const item = value && typeof value === "object" ? value : {};
+  return {
+    ...item,
+    original: stringValue(item.original || item.current || item.evidence),
+    originalZh: firstString(item.originalZh, item.currentZh, item.evidenceZh, item.explanationZh),
+    improved: stringValue(item.improved || item.better || item.suggestion),
+    improvedZh: firstString(item.improvedZh, item.betterZh, item.suggestionZh),
+    whyBetter: bilingualFallback(item.whyBetter || item.reason || item.explanation, "This version is clearer for the task.")
+  };
 }
 
 function normalizeModuleResult(moduleName, value) {
@@ -395,6 +457,23 @@ function normalizeModuleResult(moduleName, value) {
     result.cohesion = result.cohesion && typeof result.cohesion === "object" ? result.cohesion : { issues: asArray(result.cohesionIssues) };
     result.development = result.development && typeof result.development === "object" ? result.development : { issues: asArray(result.developmentIssues) };
     result.taskResponse = result.taskResponse && typeof result.taskResponse === "object" ? result.taskResponse : {};
+    result.taskChecklist = asArray(result.taskChecklist || result.taskResponse.coverage || result.coverage).slice(0, 10).map(normalizeStructureCoverageItem);
+    result.opening = normalizeStructureSection(result.opening);
+    result.paragraphOrganisation = normalizeStructureSection(result.paragraphOrganisation || result.paragraphOrganization);
+    result.paragraphOrganization = result.paragraphOrganisation;
+    result.ending = normalizeStructureSection(result.ending);
+    result.taskResponse = {
+      ...result.taskResponse,
+      currentIssue: stringValue(result.taskResponse.currentIssue || result.taskResponse.issue || result.taskResponse.current),
+      currentIssueZh: firstString(result.taskResponse.currentIssueZh, result.taskResponse.issueZh, result.taskResponse.currentZh, result.taskResponse.explanationZh),
+      suggestedVersion: stringValue(result.taskResponse.suggestedVersion || result.taskResponse.suggestion || result.taskResponse.improved),
+      suggestedVersionZh: firstString(result.taskResponse.suggestedVersionZh, result.taskResponse.suggestionZh, result.taskResponse.improvedZh),
+      whyBetter: bilingualFallback(result.taskResponse.whyBetter || result.taskResponse.why || result.taskResponse.reason, "This improves task response or task achievement."),
+      howToUse: bilingualFallback(result.taskResponse.howToUse || result.taskResponse.nextStep || result.taskResponse.advice, "Use this approach when answering the task requirement."),
+      coverage: asArray(result.taskResponse.coverage || result.taskChecklist).slice(0, 10).map(normalizeStructureCoverageItem)
+    };
+    result.cohesion.issues = asArray(result.cohesion.issues || result.cohesionIssues).slice(0, 8).map(normalizeStructureIssue);
+    result.development.issues = asArray(result.development.issues || result.developmentIssues).slice(0, 8).map(normalizeStructureIssue);
   }
 
   if (moduleName === "expressionBank") {
@@ -471,7 +550,11 @@ function buildPrompt(body, moduleName) {
     "Do not put unescaped newlines inside JSON strings.",
     "Do not leave dangling commas. Do not omit commas between array elements.",
     "Keep each string concise. Long explanations increase JSON failure risk.",
-    "Every user-facing English explanation, advice, rule, correction, improved expression, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or matching *Zh field.",
+    "Every user-facing English explanation, evidence, advice, rule, correction, improved expression, issue, suggestion, requirement, or quoted English text must include a Chinese explanation or Chinese meaning in the paired zh field or matching *Zh field.",
+    "Chinese is required, not optional. Do not leave zh, evidenceZh, issueZh, suggestionZh, reasonZh, explanationZh, whyBetter.zh, advice.zh, currentIssueZh, or requirementZh blank when the English field has content.",
+    "Chinese notes must be specific to the student's essay and prompt. Do not write generic text such as 'this sentence needs improvement'.",
+    "For evidence fields: keep the evidence quote in English, then explain in evidenceZh what that quote shows and why it matters for the IELTS task.",
+    "If you cannot find a relevant issue for a field, use an empty English field and an empty Chinese field instead of returning English-only content.",
     `Requested module: ${moduleName} - ${moduleConfig.title}`,
     `Item limit: ${moduleConfig.maxItems}`,
     `Module instructions: ${moduleConfig.instructions.join(" ")}`,
