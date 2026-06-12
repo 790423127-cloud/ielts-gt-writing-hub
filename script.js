@@ -2694,6 +2694,8 @@
       "verified-pass": "Accepted for learning",
       target_exceeded: "Too high for target",
       "verified-too-high": "Too high for target",
+      acceptable_high: "Slightly above target, still learnable",
+      "verified-acceptable-high": "Slightly above target, still learnable",
       not_exact_target: "Not an exact target match",
       below_target: "Below target",
       "verified-too-low": "Below target",
@@ -2867,16 +2869,26 @@
       ${listBlock("可模仿句子", plus10.usefulSentences)}
     `;
 
+    const generatedLearningSummaryText = () => {
+      const versions = [model, plus05, plus10];
+      const acceptedCount = versions.filter((item) => item?.verification?.isAcceptedForLearning === true).length;
+      const exactCount = versions.filter((item) => item?.verification?.exactTargetMet === true).length;
+      const total = versions.length;
+      if (!versions.some((item) => item?.verification?.enabled)) return `已生成 ${total} 篇候选作文，正在验证目标分。`;
+      if (acceptedCount === 0) return `已生成 ${total} 篇候选作文，但暂无合格学习版本。`;
+      return `已生成 ${total} 篇候选作文，${acceptedCount} 篇适合学习，其中 ${exactCount} 篇精确达标。`;
+    };
+
     const guideHtml = renderTeacherGuide(guide);
     const html = `<section class="grading-section revision-block generated-writing-learning-block">
       <details class="score-accordion generated-writing-panel">
-        <summary>作文生成 / Model and Revision <span class="muted">已生成 3 篇可学习作文，点击展开。</span></summary>
+        <summary>作文生成 / Model and Revision <span class="muted">${escapeHtml(generatedLearningSummaryText())}</span></summary>
         <div class="score-accordion-body">
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="score-flow-note generated-score-separation"><strong>分数说明：</strong>${escapeHtml(scoreSeparationNote)}</div>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
-          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版必须基于你的原文按真实 Band 5 保底清单重写；如果多次仍卡在 4.5，会升级重构；如果多次被判 6.0，会进入 Band 5 降档锁定：保留内容但减少 polish、复杂句和额外展开；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写，超过目标 0.5 以上会降档，因为太高也不适合作为当前阶段学习版。</div>` : ""}
+          ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版必须基于你的原文按真实 Band 5 保底清单重写；如果多次仍卡在 4.5，会升级重构；如果多次被判 6.0，会进入 Band 5 降档锁定：保留内容但减少 polish、复杂句和额外展开；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写；题目范文和 Band 5.5 提升版允许略高 0.5 作为可学习版本；Band 5 保底版低于目标不能接受，过高也会标记为不适合作为保底版。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
           ${card(plus05Title, verificationBandText(plus05, result.targetBandPlus05), generatedTextMap.plus05, plus05Explanation, `${copyButton("plus05", isBand5Rescue ? "复制 Band 5 保底版" : "复制 +0.5 修改版")}${applyButton("plus05", isBand5Rescue ? "应用 Band 5 保底版到作文输入区" : "应用 +0.5 到作文输入区")}`)}
           ${card(plus10Title, verificationBandText(plus10, result.targetBandPlus10), generatedTextMap.plus10, plus10Explanation, `${copyButton("plus10", isBand5Rescue ? "复制 Band 5.5 提升版" : "复制 +1.0 修改版")}${applyButton("plus10", isBand5Rescue ? "应用 Band 5.5 提升版到作文输入区" : "应用 +1.0 到作文输入区")}`)}
@@ -2945,55 +2957,118 @@
     return null;
   }
 
-  function generatedVerificationStatus(verifiedBand, targetBand) {
-    const verified = Number(verifiedBand);
+  function generatedPartAllowsSlightlyHigh(key, targetBand) {
     const target = Number(targetBand);
-    if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
-    if (verified < target) return "below_target";
-    if (verified > target) return "target_exceeded";
-    return "target_met";
+    if (!Number.isFinite(target)) return false;
+    if (key === "modelAnswer" && target === 5.5) return true;
+    if (key === "revisionPlus10" && target === 5.5) return true;
+    return false;
   }
 
-  function publicGeneratedVerificationStatus(status, verifiedBand, targetBand) {
+  function generatedVerificationProfile(key, verifiedBand, targetBand) {
+    const verified = Number(verifiedBand);
+    const target = Number(targetBand);
+    if (!Number.isFinite(verified) || !Number.isFinite(target)) {
+      return {
+        comparisonStatus: "verification_unavailable",
+        verificationStatus: "verification_unavailable",
+        exactTargetMet: false,
+        isAcceptedForLearning: false,
+        isSlightlyAboveTarget: false,
+        distanceFromTarget: null
+      };
+    }
+    const diff = Math.round((verified - target) * 2) / 2;
+    if (diff === 0) {
+      return {
+        comparisonStatus: "target_met",
+        verificationStatus: "verified-pass",
+        exactTargetMet: true,
+        isAcceptedForLearning: true,
+        isSlightlyAboveTarget: false,
+        distanceFromTarget: 0
+      };
+    }
+    if (diff < 0) {
+      return {
+        comparisonStatus: "below_target",
+        verificationStatus: "verified-too-low",
+        exactTargetMet: false,
+        isAcceptedForLearning: false,
+        isSlightlyAboveTarget: false,
+        distanceFromTarget: Math.abs(diff)
+      };
+    }
+    if (diff === 0.5 && generatedPartAllowsSlightlyHigh(key, target)) {
+      return {
+        comparisonStatus: "acceptable_high",
+        verificationStatus: "verified-acceptable-high",
+        exactTargetMet: false,
+        isAcceptedForLearning: true,
+        isSlightlyAboveTarget: true,
+        distanceFromTarget: diff
+      };
+    }
+    return {
+      comparisonStatus: "target_exceeded",
+      verificationStatus: "verified-too-high",
+      exactTargetMet: false,
+      isAcceptedForLearning: false,
+      isSlightlyAboveTarget: false,
+      distanceFromTarget: diff
+    };
+  }
+
+  function generatedVerificationStatus(verifiedBand, targetBand, key = "") {
+    return generatedVerificationProfile(key, verifiedBand, targetBand).comparisonStatus;
+  }
+
+  function publicGeneratedVerificationStatus(status, verifiedBand, targetBand, key = "") {
     const raw = String(status || "").trim();
     if (raw === "verification_failed" || raw === "generation_failed" || raw === "empty_essay" || raw === "verification_running" || raw === "rewrite_running" || raw === "verification_unavailable") {
       return raw;
     }
+    if (raw === "verified-acceptable-high" || raw === "acceptable_high") return "verified-acceptable-high";
     const comparisonStatus = raw === "verified-too-low"
       ? "below_target"
       : raw === "verified-too-high"
         ? "target_exceeded"
         : raw === "verified-pass"
           ? "target_met"
-          : generatedVerificationStatus(verifiedBand, targetBand);
+          : generatedVerificationStatus(verifiedBand, targetBand, key);
     if (comparisonStatus === "below_target") return "verified-too-low";
     if (comparisonStatus === "target_exceeded") return "verified-too-high";
+    if (comparisonStatus === "acceptable_high") return "verified-acceptable-high";
     if (comparisonStatus === "target_met") return "verified-pass";
     return "verification_unavailable";
   }
 
-  function generatedComparisonStatus(status, verifiedBand, targetBand) {
+  function generatedComparisonStatus(status, verifiedBand, targetBand, key = "") {
     const raw = String(status || "").trim();
-    if (raw === "below_target" || raw === "target_exceeded" || raw === "target_met" || raw === "verification_unavailable") {
+    if (raw === "below_target" || raw === "target_exceeded" || raw === "target_met" || raw === "acceptable_high" || raw === "verification_unavailable") {
       return raw;
     }
     if (raw === "verified-too-low") return "below_target";
     if (raw === "verified-too-high") return "target_exceeded";
+    if (raw === "verified-acceptable-high") return "acceptable_high";
     if (raw === "verified-pass") return "target_met";
-    return generatedVerificationStatus(verifiedBand, targetBand);
+    return generatedVerificationStatus(verifiedBand, targetBand, key);
   }
 
-  function isAcceptedGeneratedVersion(status, verifiedBand, targetBand) {
-    return publicGeneratedVerificationStatus(status, verifiedBand, targetBand) === "verified-pass";
+  function isAcceptedGeneratedVersion(status, verifiedBand, targetBand, key = "") {
+    return generatedVerificationProfile(key, verifiedBand, targetBand).isAcceptedForLearning
+      || publicGeneratedVerificationStatus(status, verifiedBand, targetBand, key) === "verified-pass"
+      || publicGeneratedVerificationStatus(status, verifiedBand, targetBand, key) === "verified-acceptable-high";
   }
 
-  function generatedVerificationMessageZh(status, targetBand, verifiedBand) {
-    const verificationStatus = publicGeneratedVerificationStatus(status, verifiedBand, targetBand);
+  function generatedVerificationMessageZh(status, targetBand, verifiedBand, key = "") {
+    const verificationStatus = publicGeneratedVerificationStatus(status, verifiedBand, targetBand, key);
     const targetText = Number.isFinite(Number(targetBand)) ? `Band ${formatBand(targetBand)}` : "未指定";
     const verifiedText = Number.isFinite(Number(verifiedBand)) ? `Band ${formatBand(verifiedBand)}` : "暂无";
-    if (verificationStatus === "verified-pass") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本达标，可作为合格学习版本。`;
+    if (verificationStatus === "verified-pass") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本精确达标，可作为合格学习版本。`;
+    if (verificationStatus === "verified-acceptable-high") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本略高于目标，但仍适合作为当前阶段的学习版本；请注意它不是精确命中目标。`;
     if (verificationStatus === "verified-too-low") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本低于目标，不能作为合格学习版本。`;
-    if (verificationStatus === "verified-too-high") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本高于目标，可能过难，不作为当前阶段的合格学习版本。`;
+    if (verificationStatus === "verified-too-high") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本高于当前目标窗口，可能过难，不作为当前阶段的合格学习版本。`;
     if (verificationStatus === "verification_failed") return `目标 ${targetText} 的生产验证失败。该版本暂时不能作为合格学习版本。`;
     if (verificationStatus === "generation_failed") return `目标 ${targetText} 的生成失败，当前没有可用学习版本。`;
     if (verificationStatus === "empty_essay") return `目标 ${targetText} 尚无可验证文本。`;
@@ -3003,17 +3078,23 @@
   function normalizeGeneratedVerificationPayload(payload = {}) {
     const targetBand = Number.isFinite(Number(payload.targetBand)) ? Number(payload.targetBand) : null;
     const verifiedBand = Number.isFinite(Number(payload.verifiedBand)) ? Number(payload.verifiedBand) : null;
-    const comparisonStatus = generatedComparisonStatus(payload.comparisonStatus || payload.status, verifiedBand, targetBand);
-    const verificationStatus = publicGeneratedVerificationStatus(payload.verificationStatus || payload.status || payload.comparisonStatus, verifiedBand, targetBand);
+    const partKey = payload.partKey || payload.key || "";
+    const profile = generatedVerificationProfile(partKey, verifiedBand, targetBand);
+    const comparisonStatus = generatedComparisonStatus(payload.comparisonStatus || payload.status, verifiedBand, targetBand, partKey);
+    const verificationStatus = publicGeneratedVerificationStatus(payload.verificationStatus || payload.status || payload.comparisonStatus, verifiedBand, targetBand, partKey);
+    const accepted = verificationStatus === "verified-pass" || verificationStatus === "verified-acceptable-high" || profile.isAcceptedForLearning;
     return {
       ...payload,
+      partKey,
       targetBand,
       verifiedBand,
       comparisonStatus,
       status: payload.status || comparisonStatus,
       verificationStatus,
-      isAcceptedForLearning: payload.isAcceptedForLearning === true || isAcceptedGeneratedVersion(verificationStatus, verifiedBand, targetBand),
-      finalMessageZh: payload.finalMessageZh || generatedVerificationMessageZh(verificationStatus, targetBand, verifiedBand)
+      exactTargetMet: verificationStatus === "verified-pass",
+      isSlightlyAboveTarget: verificationStatus === "verified-acceptable-high",
+      isAcceptedForLearning: payload.isAcceptedForLearning === true || accepted,
+      finalMessageZh: payload.finalMessageZh || generatedVerificationMessageZh(verificationStatus, targetBand, verifiedBand, partKey)
     };
   }
 
@@ -3033,7 +3114,7 @@
       return "Vercel 部署或接口路径异常：请确认最新部署已完成，并检查 Grading API Endpoint 是否指向当前项目。";
     }
     if (/target|closest|below_target|target_exceeded/i.test(lower)) {
-      return "生成候选未精确命中目标：系统会保留最接近版本，并标明 verifiedBand 与 targetBand 的差距。";
+      return "生成候选没有进入可学习目标窗口：系统会标明 verifiedBand 与 targetBand 的差距，不会把失败版本当成合格学习版本。";
     }
     return `作文生成失败：${raw || "未知错误"}`;
   }
@@ -3045,13 +3126,16 @@
       const status = generatedComparisonStatus(
         verification.comparisonStatus || verification.status || verification.verificationStatus,
         verification.verifiedBand,
-        verification.targetBand || result[key]?.targetBand
+        verification.targetBand || result[key]?.targetBand,
+        key
       ) || "unknown";
       acc[status] = (acc[status] || 0) + 1;
+      if (verification.isAcceptedForLearning === true) acc.accepted = (acc.accepted || 0) + 1;
+      if (verification.exactTargetMet === true) acc.exact = (acc.exact || 0) + 1;
       return acc;
     }, {});
     const rewrites = keys.reduce((sum, key) => sum + (Number(result[key]?.rewriteAttemptCount) || 0), 0);
-    return `Strict production verification completed: exact target met ${counts.target_met || 0}, too high ${counts.target_exceeded || 0}, too low ${counts.below_target || 0}, verification failed ${counts.verification_failed || 0}, rewrite/downshift attempts ${rewrites}.`;
+    return `Production verification completed: accepted for learning ${counts.accepted || 0}/3, exact target met ${counts.exact || 0}, slightly above but learnable ${counts.acceptable_high || 0}, too high ${counts.target_exceeded || 0}, too low ${counts.below_target || 0}, verification failed ${counts.verification_failed || 0}, rewrite/downshift attempts ${rewrites}.`;
   }
 
   function generatedPartChineseName(key) {
@@ -3089,7 +3173,7 @@
     });
     const score = await postStage(scoreEndpoint, payload);
     const verifiedBand = extractBandFromGeneratedVerificationResult(score);
-    const status = generatedVerificationStatus(verifiedBand, targetBand);
+    const status = generatedVerificationStatus(verifiedBand, targetBand, key);
     return normalizeGeneratedVerificationPayload({
       enabled: true,
       ok: true,
@@ -3097,6 +3181,7 @@
       router: "grade-ielts-production-router",
       targetBand: Number.isFinite(targetBand) ? targetBand : null,
       verifiedBand,
+      partKey: key,
       status,
       message: status === "target_met"
         ? "Production verification matched the exact target."
@@ -3126,12 +3211,32 @@
     return result[key];
   }
 
+  function generatedRewriteStrategyFor(key, verification = {}) {
+    const comparison = generatedComparisonStatus(
+      verification.comparisonStatus || verification.status || verification.verificationStatus,
+      verification.verifiedBand,
+      verification.targetBand,
+      key
+    );
+    const task = lockedTaskForSelected();
+    if (comparison === "target_exceeded" || comparison === "acceptable_high") {
+      if (key === "revisionPlus05") return "above-target-band5-rescue-downshift";
+      return "above-target-simplify-language-reduce-polish";
+    }
+    if (comparison === "below_target") {
+      if (key === "revisionPlus05" && task === "Task 1") return "below-target-task1-rescue-format-coverage-grammar-repair";
+      if (key === "revisionPlus05") return "below-target-band5-rescue-task-coverage-grammar-repair";
+      return "below-target-task-coverage-and-grammar-repair";
+    }
+    return "target-calibration";
+  }
+
   async function rewriteGeneratedEssayPartClientSide(result, key, verification, attemptNumber) {
     const endpoint = essayGeneratorEndpointFromGradingEndpoint();
     if (!endpoint) throw new Error("作文生成接口地址不可用，无法自动重写。 ");
     const part = result[key] || {};
     const lockedTask = lockedTaskForSelected();
-    const rewriteStrategy = verification?.status === "target_exceeded" ? "soft downshift" : "floor raise";
+    const rewriteStrategy = generatedRewriteStrategyFor(key, verification);
     const rewriteResponse = await postStage(endpoint, gradingPayload({
       mode: "rewrite_generated_part",
       generationMode: "rewrite_generated_part",
@@ -3278,14 +3383,14 @@
             rewriteAttempted: false,
             rewriteAttemptCount: 0,
             rewriteStrategy: entry.strategy || "candidate selected",
-            exactTargetMet: lastVerification.status === "target_met",
+            exactTargetMet: lastVerification.verificationStatus === "verified-pass" || lastVerification.status === "target_met",
             candidateIndex: entry.index,
             candidateCount: initialCandidates.length
           };
-          recordCandidateHistory(result, key, entry, lastVerification, lastVerification.status === "target_met");
+          recordCandidateHistory(result, key, entry, lastVerification, lastVerification.isAcceptedForLearning === true);
           rememberClosest();
           renderRevisionResult(result);
-          if (lastVerification.status === "target_met") {
+          if (lastVerification.isAcceptedForLearning === true) {
             markSelectedCandidateHistory(result, key, entry.index === 0 ? "initial" : `candidate-${entry.index}`);
             return result[key].verification;
           }
@@ -3319,7 +3424,7 @@
           candidateHistory: fullCandidateHistory,
           candidateCount: initialCandidates.length,
           selectedCandidateIndex: closest.part?.candidateIndex ?? result[key]?.candidateIndex ?? 0,
-          rewriteStrategy: closest.verification?.status === "target_exceeded" ? "soft downshift" : "floor raise"
+          rewriteStrategy: generatedRewriteStrategyFor(key, closest.verification)
         };
         result[key].verification = {
           ...(closest.verification || {}),
@@ -3342,15 +3447,15 @@
           ...lastVerification,
           rewriteAttempted: Boolean(result[key].rewriteAttempted),
           rewriteAttemptCount: Number(result[key].rewriteAttemptCount) || 0,
-          rewriteStrategy: result[key].rewriteStrategy || (lastVerification.status === "target_exceeded" ? "soft downshift" : (lastVerification.status === "below_target" ? "floor raise" : "candidate selected")),
-          exactTargetMet: lastVerification.status === "target_met",
+          rewriteStrategy: result[key].rewriteStrategy || generatedRewriteStrategyFor(key, lastVerification),
+          exactTargetMet: lastVerification.verificationStatus === "verified-pass" || lastVerification.status === "target_met",
           firstVerifiedBand: result[key].verification?.firstVerifiedBand ?? (attempt === 0 ? lastVerification.verifiedBand : result[key].verification?.firstVerifiedBand),
           firstStatus: result[key].verification?.firstStatus ?? (attempt === 0 ? lastVerification.status : result[key].verification?.firstStatus)
         };
         rememberClosest();
         renderRevisionResult(result);
 
-        if (lastVerification.status === "target_met") return result[key].verification;
+        if (lastVerification.isAcceptedForLearning === true) return result[key].verification;
         if (!["below_target", "target_exceeded"].includes(lastVerification.status)) return result[key].verification;
         if (attempt >= maxRewriteAttempts) {
           const chosen = closest || { part: result[key], verification: result[key].verification, distance: generatedBandDistance(lastVerification.verifiedBand, targetBand) };
@@ -3361,7 +3466,7 @@
             rewriteAttempted: true,
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts
           };
-          const chosenStatus = chosen.verification?.status || result[key]?.verification?.status || generatedVerificationStatus(chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, targetBand);
+          const chosenStatus = chosen.verification?.status || result[key]?.verification?.status || generatedVerificationStatus(chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, targetBand, key);
           result[key].verification = normalizeGeneratedVerificationPayload({
             ...(chosen.verification || result[key].verification || {}),
             status: chosenStatus,
@@ -3375,7 +3480,7 @@
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts,
             rewriteStrategy: "closest candidate retained for diagnostics",
             isAcceptedForLearning: false,
-            finalMessageZh: `${generatedVerificationMessageZh(chosenStatus, targetBand, chosen.verification?.verifiedBand ?? lastVerification.verifiedBand)} This closest candidate is kept only for diagnostics and is not accepted as a qualified learning version.`
+            finalMessageZh: `${generatedVerificationMessageZh(chosenStatus, targetBand, chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, key)} This closest candidate is kept only for diagnostics and is not accepted as a qualified learning version.`
           });
           result[key].closestVersionUsed = true;
           result[key].exactTargetMet = false;
@@ -3384,13 +3489,13 @@
           return result[key].verification;
         }
 
-        const rewriteStrategy = lastVerification.status === "target_exceeded" ? "soft downshift" : "floor raise";
+        const rewriteStrategy = generatedRewriteStrategyFor(key, lastVerification);
         result[key].verification = {
           ...result[key].verification,
           status: "rewrite_running",
           message: lastVerification.status === "target_exceeded"
-            ? `验证分高于精确目标，正在进行 soft downshift 第 ${attempt + 1} 次。`
-            : `验证分低于精确目标，正在进行 floor raise 第 ${attempt + 1} 次。`,
+            ? `验证分高于当前学习窗口，正在进行针对性降档第 ${attempt + 1} 次。`
+            : `验证分低于目标，正在进行针对性补强第 ${attempt + 1} 次。`,
           rewriteAttempted: true,
           rewriteAttemptCount: attempt + 1,
           rewriteStrategy
@@ -3438,7 +3543,7 @@
       };
       renderRevisionResult(result);
     }
-    setGradingStatus("作文生成完成，严格生产评分验证和必要自动重写已完成。", "done");
+    setGradingStatus("作文生成完成，生产评分验证已完成；只有进入学习窗口的版本会标记为可学习。", "done");
     return result;
   }
 

@@ -4921,3 +4921,27 @@ body.hybrid-spa-app .feedback-tabs button.active{
     width:100%;
   }
 }
+
+/* Essay generator target-window verification statuses */
+.generated-verification-note.status-verified-pass,
+.generated-candidate-item.status-verified-pass{
+  border-color:rgba(13,119,111,.42);
+  background:rgba(13,119,111,.10);
+}
+.generated-verification-note.status-verified-acceptable-high,
+.generated-candidate-item.status-verified-acceptable-high,
+.generated-verification-note.status-acceptable_high,
+.generated-candidate-item.status-acceptable_high{
+  border-color:rgba(37,99,235,.36);
+  background:rgba(37,99,235,.08);
+}
+.generated-verification-note.status-verified-too-low,
+.generated-candidate-item.status-verified-too-low{
+  border-color:rgba(164,93,0,.36);
+  background:rgba(164,93,0,.09);
+}
+.generated-verification-note.status-verified-too-high,
+.generated-candidate-item.status-verified-too-high{
+  border-color:rgba(185,67,59,.36);
+  background:rgba(185,67,59,.08);
+}

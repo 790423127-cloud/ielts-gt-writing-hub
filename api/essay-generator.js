@@ -173,15 +173,15 @@ function generationTargetsForContext(context = {}) {
       targetBandModel: 5.5,
       targetBandPlus05: 5.0,
       targetBandPlus10: 5.5,
-      minimumTargetRule: "No frozen band is available. Use strict minimum targets: +0.5 revision at least Band 5.0, +1.0 revision/model at least Band 5.5.",
-      levelInstruction: "No frozen band is available. Generate at least Band 5.0 for the +0.5 revision and at least Band 5.5 for the +1.0/model answer, while keeping language learnable and practical."
+      minimumTargetRule: "No frozen band is available. Use target windows: +0.5 revision targets Band 5.0, +1.0/model targets Band 5.5, with model/+1.0 allowed to be slightly above by 0.5 if still learnable.",
+      levelInstruction: "No frozen band is available. Generate Band 5.0 for the +0.5 revision and Band 5.5 for the +1.0/model answer, while keeping language learnable and practical."
     };
   }
 
   const targetBandPlus05 = currentBand < 5.0 ? 5.0 : clampBand(currentBand + 0.5);
   const targetBandPlus10 = currentBand < 5.0 ? 5.5 : clampBand(currentBand + 1.0);
   const targetBandModel = clampBand(Math.max(targetBandPlus10, 5.5));
-  const minimumTargetRule = `Strict exact target rule: if current band is ${currentBand.toFixed(1)}, revisionPlus05 must target exactly Band ${targetBandPlus05.toFixed(1)}, and revisionPlus10 must target exactly Band ${targetBandPlus10.toFixed(1)}. verifiedBand below target is below_target; verifiedBand equal to target is target_met; verifiedBand above target is target_exceeded. Do not call an above-target version target_met.`;
+  const minimumTargetRule = `Target-window rule: if current band is ${currentBand.toFixed(1)}, revisionPlus05 targets Band ${targetBandPlus05.toFixed(1)} and revisionPlus10 targets Band ${targetBandPlus10.toFixed(1)}. verifiedBand below target is below_target; verifiedBand equal to target is target_met. For modelAnswer and revisionPlus10 at target Band 5.5, verified Band 6.0 is acceptable_high: learnable but not exact. revisionPlus05 rescue must not accept below-target versions.`;
 
   let levelInstruction = "";
   if (currentBand < 5) {
@@ -209,7 +209,8 @@ function sourceBasedRevisionRules(task) {
     "6. The modelAnswer may be question-based and independent; this source-based rule applies especially to revisionPlus05 and revisionPlus10.",
     "7. If an added detail is needed for task completion, keep it modest, realistic, and directly connected to the original essay.",
     "8. Band 5 rescue is a sub-rule of source-based revision, not an exception. Do not use the Band 5 checklist as permission to replace the student's scenario, relationship, request, position, reasons, examples, or main facts.",
-    "9. First preserve the student's source content, then raise it to the target band. The result must read like the student's own answer has been improved, not like a separate model answer."
+    "9. First preserve the student's source content, then raise it to the target band. The result must read like the student's own answer has been improved, not like a separate model answer.",
+    "10. Source-based does NOT mean preserving broken grammar, unclear sentence boundaries, or weak paragraph structure. Preserve the student's facts and intentions, but rebuild the wording and structure when needed to reach the learning target."
   ];
   if (task === "Task 1") {
     common.push(
@@ -489,10 +490,10 @@ function buildGenerationPrompt(body = {}) {
     "3) revisionPlus10: if the student is below Band 5.0, this must target Band 5.5. If the student is Band 5.0 or above, it is a strict +1.0 band revision.",
     "Also generate 2 additional source-based candidates for revisionPlus05 and 2 additional source-based candidates for revisionPlus10. The candidates must keep the same student source facts but vary strategy slightly: one safer/simple version, one fuller clearer version. They are candidates for production verification and must not be new model answers.",
     "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
-    "Strict target rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 revision must be at least Band 5.0 and the +1.0 revision must be at least Band 5.5. If the current band is 5.0, the +0.5 revision must be at least Band 5.5.",
-    "Verification status must be exact: verifiedBand < targetBand means below_target; verifiedBand === targetBand means target_met; verifiedBand > targetBand means target_exceeded. Higher than target is not target_met because this module teaches a specific next-step band.",
+    "Target-window rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 rescue revision must verify at Band 5.0. The +1.0 revision/model target Band 5.5, and Band 6.0 may be acceptable as slightly above target if it remains learnable. If the current band is 5.0, the +0.5 revision targets Band 5.5.",
+    "Verification status: verifiedBand < targetBand means below_target; verifiedBand === targetBand means target_met. For modelAnswer and revisionPlus10 with target Band 5.5, verifiedBand 6.0 is acceptable_high, not exact. Higher or lower versions must be labelled honestly and cannot be presented as exact target.",
     "For revisionPlus05 and revisionPlus10, generate source-based revisions. They must preserve the user's scenario, relationship, request or position, main reasons, examples, task facts, and basic order/meaning. They must not become a new model answer.",
-    "For Band 5 rescue, the checklist is subordinate to source-based revision. Do not replace the user's content just to satisfy the checklist. Preserve the user's source content first, then make it clear enough for Band 5.",
+    "For Band 5 rescue, the checklist is subordinate to source-based revision. Preserve the user's source content, but do not preserve broken sentence structure. Rebuild wording, paragraphing, formal letter format, and basic grammar enough to reach Band 5.0 without becoming polished Band 6.",
     "When writing learningGuide, write like an IELTS teacher speaking to a Chinese learner. Be concrete: cite original evidence, compare with revision evidence, tell the student which answer to study first, how to study it in three steps, which sentence patterns to imitate, what to check next time, and what not to do. Do not re-score the essay.",
     "Explain WHY each version is higher and WHAT the student should learn from it.",
     "Do not tell the student to memorize entire essays. Focus on structure, task coverage, useful sentences, grammar control, and paragraph development.",
@@ -583,7 +584,7 @@ function buildGenerationPrompt(body = {}) {
           relationToCurrentLevel: "Explain how this version relates to currentBand.",
           whatToStudy: "What exactly the student should learn from it.",
           notPriorityYet: "Which answer is not the first priority and why.",
-          targetAccuracyNote: "If a generated version did not exactly meet target after verification, honestly say it is the closest available version."
+          targetAccuracyNote: "After verification, honestly state whether the version is exact target, slightly above but learnable, below target, too high, or failed. Do not call a failed closest version a successful learning version."
         },
         keyDifferences: [
           {
@@ -818,40 +819,53 @@ function extractBandFromScoreResult(result = {}) {
   return null;
 }
 
-function verificationLabel(verifiedBand, targetBand) {
+function generatedPartAllowsSlightlyHigh(key, targetBand) {
+  const target = Number(targetBand);
+  if (!Number.isFinite(target)) return false;
+  if (key === "modelAnswer" && target === 5.5) return true;
+  if (key === "revisionPlus10" && target === 5.5) return true;
+  return false;
+}
+
+function verificationLabel(verifiedBand, targetBand, key = "") {
   const verified = Number(verifiedBand);
   const target = Number(targetBand);
   if (!Number.isFinite(verified) || !Number.isFinite(target)) return "verification_unavailable";
-  if (verified < target) return "below_target";
-  if (verified > target) return "target_exceeded";
-  return "target_met";
+  const diff = Math.round((verified - target) * 2) / 2;
+  if (diff < 0) return "below_target";
+  if (diff === 0) return "target_met";
+  if (diff === 0.5 && generatedPartAllowsSlightlyHigh(key, target)) return "acceptable_high";
+  return "target_exceeded";
 }
 
-function strictVerificationStatus(status, verifiedBand, targetBand) {
+function strictVerificationStatus(status, verifiedBand, targetBand, key = "") {
   const raw = String(status || "").trim();
   if (raw === "verification_failed" || raw === "generation_failed" || raw === "empty_essay" || raw === "verification_unavailable") {
     return raw;
   }
+  if (raw === "acceptable_high" || raw === "verified-acceptable-high") return "verified-acceptable-high";
   const comparisonStatus = raw === "verified-too-low"
     ? "below_target"
     : raw === "verified-too-high"
       ? "target_exceeded"
       : raw === "verified-pass"
         ? "target_met"
-        : verificationLabel(verifiedBand, targetBand);
+        : verificationLabel(verifiedBand, targetBand, key);
   if (comparisonStatus === "below_target") return "verified-too-low";
   if (comparisonStatus === "target_exceeded") return "verified-too-high";
+  if (comparisonStatus === "acceptable_high") return "verified-acceptable-high";
   if (comparisonStatus === "target_met") return "verified-pass";
   return "verification_unavailable";
 }
 
-function strictVerificationMessageZh(status, targetBand, verifiedBand) {
-  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand);
+function strictVerificationMessageZh(status, targetBand, verifiedBand, key = "") {
+  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand, key);
   const targetText = bandLabel(targetBand) || "未指定";
   const verifiedText = bandLabel(verifiedBand) || "暂无";
-  if (verificationStatus === "verified-pass") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本达标，可作为合格学习版本。`;
+  if (verificationStatus === "verified-pass") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本精确达标，可作为合格学习版本。`;
+  if (verificationStatus === "verified-acceptable-high") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本略高于目标，但仍适合作为当前阶段的学习版本；注意它不是精确命中目标。`;
   if (verificationStatus === "verified-too-low") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本低于目标，不能作为合格学习版本。`;
-  if (verificationStatus === "verified-too-high") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本高于目标，可能过难，不作为当前阶段的合格学习版本。`;
+  if (verificationStatus === "verified-too-high") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本高于目标窗口，可能过难，不作为当前阶段的合格学习版本。`;
   if (verificationStatus === "verification_failed") return `目标 Band ${targetText} 的生产验证失败。该版本暂时不能作为合格学习版本。`;
   if (verificationStatus === "generation_failed") return `目标 Band ${targetText} 的生成失败，当前没有可用学习版本。`;
   if (verificationStatus === "empty_essay") return `目标 Band ${targetText} 尚无可验证文本。`;
@@ -861,16 +875,21 @@ function strictVerificationMessageZh(status, targetBand, verifiedBand) {
 function applyStrictVerificationMeta(payload = {}) {
   const targetBand = clampBand(payload.targetBand);
   const verifiedBand = clampBand(payload.verifiedBand);
-  const status = String(payload.status || verificationLabel(verifiedBand, targetBand));
-  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand);
+  const key = payload.key || payload.partKey || payload.label || "";
+  const status = String(payload.status || verificationLabel(verifiedBand, targetBand, key));
+  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand, key);
   return {
     ...payload,
+    key,
+    partKey: key,
     targetBand,
     verifiedBand,
     status,
     verificationStatus,
-    isAcceptedForLearning: payload.isAcceptedForLearning === true || verificationStatus === "verified-pass",
-    finalMessageZh: payload.finalMessageZh || strictVerificationMessageZh(verificationStatus, targetBand, verifiedBand)
+    exactTargetMet: verificationStatus === "verified-pass",
+    isSlightlyAboveTarget: verificationStatus === "verified-acceptable-high",
+    isAcceptedForLearning: payload.isAcceptedForLearning === true || verificationStatus === "verified-pass" || verificationStatus === "verified-acceptable-high",
+    finalMessageZh: payload.finalMessageZh || strictVerificationMessageZh(verificationStatus, targetBand, verifiedBand, key)
   };
 }
 
@@ -882,7 +901,8 @@ function generatedBandDistance(verifiedBand, targetBand) {
 }
 
 function verificationMessage(status) {
-  if (status === "target_met") return "生产评分验证在目标窗口内。";
+  if (status === "target_met") return "生产评分验证精确命中目标。";
+  if (status === "acceptable_high") return "生产评分验证略高于目标，但仍在可学习窗口内。";
   if (status === "target_exceeded") return "生产评分验证超过目标窗口，达标但偏难，需要降档重写。";
   if (status === "below_target") return "生产评分验证低于目标，需要提高重写。";
   return "生产评分验证暂不可用。";
@@ -929,7 +949,7 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
     try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!response.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
     const verifiedBand = extractBandFromScoreResult(data);
-    const status = verificationLabel(verifiedBand, targetBand);
+    const status = verificationLabel(verifiedBand, targetBand, label);
     return applyStrictVerificationMeta({
       enabled: true,
       ok: true,
@@ -937,6 +957,7 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
       router: "grade-ielts-production-router",
       targetBand: clampBand(targetBand),
       verifiedBand,
+      key: label,
       status,
       message: verificationMessage(status),
       criterionBands: data.finalCriteria || data.criteria || null,
@@ -962,7 +983,7 @@ function shouldRewriteForTarget(verification = {}) {
   const verified = Number(verification.verifiedBand);
   if (!verification.ok) return false;
   if (!Number.isFinite(target) || !Number.isFinite(verified)) return false;
-  return verified !== target;
+  return verification.isAcceptedForLearning !== true;
 }
 
 function generatedPartSpec(key) {
@@ -1064,8 +1085,12 @@ function buildRewritePrompt(body, normalized, key, verification) {
     `Escalation mode active: ${escalationMode ? "YES" : "NO"}`,
     `Band 5 downshift lock active: ${downshiftLockMode ? "YES" : "NO"}`,
     `Rewrite direction: ${rewriteDirection}`,
+    `Client rewrite strategy: ${body.rewriteStrategy || "not provided"}`,
+    body.rewriteStrategy && String(body.rewriteStrategy).includes("below-target-task1-rescue") ? "Strategy detail: repair Task 1 formal letter structure, bullet coverage, clear purpose, basic grammar, and spelling. Preserve facts but rebuild weak original wording." : "",
+    body.rewriteStrategy && String(body.rewriteStrategy).includes("below-target") && !String(body.rewriteStrategy).includes("task1-rescue") ? "Strategy detail: strengthen task coverage, paragraph clarity, and basic grammar. Do not simply add sophisticated vocabulary." : "",
+    body.rewriteStrategy && String(body.rewriteStrategy).includes("above-target") ? "Strategy detail: reduce polish, simplify sentence structure and vocabulary, remove unnecessary developed details, but keep task coverage clear." : "",
     `Production-router criterion bands: ${JSON.stringify(criterionBands)}`,
-    "The learning slot has an exact target, not a minimum. If target is Band 5.0 and production verification is Band 5.5 or 6.0, status is target_exceeded and the answer must be softly downshifted. Do not call above-target versions successful.",
+    "The learning slot has a target window. Below target is failure. For modelAnswer/revisionPlus10 target Band 5.5, Band 6.0 may be acceptable_high if still learnable. For Band 5 rescue, do not accept below target and avoid over-polished Band 6 style.",
     isBand5Rescue ? "This is the Band 5 rescue revision. It must satisfy the checklist below. It must be a source-based rescue rewrite: stronger than the original, but still clearly derived from the student\'s original facts, request, reason, and benefit idea." : "",
     isBand5Rescue ? "Realistic Band 5 rule: the answer should be clear and complete but still simple. It can contain basic vocabulary, simple grammar, some repetition, and minor awkwardness. Do not intentionally add mistakes." : "",
     isBand5Rescue ? band5Checklist : "",
@@ -1114,7 +1139,7 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
       firstStatus: firstVerification.status,
       rewriteAttempted: true,
       rewriteStrategy: firstVerification.status === "target_exceeded" ? "soft downshift" : "floor raise",
-      exactTargetMet: secondVerification.status === "target_met"
+      exactTargetMet: secondVerification.verificationStatus === "verified-pass"
     };
     normalized[key].rewriteAttempted = true;
     return normalized[key].verification;
@@ -1123,7 +1148,7 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
       ...firstVerification,
       rewriteAttempted: true,
       rewriteStrategy: firstVerification.status === "target_exceeded" ? "soft downshift" : "floor raise",
-      exactTargetMet: firstVerification.status === "target_met",
+      exactTargetMet: firstVerification.isAcceptedForLearning === true,
       rewriteFailed: true,
       rewriteError: String(error.message || error).slice(0, 500),
       message: `${firstVerification.message} 自动重写尝试失败；请手动查看目标分和验证分差距。`
@@ -1217,17 +1242,17 @@ async function verifyGeneratedPartWithCandidates(req, body, normalized, key) {
       ...verification,
       rewriteAttempted: false,
       rewriteAttemptCount: 0,
-      exactTargetMet: verification.status === "target_met",
+      exactTargetMet: verification.isAcceptedForLearning === true,
       candidateIndex: entry.index,
       candidateCount: candidates.length,
       rewriteStrategy: entry.strategy
     };
-    recordCandidateHistory(normalized, key, entry, verification, verification.status === "target_met");
+    recordCandidateHistory(normalized, key, entry, verification, verification.isAcceptedForLearning === true);
     const distance = generatedBandDistance(verification.verifiedBand, normalized[key].targetBand);
     if (Number.isFinite(distance) && (!closest || distance < closest.distance)) {
       closest = { part: { ...normalized[key] }, verification: { ...normalized[key].verification }, distance };
     }
-    if (verification.status === "target_met") {
+    if (verification.isAcceptedForLearning === true) {
       markSelectedCandidateHistory(normalized, key, entry.index === 0 ? "initial" : `candidate-${entry.index}`);
       return normalized[key].verification;
     }
@@ -1277,10 +1302,11 @@ async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
     enabled: true,
     router: "grade-ielts-production-router",
     targetMet: counts.target_met || 0,
+    acceptableHigh: counts.acceptable_high || 0,
     nearTarget: counts.near_target || 0,
     belowTarget: counts.below_target || 0,
     verificationFailed: counts.verification_failed || 0,
-    summary: `严格生产评分验证完成：达到目标 ${counts.target_met || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项。`,
+    summary: `生产评分验证完成：精确达标 ${counts.target_met || 0} 项，略高但可学习 ${counts.acceptable_high || 0} 项，低于目标 ${counts.below_target || 0} 项，过高 ${counts.target_exceeded || 0} 项，验证失败 ${counts.verification_failed || 0} 项。`,
     items: results
   };
 
