@@ -817,7 +817,7 @@ function normalizeGenerationResult(raw = {}, body = {}) {
 }
 
 
-async function callDeepSeek(prompt) {
+async function callDeepSeek(prompt, temperature = 0.65) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY");
   const controller = new AbortController();
@@ -828,9 +828,9 @@ async function callDeepSeek(prompt) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        // Controlled Exact-Hit Mode: higher temp for main generation path (more linguistic variety for delta upgrades);
-        // low/zero temp for rewrite attempts (more controlled calibration).
-        temperature: (body && (body.rewriteGeneratedPart || body.generationMode === "rewrite_generated_part")) ? 0.25 : 0.65,
+        // Controlled Exact-Hit Mode: higher temp (0.65) for initial generation to allow more linguistic variety for delta upgrades.
+        // Lower temp (0.25) for rewrite attempts for more controlled, deterministic calibration.
+        temperature,
         max_tokens: 8000,
         messages: [
           { role: "system", content: "Return strict JSON only. Generate IELTS GT practice writing only. Never recalculate or change any score." },
@@ -1218,7 +1218,7 @@ async function maybeRewriteGeneratedPart(req, body, normalized, key, firstVerifi
 
   try {
     const rewritePrompt = buildRewritePrompt(body, normalized, key, firstVerification);
-    const rawRewrite = await callDeepSeek(rewritePrompt);
+    const rawRewrite = await callDeepSeek(rewritePrompt, 0.25);
     mergeRewrittenPart(normalized, key, rawRewrite);
     const secondVerification = await scoreGeneratedEssay(req, body, normalized[key].essay, key, normalized[key].targetBand);
     normalized[key].verification = {
@@ -1410,6 +1410,7 @@ async function verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized) {
 
 
 async function generateClientSideRewritePart(body) {
+  const { essay, frozenScore, currentResult, verifyGeneratedScores } = body || {};
   const key = String(body.rewriteGeneratedPart || body.generatedPartKey || body.partKey || "").trim();
   if (!["modelAnswer", "revisionPlus05", "revisionPlus10"].includes(key)) {
     throw new Error("Unsupported rewriteGeneratedPart. Use modelAnswer, revisionPlus05, or revisionPlus10.");
@@ -1435,7 +1436,7 @@ async function generateClientSideRewritePart(body) {
     criterionBands: body.criterionBands || incomingVerification.criterionBands || {}
   };
 
-  const rawRewrite = await callDeepSeek(buildRewritePrompt(body, normalized, key, verification));
+  const rawRewrite = await callDeepSeek(buildRewritePrompt(body, normalized, key, verification), 0.25);
   mergeRewrittenPart(normalized, key, rawRewrite);
   normalized[key].targetBand = targetBand;
 
@@ -1477,7 +1478,12 @@ module.exports = async function handler(req, res) {
     return sendJson(req, res, 405, { ok: false, error: "Method not allowed" });
   }
   try {
-    const body = normalizeIncomingBody(await readJsonBody(req));
+    // 使用用户建议的解构方式获取关键字段，同时保持对 serverless body 的健壮解析。
+    // 先通过 readJsonBody 获取解析后的 body（兼容 req.body 为 object/string/流），然后解构，再 normalize。
+    const rawBody = await readJsonBody(req);
+    const { essay, frozenScore, currentResult, verifyGeneratedScores } = rawBody || {};
+    const body = normalizeIncomingBody(rawBody);
+
     if (!String(body.prompt || body.questionPrompt || "").trim()) {
       return sendJson(req, res, 400, { ok: false, error: "Prompt is required for essay generation" });
     }
@@ -1485,7 +1491,7 @@ module.exports = async function handler(req, res) {
       const rewritten = await generateClientSideRewritePart(body);
       return sendJson(req, res, 200, rewritten);
     }
-    const raw = await callDeepSeek(buildGenerationPrompt(body));
+    const raw = await callDeepSeek(buildGenerationPrompt(body), 0.65);
     const normalized = normalizeGenerationResult(raw, body);
     const verified = await verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized);
     return sendJson(req, res, 200, verified);
