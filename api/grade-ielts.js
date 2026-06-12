@@ -1664,6 +1664,184 @@ function defaultImproveForCriterion(criterion) {
   return "Strengthen the limiting evidence for this criterion to move 0.5 band higher.";
 }
 
+function clampCriterionBand(value) {
+  const band = roundHalf(value);
+  if (!Number.isFinite(band)) return null;
+  return Math.max(1, Math.min(9, band));
+}
+
+function criterionBandDelta(baseBand, delta) {
+  const next = clampCriterionBand(Number(baseBand) + Number(delta || 0));
+  return Number.isFinite(next) ? next : clampCriterionBand(baseBand);
+}
+
+function countCueMatches(text, patterns = []) {
+  const source = String(text || "");
+  return patterns.reduce((total, pattern) => total + countPattern(source, pattern), 0);
+}
+
+function buildCriterionAudit(task, criteria = {}, signals = {}, body = {}) {
+  const essay = String(body.essay || body.answer || body.response || body.text || "");
+  const prompt = String(body.questionPrompt || body.promptText || body.prompt || body.question || "");
+  const names = criterionNames(task);
+  const taskRequirementAudit = signals.taskRequirementAudit || buildTaskRequirementAudit(body, signals) || null;
+  const items = Array.isArray(taskRequirementAudit?.items) ? taskRequirementAudit.items : [];
+  const covered = items.filter((item) => item.status === "covered").length;
+  const partly = items.filter((item) => item.status === "partly_covered").length;
+  const missing = items.filter((item) => item.status === "missing").length;
+  const bullets = Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints : extractTask1Bullets(prompt);
+  const task2Profile = signals.task2QuestionProfile || inferTask2Profile(prompt);
+  const questionCount = Number(task2Profile?.questionCount) || (Array.isArray(task2Profile?.directQuestions) ? task2Profile.directQuestions.length : 0);
+  const answeredParts = items.filter((item) => item.status === "covered" || item.status === "partly_covered").length;
+  const paragraphCount = Number(signals.paragraphCount) || countParagraphs(essay);
+  const wordCountValue = Number(signals.wordCount) || countWords(essay);
+  const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(essay).length;
+  const distinctRatio = distinctWordRatio(essay);
+  const connectorCount = countCueMatches(essay, [
+    /\b(firstly|secondly|thirdly|however|moreover|furthermore|in conclusion|overall)\b/gi,
+    /\b(because|for example|for instance|therefore|as a result|also|when|if|although|while)\b/gi
+  ]);
+
+  const task1Complete = task === "Task 1"
+    ? (bullets.length ? covered + partly >= bullets.length : missing === 0)
+    : false;
+  const task2Complete = task === "Task 2"
+    ? ((questionCount ? answeredParts >= questionCount : answeredParts >= 1) && Boolean(task2Profile?.twoPartQuestion ? answeredParts >= 2 : true))
+    : false;
+
+  const firstName = names[0];
+  const secondName = "Coherence and Cohesion";
+  const thirdName = "Lexical Resource";
+  const fourthName = "Grammatical Range and Accuracy";
+
+  const positive = {
+    [firstName]: [],
+    [secondName]: [],
+    [thirdName]: [],
+    [fourthName]: []
+  };
+  const limiting = {
+    [firstName]: [],
+    [secondName]: [],
+    [thirdName]: [],
+    [fourthName]: []
+  };
+  const outputs = {};
+
+  const taskRequirementCoverage = task === "Task 1"
+    ? `Task 1 coverage: ${covered}/${Math.max(1, bullets.length)} bullet(s) covered, ${partly} partly covered, ${missing} missing.`
+    : `Task 2 coverage: ${answeredParts}/${Math.max(1, questionCount || items.length || 1)} required part(s) answered, ${partly} partly covered, ${missing} missing.`;
+
+  if (task === "Task 1") {
+    positive[firstName].push(
+      missing === 0 ? "all bullet points are attempted" : "the letter is still task-related"
+    );
+    if (covered >= Math.max(2, Math.min(3, bullets.length || 3))) positive[firstName].push("purpose is clear enough to guide the letter");
+    if (taskRequirementAudit?.summary) positive[firstName].push(taskRequirementAudit.summary);
+    if (partly > 0 || missing > 0) limiting[firstName].push(taskRequirementCoverage);
+    if (wordCountValue < 150) limiting[firstName].push(`word count is ${wordCountValue}, so development is constrained`);
+
+    positive[secondName].push(
+      paragraphCount >= 3 ? "opening, body and closing are present" : "ideas are separated into readable chunks"
+    );
+    if (connectorCount >= 2) positive[secondName].push("basic linking devices are used effectively");
+    if (paragraphCount <= 2) limiting[secondName].push("paragraphing is thin or compressed");
+    if (connectorCount <= 1) limiting[secondName].push("cohesion relies on simple linking only");
+
+    positive[thirdName].push(
+      signals.lexicalControl === "adequate_or_better" ? "general letter vocabulary is understandable" : "topic vocabulary is visible"
+    );
+    if (distinctRatio >= 0.58) positive[thirdName].push("there is some vocabulary variety");
+    if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high") limiting[thirdName].push("lexical control is weak or awkward");
+    if (distinctRatio < 0.6) limiting[thirdName].push("range is simple and repetition is noticeable");
+
+    positive[fourthName].push(
+      signals.grammarErrorDensity === "low" || signals.grammarErrorDensity === "none" ? "meaning is generally clear" : "basic sentence control is visible"
+    );
+    if (signals.sentenceControl === "adequate_or_better") positive[fourthName].push("simple and some complex forms are mostly controlled");
+    if (signals.grammarErrorDensity === "high") limiting[fourthName].push("grammar errors are frequent and limit accuracy");
+    if (signals.sentenceControl === "weak") limiting[fourthName].push("sentence control is limited");
+  } else {
+    positive[firstName].push(
+      task2Complete ? "answers both direct questions" : "the response is task-related"
+    );
+    if (taskRequirementAudit?.markers?.clearOpinion || taskRequirementAudit?.markers?.implicitJudgement || taskRequirementAudit?.markers?.positiveNegativeJudgement || taskRequirementAudit?.markers?.outweighJudgement) {
+      positive[firstName].push("a clear opinion or judgement is present");
+    }
+    if (taskRequirementAudit?.markers?.exampleSupport || taskRequirementAudit?.markers?.explanationMarkers >= 2) positive[firstName].push("reasons are given for the answer");
+    if (taskRequirementAudit?.summary) positive[firstName].push(taskRequirementAudit.summary);
+    if (!task2Complete || missing > 0 || partly > 0) limiting[firstName].push(taskRequirementCoverage);
+    if (wordCountValue < 150) limiting[firstName].push(`development is limited by word count ${wordCountValue}`);
+
+    positive[secondName].push(
+      paragraphCount >= 3 ? "clear paragraphing and logical order" : "the response is grouped into readable paragraphs"
+    );
+    if (connectorCount >= 2) positive[secondName].push("basic cohesive devices are used effectively");
+    if (paragraphCount >= 4) positive[secondName].push("progression is easy to follow");
+    if (paragraphCount <= 2) limiting[secondName].push("paragraphing is too thin or compressed");
+    if (connectorCount <= 1) limiting[secondName].push("cohesion is simple and repetitive");
+
+    positive[thirdName].push(
+      signals.lexicalControl === "adequate_or_better" ? "topic vocabulary is understandable" : "word choice is clear enough for the message"
+    );
+    if (distinctRatio >= 0.58) positive[thirdName].push("there is some lexical range");
+    if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high") limiting[thirdName].push("lexical range is limited or repetitive");
+    if (distinctRatio < 0.6) limiting[thirdName].push("repetition is noticeable");
+
+    positive[fourthName].push(
+      signals.grammarErrorDensity === "low" || signals.grammarErrorDensity === "none" ? "sentence control is mostly clear" : "simple sentence control is functional"
+    );
+    if (signals.sentenceControl === "adequate_or_better") positive[fourthName].push("there is some use of subordinate clauses");
+    if (signals.grammarErrorDensity === "high") limiting[fourthName].push("grammar errors reduce accuracy");
+    if (signals.sentenceControl === "weak") limiting[fourthName].push("sentence range and control are limited");
+  }
+
+  const baseBands = names.map((name) => Number(criteria?.[name]));
+  names.forEach((name) => {
+    outputs[name] = {
+      band: Number.isFinite(Number(criteria?.[name])) ? Number(criteria[name]) : null,
+      positiveEvidence: positive[name].slice(0, 4),
+      limitingEvidence: limiting[name].slice(0, 4),
+      reason: positive[name].length || limiting[name].length
+        ? `${positive[name][0] || "Criterion-specific evidence reviewed."}${limiting[name][0] ? `; limiting: ${limiting[name][0]}` : ""}`
+        : "Criterion-specific evidence reviewed."
+    };
+  });
+
+  return {
+    criterionAudit: outputs,
+    criterionScoreAudit: {
+      allCriteriaSame: allCriteriaSame(criteria),
+      sameScoreJustification: allCriteriaSame(criteria)
+        ? `All four criteria start from Band ${Number.isFinite(baseBands[0]) ? baseBands[0].toFixed(1) : "-"}. The audit will only separate them if task-response, cohesion, lexis, or grammar evidence clearly differs.`
+        : "AI already differentiated the criterion bands.",
+      mechanicalCopyDetected: false,
+      originalCriteria: { ...(criteria || {}) }
+    },
+    taskRequirementCoverage
+  };
+}
+
+function rebalanceMechanicalCriteria(task, criteria = {}, signals = {}, body = {}) {
+  const names = criterionNames(task);
+  const original = {};
+  names.forEach((name) => { original[name] = Number(criteria?.[name]); });
+  const audit = buildCriterionAudit(task, original, signals, body);
+  return {
+    criteria: original,
+    criterionAudit: audit.criterionAudit,
+    criterionScoreAudit: {
+      ...audit.criterionScoreAudit,
+      allCriteriaSame: allCriteriaSame(original),
+      mechanicalCopyDetected: allCriteriaSame(original),
+      originalCriteria: { ...original },
+      adjustedCriteria: { ...original },
+      spread: 0
+    },
+    taskRequirementCoverage: audit.taskRequirementCoverage
+  };
+}
+
 
 // Detailed feedback quality auditing has been removed from the scoring endpoint.
 // The scoring endpoint only freezes bands; /api/criterion-feedback owns feedback quality.
@@ -2310,11 +2488,20 @@ async function applyCriterionDifferentiationReviewIfNeeded(body, reviewedResult 
     firstCriteria: firstSameCriteria,
     finalCriteria: differentiatedCriteria
   };
+  const differentiatedCriterionAudit = buildCriterionAudit(signals.task, differentiatedCriteria, signals, body);
   return {
     ...reviewedResult,
     ...differentiatedBase,
     criteria: differentiatedCriteria,
     finalCriteria: differentiatedCriteria,
+    criterionAudit: differentiatedCriterionAudit.criterionAudit,
+    criterionScoreAudit: {
+      ...differentiatedCriterionAudit.criterionScoreAudit,
+      allCriteriaSame: allCriteriaSame(differentiatedCriteria),
+      mechanicalCopyDetected: allCriteriaSame(differentiatedCriteria),
+      originalCriteria: { ...firstSameCriteria },
+      adjustedCriteria: { ...differentiatedCriteria }
+    },
     anchorComparison: differentiatedBase.anchorComparison?.anchorMissing ? (reviewedResult.anchorComparison || differentiatedBase.anchorComparison) : differentiatedBase.anchorComparison,
     boundaryAudit: {
       ...audit,
@@ -2365,7 +2552,9 @@ function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison
 }
 function normalizeScoreCoreResult(ai, body, signals, options = {}) {
   const task = signals.task === "Task 1" ? "Task 1" : "Task 2";
-  const criteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+  const normalizedCriteria = normalizeCriteria(ai.criteria || ai.finalCriteria, task);
+  const criterionRebalance = rebalanceMechanicalCriteria(task, normalizedCriteria, signals, body);
+  const criteria = criterionRebalance.criteria || normalizedCriteria;
   assertNoImpossibleZeroBand(criteria, signals);
   const { rawAverage, finalBand } = averageBand(criteria);
   if (!Number.isFinite(finalBand)) throw new Error("AI returned incomplete criterion bands.");
@@ -2415,6 +2604,8 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
     scoreProfile,
     taskSpecificGate,
     boundaryAudit,
+    criterionAudit: criterionRebalance.criterionAudit,
+    criterionScoreAudit: criterionRebalance.criterionScoreAudit,
     diagnosticSignals: ai.diagnosticSignals || {},
     examinerSummary: String(ai.examinerSummary || "").trim(),
     examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),

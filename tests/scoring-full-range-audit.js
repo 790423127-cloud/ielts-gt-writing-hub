@@ -118,6 +118,11 @@ function hasChinese(value) {
   return false;
 }
 
+function criteriaAllSame(criteria = {}) {
+  const values = Object.values(criteria || {}).map(Number).filter(Number.isFinite);
+  return values.length === 4 && values.every((value) => value === values[0]);
+}
+
 function buildLocalSamples() {
   return {
     task1: [
@@ -602,6 +607,10 @@ async function verifyLiveApis() {
   assert(score.finalSource, "Production router did not return finalSource.", score);
   assert(score.boundaryMainReuseAudit, "Production router response did not expose boundaryMainReuseAudit.", score);
   assert(score.scoringAudit, "Production router response did not expose scoringAudit.", score);
+  assert(score.criterionAudit, "Production router response did not expose criterionAudit.", score);
+  assert(score.criterionScoreAudit, "Production router response did not expose criterionScoreAudit.", score);
+  assert(!criteriaAllSame(score.criteria || score.finalCriteria || {}), "Crime drama sample should not return four identical criterion scores.", score);
+  assert(score.criterionScoreAudit.allCriteriaSame === false, "Criterion score audit should show the crime sample is not mechanically uniform.", score.criterionScoreAudit);
 
   const generator = await postJson(generatorEndpoint, {
     ...routerSample,

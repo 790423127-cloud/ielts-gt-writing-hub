@@ -75,10 +75,122 @@ function countParagraphs(text) {
     .filter(Boolean)
     .length;
 }
+function countPattern(text, regex) {
+  return (String(text || "").match(regex) || []).length;
+}
+
+function distinctWordRatio(text) {
+  const words = String(text || "").toLowerCase().match(/[a-z][a-z'’]*/g) || [];
+  if (!words.length) return 0;
+  return new Set(words).size / words.length;
+}
+
 function roundHalf(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.min(9, Math.round(n * 2) / 2));
+}
+
+function allCriteriaSame(criteria = {}, task = "Task 2") {
+  const values = criterionNames(task)
+    .map((name) => Number(criteria?.[name]))
+    .filter(Number.isFinite);
+  return values.length === 4 && values.every((value) => value === values[0]);
+}
+
+function buildCriterionAudit(task, criteria = {}, main = {}, lowband = {}, essay = "", questionPrompt = "") {
+  const names = criterionNames(task);
+  const signals = main?.raw?.localSignals || main?.localSignals || {};
+  const taskProfile = main?.raw?.taskProfile || main?.taskProfile || {};
+  const taskRequirementAudit = taskProfile.taskRequirementAudit || main?.raw?.taskRequirementAudit || null;
+  const items = Array.isArray(taskRequirementAudit?.items) ? taskRequirementAudit.items : [];
+  const connectors = countPattern(essay, /\b(firstly|secondly|thirdly|however|moreover|furthermore|in conclusion|overall|because|for example|for instance|therefore|as a result|also|when|if|although|while)\b/gi);
+  const paragraphCount = countParagraphs(essay);
+  const distinctRatio = distinctWordRatio(essay);
+  const outputs = {};
+
+  names.forEach((name) => {
+    const positive = [];
+    const limiting = [];
+    if (task === "Task 1") {
+      if (name === "Task Achievement") {
+        const covered = items.filter((item) => item.status === "covered").length;
+        const partly = items.filter((item) => item.status === "partly_covered").length;
+        positive.push(covered >= 2 ? "bullet points are addressed" : "the letter responds to the task");
+        if (covered >= 3) positive.push("all task prompts are attempted");
+        if (taskProfile?.letterStyle || taskProfile?.purposeRequired) positive.push("purpose and tone are task-locked");
+        if (partly || items.some((item) => item.status === "missing")) limiting.push("coverage is not fully developed");
+        if (Number(signals.wordCount) < 150) limiting.push("response is short for GT Task 1");
+      } else if (name === "Coherence and Cohesion") {
+        positive.push(paragraphCount >= 3 ? "opening, body and closing are visible" : "ideas are organised into paragraphs");
+        if (connectors >= 2) positive.push("basic linking is used");
+        if (paragraphCount <= 2) limiting.push("paragraphing is compressed");
+        if (connectors <= 1) limiting.push("linking is simple");
+      } else if (name === "Lexical Resource") {
+        positive.push("vocabulary is understandable");
+        if (distinctRatio >= 0.6) positive.push("some lexical variety is present");
+        if ((signals.weakPhraseCount || 0) > 0) limiting.push("repetition or weak phrases are noticeable");
+        if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high") limiting.push("lexical range is limited");
+      } else {
+        positive.push(signals.grammarErrorDensity === "low" || signals.grammarErrorDensity === "none" ? "most sentences are clear" : "simple sentence control is functional");
+        if (signals.sentenceControl === "adequate_or_better") positive.push("some subordinate clauses appear");
+        if (signals.grammarErrorDensity === "high") limiting.push("grammar errors reduce accuracy");
+        if (signals.sentenceControl === "weak") limiting.push("sentence control is limited");
+      }
+    } else {
+      if (name === "Task Response") {
+        const answerParts = items.filter((item) => item.status === "covered" || item.status === "partly_covered").length;
+        positive.push(answerParts >= 2 ? "both question parts are addressed" : "the essay answers the question");
+        if (taskProfile?.positionRequired || taskProfile?.twoPartQuestion) positive.push("the task type is correctly understood");
+        if (answerParts >= 2) positive.push("a clear opinion or position is visible");
+        if (items.some((item) => item.status === "missing")) limiting.push("development is limited");
+        if (Number(signals.wordCount) < 250) limiting.push("development is still basic");
+      } else if (name === "Coherence and Cohesion") {
+        positive.push(paragraphCount >= 3 ? "the essay is paragraph-based" : "ideas are separated into sections");
+        if (connectors >= 3) positive.push("connectors are used effectively");
+        if (paragraphCount <= 2) limiting.push("paragraphing is thin");
+        if (connectors <= 1) limiting.push("cohesion is basic");
+      } else if (name === "Lexical Resource") {
+        positive.push("topic vocabulary is understandable");
+        if (distinctRatio >= 0.6) positive.push("there is some lexical range");
+        if ((signals.weakPhraseCount || 0) > 0) limiting.push("repetition is noticeable");
+        if (signals.lexicalControl === "weak" || signals.lexicalNaturalnessRisk === "high") limiting.push("lexical control is limited");
+      } else {
+        positive.push(signals.grammarErrorDensity === "low" || signals.grammarErrorDensity === "none" ? "sentence control is mostly clear" : "simple sentence control is functional");
+        if (signals.sentenceControl === "adequate_or_better") positive.push("some subordinate clauses appear");
+        if (signals.grammarErrorDensity === "high") limiting.push("grammar errors reduce clarity");
+        if (signals.sentenceControl === "weak") limiting.push("sentence range is limited");
+      }
+    }
+
+    outputs[name] = {
+      band: Number.isFinite(Number(criteria?.[name])) ? Number(criteria[name]) : null,
+      positiveEvidence: positive.slice(0, 4),
+      limitingEvidence: limiting.slice(0, 4),
+      reason: positive[0] || limiting[0] || "Criterion-specific evidence reviewed."
+    };
+  });
+
+  const same = allCriteriaSame(criteria, task);
+  return {
+    criterionAudit: outputs,
+    criterionScoreAudit: {
+      allCriteriaSame: same,
+      sameScoreJustification: same
+        ? "The AI returned identical criterion bands. The score was preserved, but the audit records criterion-specific evidence for review."
+        : "The AI already differentiated the criterion bands.",
+      mechanicalCopyDetected: same,
+      originalCriteria: { ...(criteria || {}) },
+      adjustedCriteria: { ...(criteria || {}) },
+      spread: 0,
+      source: same ? "ai-result-was-uniform" : "ai-result-was-differentiated"
+    },
+    taskRequirementCoverage: taskRequirementAudit?.summary || "",
+    taskProfile,
+    signals,
+    questionPrompt,
+    essay
+  };
 }
 
 function isValidBand(value) {
@@ -515,7 +627,8 @@ function selectWithoutAdjudication(route, main, lowband) {
       finalBand: lowband.score,
       finalCriteria: lowband.criteria,
       finalSource: "lowband-confirmed-low-score",
-      confidence: route.confidence
+      confidence: route.confidence,
+      criterionSource: "lowband-ai"
     };
   }
 
@@ -523,7 +636,8 @@ function selectWithoutAdjudication(route, main, lowband) {
     finalBand: main.score,
     finalCriteria: main.criteria,
     finalSource: "main-score",
-    confidence: route.confidence
+    confidence: route.confidence,
+    criterionSource: "main-ai"
   };
 }
 
@@ -589,15 +703,22 @@ module.exports = async function handler(req, res) {
 
     if (route.adjudicate) {
       adjudicator = await adjudicate(task, questionPrompt, essay, main, lowband, route);
+      const mainCriteria = validateCriteria(main.criteria || main.finalCriteria || {}, task);
+      const adjudicatorCriteria = validateCriteria(adjudicator.finalCriteria, task);
+      const useFrozenMainCriteria = allCriteriaSame(adjudicatorCriteria, task) && !allCriteriaSame(mainCriteria, task);
+      const finalCriteria = useFrozenMainCriteria ? mainCriteria : adjudicatorCriteria;
       selected = {
-        finalBand: adjudicator.finalBand,
-        finalCriteria: adjudicator.finalCriteria,
+        finalBand: averageBand(finalCriteria, task),
+        finalCriteria,
         finalSource: "boundary-adjudicator-v4-3",
-        confidence: adjudicator.confidence
+        confidence: adjudicator.confidence,
+        criterionSource: useFrozenMainCriteria ? "frozen-main-from-production-router" : "boundary-adjudicator-ai"
       };
     } else {
       selected = selectWithoutAdjudication(route, main, lowband);
     }
+
+    const criterionAuditBase = buildCriterionAudit(task, selected.finalCriteria, main, lowband, essay, questionPrompt);
 
     const payload = {
       ok: true,
@@ -620,6 +741,13 @@ module.exports = async function handler(req, res) {
       scoreGap: route.scoreGap,
       main,
       lowband,
+      criterionAudit: criterionAuditBase.criterionAudit,
+      criterionScoreAudit: {
+        ...criterionAuditBase.criterionScoreAudit,
+        selectedSource: selected.criterionSource || selected.finalSource || "",
+        finalBand: selected.finalBand,
+        finalCriteria: selected.finalCriteria
+      },
       scoringAudit: buildBoundaryScoringAudit(task, questionPrompt, essay, main, lowband, route, selected, mainReusedFromRouter, mainSource),
       boundaryMainReuseAudit: {
         mainReusedFromRouter,
