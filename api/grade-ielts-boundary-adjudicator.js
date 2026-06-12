@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-5-diagnostic-only-midband-retired";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-5-neutral-diagnostic-only";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -524,7 +524,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "Classification options:",
     "- low_4_band: around 3.5-4.0; weak control, thin task development, frequent errors, limited vocabulary, basic sequencing.",
     "- boundary_4_5: around 4.0-4.5; recognizable response, some organization, but language and development remain limited.",
-    "- basic_5: around 5.0; generally understandable and task-relevant, with simple/basic development and limited language; can include corrected low-band Task 1 letters where all bullets are covered and meaning is clear.",
+    "- basic_5: around 5.0; generally understandable and task-relevant, with simple/basic development and limited language; can include simple Task 1 letters where all bullets are covered and meaning is clear.",
     "- safe_5_5_plus: around 5.5 or above; clearly above low-band weakness, enough specific detail/development, mostly controlled progression, and LR/GRA not merely basic.",
     "",
     "Core v4.3 rule:",
@@ -539,8 +539,8 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "If the letter has frequent basic grammar errors, very limited vocabulary, formulaic wording, and only simple bullet coverage, choose low_4_band or boundary_4_5 conservatively.",
     "Do not give basic_5 just because the letter covers the bullet points, has paragraphs, or is understandable.",
     "If LR/GRA are around 3.5-4.0 and development is thin, low_4_band is allowed.",
-    "But if the letter has been corrected so that grammar/spelling are mostly readable, all three bullets are covered, the message is clear, and the tone fits a friend/formal recipient, do not keep it in low_4_band merely because the vocabulary is ordinary or sentence patterns are simple.",
-    "Corrected Task 1 Band 5 anchor: simple but clear letters with a recognisable greeting/closing, all bullets addressed, basic useful details, and no frequent meaning-straining errors should normally be basic_5 or cautious 5.5 rather than boundary_4_5.",
+    "But if the current letter has mostly readable grammar/spelling, all three bullets are covered, the message is clear, and the tone fits a friend/formal recipient, do not keep it in low_4_band merely because the vocabulary is ordinary or sentence patterns are simple.",
+    "Task 1 functional Band 5 anchor: simple but clear letters with a recognisable greeting/closing, all bullets addressed, basic useful details, and no frequent meaning-straining errors should normally be basic_5 or cautious 5.5 rather than boundary_4_5.",
     "For informal friend letters, conversational warmth and simple phrases are appropriate; do not require formal admissions-office style.",
     "",
     "Task 1 main=7 / lowband=5 anti-inflation:",
@@ -552,7 +552,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "Preserve 4.0 and 4.5 protection:",
     "If lowbandScore is 4.0, final LR/GRA around 4.0, and the writing is understandable but still has frequent grammar/spelling/word-form errors or unclear sentence control, boundary_4_5 may be safest. But if the current text is mostly readable and covers the task, Band 5 is allowed even with noticeable non-blocking errors.",
     "Do not lift 4.0/4.5 samples to 5.0/5.5 because of full word count, paragraph count, clear opinion, or correct letter format alone.",
-    "However, do not over-apply this protection to a corrected Task 1 letter: once the major grammar/spelling errors are removed and the reader can clearly follow all bullet points, Band 5.0-5.5 becomes plausible even if wording remains simple.",
+    "However, do not over-apply this protection to a simple Task 1 letter: when the reader can clearly follow all bullet points and language is mostly readable, Band 5.0-5.5 becomes plausible even if wording remains simple.",
     "",
     "Task 2 relabel awareness:",
     "Some full-length Task 2 low-band-looking samples may be closer to 4.5 than 3.5. Do not force them down to 3.5 unless they are genuinely very weak.",

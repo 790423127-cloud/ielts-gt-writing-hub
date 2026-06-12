@@ -11,8 +11,8 @@ const midband = read('api/grade-ielts-midband.js');
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
 
-assert(grade.includes('score-core-v8-5-12-midband-ai-primary-cleanup'), 'grade-ielts.js should identify v4.2 AI-primary cleanup');
-assert(router.includes('production-router-v3-3-ai-primary-routing'), 'router should identify v4.2 AI-primary routing');
+assert(grade.includes('score-core-v8-5-13-neutral-ai-primary-midband'), 'grade-ielts.js should identify v4.3 neutral AI-primary cleanup');
+assert(router.includes('production-router-v3-4-neutral-ai-primary-routing'), 'router should identify v4.3 neutral AI-primary routing');
 assert(grade.includes('local taskRequirementAudit is debug-only'), 'task requirement audit must be debug-only in prompt');
 assert(grade.includes('Do not use local keyword audit'), 'prompt must reject local keyword audit as scoring prior');
 assert(grade.includes('Do not rely on local bullet extraction'), 'anchor prompt must reject local bullet extraction');
@@ -51,4 +51,4 @@ assert(audit.routeReason(6.5, 'Task 2', { yes: false }, false).targetSystem === 
 assert(audit.routeReason(6.5, 'Task 2', { yes: false }, true).useHighbandShadow === true, '6.5 with highband potential should trigger highband shadow');
 assert(audit.routeReason(3.5, 'Task 2', { yes: true, reason: 'MIDBAND_BELOW_4' }, false).useLowbandGuard === true, 'AI lowband evidence should trigger lowband');
 
-console.log('PASS midband AI-primary v4.2 static test');
+console.log('PASS midband AI-primary v4.3 static test');

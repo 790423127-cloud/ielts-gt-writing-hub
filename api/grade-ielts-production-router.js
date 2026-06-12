@@ -5,11 +5,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v3-3-ai-primary-routing";
-const MIDBAND_VERSION = "score-core-v8-5-12-midband-ai-primary-cleanup";
-const LOWBAND_VERSION = "score-core-v8-5-9-lowband-hard-evidence-guard";
+const ROUTER_VERSION = "production-router-v3-4-neutral-ai-primary-routing";
+const MIDBAND_VERSION = "score-core-v8-5-13-neutral-ai-primary-midband";
+const LOWBAND_VERSION = "score-core-v8-5-10-lowband-neutral-hard-evidence-guard";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
-const BOUNDARY_VERSION = "boundary-adjudicator-v4-4-retired-from-production-router";
+const BOUNDARY_VERSION = "boundary-adjudicator-v4-5-neutral-diagnostic-only";
 
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 180000, 240000));
 const RETRY_COUNT = Math.max(1, Math.min(Number(process.env.PRODUCTION_ROUTER_RETRY_COUNT) || 2, 4));

@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-9-lowband-hard-evidence-guard";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-10-lowband-neutral-hard-evidence-guard";
 const DISCLAIMER = "This is an AI-generated estimated IELTS low-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -203,7 +203,7 @@ function lowBandPrompt(task, prompt, essay) {
     "Band 4 Task 1: basically related but incomplete or very thin; tone/format unstable; frequent basic errors restrict clarity.",
     "Band 4.5 Task 1: more understandable than Band 4, but still simple, repetitive, thin, and error-prone. It should not become Band 6 merely because all bullets are mentioned.",
     "Band 5/5.5 Task 1: generally clear purpose and most or all bullets addressed with some usable detail; language remains limited but the reader can clearly act on the message.",
-    "Corrected Task 1 Band 5 rule: if the letter has all bullets covered, an appropriate informal/formal tone, readable grammar/spelling, and no frequent meaning-straining errors, do not keep it at 4.0/4.5 just because vocabulary and sentences are simple."
+    "Task 1 functional Band 5 rule: if the current letter has all bullets covered, an appropriate informal/formal tone, readable grammar/spelling, and no frequent meaning-straining errors, do not keep it at 4.0/4.5 just because vocabulary and sentences are simple."
   ] : [
     "Task 2 low-band warning: 250+ words, four paragraphs, and an introduction/conclusion do NOT prove Band 5+.",
     "If the Task 2 prompt contains two direct questions, a basic but complete response that answers both parts should not be pushed down to 3.0-4.5 merely because development is simple.",
@@ -224,7 +224,7 @@ function lowBandPrompt(task, prompt, essay) {
     "Frequent basic grammar problems, unnatural phrasing, repetitive sentence patterns, limited vocabulary, thin development, or mechanical progression should keep LR/GRA and sometimes CC/TA/TR in the low band.",
     "If a response is relevant and complete-looking but the language is very basic, repetitive, awkward, or error-prone, consider Band 4.0-4.5 only when the errors or thinness make reading effortful. Do not punish simple but clear Band 5 writing.",
     "If a response is easy to understand, covers the task with usable detail, and errors do not often restrict communication, then Band 5.0+ may be justified. In that case lowBandAudit.trueLowBand should be false. Explain with short reason codes.",
-    "For corrected low-band writing, separate the original error-dense version from the current corrected version. Score the current text only.",
+    "Score the current text only. Do not use any assumption about whether the response is a editing history, generated status, or original/subsequent version as a scoring reason.",
     ...taskSpecific,
     `Word count: ${wc}. Remember: meeting the IELTS word count does not lift a weak response out of low band by itself.`,
     `Question prompt:\n${prompt || ""}`,

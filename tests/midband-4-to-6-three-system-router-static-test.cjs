@@ -14,7 +14,7 @@ const lowband = read('api/grade-ielts-lowband.js');
 const boundary = read('api/grade-ielts-boundary-adjudicator.js');
 
 [
-  'production-router-v3-3-ai-primary-routing',
+  'production-router-v3-4-neutral-ai-primary-routing',
   '/api/grade-ielts-midband',
   'hasHardLowbandEvidence',
   'LOWBAND_NOT_CALLED_FOR_ORDINARY_BAND5',
@@ -30,7 +30,7 @@ assert(!/finalBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint 
 assert(!/overallBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint + lowband + boundary), 'Forbidden local overall floor found.');
 
 [
-  'score-core-v8-5-12-midband-ai-primary-cleanup',
+  'score-core-v8-5-13-neutral-ai-primary-midband',
   'MIDBAND_4_TO_6_CALIBRATION_RULES',
   'Band 5.0 Task 1',
   'Band 5 does not mean error-free',
@@ -48,14 +48,14 @@ assert(!/overallBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoin
 ].forEach((phrase) => assert(midbandEndpoint.includes(phrase), `Midband endpoint missing phrase: ${phrase}`));
 
 [
-  'score-core-v8-5-9-lowband-hard-evidence-guard',
+  'score-core-v8-5-10-lowband-neutral-hard-evidence-guard',
   'LOWBAND GUARD',
   'not suppress ordinary Band 5 writing',
   'trueLowBand should be false'
 ].forEach((phrase) => assert(lowband.includes(phrase), `Lowband guard missing phrase: ${phrase}`));
 
 [
-  'boundary-adjudicator-v4-5-diagnostic-only-midband-retired',
+  'boundary-adjudicator-v4-5-neutral-diagnostic-only',
   'diagnostic-only',
   'Production router v3 no longer uses this endpoint'
 ].forEach((phrase) => assert(boundary.includes(phrase), `Boundary diagnostic endpoint missing phrase: ${phrase}`));
@@ -103,4 +103,4 @@ const notLow = { lowBandDecision: '5_plus', lowBandAudit: { trueLowBand: false, 
 assert(audit.shouldUseLowbandFinal(5.0, 3.5, trueLow) === true, 'AI-confirmed hard lowband should be selectable as final.');
 assert(audit.shouldUseLowbandFinal(5.0, 4.5, notLow) === false, 'Simple Band 5 writing should not be suppressed by lowband guard.');
 
-console.log('PASS midband 4-6 three-system router static test v4.2');
+console.log('PASS midband 4-6 three-system router static test v4.3');

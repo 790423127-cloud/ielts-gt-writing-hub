@@ -13,9 +13,9 @@ function assert(condition, message) {
 const requiredMainAnchors = [
   'Primary 4.0-6.5 midband calibration',
   'Band 5 does not mean error-free',
-  'Corrected low-band Task 1 calibration',
-  'Corrected Task 1 Band 5 anchor',
-  'Corrected low-band letters with clear purpose',
+  'Neutral Task 1 Band 5 calibration',
+  'Task 1 functional Band 5 anchor',
+  'score the current response only',
   'Do not keep Lexical Resource or Grammar at Band 4 solely because the vocabulary is ordinary or sentence structures are simple',
   'For informal letters to friends, a conversational greeting',
   'Priority rule for this midband scorer',
@@ -26,30 +26,44 @@ const requiredMainAnchors = [
 ];
 
 for (const phrase of requiredMainAnchors) {
-  assert(main.includes(phrase), `grade-ielts.js missing Task 1 corrected Band 5 anchor phrase: ${phrase}`);
+  assert(main.includes(phrase), `grade-ielts.js missing neutral Task 1 Band 5 anchor phrase: ${phrase}`);
 }
 
 const requiredBoundaryAnchors = [
-  'Corrected Task 1 Band 5 anchor',
+  'Task 1 functional Band 5 anchor',
   'simple but clear letters with a recognisable greeting/closing',
   'do not keep it in low_4_band merely because the vocabulary is ordinary or sentence patterns are simple',
   'For informal friend letters, conversational warmth and simple phrases are appropriate'
 ];
 
 for (const phrase of requiredBoundaryAnchors) {
-  assert(boundary.includes(phrase), `boundary adjudicator missing corrected Task 1 anchor phrase: ${phrase}`);
+  assert(boundary.includes(phrase), `boundary adjudicator missing neutral Task 1 anchor phrase: ${phrase}`);
 }
 
 const requiredLowbandAnchors = [
   'LOWBAND GUARD',
   'Band 5 may still contain noticeable non-blocking errors',
-  'Corrected Task 1 Band 5 rule',
+  'Task 1 functional Band 5 rule',
   'Score the current text only',
   'do not keep it at 4.0/4.5 just because vocabulary and sentences are simple'
 ];
 
 for (const phrase of requiredLowbandAnchors) {
-  assert(lowband.includes(phrase), `lowband shadow missing corrected Task 1 anchor phrase: ${phrase}`);
+  assert(lowband.includes(phrase), `lowband shadow missing neutral Task 1 anchor phrase: ${phrase}`);
+}
+
+const forbiddenSpecialCaseLanguage = [
+  /Corrected Task 1/i,
+  /corrected low-band/i,
+  /previously weak/i,
+  /correctedEssay/i,
+  /Dear Mark/
+];
+
+for (const re of forbiddenSpecialCaseLanguage) {
+  assert(!re.test(main), `forbidden special-case wording found in grade-ielts.js: ${re}`);
+  assert(!re.test(boundary), `forbidden special-case wording found in boundary adjudicator: ${re}`);
+  assert(!re.test(lowband), `forbidden special-case wording found in lowband scorer: ${re}`);
 }
 
 const forbiddenLocalScoreAdjustments = [
@@ -68,4 +82,4 @@ for (const re of forbiddenLocalScoreAdjustments) {
   assert(!re.test(lowband), `forbidden local scoring adjustment found in lowband scorer: ${re}`);
 }
 
-console.log('Task 1 corrected friend-visit Band 5 calibration static test passed.');
+console.log('PASS Task 1 neutral functional Band 5 calibration static test.');
