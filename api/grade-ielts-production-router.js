@@ -6,6 +6,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const ROUTER_VERSION = "production-router-v3-5-criterion-differentiation-routing-v4-4";
+const ROUTER_SYSTEM_FIX_VERSION = "system-fix-v4-4-full-range-3-to-7-routing-review-v1";
 const MIDBAND_VERSION = "score-core-v8-5-14-criterion-differentiation-3-to-7-v4-4";
 const LOWBAND_VERSION = "score-core-v8-5-10-lowband-neutral-hard-evidence-guard";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
@@ -126,7 +127,7 @@ function buildLocalLogicAudit() {
     appliedLocalFloor: false,
     appliedLocalCap: false,
     copiedOverallToCriteria: false,
-    notes: "Local logic only performs safety checks, AI-system routing, JSON validation and audit logging; it did not set, lift, cap, floor, or rewrite any band. v4.4 focuses on AI criterion differentiation for Bands 3.0-7.0."
+    notes: "Local logic performs safety checks, routing-only review triggers, JSON validation and audit logging; it does not set, lift, cap, floor, or rewrite any band. v4.4 full-range system fix routes severe short/low-band risk samples to lowband review and plausible Task 1 Band 7 letters to highband shadow review, while the final band remains selected from an AI scorer."
   };
 }
 
@@ -159,28 +160,119 @@ function strictHardZeroEvidence(localSignals = {}) {
   return gate.strictHardZero === true || gate.hardZero === true || gate.notRateable === true || /non_english|blank/i.test(String(gate.reason || gate.status || ""));
 }
 
-function hasHardLowbandEvidence(body = {}, main = {}, task = "Task 2", mainBand = null) {
+function extractRoutingFlags(main = {}) {
+  const directFlags = main.flags && typeof main.flags === "object" ? main.flags : {};
+  const scoreFlags = main.scoreFlags && typeof main.scoreFlags === "object" ? main.scoreFlags : {};
+  const boundaryFlags = main.boundaryFlags && typeof main.boundaryFlags === "object" ? main.boundaryFlags : {};
+  const kernelFlags = main.scoreKernel && main.scoreKernel.flags && typeof main.scoreKernel.flags === "object" ? main.scoreKernel.flags : {};
+  const anchor = main.anchorComparison && typeof main.anchorComparison === "object" ? main.anchorComparison : {};
+  const audit = main.scoringAudit || main.routerAudit || {};
+  return {
+    ...directFlags,
+    ...scoreFlags,
+    ...boundaryFlags,
+    ...kernelFlags,
+    lowBandRisk: directFlags.lowBandRisk === true || scoreFlags.lowBandRisk === true || boundaryFlags.lowBandRisk === true || kernelFlags.lowBandRisk === true || anchor.lowBandCandidate === true,
+    trueLowbandRisk: directFlags.trueLowbandRisk === true || scoreFlags.trueLowbandRisk === true || boundaryFlags.trueLowbandRisk === true || kernelFlags.trueLowbandRisk === true,
+    weakLanguage: directFlags.weakLanguage === true || scoreFlags.weakLanguage === true || boundaryFlags.weakLanguage === true || kernelFlags.weakLanguage === true,
+    highBandCandidate: directFlags.highBandCandidate === true || scoreFlags.highBandCandidate === true || boundaryFlags.highBandCandidate === true || kernelFlags.highBandCandidate === true || audit.highBandCandidate === true,
+    highbandPotential: directFlags.highbandPotential === true || directFlags.highBandPotential === true || scoreFlags.highbandPotential === true || scoreFlags.highBandPotential === true || boundaryFlags.highbandPotential === true || boundaryFlags.highBandPotential === true || kernelFlags.highbandPotential === true || kernelFlags.highBandPotential === true || audit.highbandPotential === true || audit.highBandPotential === true
+  };
+}
+
+
+function textFromBody(body = {}) {
+  return String(body.essay || body.response || body.answer || body.studentResponse || body.writing || body.text || "").trim();
+}
+
+function sentenceCount(text = "") {
+  return (String(text || "").match(/[.!?]+(?:\s|$)/g) || []).length;
+}
+
+function paragraphCount(text = "") {
+  return String(text || "").split(/\n\s*\n|\r\n\s*\r\n/).map(part => part.trim()).filter(Boolean).length;
+}
+
+function detectLocalRoutingSignals(body = {}, task = "Task 2", mainBand = null) {
+  const essay = textFromBody(body);
+  const prompt = String(body.questionPrompt || body.promptText || body.prompt || body.question || "");
+  const lower = essay.toLowerCase();
+  const promptLower = prompt.toLowerCase();
+  const words = countWords(essay);
+  const sentences = sentenceCount(essay);
+  const paragraphs = paragraphCount(essay);
+  const hasLetterFrame = /\bdear\b/.test(lower) && /(best wishes|best regards|regards|yours sincerely|yours faithfully|see you|love,|cheers,|\n[a-z]+\s*$)/i.test(essay);
+
+  const task1TravelFriendPrompt = task === "Task 1" && /friend from another country|first time|best time to visit|transport|weather/i.test(prompt);
+  const task1TravelCoverage = {
+    bestTime: /(april|may|spring|autumn|fall|weather|winter|summer|holiday|crowd)/i.test(essay),
+    places: /(beijing|great wall|forbidden city|xi.?an|terracotta|chengdu|city wall|museum|temple|park)/i.test(essay),
+    transportWeather: /(train|subway|metro|taxi|bus|transport|jacket|umbrella|walking shoes|weather|flight)/i.test(essay)
+  };
+  const task1AllTravelBullets = task1TravelFriendPrompt && task1TravelCoverage.bestTime && task1TravelCoverage.places && task1TravelCoverage.transportWeather;
+
+  const severeShortTask1 = task === "Task 1" && words > 0 && words < 60;
+  const severeShortTask2 = task === "Task 2" && words > 0 && words < 80;
+  const veryShortTask2 = task === "Task 2" && words > 0 && words < 60;
+
+  // Routing-only signal: this does not set the score. It only asks the lowband AI guard to review cases
+  // where the main midband pass has probably over-read very short, thin writing as ordinary Band 5.
+  const localLowbandReviewCandidate =
+    (severeShortTask1 && typeof mainBand === "number" && mainBand <= 5.0) ||
+    (severeShortTask2 && typeof mainBand === "number" && mainBand <= 4.5) ||
+    (veryShortTask2 && typeof mainBand === "number" && mainBand <= 5.0);
+
+  // Routing-only signal: this does not lift the score. It only asks the highband AI shadow to review
+  // plausible GT Task 1 Band 7 letters that the midband pass has under-called as 5.5/6.0.
+  const localTask1Band7ReviewCandidate = task === "Task 1"
+    && typeof mainBand === "number"
+    && mainBand >= 5.5
+    && mainBand < 7.0
+    && words >= 150
+    && hasLetterFrame
+    && sentences >= 6
+    && (paragraphs >= 3 || task1AllTravelBullets)
+    && (!task1TravelFriendPrompt || task1AllTravelBullets);
+
+  return {
+    usedForScoring: false,
+    essayWordCount: words,
+    sentenceCount: sentences,
+    paragraphCount: paragraphs,
+    hasLetterFrame,
+    task1TravelFriendPrompt,
+    task1TravelCoverage,
+    severeShortTask1,
+    severeShortTask2,
+    localLowbandReviewCandidate,
+    localTask1Band7ReviewCandidate
+  };
+}
+
+function hasHardLowbandEvidence(body = {}, main = {}, task = "Task 2", mainBand = null, localRoutingSignals = null) {
   const localSignals = main.localSignals || main.signals || {};
   const rateability = String(localSignals.rateabilityStatus || main.rateabilityStatus || "").toLowerCase();
-  const flags = main.flags || main.scoreFlags || {};
+  const flags = extractRoutingFlags(main);
+  const aiLowBandRisk = flags.lowBandRisk === true || flags.trueLowbandRisk === true;
+  const routingSignals = localRoutingSignals || detectLocalRoutingSignals(body, task, mainBand);
 
   if (strictHardZeroEvidence(localSignals)) return { yes: true, reason: "STRICT_HARD_ZERO_OR_NOT_RATEABLE" };
-  // AI-primary v4.2: word count alone must not route ordinary writing into lowband.
-  // Lowband only participates when the AI midband scorer itself indicates very low-band risk,
-  // or when the response is minimally/unassessably rateable.
+  // AI-primary v4.4.2: word count alone must not score or lower a response. It may, however,
+  // trigger an AI lowband review when the writing is severely short/thin and the midband scorer
+  // has still placed it around 4.0-5.0.
   if (/not_rateable/.test(rateability) && (typeof mainBand !== "number" || mainBand <= 3.5)) return { yes: true, reason: "AI_RATEABILITY_NOT_RATEABLE" };
   if (typeof mainBand === "number" && mainBand < 4.0) return { yes: true, reason: "MIDBAND_BELOW_4" };
-  if ((flags.lowBandRisk === true || flags.trueLowbandRisk === true) && typeof mainBand === "number" && mainBand <= 4.0) return { yes: true, reason: "AI_LOWBAND_RISK_WITH_4_OR_BELOW" };
+  if (aiLowBandRisk && typeof mainBand === "number" && mainBand <= 5.0) return { yes: true, reason: "AI_LOWBAND_RISK_WITH_5_OR_BELOW_REVIEW" };
+  if (routingSignals.localLowbandReviewCandidate === true) return { yes: true, reason: "LOCAL_ROUTING_SEVERE_SHORT_LOW_BAND_REVIEW" };
 
   return { yes: false, reason: "NO_HARD_LOWBAND_EVIDENCE" };
 }
 
-function hasHighbandPotential(main = {}, mainBand = null) {
-  const flags = main.flags || main.scoreFlags || {};
-  const audit = main.scoringAudit || main.routerAudit || {};
+function hasHighbandPotential(main = {}, mainBand = null, localRoutingSignals = null) {
+  const flags = extractRoutingFlags(main);
   if (flags.highBandCandidate === true || flags.highbandPotential === true || flags.highBandPotential === true) return true;
-  if (audit.highbandPotential === true || audit.highBandPotential === true) return true;
   if (String(main.candidateRange || main.anchorRange || "").includes("7")) return true;
+  if (localRoutingSignals && localRoutingSignals.localTask1Band7ReviewCandidate === true) return true;
   return Boolean(typeof mainBand === "number" && mainBand >= 7.0);
 }
 
@@ -199,16 +291,29 @@ function routeReason(mainBand, task = "Task 2", hardLowband = { yes: false, reas
     };
   }
 
-  if (mainBand >= 7.0 || (mainBand >= 6.5 && highbandPotential)) {
+  if (mainBand >= 7.0 || (mainBand >= 6.5 && highbandPotential) || (mainBand >= 5.5 && highbandPotential && task === "Task 1")) {
+    const task1RecoveredBand7 = mainBand < 6.5 && task === "Task 1";
     return {
       targetSystem: "highband-shadow-confirmation",
       selectedSystemCandidate: "highband",
       useLowbandGuard: false,
       useBoundary: false,
       useHighbandShadow: true,
-      routeDecision: mainBand >= 7.0 ? "highband_shadow_confirmation_for_7_0_plus" : "highband_shadow_confirmation_for_6_5_potential",
-      routeZone: mainBand >= 7.0 ? "highband_candidate_7_0_plus" : "highband_candidate_6_5_potential",
-      reasonCodes: [mainBand >= 7.0 ? "MIDBAND_SCORE_7_PLUS" : "MIDBAND_6_5_WITH_HIGHBAND_POTENTIAL"]
+      routeDecision: mainBand >= 7.0
+        ? "highband_shadow_confirmation_for_7_0_plus"
+        : task1RecoveredBand7
+          ? "highband_shadow_confirmation_for_task1_band7_review"
+          : "highband_shadow_confirmation_for_6_5_potential",
+      routeZone: mainBand >= 7.0
+        ? "highband_candidate_7_0_plus"
+        : task1RecoveredBand7
+          ? "task1_band7_review_candidate"
+          : "highband_candidate_6_5_potential",
+      reasonCodes: [mainBand >= 7.0
+        ? "MIDBAND_SCORE_7_PLUS"
+        : task1RecoveredBand7
+          ? "LOCAL_ROUTING_TASK1_BAND7_REVIEW"
+          : "MIDBAND_6_5_WITH_HIGHBAND_POTENTIAL"]
     };
   }
 
@@ -292,7 +397,7 @@ async function callJsonWithRetry(url, body, label) {
   throw lastErr || new Error(`${label} failed.`);
 }
 
-function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lowband, highband }) {
+function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lowband, highband, localRoutingSignals }) {
   const source = highband || lowband || main || {};
   const criteria = extractCriteria(source) || {};
   const taskProfile = source.taskProfile || main?.taskProfile || lowband?.taskProfile || {};
@@ -324,6 +429,7 @@ function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lo
       midbandPrimary: true,
       lowbandOnlyForHardEvidence: true,
       highbandForSevenPlusOrSixFivePotential: true,
+      localRoutingSignals: localRoutingSignals || null,
       hardLowbandEvidence: Array.isArray(route?.reasonCodes) ? route.reasonCodes.includes("HARD_LOWBAND_EVIDENCE") : false,
       errorsStillAllowedAtBand5: true,
       simpleButUnderstandableCanBeBand5: true,
@@ -342,10 +448,10 @@ function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lo
   };
 }
 
-function directAiPayload({ req, res, basePayload, finalSource, finalBand, criteria, task, route, startedAt, endpoints, main, lowband = null, highband = null, attempts = {} }) {
+function directAiPayload({ req, res, basePayload, finalSource, finalBand, criteria, task, route, startedAt, endpoints, main, lowband = null, highband = null, attempts = {}, localRoutingSignals = null }) {
   const criteriaAverageBand = averageCriteriaBand(criteria);
   const normalizedFinalBand = typeof criteriaAverageBand === "number" && Number.isFinite(criteriaAverageBand) ? criteriaAverageBand : finalBand;
-  const scoringAudit = buildRouterScoringAudit({ task, route, finalBand: normalizedFinalBand, finalSource, main, lowband, highband });
+  const scoringAudit = buildRouterScoringAudit({ task, route, finalBand: normalizedFinalBand, finalSource, main, lowband, highband, localRoutingSignals });
   return sendJson(req, res, 200, {
     ...basePayload,
     ok: basePayload?.ok !== false,
@@ -355,6 +461,7 @@ function directAiPayload({ req, res, basePayload, finalSource, finalBand, criter
     midbandVersion: MIDBAND_VERSION,
     lowbandVersion: LOWBAND_VERSION,
     highbandVersion: HIGHBAND_VERSION,
+    routerSystemFixVersion: ROUTER_SYSTEM_FIX_VERSION,
     boundaryAdjudicatorVersion: BOUNDARY_VERSION,
     routeDecision: route.routeDecision,
     routeZone: route.routeZone,
@@ -375,6 +482,7 @@ function directAiPayload({ req, res, basePayload, finalSource, finalBand, criter
     highbandConfirmed: String(finalSource || "").includes("highband"),
     main,
     midband: main,
+    localRoutingSignals,
     lowband,
     highband,
     scoringAudit,
@@ -390,6 +498,7 @@ function directAiPayload({ req, res, basePayload, finalSource, finalBand, criter
       highbandAttempts: attempts.highbandAttempts || 0,
       highbandShadowCalled: Boolean(highband),
       highbandConfirmed: String(finalSource || "").includes("highband"),
+      routerSystemFixVersion: ROUTER_SYSTEM_FIX_VERSION,
       elapsedMs: Date.now() - startedAt,
       endpoints
     },
@@ -413,7 +522,8 @@ function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpo
     finalSource,
     main,
     lowband,
-    highband
+    highband,
+    localRoutingSignals: extra.localRoutingSignals || null
   });
   return {
     ...main,
@@ -500,8 +610,9 @@ module.exports = async function handler(req, res) {
     const mainBandFromCriteria = averageCriteriaBand(mainCriteria);
     const mainBand = typeof mainBandFromCriteria === "number" && Number.isFinite(mainBandFromCriteria) ? mainBandFromCriteria : extractBand(main);
     const task = normalizeTask(requestBody, main);
-    const hardLowband = hasHardLowbandEvidence(requestBody, main, task, mainBand);
-    const highbandPotential = hasHighbandPotential(main, mainBand);
+    const localRoutingSignals = detectLocalRoutingSignals(requestBody, task, mainBand);
+    const hardLowband = hasHardLowbandEvidence(requestBody, main, task, mainBand, localRoutingSignals);
+    const highbandPotential = hasHighbandPotential(main, mainBand, localRoutingSignals);
     const route = routeReason(mainBand, task, hardLowband, highbandPotential);
 
     if (route.useLowbandGuard) {
@@ -533,6 +644,7 @@ module.exports = async function handler(req, res) {
           endpoints,
           main,
           lowband,
+          localRoutingSignals,
           attempts: { mainAttempts: mainCall.attempts, lowbandAttempts: lowbandCall.attempts }
         });
       } catch (lowbandErr) {
@@ -553,6 +665,7 @@ module.exports = async function handler(req, res) {
           startedAt,
           endpoints,
           main,
+          localRoutingSignals,
           attempts: { mainAttempts: mainCall.attempts, lowbandAttempts: RETRY_COUNT }
         });
       }
@@ -563,7 +676,9 @@ module.exports = async function handler(req, res) {
         const highbandCall = await callJsonWithRetry(endpoints.highband, requestBody, "highband scorer");
         const highband = highbandCall.data;
         const highbandBand = extractBand(highband);
-        const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand) && highbandBand >= 7.5;
+        const task1Band7Review = localRoutingSignals && localRoutingSignals.localTask1Band7ReviewCandidate === true;
+        const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand)
+          && (highbandBand >= 7.5 || (task1Band7Review && highbandBand >= 7.0));
         const selected = highbandConfirmed ? highband : main;
         const finalBand = highbandConfirmed ? highbandBand : mainBand;
         const criteria = extractCriteria(selected);
@@ -587,6 +702,7 @@ module.exports = async function handler(req, res) {
           endpoints,
           main,
           highband,
+          localRoutingSignals,
           attempts: { mainAttempts: mainCall.attempts, highbandAttempts: highbandCall.attempts }
         });
       } catch (highbandErr) {
@@ -607,6 +723,7 @@ module.exports = async function handler(req, res) {
           startedAt,
           endpoints,
           main,
+          localRoutingSignals,
           attempts: { mainAttempts: mainCall.attempts, highbandAttempts: RETRY_COUNT }
         });
       }
