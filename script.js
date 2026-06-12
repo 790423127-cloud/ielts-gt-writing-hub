@@ -2214,27 +2214,112 @@
     return "";
   }
 
+  function flattenFeedbackTextParts(value, bucket = []) {
+    if (value == null) return bucket;
+    if (typeof value === "string" || typeof value === "number") {
+      const text = String(value).trim();
+      if (text) bucket.push(text);
+      return bucket;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => flattenFeedbackTextParts(item, bucket));
+      return bucket;
+    }
+    if (typeof value === "object") {
+      const direct = firstMeaningfulValue(
+        value.zh,
+        value.chinese,
+        value.label,
+        value.titleZh,
+        value.errorTypeZh,
+        value.requirementZh,
+        value.statusZh,
+        value.en,
+        value.english,
+        value.text,
+        value.value,
+        value.title,
+        value.errorType,
+        value.requirement,
+        value.problem,
+        value.issue,
+        value.focus,
+        value.point,
+        value.summary,
+        value.original,
+        value.corrected,
+        value.example,
+        value.evidence,
+        value.phrase,
+        value.expression,
+        value.suitableFor,
+        value.note
+      );
+      if (hasMeaningfulContent(direct)) {
+        bucket.push(String(direct).trim());
+        return bucket;
+      }
+      Object.values(value).forEach((item) => flattenFeedbackTextParts(item, bucket));
+    }
+    return bucket;
+  }
+
+  function feedbackFingerprint(value) {
+    return flattenFeedbackTextParts(value)
+      .join(" | ")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[^a-z0-9\u4e00-\u9fff| ]+/g, "")
+      .trim();
+  }
+
+  function dedupeFeedbackItems(items, limit = 12) {
+    const list = Array.isArray(items) ? items : (hasMeaningfulContent(items) ? [items] : []);
+    const seen = new Set();
+    const result = [];
+    for (const item of list) {
+      const key = feedbackFingerprint(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+      if (result.length >= limit) break;
+    }
+    return result;
+  }
+
+  function valueLines(value, limit = 6) {
+    return dedupeFeedbackItems(flattenFeedbackTextParts(value), limit);
+  }
+
+  function renderValueLines(lines, cls) {
+    const list = dedupeFeedbackItems(lines, 8);
+    if (!list.length) return "";
+    if (list.length === 1) return `<p class="${escapeHtml(cls)}">${escapeHtml(list[0])}</p>`;
+    return `<ul class="${escapeHtml(cls)}">${list.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
+  }
+
   function pairHtml(pair) {
     if (!hasMeaningfulContent(pair)) return "";
     if (typeof pair === "string") {
       return `<div class="learning-bilingual-block"><p class="learning-en">${escapeHtml(pair)}</p></div>`;
     }
-    const en = pair.en || pair.english || pair.text || pair.label || pair.value || "";
-    const zh = zhTextFrom(pair);
-    if (!hasMeaningfulContent(en) && !hasMeaningfulContent(zh)) return "";
-    return `<div class="learning-bilingual-block">${hasMeaningfulContent(zh) ? `<p class="learning-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-en">${escapeHtml(en)}</p>` : ""}</div>`;
+    const enLines = valueLines(pair.en || pair.english || pair.text || pair.label || pair.value || "");
+    const zhLines = valueLines(zhTextFrom(pair));
+    if (!enLines.length && !zhLines.length) return "";
+    return `<div class="learning-bilingual-block">${renderValueLines(zhLines, "learning-zh")}${renderValueLines(enLines, "learning-en")}</div>`;
   }
 
   function learningText(value) {
     if (value == null) return "";
     if (typeof value === "string" || typeof value === "number") return String(value).trim();
-    if (typeof value === "object") return String(value.zh || value.chinese || value.en || value.english || value.text || value.value || "").trim();
+    const parts = flattenFeedbackTextParts(value);
+    if (parts.length) return parts[0];
     return "";
   }
 
   function learningArray(value, limit = 12) {
-    if (Array.isArray(value)) return value.filter(hasMeaningfulContent).slice(0, limit);
-    if (hasMeaningfulContent(value)) return [value].slice(0, limit);
+    if (Array.isArray(value)) return dedupeFeedbackItems(value.filter(hasMeaningfulContent), limit);
+    if (hasMeaningfulContent(value)) return dedupeFeedbackItems([value], limit);
     return [];
   }
 
@@ -2252,10 +2337,12 @@
     let en = value;
     let zh = zhValue;
     if (value && typeof value === "object") {
-      en = value.en || value.english || value.text || value.value || "";
+      en = value.en || value.english || value.text || value.value || value.label || value.title || value.phrase || value.expression || value.original || value.corrected || "";
       zh = zhTextFrom(zhValue, value, value.translation, value.chineseMeaning);
     }
-    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${hasMeaningfulContent(zh) ? `<p class="learning-value-zh">${escapeHtml(zh)}</p>` : ""}${hasMeaningfulContent(en) ? `<p class="learning-value-en">${escapeHtml(en)}</p>` : ""}</div>`;
+    const zhLines = valueLines(zh);
+    const enLines = valueLines(en);
+    return `<div class="learning-value ${escapeHtml(cls)}"><strong>${escapeHtml(label)}</strong>${renderValueLines(zhLines, "learning-value-zh")}${renderValueLines(enLines, "learning-value-en")}</div>`;
   }
 
   function tagListHtml(tags) {
@@ -2274,27 +2361,30 @@
     if (!list.length) return "";
     return `<div class="learning-card-list"><h4>${escapeHtml(title)}</h4>${list.map((item) => {
       if (typeof item === "string") return `<article class="learning-card">${escapeHtml(item)}</article>`;
-      const titleText = item.title || item.problem || item.focus || item.point || item.type || item.label || "";
+      const titleText = learningText(item.title || item.titleZh || item.problem || item.focus || item.point || item.type || item.label || item.requirement || item.status || "");
       const issueZh = firstMeaningfulValue(item.problemZh, item.issueZh, item.focusZh, item.pointZh, item.summaryZh, item.requirementZh, item.statusZh);
-      const evidenceZh = firstMeaningfulValue(item.evidenceZh, item.originalZh, item.exampleZh, item.fromEssayZh, item.advice?.zh, item.explanationZh, item.reasonZh);
+      const evidenceZh = firstMeaningfulValue(item.evidenceZh, item.originalZh, item.exampleZh, item.fromEssayZh, item.sourceZh, item.advice?.zh, item.explanationZh, item.reasonZh);
       const whyZh = firstMeaningfulValue(item.whyMattersZh, item.reasonZh, item.whyZh, item.explanationZh, item.advice?.zh);
-      const nextZh = firstMeaningfulValue(item.nextActionZh, item.actionZh, item.checkMethodZh, item.suggestionZh, item.advice?.zh);
+      const nextZh = firstMeaningfulValue(item.nextActionZh, item.actionZh, item.checkMethodZh, item.suggestionZh, item.whatToLearnZh, item.practiceFocusZh, item.advice?.zh);
       const parts = [
-        titleText ? `<div class="learning-card-title">${escapeHtml(learningText(titleText))}</div>` : "",
+        titleText ? `<div class="learning-card-title">${escapeHtml(titleText)}</div>` : "",
         pairHtml(bilingualObject(item.problem || item.issue || item.focus || item.point || item.summary || item.requirement || item.status, issueZh)),
         simpleValueHtml("原文证据 / Evidence", item.evidence || item.original || item.fromEssay || item.example, "", evidenceZh),
         pairHtml(bilingualObject(item.whyMatters || item.reason || item.why || item.explanation, whyZh)),
-        pairHtml(bilingualObject(item.nextAction || item.action || item.checkMethod || item.suggestion || item.advice?.en, nextZh))
+        pairHtml(bilingualObject(item.nextAction || item.action || item.checkMethod || item.suggestion || item.whatToLearn || item.practiceFocus || item.advice?.en, nextZh))
       ].filter(Boolean).join("");
       return `<article class="learning-card">${parts || `<pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>`}</article>`;
     }).join("")}</div>`;
   }
 
   function renderOverviewModule(result = {}) {
+    const topProblems = learningArray(result.topProblems, 5);
+    const errorSummary = learningArray(result.errorSummary, 8);
+    const nextPracticeFocus = learningArray(result.nextPracticeFocus, 6);
     return `${pairHtml(result.summary)}
-      ${learningListHtml("最影响分数的 3-5 个问题 / Top score-limiting problems", result.topProblems, 5)}
-      ${learningListHtml("错误类型总览 / Error summary", result.errorSummary, 8)}
-      ${learningListHtml("下一篇优先练什么 / Next practice focus", result.nextPracticeFocus, 6)}
+      ${learningListHtml("最影响分数的 3-5 个问题 / Top score-limiting problems", topProblems, 5)}
+      ${learningListHtml("错误类型总览 / Error summary", errorSummary, 8)}
+      ${learningListHtml("下一篇优先练什么 / Next practice focus", nextPracticeFocus, 6)}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
@@ -2322,17 +2412,17 @@
     const wordForm = learningArray(result.wordFormErrors || result.wordFormAndPartOfSpeechErrors, 80);
     const spelling = learningArray(result.spellingQuickFix || result.spellingErrors, 100);
     const focus = learningArray(result.learningFocus || result.grammarLearningFocus, 10);
-    const grammarRows = grammar.length ? `<details class="score-accordion learning-subsection" open><summary>全部语法错误 / All grammar errors <span class="muted">${grammar.length} items</span></summary><div class="score-accordion-body learning-card-list">${grammar.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.errorType || item.type || `Grammar error ${index + 1}`)}</div>${simpleValueHtml("原文错误 / Original error", item.original || item.evidence, "", item.originalZh)}${simpleValueHtml("正确写法 / Corrected", item.corrected || item.correction, "is-corrected", item.correctedZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : `<p class="muted">没有发现明确语法错误，或该模块未返回语法错误。</p>`;
-    const wordRows = wordForm.length ? `<details class="score-accordion learning-subsection"><summary>词形 / 词性错误 / Word form & part of speech <span class="muted">${wordForm.length} items</span></summary><div class="score-accordion-body learning-card-list">${wordForm.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.errorType || item.type || `Word-form issue ${index + 1}`)}</div>${simpleValueHtml("原文错误 / Original", item.original || item.wrong, "", item.originalZh)}${simpleValueHtml("正确写法 / Correct", item.corrected || item.correct, "is-corrected", item.correctedZh || item.correctZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : "";
-    const spellingRows = spelling.length ? `<details class="score-accordion learning-subsection"><summary>拼写速查 / Spelling quick fix <span class="muted">${spelling.length} items</span></summary><div class="score-accordion-body"><div class="learning-spelling-grid">${spelling.map((item) => `<div class="learning-spelling-row"><strong>${escapeHtml(item.wrong || item.original || "")}</strong><span>→</span><strong class="is-corrected">${escapeHtml(item.correct || item.correction || "")}</strong><small>${escapeHtml(item.note || item.reason || "spelling")}</small></div>`).join("")}</div></div></details>` : "";
-    const focusRows = focus.length ? `<details class="score-accordion learning-subsection" open><summary>本篇语法检查方法 / Grammar focus</summary><div class="score-accordion-body learning-card-list">${focus.map((item) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(item.point || item.focus || item.ruleName || "Grammar focus")}</div>${simpleValueHtml("本篇例子 / Example", item.example, "", item.exampleZh)}${pairHtml(item.rule || item.explanation)}${pairHtml(item.checkMethod || item.practiceTip)}</article>`).join("")}</div></details>` : "";
+    const grammarRows = grammar.length ? `<details class="score-accordion learning-subsection" open><summary>全部语法错误 / All grammar errors <span class="muted">${grammar.length} items</span></summary><div class="score-accordion-body learning-card-list">${grammar.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(learningText(item.errorTypeZh || item.errorType || item.type || `Grammar error ${index + 1}`))}</div>${simpleValueHtml("原文错误 / Original error", item.original || item.evidence, "", item.originalZh)}${simpleValueHtml("正确写法 / Corrected", item.corrected || item.correction, "is-corrected", item.correctedZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : `<p class="muted">没有发现明确语法错误，或该模块未返回语法错误。</p>`;
+    const wordRows = wordForm.length ? `<details class="score-accordion learning-subsection"><summary>词形 / 词性错误 / Word form & part of speech <span class="muted">${wordForm.length} items</span></summary><div class="score-accordion-body learning-card-list">${wordForm.map((item, index) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(learningText(item.errorTypeZh || item.errorType || item.type || `Word-form issue ${index + 1}`))}</div>${simpleValueHtml("原文错误 / Original", item.original || item.wrong, "", item.originalZh)}${simpleValueHtml("正确写法 / Correct", item.corrected || item.correct, "is-corrected", item.correctedZh || item.correctZh)}${pairHtml(item.explanation || item.reason)}${pairHtml(item.checkMethod || item.nextCheck)}</article>`).join("")}</div></details>` : "";
+    const spellingRows = spelling.length ? `<details class="score-accordion learning-subsection"><summary>拼写速查 / Spelling quick fix <span class="muted">${spelling.length} items</span></summary><div class="score-accordion-body"><div class="learning-spelling-grid">${spelling.map((item) => `<div class="learning-spelling-row"><strong>${escapeHtml(learningText(item.wrong || item.original || ""))}</strong><span>→</span><strong class="is-corrected">${escapeHtml(learningText(item.correct || item.correction || ""))}</strong><small>${escapeHtml(learningText(item.note || item.reason || "spelling"))}</small></div>`).join("")}</div></div></details>` : "";
+    const focusRows = focus.length ? `<details class="score-accordion learning-subsection" open><summary>本篇语法检查方法 / Grammar focus</summary><div class="score-accordion-body learning-card-list">${focus.map((item) => `<article class="learning-card"><div class="learning-card-title">${escapeHtml(learningText(item.point || item.focus || item.ruleName || "Grammar focus"))}</div>${simpleValueHtml("本篇例子 / Example", item.example, "", item.exampleZh)}${pairHtml(item.rule || item.explanation)}${pairHtml(item.checkMethod || item.practiceTip)}</article>`).join("")}</div></details>` : "";
     return `${pairHtml(result.summary)}${grammarRows}${wordRows}${spellingRows}${focusRows}${pairHtml(result.priorityAdvice)}`;
   }
 
   function renderStructureCohesionTaskModule(result = {}) {
     const sectionCard = (title, obj) => {
       if (!hasMeaningfulContent(obj)) return "";
-      return `<article class="learning-card"><div class="learning-card-title">${escapeHtml(title)}</div>${simpleValueHtml("当前问题 / Current issue", obj.currentIssue || obj.issue || obj.current, "", firstMeaningfulValue(obj.currentIssueZh, obj.issueZh, obj.currentZh, obj.explanationZh))}${simpleValueHtml("建议写法 / Suggested version", obj.suggestedVersion || obj.suggestion || obj.improved, "is-upgraded", firstMeaningfulValue(obj.suggestedVersionZh, obj.suggestionZh, obj.improvedZh))}${pairHtml(bilingualObject(obj.whyBetter?.en || obj.whyBetter || obj.why || obj.reason, firstMeaningfulValue(obj.whyBetter?.zh, obj.whyZh, obj.reasonZh, obj.explanationZh)))}${pairHtml(bilingualObject(obj.howToUse?.en || obj.howToUse || obj.nextStep || obj.advice?.en, firstMeaningfulValue(obj.howToUse?.zh, obj.nextStepZh, obj.advice?.zh, obj.suggestionZh)))}</article>`;
+      return `<article class="learning-card"><div class="learning-card-title">${escapeHtml(title)}</div>${simpleValueHtml("当前问题 / Current issue", obj.currentIssue || obj.issue || obj.current, "", firstMeaningfulValue(obj.currentIssueZh, obj.issueZh, obj.currentZh, obj.explanationZh))}${simpleValueHtml("局部改写示例 / Micro example", obj.microExample || obj.suggestedVersion || obj.suggestion || obj.improved, "is-upgraded", firstMeaningfulValue(obj.microExampleZh, obj.suggestedVersionZh, obj.suggestionZh, obj.improvedZh))}${pairHtml(bilingualObject(obj.whyBetter?.en || obj.whyBetter || obj.why || obj.reason, firstMeaningfulValue(obj.whyBetter?.zh, obj.whyZh, obj.reasonZh, obj.explanationZh)))}${pairHtml(bilingualObject(obj.howToUse?.en || obj.howToUse || obj.nextStep || obj.advice?.en, firstMeaningfulValue(obj.practiceFocusZh, obj.howToUse?.zh, obj.nextStepZh, obj.advice?.zh, obj.suggestionZh)))}</article>`;
     };
     const checklist = learningArray(result.taskChecklist || result.taskResponse?.coverage || result.coverage, 10);
     const cohesionIssues = learningArray(result.cohesion?.issues || result.cohesionIssues, 8);
@@ -2342,8 +2432,8 @@
       <div class="learning-card-list">
         ${sectionCard("开头 / Opening", result.opening)}
         ${sectionCard("段落结构 / Paragraph organisation", result.paragraphOrganisation || result.paragraphOrganization)}
-        ${cohesionIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">衔接 / Cohesion</div>${simpleValueHtml("原来的连接 / Original link", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("更好的连接 / Better link", item.improved || item.better, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
-        ${developmentIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">内容展开 / Development</div>${simpleValueHtml("原内容 / Original content", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("如何展开 / Better development", item.improved || item.better || item.suggestion, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
+        ${cohesionIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">衔接 / Cohesion</div>${simpleValueHtml("原来的连接 / Original link", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("更好的连接 / Better link", item.improved || item.better, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.practiceFocusZh, item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
+        ${developmentIssues.map((item) => `<article class="learning-card"><div class="learning-card-title">内容展开 / Development</div>${simpleValueHtml("原内容 / Original content", item.original || item.current, "", firstMeaningfulValue(item.originalZh, item.currentZh, item.evidenceZh))}${simpleValueHtml("如何展开 / Better development", item.improved || item.better || item.suggestion, "is-upgraded", firstMeaningfulValue(item.improvedZh, item.betterZh, item.suggestionZh))}${pairHtml(bilingualObject(item.whyBetter?.en || item.whyBetter || item.reason, firstMeaningfulValue(item.practiceFocusZh, item.whyBetter?.zh, item.reasonZh, item.explanationZh)))}</article>`).join("")}
         ${sectionCard("结尾 / Ending", result.ending)}
         ${sectionCard("任务回应 / Task response or achievement", result.taskResponse)}
       </div>
@@ -2351,10 +2441,11 @@
   }
 
   function renderExpressionBankModule(result = {}) {
+    const groups = learningArray(result.groups, 6);
     const expressions = learningArray(result.usefulExpressions || result.expressions, 8);
     const avoid = learningArray(result.avoidForNow || result.avoid, 5);
     return `${pairHtml(result.summary)}
-      ${expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的表达积累。请重新生成该模块。</p>`}
+      ${groups.length ? `<div class="learning-card-list">${groups.map((group) => `<section class="learning-expression-group"><h4>${escapeHtml(learningText(group.categoryZh || group.categoryEn || "Useful expressions"))}</h4><div class="learning-card-list">${learningArray(group.items, 8).map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.phrase || item.expression || item.targetVersion, "is-upgraded", item.usageZh || item.meaningZh || item.zh)}${simpleValueHtml("适用场景 / Suitable for", item.suitableFor || item.situation || item.categoryEn, "", item.suitableForZh)}${simpleValueHtml("来自原文或题目 / Source", item.source || item.fromEssayOrPrompt || item.original, "", item.sourceZh)}${pairHtml(item.whyUseful || item.reason || item.pattern)}</article>`).join("")}</div></section>`).join("")}</div>` : expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的表达积累。请重新生成该模块。</p>`}
       ${avoid.length ? learningListHtml("暂时不要优先模仿 / Avoid for now", avoid, 5) : ""}
       ${pairHtml(result.priorityAdvice)}`;
   }

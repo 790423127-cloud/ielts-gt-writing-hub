@@ -99,6 +99,7 @@ const MODULES = {
       "Find all clear grammar, word-form, and spelling errors in the student's essay as far as possible.",
       "Every item must use text from the student's essay. Do not invent errors.",
       "For grammar and word-form errors, give the wrong original text, corrected text, short Chinese explanation, and a practical checking method.",
+      "When the essay is weak, cover the main error families you can genuinely see, such as Verb form after be, spelling/verb form, prepositions, indirect question word order, subject-verb agreement, article/noun form, sentence boundary/punctuation, and formal letter grammar/tone.",
       "Keep spellingQuickFix brief: wrong -> correct + short reason. Do not repeat long sentence-upgrade explanations here.",
       "If the essay is strong and has few errors, say so and focus on accuracy checks rather than forcing fake errors."
     ]
@@ -144,6 +145,9 @@ const MODULES = {
       "Every taskChecklist/coverage item must mention a prompt requirement and evidence from the essay or state what is missing.",
       "Every taskChecklist/coverage item must include requirementZh, statusZh, evidenceZh, and advice.zh. evidenceZh must explain in Chinese what the English evidence shows and why it affects Task Achievement/Task Response or Coherence.",
       "If evidence quotes an English phrase from the essay, keep evidence in English and explain it in evidenceZh. Do not leave evidenceZh blank.",
+      "Do not rewrite the whole essay.",
+      "Never place a full rewritten essay or a full rewritten letter inside suggestedVersion. Give only a short local fix, micro-example, or a one-sentence pattern.",
+      "For each structure issue, teach one local improvement: what is wrong now, what short example to use instead, and what the learner should practise next.",
       "Do not repeat grammar/spelling lists unless the language problem affects task response, cohesion, tone, or clarity."
     ]
   },
@@ -153,6 +157,15 @@ const MODULES = {
     maxItems: "3-6 usefulExpressions, 0-4 avoidForNow",
     schema: {
       summary: { en: "", zh: "" },
+      groups: [
+        {
+          categoryZh: "",
+          categoryEn: "",
+          items: [
+            { phrase: "", usageZh: "", suitableFor: "", source: "", sourceZh: "" }
+          ]
+        }
+      ],
       usefulExpressions: [
         { expression: "", meaningZh: "", situation: { en: "", zh: "" }, pattern: { en: "", zh: "" }, fromEssayOrPrompt: "", whyUseful: { en: "", zh: "" } }
       ],
@@ -165,7 +178,8 @@ const MODULES = {
       "Give 3-6 expressions that grow naturally from this exact essay and prompt.",
       "Expressions must fit the frozen score level and be usable by this learner in a similar IELTS GT task.",
       "Do not give random universal IELTS phrases or expressions far above the student's current level.",
-      "For each expression, explain Chinese meaning, usage situation, pattern, source connection, and why it is useful.",
+      "Prefer grouped output by function or situation, for example formal opening, asking for requirements, asking about fees, giving an opinion, or balancing advantages and disadvantages.",
+      "For each expression, explain Chinese meaning, usage situation, source connection, and why it is useful.",
       "Do not translate or rewrite the whole essay."
     ]
   }
@@ -372,6 +386,87 @@ function firstString(...values) {
   return "";
 }
 
+function flattenTextParts(value, bucket = []) {
+  if (value == null) return bucket;
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    if (text) bucket.push(text);
+    return bucket;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenTextParts(item, bucket));
+    return bucket;
+  }
+  if (typeof value === "object") {
+    Object.values(value).forEach((item) => flattenTextParts(item, bucket));
+  }
+  return bucket;
+}
+
+function textFingerprint(value) {
+  return flattenTextParts(value)
+    .join(" | ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\u4e00-\u9fff| ]+/g, "")
+    .trim();
+}
+
+function uniqueBy(items, makeKey) {
+  const seen = new Set();
+  const result = [];
+  for (const item of asArray(items)) {
+    const key = String(makeKey(item) || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function listFromValue(value, limit = 6) {
+  return uniqueBy(flattenTextParts(value), (item) => textFingerprint(item)).slice(0, limit);
+}
+
+function normalizeLabelText(value, fallback = "") {
+  if (typeof value === "string" || typeof value === "number") return String(value).trim() || fallback;
+  if (value && typeof value === "object") {
+    return firstString(
+      value.zh,
+      value.chinese,
+      value.label,
+      value.titleZh,
+      value.errorTypeZh,
+      value.en,
+      value.english,
+      value.text,
+      value.errorType,
+      value.title
+    ) || fallback;
+  }
+  return fallback;
+}
+
+function looksLikeWholeEssayRewrite(text) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const words = countWords(value);
+  if (words >= 65) return true;
+  if (/\n\s*\n/.test(value) && words >= 35) return true;
+  if (/^dear\b/i.test(value) && /(yours|best regards|kind regards)/i.test(value)) return true;
+  return false;
+}
+
+function toMicroExample(text) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  const firstLine = value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)[0] || "";
+  if (!firstLine) return "";
+  const sentence = firstLine.match(/[^.!?]+[.!?]?/);
+  const sample = sentence ? sentence[0].trim() : firstLine;
+  return sample.length > 180 ? `${sample.slice(0, 177)}...` : sample;
+}
+
 function normalizeStructureCoverageItem(item = {}) {
   const value = item && typeof item === "object" ? item : {};
   const advice = bilingualFallback(value.advice || value.suggestion || value.nextAction || value.reason, "Give a specific next action for this task requirement.");
@@ -392,12 +487,17 @@ function normalizeStructureCoverageItem(item = {}) {
 
 function normalizeStructureSection(value = {}) {
   const item = value && typeof value === "object" ? value : {};
+  const suggestedVersion = stringValue(item.suggestedVersion || item.suggestion || item.improved);
+  const microExample = stringValue(item.microExample || item.shortExample || item.example || toMicroExample(suggestedVersion));
   return {
     ...item,
     currentIssue: stringValue(item.currentIssue || item.issue || item.current),
     currentIssueZh: firstString(item.currentIssueZh, item.issueZh, item.currentZh, item.explanationZh),
-    suggestedVersion: stringValue(item.suggestedVersion || item.suggestion || item.improved),
-    suggestedVersionZh: firstString(item.suggestedVersionZh, item.suggestionZh, item.improvedZh),
+    suggestedVersion: looksLikeWholeEssayRewrite(suggestedVersion) ? "" : suggestedVersion,
+    suggestedVersionZh: looksLikeWholeEssayRewrite(suggestedVersion) ? "" : firstString(item.suggestedVersionZh, item.suggestionZh, item.improvedZh),
+    microExample,
+    microExampleZh: firstString(item.microExampleZh, item.shortExampleZh, item.exampleZh),
+    practiceFocusZh: firstString(item.practiceFocusZh, item.whatToLearnZh, item.howToUseZh, item.nextStepZh),
     whyBetter: bilingualFallback(item.whyBetter || item.why || item.reason, "This change improves clarity or task response."),
     howToUse: bilingualFallback(item.howToUse || item.nextStep || item.advice, "Use this pattern when the same task need appears.")
   };
@@ -405,12 +505,14 @@ function normalizeStructureSection(value = {}) {
 
 function normalizeStructureIssue(value = {}) {
   const item = value && typeof value === "object" ? value : {};
+  const improved = stringValue(item.improved || item.better || item.suggestion);
   return {
     ...item,
     original: stringValue(item.original || item.current || item.evidence),
     originalZh: firstString(item.originalZh, item.currentZh, item.evidenceZh, item.explanationZh),
-    improved: stringValue(item.improved || item.better || item.suggestion),
-    improvedZh: firstString(item.improvedZh, item.betterZh, item.suggestionZh),
+    improved: looksLikeWholeEssayRewrite(improved) ? toMicroExample(improved) : improved,
+    improvedZh: looksLikeWholeEssayRewrite(improved) ? "" : firstString(item.improvedZh, item.betterZh, item.suggestionZh),
+    practiceFocusZh: firstString(item.practiceFocusZh, item.whatToLearnZh, item.nextStepZh),
     whyBetter: bilingualFallback(item.whyBetter || item.reason || item.explanation, "This version is clearer for the task.")
   };
 }
@@ -421,18 +523,27 @@ function normalizeModuleResult(moduleName, value) {
   result.priorityAdvice = bilingualFallback(result.priorityAdvice, "Focus on the most useful next step first.");
 
   if (moduleName === "overview") {
-    result.topProblems = asArray(result.topProblems).slice(0, 6);
-    result.errorSummary = asArray(result.errorSummary).slice(0, 10);
-    result.nextPracticeFocus = asArray(result.nextPracticeFocus).slice(0, 8);
+    result.topProblems = uniqueBy(asArray(result.topProblems).map((item) => ({
+      ...item,
+      title: firstString(item.title, item.problem?.en, item.problem, item.issue, item.focus),
+      titleZh: firstString(item.titleZh, item.problem?.zh, item.problemZh, item.issueZh, item.focusZh),
+      problem: bilingualFallback(item.problem || item.issue || item.focus, "This is one of the main score-limiting issues."),
+      evidence: listFromValue(item.evidence, 4),
+      evidenceZh: firstString(item.evidenceZh, item.reasonZh, item.explanationZh),
+      whyMatters: bilingualFallback(item.whyMatters || item.reason || item.explanation, "This issue affects the frozen score."),
+      nextPractice: bilingualFallback(item.nextPractice || item.nextAction || item.advice, "Practise one concrete improvement for this issue.")
+    })), (item) => textFingerprint([item.titleZh, item.title, item.evidence, item.nextPractice?.zh])).slice(0, 5);
+    result.errorSummary = uniqueBy(asArray(result.errorSummary), (item) => textFingerprint(item)).slice(0, 8);
+    result.nextPracticeFocus = uniqueBy(asArray(result.nextPracticeFocus), (item) => textFingerprint(item)).slice(0, 6);
   }
 
   if (moduleName === "sentenceUpgrade") {
-    result.sentenceCards = asArray(result.sentenceCards || result.sentences).slice(0, 12).map((item, index) => ({
+    result.sentenceCards = uniqueBy(asArray(result.sentenceCards || result.sentences).map((item, index) => ({
       index: Number(item.index) || index + 1,
       original: String(item.original || "").trim(),
       originalZh: String(item.originalZh || item.originalTranslationZh || "").trim(),
       hasClearError: item.hasClearError === false ? false : true,
-      issueTags: asArray(item.issueTags || item.errorTags || item.problemTags).slice(0, 8),
+      issueTags: uniqueBy(asArray(item.issueTags || item.errorTags || item.problemTags), (tag) => textFingerprint(tag)).slice(0, 8),
       minimalCorrection: String(item.minimalCorrection || item.corrected || "").trim(),
       minimalCorrectionZh: String(item.minimalCorrectionZh || item.correctedZh || "").trim(),
       upgradedVersion: String(item.upgradedVersion || item.improvedVersion || "").trim(),
@@ -440,43 +551,45 @@ function normalizeModuleResult(moduleName, value) {
       whyBetter: bilingualFallback(item.whyBetter || item.explanation || item.reason, "This version is clearer and more suitable for the task."),
       learnThis: bilingualFallback(item.learnThis || item.studyPoint || item.usefulPattern, "Learn the sentence pattern and reuse it only when it matches your meaning."),
       usefulPattern: bilingualFallback(item.usefulPattern || item.pattern, "A useful pattern from this sentence.")
-    })).filter((item) => item.original || item.minimalCorrection || item.upgradedVersion);
+    })).filter((item) => item.original || item.minimalCorrection || item.upgradedVersion), (item) => textFingerprint([item.original, item.minimalCorrection, item.upgradedVersion])).slice(0, 12);
   }
 
   if (moduleName === "grammarWordFormSpelling") {
-    result.grammarErrors = asArray(result.grammarErrors).map((item, index) => ({
+    result.grammarErrors = uniqueBy(asArray(result.grammarErrors).map((item, index) => ({
       index: Number(item.index) || index + 1,
-      errorType: String(item.errorType || item.type || "grammar").trim(),
+      errorType: normalizeLabelText(item.errorType || item.type, "grammar"),
+      errorTypeZh: firstString(item.errorTypeZh, item.typeZh, item.errorType?.zh, item.type?.zh),
       original: String(item.original || item.evidence || "").trim(),
       originalZh: String(item.originalZh || item.evidenceZh || "").trim(),
       corrected: String(item.corrected || item.correction || "").trim(),
       correctedZh: String(item.correctedZh || item.correctionZh || "").trim(),
       explanation: bilingualFallback(item.explanation || item.reason, "This is a grammar issue."),
       checkMethod: bilingualFallback(item.checkMethod || item.nextCheck, "Check this grammar pattern when you revise.")
-    })).filter((item) => item.original || item.corrected);
-    result.wordFormErrors = asArray(result.wordFormErrors || result.wordFormAndPartOfSpeechErrors).map((item, index) => ({
+    })).filter((item) => item.original || item.corrected), (item) => textFingerprint([item.errorTypeZh, item.errorType, item.original, item.corrected]));
+    result.wordFormErrors = uniqueBy(asArray(result.wordFormErrors || result.wordFormAndPartOfSpeechErrors).map((item, index) => ({
       index: Number(item.index) || index + 1,
-      errorType: String(item.errorType || item.type || "word_form").trim(),
+      errorType: normalizeLabelText(item.errorType || item.type, "word_form"),
+      errorTypeZh: firstString(item.errorTypeZh, item.typeZh, item.errorType?.zh, item.type?.zh),
       original: String(item.original || item.wrong || "").trim(),
       originalZh: String(item.originalZh || "").trim(),
       corrected: String(item.corrected || item.correct || item.correction || "").trim(),
       correctedZh: String(item.correctedZh || item.correctZh || "").trim(),
       explanation: bilingualFallback(item.explanation || item.reason, "This is a word form or part-of-speech issue."),
       checkMethod: bilingualFallback(item.checkMethod || item.nextCheck, "Check whether the sentence needs a noun, verb, adjective, or adverb.")
-    })).filter((item) => item.original || item.corrected);
-    result.spellingQuickFix = asArray(result.spellingQuickFix || result.spellingErrors).map((item) => ({
+    })).filter((item) => item.original || item.corrected), (item) => textFingerprint([item.errorTypeZh, item.errorType, item.original, item.corrected]));
+    result.spellingQuickFix = uniqueBy(asArray(result.spellingQuickFix || result.spellingErrors).map((item) => ({
       wrong: String(item.wrong || item.original || "").trim(),
       correct: String(item.correct || item.correction || "").trim(),
       note: String(item.note || item.reason || "spelling").trim()
-    })).filter((item) => item.wrong || item.correct);
-    result.learningFocus = asArray(result.learningFocus || result.grammarLearningFocus).slice(0, 8);
+    })).filter((item) => item.wrong || item.correct), (item) => textFingerprint([item.wrong, item.correct, item.note]));
+    result.learningFocus = uniqueBy(asArray(result.learningFocus || result.grammarLearningFocus), (item) => textFingerprint(item)).slice(0, 8);
   }
 
   if (moduleName === "structureCohesionTask") {
     result.cohesion = result.cohesion && typeof result.cohesion === "object" ? result.cohesion : { issues: asArray(result.cohesionIssues) };
     result.development = result.development && typeof result.development === "object" ? result.development : { issues: asArray(result.developmentIssues) };
     result.taskResponse = result.taskResponse && typeof result.taskResponse === "object" ? result.taskResponse : {};
-    result.taskChecklist = asArray(result.taskChecklist || result.taskResponse.coverage || result.coverage).slice(0, 10).map(normalizeStructureCoverageItem);
+    result.taskChecklist = uniqueBy(asArray(result.taskChecklist || result.taskResponse.coverage || result.coverage).map(normalizeStructureCoverageItem), (item) => textFingerprint([item.requirementZh, item.requirement, item.evidence, item.advice?.zh])).slice(0, 10);
     result.opening = normalizeStructureSection(result.opening);
     result.paragraphOrganisation = normalizeStructureSection(result.paragraphOrganisation || result.paragraphOrganization);
     result.paragraphOrganization = result.paragraphOrganisation;
@@ -489,15 +602,39 @@ function normalizeModuleResult(moduleName, value) {
       suggestedVersionZh: firstString(result.taskResponse.suggestedVersionZh, result.taskResponse.suggestionZh, result.taskResponse.improvedZh),
       whyBetter: bilingualFallback(result.taskResponse.whyBetter || result.taskResponse.why || result.taskResponse.reason, "This improves task response or task achievement."),
       howToUse: bilingualFallback(result.taskResponse.howToUse || result.taskResponse.nextStep || result.taskResponse.advice, "Use this approach when answering the task requirement."),
-      coverage: asArray(result.taskResponse.coverage || result.taskChecklist).slice(0, 10).map(normalizeStructureCoverageItem)
+      coverage: uniqueBy(asArray(result.taskResponse.coverage || result.taskChecklist).map(normalizeStructureCoverageItem), (item) => textFingerprint([item.requirementZh, item.requirement, item.evidence, item.advice?.zh])).slice(0, 10)
     };
-    result.cohesion.issues = asArray(result.cohesion.issues || result.cohesionIssues).slice(0, 8).map(normalizeStructureIssue);
-    result.development.issues = asArray(result.development.issues || result.developmentIssues).slice(0, 8).map(normalizeStructureIssue);
+    result.cohesion.issues = uniqueBy(asArray(result.cohesion.issues || result.cohesionIssues).map(normalizeStructureIssue), (item) => textFingerprint([item.original, item.improved, item.whyBetter?.zh])).slice(0, 8);
+    result.development.issues = uniqueBy(asArray(result.development.issues || result.developmentIssues).map(normalizeStructureIssue), (item) => textFingerprint([item.original, item.improved, item.whyBetter?.zh])).slice(0, 8);
   }
 
   if (moduleName === "expressionBank") {
-    result.usefulExpressions = asArray(result.usefulExpressions || result.expressions).slice(0, 8);
-    result.avoidForNow = asArray(result.avoidForNow || result.avoid).slice(0, 5);
+    const rawGroups = asArray(result.groups).map((group) => {
+      const items = uniqueBy(asArray(group.items).map((item) => ({
+        phrase: stringValue(item.phrase || item.expression || item.targetVersion),
+        usageZh: firstString(item.usageZh, item.meaningZh, item.zh, item.situation?.zh),
+        suitableFor: stringValue(item.suitableFor || item.situation?.en || item.situation || item.categoryEn),
+        source: stringValue(item.source || item.fromEssayOrPrompt || item.original),
+        sourceZh: firstString(item.sourceZh, item.fromEssayOrPromptZh, item.originalZh),
+        whyUseful: bilingualFallback(item.whyUseful || item.reason || item.pattern, "Use this only when the task meaning matches.")
+      })), (item) => textFingerprint([item.phrase, item.usageZh, item.suitableFor])).slice(0, 6);
+      return {
+        categoryZh: firstString(group.categoryZh, group.titleZh, group.labelZh, group.categoryEn, group.title),
+        categoryEn: stringValue(group.categoryEn || group.titleEn || group.labelEn || group.title),
+        items
+      };
+    }).filter((group) => group.items.length);
+    const fallbackUseful = uniqueBy(asArray(result.usefulExpressions || result.expressions).map((item) => ({
+      phrase: stringValue(item.expression || item.targetVersion || item.phrase),
+      usageZh: firstString(item.meaningZh, item.zh, item.situation?.zh),
+      suitableFor: stringValue(item.situation?.en || item.situation || item.fromEssayOrPrompt),
+      source: stringValue(item.fromEssayOrPrompt || item.source || item.original),
+      sourceZh: firstString(item.sourceZh, item.fromEssayOrPromptZh, item.originalZh),
+      whyUseful: bilingualFallback(item.whyUseful || item.reason || item.pattern, "Use this expression when the task need is the same.")
+    })), (item) => textFingerprint([item.phrase, item.usageZh, item.suitableFor])).slice(0, 8);
+    result.groups = rawGroups.length ? rawGroups : (fallbackUseful.length ? [{ categoryZh: "可直接模仿的表达", categoryEn: "Useful expressions", items: fallbackUseful }] : []);
+    result.usefulExpressions = fallbackUseful;
+    result.avoidForNow = uniqueBy(asArray(result.avoidForNow || result.avoid), (item) => textFingerprint(item)).slice(0, 5);
   }
 
   return result;
