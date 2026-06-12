@@ -5,8 +5,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v3-1-true-midband-default-hard-lowband-only";
-const MIDBAND_VERSION = "score-core-v8-5-9-true-midband-no-boundary-override";
+const ROUTER_VERSION = "production-router-v3-2-midband-core-cleanup";
+const MIDBAND_VERSION = "score-core-v8-5-10-midband-core-cleanup";
 const LOWBAND_VERSION = "score-core-v8-5-9-lowband-hard-evidence-guard";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
 const BOUNDARY_VERSION = "boundary-adjudicator-v4-4-retired-from-production-router";

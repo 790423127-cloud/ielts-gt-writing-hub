@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-8-midband-4-to-6-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-10-midband-core-cleanup";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -141,18 +141,22 @@ const EXTREME_BAND_ANCHOR_CONTRAST_V8_5_5 = {
 const MIDBAND_4_TO_6_CALIBRATION_RULES = {
   "Task 1": [
     "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 1 letters around Band 4.0-6.5. Do not outsource ordinary Band 5 writing to lowband logic.",
+    "Priority rule for this midband scorer: these 4.0-6.5 anchors override older low-band protection notes unless the writing is truly not rateable or has hard lowband evidence. Do not let generic 'protect Band 4' language outweigh a clear functional Band 5 response.",
+    "Functional Band 5 rule: if a Task 1 letter has a recognisable greeting/closing, a clear purpose, all or most bullets communicated, and the reader can act on the message, it normally belongs at 5.0 or 5.5 even when the wording is basic and some errors remain.",
     "Band 4.0 Task 1: related attempt but communication is unstable; bullet coverage may be partial/thin; frequent basic grammar, spelling, word-form or sentence-control errors make reading effortful.",
     "Band 4.5 Task 1: the main situation is understandable and perhaps all bullets are touched, but language errors remain frequent, vocabulary is narrow/error-prone, progression is mechanical, and the reader still works to understand details.",
     "Band 5.0 Task 1: purpose is clear enough and the main bullet points are addressed. Vocabulary may be basic and grammar may still contain noticeable mistakes, but the reader can understand the main message without serious difficulty. Band 5 does not mean error-free.",
     "Band 5.5 Task 1: bullets are covered more clearly, paragraphing and sequencing are stable, and language is easier to read than Band 5.0, though detail may still be limited and phrasing may remain simple or occasionally awkward.",
     "Band 6.0 Task 1: all bullets are clear with useful detail, tone and format are suitable, and language is reasonably controlled. Errors may remain, but they do not regularly interrupt the reader.",
     "Band 6.5 Task 1: clearly complete and fairly natural with better detail, lexical range and sentence control, but not yet consistently flexible/natural enough for Band 7.",
-    "Do not keep Lexical Resource or Grammatical Range and Accuracy below 5.0 solely because the vocabulary is ordinary or sentence structures are simple. LR/GRA 4.5 requires evidence that errors or word choice still make reading effortful.",
+    "Do not keep Lexical Resource or Grammatical Range and Accuracy below 5.0 solely because the vocabulary is ordinary or sentence structures are simple. LR/GRA 4.5 requires concrete evidence that errors, spelling, word choice, sentence boundaries, or verb forms still make reading effortful.",
+    "For a mostly corrected Task 1 letter with low local spelling/grammar error signals, LR 5.0 and GRA 5.0 are normal unless the AI can point to non-blocking but still frequent language problems. Simple but sufficient = Band 5, not Band 4.5.",
     "For informal letters to friends, simple conversational warmth is appropriate. Do not penalise a friend letter for not sounding formal or professional.",
     "A corrected low-band letter that now covers all bullets, has recognisable format and tone, and is mostly readable should normally move into Band 5.0-5.5 rather than staying at 4.0-4.5."
   ],
   "Task 2": [
     "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 2 essays around Band 4.0-6.5. Do not treat length and paragraphing as high quality, but also do not keep a complete understandable answer at lowband solely for simple language.",
+    "Priority rule for this midband scorer: these 4.0-6.5 anchors override older low-band protection notes unless the writing is truly not rateable or has hard lowband evidence. Do not let generic 'protect Band 4' language outweigh a clear basic Band 5 response.",
     "Band 4.0 Task 2: a related attempt with weak or repetitive ideas, poor control, and frequent language errors that make reading effortful; the position or prompt coverage may be unstable.",
     "Band 4.5 Task 2: basic response is understandable, but development remains thin/general, cohesion is mechanical, and LR/GRA are limited with frequent errors.",
     "Band 5.0 Task 2: a clear basic position and the main question parts are addressed. Ideas may be simple and language may have noticeable errors, but the reader can follow the argument. Band 5 can contain many non-blocking errors. Band 5 may still contain many non-blocking errors.",
@@ -963,22 +967,32 @@ function auditTask1Requirements(body = {}, signals = {}) {
   const items = bullets.map((requirement, index) => ({ index: index + 1, ...classifyTask1Requirement(requirement, essay) }));
   const missingCount = items.filter((item) => item.status === "missing").length;
   const partlyCount = items.filter((item) => item.status === "partly_covered").length;
-  let taskAchievementCap = null;
-  if (missingCount >= 2) taskAchievementCap = 4.0;
-  else if (missingCount === 1) taskAchievementCap = 5.0;
-  else if (partlyCount >= 1) taskAchievementCap = 5.5;
-  else if (items.length >= 3 && items.every((item) => item.status === "covered") && Number(signals.wordCount) < 120) taskAchievementCap = 6.0;
+  const midbandPrimary = isMidbandPrimaryScoringRequest(body);
+  let advisoryTaskAchievementCap = null;
+  if (missingCount >= 2) advisoryTaskAchievementCap = 4.0;
+  else if (missingCount === 1) advisoryTaskAchievementCap = 5.0;
+  else if (partlyCount >= 1) advisoryTaskAchievementCap = 5.5;
+  else if (items.length >= 3 && items.every((item) => item.status === "covered") && Number(signals.wordCount) < 120) advisoryTaskAchievementCap = 6.0;
+
+  // In production midband mode this audit must never act as a local scoring ceiling.
+  // It is only a checklist passed to the AI examiner so simple but functional Band 5 letters
+  // are not pulled back to Band 4 merely because the local keyword classifier is conservative.
+  const taskAchievementCap = midbandPrimary ? null : advisoryTaskAchievementCap;
   return {
-    version: "task1-requirement-audit-v8-1",
+    version: "task1-requirement-audit-v8-2-advisory-midband",
     task: "Task 1",
     extractedRequirements: bullets,
     items,
     missingCount,
     partlyCount,
     taskAchievementCap,
-    triggered: Number.isFinite(taskAchievementCap),
-    summary: Number.isFinite(taskAchievementCap)
-      ? `Task 1 requirement audit capped Task Achievement at Band ${taskAchievementCap.toFixed(1)} because ${missingCount} bullet(s) are missing and ${partlyCount} bullet(s) are only partly covered.`
+    advisoryTaskAchievementCap,
+    midbandAdvisoryOnly: midbandPrimary,
+    triggered: !midbandPrimary && Number.isFinite(taskAchievementCap),
+    summary: Number.isFinite(advisoryTaskAchievementCap)
+      ? (midbandPrimary
+        ? `Task 1 requirement audit is advisory only in midband mode: ${missingCount} bullet(s) appear missing and ${partlyCount} bullet(s) appear partly covered by local keyword audit. AI must judge coverage from the actual prompt and response; this is not a cap.`
+        : `Task 1 requirement audit capped Task Achievement at Band ${advisoryTaskAchievementCap.toFixed(1)} because ${missingCount} bullet(s) are missing and ${partlyCount} bullet(s) are only partly covered.`)
       : "All extracted Task 1 bullet requirements appear covered by local requirement audit."
   };
 }
@@ -1525,7 +1539,7 @@ function normalizeTaskSpecificGate(raw, signals, criteria = {}, anchor = {}, cal
       letterCompletenessGate: normalizeGate(source.letterCompletenessGate || source.letterCompleteness, "Letter completeness checked: greeting/opening purpose/body details/closing/request or thanks/sign-off.", false),
       wordCountGuard: normalizeGate(source.wordCountGuard, `${wordBoundary.reason} Suggested range: ${wordBoundary.suggestedRange}.`, wordBoundary.triggered),
       highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5)),
-      taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 1 bullet-specific requirement audit completed.", Boolean(signals.taskRequirementAudit?.triggered))
+      taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 1 bullet-specific requirement audit completed.", Boolean(signals.taskRequirementAudit?.triggered && !signals.taskRequirementAudit?.midbandAdvisoryOnly))
     };
   }
   return {
@@ -2039,7 +2053,7 @@ function buildHardBoundaryAudit(criteria, signals, anchorComparison = {}, criter
   if (taskRequirementScoreConflict) reviewReasons.push(`${signals.task} task-specific requirement conflict: ${names[0]} ${firstCriterionBand.toFixed(1)} exceeds the requirement-audit ceiling ${requirementCap.toFixed(1)}; AI boundary review must justify or revise it.`);
   if (examRealismUnderScoreRisk.triggered) reviewReasons.push(examRealismUnderScoreRisk.reason);
   return {
-    version: "strict-boundary-audit-v6",
+    version: "strict-boundary-audit-v6-midband-advisory-requirements",
     localScoringApplied: false,
     localParticipation: "The server does not assign bands, but it performs hard local gate audit, boundary-trigger detection, structural validation, and AI re-review routing before score freeze.",
     status: reviewReasons.length ? "review_required" : "passed",
@@ -2528,7 +2542,7 @@ function buildLocalGateReport(criteria, signals, existing = {}, anchorComparison
   const localHigh = gateStatus(highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => x >= 7.5));
   const localProfile = gateStatus(warnings.length ? warnings.join(" ") : "No major score-profile instability detected.", warnings.length > 0 || allCriteriaSame(criteria));
   const reqAudit = signals.taskRequirementAudit || null;
-  const localRequirement = gateStatus(reqAudit?.summary || "Task-specific requirement audit not available.", Boolean(reqAudit?.triggered));
+  const localRequirement = gateStatus(reqAudit?.summary || "Task-specific requirement audit not available.", Boolean(reqAudit?.triggered && !reqAudit?.midbandAdvisoryOnly));
   return {
     likelyOverallRange: profile.likelyOverallRange || (wordBoundary.triggered ? wordBoundary.suggestedRange : (signals.rateabilityStatus === "clearly_rateable" ? "rateable; band depends on criterion evidence" : "limited or weakly rateable")),
     lowBandGate: combineGate(localLow, profile.lowBandGate),
@@ -2633,10 +2647,12 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     task2DirectQuestions: Array.isArray(signals.task2QuestionProfile?.directQuestions) ? signals.task2QuestionProfile.directQuestions : [],
     taskRequirementAudit: signals.taskRequirementAudit ? {
       version: signals.taskRequirementAudit.version,
-      triggered: signals.taskRequirementAudit.triggered,
+      triggered: Boolean(signals.taskRequirementAudit.triggered && !signals.taskRequirementAudit.midbandAdvisoryOnly),
+      advisoryOnly: Boolean(signals.taskRequirementAudit.midbandAdvisoryOnly),
       missingCount: signals.taskRequirementAudit.missingCount,
       partlyCount: signals.taskRequirementAudit.partlyCount,
-      taskAchievementCap: signals.taskRequirementAudit.taskAchievementCap,
+      taskAchievementCap: signals.taskRequirementAudit.midbandAdvisoryOnly ? null : signals.taskRequirementAudit.taskAchievementCap,
+      advisoryTaskAchievementCap: signals.taskRequirementAudit.advisoryTaskAchievementCap,
       taskResponseCap: signals.taskRequirementAudit.taskResponseCap,
       summary: signals.taskRequirementAudit.summary
     } : null
@@ -2661,6 +2677,8 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
+    "Midband source-of-truth rule: local taskRequirementAudit is advisory evidence only in midband mode. Do not treat any local advisory cap as a ceiling. You must decide TA/TR and LR/GRA from the actual prompt and essay.",
+    "Band 5 reality rule: Band 5 writing can still have visible errors, simple vocabulary and simple sentence structures. If the main message is clear and the task is basically completed, do not keep LR/GRA below 5.0 merely because the style is basic.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
     `v8.5.5 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
