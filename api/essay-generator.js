@@ -5,7 +5,10 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const GENERATOR_VERSION = "essay-generator-v3-15-source-based-candidate-selection";
+const GENERATOR_VERSION = "essay-generator-v3-15-source-based-candidate-selection-controlled-exact-hit-v1";
+
+// Controlled Exact-Hit Mode: reuse scorer's band profiles & delta guidance
+const gradeIELTS = require('./grade-ielts');
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
@@ -460,6 +463,27 @@ function buildGenerationPrompt(body = {}) {
   const prompt = body.questionPrompt || body.prompt || body.promptText || "";
   const essay = String(body.essay || "").trim();
 
+  // === Controlled Exact-Hit Mode v1.0 additions ===
+  const currentCriteria = objectOnly(
+    (context.currentResult && (context.currentResult.finalCriteria || context.currentResult.criteria)) ||
+    (context.frozenScore && (context.frozenScore.finalCriteria || context.frozenScore.criteria)) ||
+    {}
+  );
+  const currentCriteriaText = Object.keys(currentCriteria).length
+    ? `Current verified criterion bands (from frozen score): ${JSON.stringify(currentCriteria)}`
+    : "Current criterion bands not available from frozen score.";
+
+  // Use scorer-aligned profiles + delta guidance (Task 2 focus; graceful for Task 1)
+  const currentProfile = (task === "Task 2" && Number.isFinite(targets.currentBand))
+    ? gradeIELTS.getTask2BandProfile(targets.currentBand)
+    : "";
+  const plus05Guidance = (task === "Task 2")
+    ? gradeIELTS.getSourceBasedDeltaGuidance(targets.currentBand, targets.targetBandPlus05)
+    : "";
+  const plus10Guidance = (task === "Task 2")
+    ? gradeIELTS.getSourceBasedDeltaGuidance(targets.currentBand, targets.targetBandPlus10)
+    : "";
+
   const taskSpecific = task === "Task 1"
     ? [
         "Task 1 requirements:",
@@ -477,8 +501,18 @@ function buildGenerationPrompt(body = {}) {
       ].join("\n");
 
   const essayInstruction = essay
-    ? "The student essay is provided. Generate TWO revised versions based on the student\'s essay. They must be source-based revisions, not new generic essays. Preserve the student\'s core meaning, topic, facts, examples, and main ideas while improving task completion, clarity, paragraphing, grammar control, and wording."
+    ? "The student essay is provided. Generate TWO revised versions based on the student\'s essay. They must be source-based revisions, not new generic essays. Preserve the student\'s core meaning, topic, facts, examples, and main ideas while improving task completion, clarity, paragraphing, grammar control, and wording. " +
+      "Controlled Exact-Hit Mode: use the Delta Guidance below. All upgrades must be applied to the student's preserved content only."
     : "No student essay was provided. Leave revisionPlus05.essay and revisionPlus10.essay empty, but still provide the question-based model answer and learning guide.";
+
+  const exactHitRules = [
+    "Controlled Exact-Hit Mode v1.0 (user personal requirement):",
+    "revisionPlus05 must aim for verifiedBand === targetBandPlus05 (or within ±0.5 and explicitly labelled Close).",
+    "revisionPlus10 must aim for verifiedBand === targetBandPlus10 (or within ±0.5 and explicitly labelled Close).",
+    "Exact Hit (verified === target) is the ideal. Close (|delta|<=0.5) is acceptable for learning if labelled honestly.",
+    "Not Hit (deviation >0.5 after max attempts) must be labelled as such and should not be presented as the primary learning version.",
+    "Maximum rewrite attempts per revision slot = 3. After 3 attempts without Close/Exact, stop and mark Not Hit + suggest re-generate."
+  ].join("\n");
 
   return [
     "You are an IELTS General Training Writing tutor.",
@@ -488,7 +522,7 @@ function buildGenerationPrompt(body = {}) {
     "1) modelAnswer: a question-based model answer. It can be unrelated to the student's essay and should be only about 0.5 to 1.0 band above the student's current frozen level.",
     "2) revisionPlus05: if the student is below Band 5.0, this must be a Band 5 rescue revision, not a conservative light edit. If the student is Band 5.0 or above, it is a strict +0.5 band revision.",
     "3) revisionPlus10: if the student is below Band 5.0, this must target Band 5.5. If the student is Band 5.0 or above, it is a strict +1.0 band revision.",
-    "Also generate 2 additional source-based candidates for revisionPlus05 and 2 additional source-based candidates for revisionPlus10. The candidates must keep the same student source facts but vary strategy slightly: one safer/simple version, one fuller clearer version. They are candidates for production verification and must not be new model answers.",
+    "Also generate 2 additional source-based candidates for revisionPlus05 and 2 additional source-based candidates for revisionPlus10. The candidates must keep the same student source facts but vary strategy slightly: one safer/simple version (focus more on clear development), one fuller clearer version (focus more on lexical precision and natural cohesion). They are candidates for production verification and must not be new model answers.",
     "Do not produce Band 8/9 style language for a Band 5 student. The outputs must be learnable and imitable, but they must still be strong enough to meet the strict target band in production scoring verification.",
     "Target-window rule: below-target verification is failure, not near success. If the current band is 4.5, the +0.5 rescue revision must verify at Band 5.0. The +1.0 revision/model target Band 5.5, and Band 6.0 may be acceptable as slightly above target if it remains learnable. If the current band is 5.0, the +0.5 revision targets Band 5.5.",
     "Verification status: verifiedBand < targetBand means below_target; verifiedBand === targetBand means target_met. For modelAnswer and revisionPlus10 with target Band 5.5, verifiedBand 6.0 is acceptable_high, not exact. Higher or lower versions must be labelled honestly and cannot be presented as exact target.",
@@ -500,6 +534,11 @@ function buildGenerationPrompt(body = {}) {
     taskSpecific,
     essayInstruction,
     targets.levelInstruction,
+    exactHitRules,
+    currentProfile ? currentProfile : "",
+    plus05Guidance ? plus05Guidance : "",
+    plus10Guidance ? plus10Guidance : "",
+    currentCriteriaText,
     "Return strict JSON only. No markdown, no code fences, no comments, no trailing prose.",
     "Return exactly this shape:",
     JSON.stringify({
@@ -723,6 +762,25 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     ].filter(Boolean).join("\n")
   ).trim();
 
+  // Controlled Exact-Hit Mode v1.0 fields for frontend display & filtering
+  const intendedDelta = {
+    plus05: targets.targetBandPlus05 != null && targets.currentBand != null ? Math.round((targets.targetBandPlus05 - targets.currentBand) * 2) / 2 : null,
+    plus10: targets.targetBandPlus10 != null && targets.currentBand != null ? Math.round((targets.targetBandPlus10 - targets.currentBand) * 2) / 2 : null
+  };
+
+  function attachDelta(part, target) {
+    if (!part) return part;
+    const v = clampBand(part.verification && part.verification.verifiedBand);
+    const t = clampBand(target);
+    if (t == null) return { ...part, verifiedDelta: null };
+    return {
+      ...part,
+      verifiedDelta: v == null ? null : Math.round((v - t) * 2) / 2,
+      exactHit: v != null && v === t,
+      closeHit: v != null && Math.abs(v - t) <= 0.5
+    };
+  }
+
   return {
     ok: true,
     aiStage: "essay-generator",
@@ -740,9 +798,10 @@ function normalizeGenerationResult(raw = {}, body = {}) {
     targetBandModel: modelAnswer.targetBand,
     targetBandPlus05: revisionPlus05.targetBand,
     targetBandPlus10: revisionPlus10.targetBand,
-    modelAnswer,
-    revisionPlus05,
-    revisionPlus10,
+    intendedDelta,
+    modelAnswer: attachDelta(modelAnswer, modelAnswer.targetBand),
+    revisionPlus05: attachDelta(revisionPlus05, targets.targetBandPlus05),
+    revisionPlus10: attachDelta(revisionPlus10, targets.targetBandPlus10),
     revisionPlus05Candidates,
     revisionPlus10Candidates,
     learningGuide,
@@ -769,7 +828,9 @@ async function callDeepSeek(prompt) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        temperature: 0.35,
+        // Controlled Exact-Hit Mode: higher temp for main generation path (more linguistic variety for delta upgrades);
+        // low/zero temp for rewrite attempts (more controlled calibration).
+        temperature: (body && (body.rewriteGeneratedPart || body.generationMode === "rewrite_generated_part")) ? 0.25 : 0.65,
         max_tokens: 8000,
         messages: [
           { role: "system", content: "Return strict JSON only. Generate IELTS GT practice writing only. Never recalculate or change any score." },
@@ -1067,7 +1128,7 @@ function buildRewritePrompt(body, normalized, key, verification) {
     ? "SOFT DOWNSHIFT: The generated answer scored above this exact learning target. Keep all task content and source facts, but reduce polish, complexity, and development until it is closer to the exact target band."
     : "UPGRADE: The generated answer scored below target. Improve it enough to reach the target.";
 
-  return [
+  const promptParts = [
     "You are revising one generated IELTS General Training practice answer after production-router verification.",
     "This is NOT scoring the user's original essay. Do not change any frozen user score.",
     "Your job is to rewrite ONLY the selected generated answer so that it better matches the stated target band while remaining learnable for the student.",
@@ -1110,7 +1171,34 @@ function buildRewritePrompt(body, normalized, key, verification) {
     clipText(part.essay || "", 5000),
     "Rewrite quality requirement:",
     downshiftLockMode ? "Return a complete minimal source-based Band 5 rescue answer. It must preserve the student\'s content and scenario, but intentionally reduce polish, sentence complexity, word choice strength, and extra development." : (escalationMode ? "Return a complete rebuilt source-based Band 5 rescue answer. It must preserve the student\'s content and scenario, but it does NOT need to preserve weak original sentence structure." : (isBand5Rescue ? "Return a complete realistic Band 5 rescue revision, not a sentence-by-sentence micro-edit. It must be clearly stronger than the original, but still simple and not over-polished." : "Return a complete revised generated answer for the target window."))
-  ].join("\n\n");
+  ];
+
+  // Controlled Exact-Hit Mode v1.0: inject precise diagnosis when we have criterion feedback from verification
+  const finalPromptParts = appendExactHitRewriteDiagnosis(promptParts, verification, task);
+  return finalPromptParts.join("\n\n");
+}
+
+// Controlled Exact-Hit Mode: append targeted rewrite diagnosis if we have criterionBands from the failed verification
+function appendExactHitRewriteDiagnosis(promptParts, verification = {}, task = "Task 2") {
+  const cb = verification.criterionBands || verification.criteria || {};
+  if (!cb || Object.keys(cb).length === 0) return promptParts;
+  const target = clampBand(verification.targetBand);
+  const verified = clampBand(verification.verifiedBand);
+  const status = verification.status || "";
+  let diag = "\n\nControlled Exact-Hit Rewrite Diagnosis (use this to decide the minimal source-safe change):\n";
+  diag += `Verification: targetBand=${target == null ? "?" : target.toFixed(1)}, verifiedBand=${verified == null ? "?" : verified.toFixed(1)}, status=${status}\n`;
+  diag += "Per-criterion snapshot from production router:\n";
+  Object.entries(cb).forEach(([name, val]) => {
+    const v = Number(val);
+    if (Number.isFinite(v)) diag += `- ${name}: ${v.toFixed(1)}\n`;
+  });
+  if (status === "below_target" || status === "verified-too-low") {
+    diag += "Action required: Choose the weakest criterion above and apply ONE modest, source-based upgrade from the original student content that the scorer's descriptor for the next 0.5 band would recognize (e.g. add one specific support detail for TR, upgrade 1-2 collocations for LR). Do not over-upgrade all criteria at once.";
+  } else if (status === "target_exceeded" || status === "verified-too-high") {
+    diag += "Action required: The version is too strong for the exact learning slot. Keep all student source facts and task coverage, but simplify one layer of vocabulary complexity, shorten one over-polished sentence chain, or remove one extra developed detail so the scorer sees it land closer to the exact target (not 1+ band higher).";
+  }
+  promptParts.push(diag);
+  return promptParts;
 }
 
 function mergeRewrittenPart(normalized, key, rawRewrite) {

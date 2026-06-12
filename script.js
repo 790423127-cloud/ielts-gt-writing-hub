@@ -395,6 +395,8 @@
   function gradingPayload(extra = {}) {
     const essay = String(els.essayInput?.value || "").trim();
     const lockedTask = lockedTaskForSelected();
+    // Controlled Exact-Hit Mode v1.0: always forward currentResult (with criteria) and frozenScore
+    // so backend can build precise per-criterion Delta Guidance for +0.5 / +1.0 source-based revisions.
     return {
       ...lockedTaskFields(lockedTask),
       promptId: selected?.id || "",
@@ -2613,6 +2615,23 @@
     if (!els.gradingResults) return;
     els.gradingResults.querySelectorAll(".generated-writing-learning-block").forEach((node) => node.remove());
 
+    // Controlled Exact-Hit Mode v1.0 helpers (display + filtering)
+    function getHitStatus(part) {
+      if (!part) return { label: "N/A", cls: "", delta: null };
+      const t = Number(part.targetBand);
+      const v = Number(part.verifiedBand ?? (part.verification && part.verification.verifiedBand));
+      if (!Number.isFinite(t) || !Number.isFinite(v)) return { label: "验证中", cls: "muted", delta: null };
+      const d = Math.round((v - t) * 2) / 2;
+      if (d === 0) return { label: "Exact Hit", cls: "hit-exact", delta: 0 };
+      if (Math.abs(d) <= 0.5) return { label: "Close (±0.5)", cls: "hit-close", delta: d };
+      return { label: "Not Hit", cls: "hit-miss", delta: d };
+    }
+    function formatDelta(d) {
+      if (d == null || !Number.isFinite(d)) return "";
+      const sign = d > 0 ? "+" : "";
+      return `${sign}${d.toFixed(1)}`;
+    }
+
     const taskLabel = result.task || lockedTaskForSelected();
     const toText = (value) => String(value || "").trim();
     const toArr = (value) => Array.isArray(value)
@@ -2679,6 +2698,11 @@
       : result.currentResultUsed
         ? "已使用同一任务的冻结分数作为语言水平参考。"
         : "未使用旧评分结果；将按当前题目生成可学习作文。";
+
+    // Controlled Exact-Hit Mode v1.0 quick status banner (appears in results area)
+    const hitSummary = (result.revisionPlus05 || result.revisionPlus10)
+      ? `精确命中模式：+0.5 状态 ${status05.label} (Δ ${formatDelta(status05.delta)})； +1.0 状态 ${status10.label} (Δ ${formatDelta(status10.delta)})`
+      : "";
     const scoreSeparationNote = [
       "考试评分 = 当前输入框原文的分数。",
       "生成验证分 = AI 生成版本通过 production router 验证得到的分数。",
@@ -3326,7 +3350,7 @@
   }
 
   async function verifyOneGeneratedEssayClientSide(result, key, label) {
-    const maxRewriteAttempts = 6;
+    const maxRewriteAttempts = 3; // Controlled Exact-Hit Mode v1.0: hard cap per user spec (3~4, using 3)
     const part = result[key] || {};
     const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
     let closest = null;
@@ -3467,6 +3491,7 @@
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts
           };
           const chosenStatus = chosen.verification?.status || result[key]?.verification?.status || generatedVerificationStatus(chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, targetBand, key);
+          const notHitMessage = "未命中目标分数（偏差超过0.5），已达最大重写次数（3）。建议重新生成或查看其他候选版本。";
           result[key].verification = normalizeGeneratedVerificationPayload({
             ...(chosen.verification || result[key].verification || {}),
             status: chosenStatus,
@@ -3480,11 +3505,12 @@
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts,
             rewriteStrategy: "closest candidate retained for diagnostics",
             isAcceptedForLearning: false,
-            finalMessageZh: `${generatedVerificationMessageZh(chosenStatus, targetBand, chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, key)} This closest candidate is kept only for diagnostics and is not accepted as a qualified learning version.`
+            finalMessageZh: `${generatedVerificationMessageZh(chosenStatus, targetBand, chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, key)} ${notHitMessage}`
           });
           result[key].closestVersionUsed = true;
           result[key].exactTargetMet = false;
           result[key].rewriteStrategy = "closest candidate retained for diagnostics";
+          result[key].notHitAfterMaxAttempts = true;
           renderRevisionResult(result);
           return result[key].verification;
         }
@@ -3569,7 +3595,7 @@
       if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
       renderRevisionResult(revision);
       navigateToView("model-revision");
-      setGradingStatus("作文生成完成，正在用生产评分路由验证生成版本。", "loading");
+      setGradingStatus("作文生成完成，正在用生产评分路由验证生成版本（可控精确命中模式，最多3次重写）。", "loading");
       verifyGeneratedEssaysClientSide(revision).catch((verifyError) => {
         setGradingStatus(essayGeneratorErrorMessage(verifyError), "error");
       });

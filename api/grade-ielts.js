@@ -411,6 +411,59 @@ function bandBoundaryProtocolForTask(task) {
   return (task === "Task 1" ? TASK1_BAND_BOUNDARY_PROTOCOL : TASK2_BAND_BOUNDARY_PROTOCOL).map((rule, index) => `${index + 1}. ${rule}`).join("\n");
 }
 
+// === Controlled Exact-Hit Mode helpers (for essay-generator delta guidance) ===
+// Pure functions. Return short, verifier-aligned text for source-based revision prompts.
+// These allow the generator to "speak the scorer's language" when targeting +0.5 / +1.0 on the student's own content.
+
+function _clampBandForProfile(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 5.0;
+  const rounded = Math.round(n * 2) / 2;
+  return Math.max(0, Math.min(9, rounded));
+}
+
+function getTask2BandProfile(band) {
+  const b = _clampBandForProfile(band);
+  const key = String(b); // matrix keys are "5", "6" etc.; .5 levels use the floor + half-band protocol in scorer
+  const m = IELTS_CRITERION_BAND_MATRIX["Task 2"];
+  const tr = m["Task Response"][key] || m["Task Response"][String(Math.floor(b))] || "N/A";
+  const cc = m["Coherence and Cohesion"][key] || m["Coherence and Cohesion"][String(Math.floor(b))] || "N/A";
+  const lr = m["Lexical Resource"][key] || m["Lexical Resource"][String(Math.floor(b))] || "N/A";
+  const gra = m["Grammatical Range and Accuracy"][key] || m["Grammatical Range and Accuracy"][String(Math.floor(b))] || "N/A";
+  return `Task 2 Band ${b} profile (as seen by production verifier):\nTask Response: ${tr}\nCoherence and Cohesion: ${cc}\nLexical Resource: ${lr}\nGrammatical Range and Accuracy: ${gra}`;
+}
+
+function getSourceBasedDeltaGuidance(currentBand, targetBand) {
+  const cur = _clampBandForProfile(currentBand);
+  const tgt = _clampBandForProfile(targetBand);
+  const delta = (tgt - cur).toFixed(1);
+  const commonPrefix = `Source-based +${delta} Delta Guidance (Task 2, Controlled Exact-Hit Mode):\n` +
+    `You MUST preserve the student's exact position, main ideas, examples, facts, basic order and argument direction at all times. ` +
+    `Only upgrade the *expression, development depth, precision and control* of those preserved elements so the production scorer (same router that produced the frozen band) will see the four criteria average at the target band.\n`;
+
+  // Concrete, modest, criterion-specific actions derived from the matrix descriptors.
+  // Focus on actions that are realistically achievable by editing wording/structure of the *existing student content*.
+  const actions = [
+    `Task Response (TR): Current ~Band ${cur} often means "ideas general, examples brief, reasoning shallow". Target ~Band ${tgt} requires "real but basic development; relevant reasons/examples; all main parts addressed" (or higher for +1.0). ` +
+    `Action: Pick ONE of the student's existing reasons/examples. Add one modest, specific supporting detail or brief concrete illustration that is directly implied by the original facts or the prompt. Briefly explain the logical link in 1 sentence so the reasoning moves from shallow to "real but basic development". Do not invent a new argument or new scenario.`,
+
+    `Lexical Resource (LR): Current ~Band ${cur} is often "adequate but repetitive/general". Target requires "sufficient range... some flexibility / good range and precision; some less common items". ` +
+    `Action: Identify 2-3 general or repetitive words/phrases that appear in the *student's original text*. Replace or enhance them with more precise topic-specific collocations or less-common but natural items that still perfectly fit the student's preserved examples and position. Keep the surrounding student wording intact.`,
+
+    `Coherence and Cohesion (CC): Current ~Band ${cur} may have "visible structure but development abrupt or links mechanical". Target needs "clear overall progression; paragraphing works; cohesive devices mostly appropriate" (or "logical progression throughout"). ` +
+    `Action: Ensure each preserved main idea has a clear topic sentence. Add 1-2 explicit links or referents that connect the student's own ideas (e.g. "this leads to...", "a direct result of the situation the student described"). Re-order paragraphs only if it makes the student's existing logic flow more obviously; never change the core order of points.`,
+
+    `Grammatical Range and Accuracy (GRA): Current ~Band ${cur} typically "simple forms... errors noticeable but message clear". Target: "mix of sentence forms; errors rarely reduce clarity" or "variety and generally good control". ` +
+    `Action: In 1-2 places where the student used a simple sentence, combine or upgrade it into a controlled compound/complex structure that expresses the *same student idea* more precisely (e.g. using "although", "because", "which means that" based on the student's own logic). Fix any obvious boundary or agreement errors that block clarity, but do not over-polish into Band 8 style.`
+  ];
+
+  return commonPrefix + actions.map((a, i) => `${i+1}. ${a}`).join("\n\n");
+}
+
+// Expose for essay-generator.js (Controlled Exact-Hit Mode)
+module.exports.getTask2BandProfile = getTask2BandProfile;
+module.exports.getSourceBasedDeltaGuidance = getSourceBasedDeltaGuidance;
+
 const DETAILED_SCORING_STEPS = [
   { stage: "score-precheck", title: "本地文本信号检查", description: "统计词数、段落、句子、英文比例、拼写/语法风险和可评分性；本地不打分。" },
   { stage: "score-task-router", title: "Task 1 / Task 2 分流", description: "确定使用 GT Task 1 书信规则还是 Task 2 作文规则，并生成任务画像。" },
