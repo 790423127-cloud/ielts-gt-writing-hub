@@ -21,7 +21,7 @@ const requiredMainAnchors = [
   'Priority rule for this midband scorer',
   'Functional Band 5 rule',
   'simple but unclear stays 4.5',
-  'Midband source-of-truth rule',
+  'AI-primary source-of-truth rule',
   'Band 5 reality rule'
 ];
 

@@ -11,10 +11,10 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(core.includes('task1-requirement-audit-v8-2-advisory-midband'), 'Task 1 requirement audit must be advisory-only in midband mode.');
+assert(core.includes('task1-requirement-audit-v8-3-debug-only-midband'), 'Task 1 requirement audit must be debug-only in midband mode.');
 assert(core.includes('midbandAdvisoryOnly'), 'Audit must expose midbandAdvisoryOnly.');
-assert(core.includes('taskAchievementCap: signals.taskRequirementAudit.midbandAdvisoryOnly ? null'), 'Compact prompt signals must not expose a midband advisory cap as a real cap.');
-assert(core.includes('Midband source-of-truth rule'), 'Prompt must tell AI that local audit is advisory only.');
+assert(core.includes('localAuditInfluence: "minimal_debug_only"'), 'Compact prompt must not expose detailed local audit as scoring prior.');
+assert(core.includes('AI-primary source-of-truth rule'), 'Prompt must tell AI that local audit is debug-only.');
 assert(core.includes('Band 5 reality rule'), 'Prompt must explicitly state Band 5 can contain visible errors and simple language.');
 assert(core.includes('simple but unclear stays 4.5'), 'Prompt must distinguish simple-sufficient from simple-unclear LR/GRA.');
 assert(!/Task 1 requirement audit capped Task Achievement[\s\S]{0,500}midbandOnly/.test(core), 'Midband mode must not use local Task 1 cap language as a scoring ceiling.');
@@ -75,12 +75,13 @@ const body = {
 };
 
 const signals = audit.localSignals(body);
-assert(signals.taskRequirementAudit.midbandAdvisoryOnly === true, 'Midband request must mark Task 1 requirement audit as advisory only.');
+assert(signals.taskRequirementAudit.midbandAdvisoryOnly === true, 'Midband request must mark Task 1 requirement audit as debug/advisory only.');
+assert(signals.taskRequirementAudit.notUsedAsScoringInput === true, 'Midband request must flag Task 1 audit as not used for scoring input.');
 assert(signals.taskRequirementAudit.taskAchievementCap == null, 'Midband request must not expose a real Task Achievement cap.');
 assert(signals.taskRequirementAudit.triggered === false, 'Midband advisory audit must not trigger a local requirement gate.');
 
 const compactPrompt = audit.buildCompactScorePrompt(body, signals);
-assert(compactPrompt.includes('Midband source-of-truth rule'), 'Compact prompt must include midband source-of-truth rule.');
+assert(compactPrompt.includes('AI-primary source-of-truth rule'), 'Compact prompt must include AI-primary source-of-truth rule.');
 assert(compactPrompt.includes('Band 5 reality rule'), 'Compact prompt must include Band 5 reality rule.');
 
-console.log('PASS midband core cleanup advisory audit static test');
+console.log('PASS midband core cleanup debug-only audit static test');

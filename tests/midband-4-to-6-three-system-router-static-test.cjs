@@ -14,7 +14,7 @@ const lowband = read('api/grade-ielts-lowband.js');
 const boundary = read('api/grade-ielts-boundary-adjudicator.js');
 
 [
-  'production-router-v3-2-midband-core-cleanup',
+  'production-router-v3-3-ai-primary-routing',
   '/api/grade-ielts-midband',
   'hasHardLowbandEvidence',
   'LOWBAND_NOT_CALLED_FOR_ORDINARY_BAND5',
@@ -30,7 +30,7 @@ assert(!/finalBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint 
 assert(!/overallBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint + lowband + boundary), 'Forbidden local overall floor found.');
 
 [
-  'score-core-v8-5-11-midband-balanced-cleanup',
+  'score-core-v8-5-12-midband-ai-primary-cleanup',
   'MIDBAND_4_TO_6_CALIBRATION_RULES',
   'Band 5.0 Task 1',
   'Band 5 does not mean error-free',
@@ -90,16 +90,17 @@ function loadAuditExports(relativeFile, exportNames) {
 
 const audit = loadAuditExports('api/grade-ielts-production-router.js', ['routeReason', 'shouldUseLowbandFinal', 'directMainPayload']);
 assert(audit.routeReason(5.5, 'Task 1', { yes: false }).targetSystem === 'midband', '5.5 should be handled by midband directly.');
-assert(audit.routeReason(6.5, 'Task 2', { yes: false }).targetSystem === 'midband', '6.5 should be handled by midband directly.');
+assert(audit.routeReason(6.5, 'Task 2', { yes: false }, false).targetSystem === 'midband', '6.5 without highband potential should be handled by midband directly.');
+assert(audit.routeReason(6.5, 'Task 2', { yes: false }, true).useHighbandShadow === true, '6.5 with highband potential should trigger highband shadow.');
 assert(audit.routeReason(5.0, 'Task 1', { yes: false }).useLowbandGuard === false, '5.0 ordinary Task 1 should not use lowband guard.');
 assert(audit.routeReason(5.0, 'Task 2', { yes: false }).useLowbandGuard === false, '5.0 ordinary Task 2 should not use lowband guard.');
-assert(audit.routeReason(4.5, 'Task 1', { yes: true, reason: 'TASK1_UNDER_80_WORDS' }).useLowbandGuard === true, 'Hard lowband evidence should trigger lowband guard.');
+assert(audit.routeReason(3.5, 'Task 1', { yes: true, reason: 'AI_LOWBAND_RISK_WITH_4_OR_BELOW' }).useLowbandGuard === true, 'AI-confirmed hard lowband evidence should trigger lowband guard.');
 assert(audit.routeReason(7.0, 'Task 2', { yes: false }).useHighbandShadow === true, '7.0 should trigger highband confirmation.');
-assert(audit.routeReason(4.5, 'Task 1', { yes: false }).useBoundary === false, '4.5 ordinary script should not route to boundary in production router v3.2.');
+assert(audit.routeReason(4.5, 'Task 1', { yes: false }).useBoundary === false, '4.5 ordinary script should not route to boundary in production router v4.2.');
 
 const trueLow = { lowBandDecision: 'band_3_5', lowBandAudit: { trueLowBand: true, weakLanguage: true, thinDevelopment: true } };
 const notLow = { lowBandDecision: '5_plus', lowBandAudit: { trueLowBand: false, weakLanguage: false, thinDevelopment: false } };
 assert(audit.shouldUseLowbandFinal(5.0, 3.5, trueLow) === true, 'AI-confirmed hard lowband should be selectable as final.');
 assert(audit.shouldUseLowbandFinal(5.0, 4.5, notLow) === false, 'Simple Band 5 writing should not be suppressed by lowband guard.');
 
-console.log('PASS midband 4-6 three-system router static test v3.2');
+console.log('PASS midband 4-6 three-system router static test v4.2');

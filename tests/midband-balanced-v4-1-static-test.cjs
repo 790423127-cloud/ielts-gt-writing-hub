@@ -10,15 +10,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(grade.includes('score-core-v8-5-11-midband-balanced-cleanup'), 'score version should identify v4.1 balanced cleanup');
-assert(grade.includes('Balanced condition: do not apply the corrected Band 5 rule merely because spelling looks cleaner'), 'Task 1 corrected Band 5 anchor must include anti-inflation condition');
+assert(grade.includes('score-core-v8-5-12-midband-ai-primary-cleanup'), 'score version should identify v4.2 AI-primary cleanup');
+assert(grade.includes('AI-primary source-of-truth rule'), 'Midband prompt must state AI-primary source of truth.');
 assert(grade.includes('Band 5 evidence rule'), 'Prompt must require positive evidence before Band 5 rescue');
 assert(grade.includes('simple but unclear stays 4.5'), 'LR/GRA rule must distinguish simple-sufficient from simple-unclear');
 assert(grade.includes('Do not overcorrect: Band 5.5 requires more stability than Band 5.0'), 'Task 1 should not over-lift to 5.5');
 assert(grade.includes('Task 2 midband direction: distinguish basic completion from real development'), 'Task 2 4-6 direction must be explicit');
 assert(grade.includes('Band 6 requires clear, relevant development'), 'Task 2 should not overreward paragraphing/grammar cleanup');
-assert(grade.includes('may override local keyword audit in either direction'), 'Local task audit must be advisory only');
+assert(grade.includes('local taskRequirementAudit is debug-only'), 'Local task audit must be debug-only in scoring prompt.');
 assert(grade.includes('taskAchievementCap = midbandPrimary ? null : advisoryTaskAchievementCap'), 'Task 1 hard cap must remain disabled in midband mode');
+assert(grade.includes('taskResponseCap = midbandPrimary ? null : advisoryTaskResponseCap'), 'Task 2 hard cap must remain disabled in midband mode');
 assert(!/Math\.max\s*\([^\n]*finalBand[^\n]*5/i.test(grade + router + midband), 'No local Band 5 floor should be added');
 assert(!/Dear Mark/.test(grade + router + midband), 'No Dear Mark sample special case should exist');
 assert(/skipMandatoryBoundaryReview\s*:\s*true/.test(midband), 'Midband wrapper must skip mandatory boundary review');

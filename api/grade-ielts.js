@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-11-midband-balanced-cleanup";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-12-midband-ai-primary-cleanup";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -669,8 +669,7 @@ function detectHardZeroResponse(body = {}, signals = null) {
 
 const STRICT_HARD_ZERO_REASONS = new Set([
   "blank_response",
-  "non_english_or_no_assessable_english",
-  "explicit_no_answer_or_copied_prompt_marker"
+  "non_english_or_no_assessable_english"
 ]);
 
 function isStrictHardZeroGate(gate = {}) {
@@ -685,7 +684,7 @@ function downgradeSoftHardZeroGate(gate = {}) {
     originalTriggered: true,
     originalReason: gate.reason,
     reason: "soft_hard_zero_blocked_for_ai_scoring",
-    note: "Soft local hard-zero signal was not allowed to assign Band 0. The response must go to AI scoring unless it is blank, non-English, or an explicit no-answer."
+    note: "Soft local hard-zero signal was not allowed to assign Band 0. The response must go to AI scoring unless it is blank or clearly non-English/no assessable English."
   };
 }
 
@@ -732,7 +731,7 @@ function buildHardZeroScore(body = {}, signals = null, gate = null) {
   const boundaryAudit = {
     version: "strict-boundary-audit-v7-4-hard-zero",
     localScoringApplied: true,
-    localParticipation: "Hard-zero only: the server assigns Band 0 only for blank, non-English, copied-prompt, no-answer, or keyword-fragment responses before AI scoring.",
+    localParticipation: "Hard-zero only: the server assigns Band 0 only for blank or clearly non-English/no-assessable-English responses before AI scoring.",
     status: "passed",
     reviewRequired: false,
     reviewReasons: [],
@@ -979,12 +978,11 @@ function auditTask1Requirements(body = {}, signals = {}) {
   else if (partlyCount >= 1) advisoryTaskAchievementCap = 5.5;
   else if (items.length >= 3 && items.every((item) => item.status === "covered") && Number(signals.wordCount) < 120) advisoryTaskAchievementCap = 6.0;
 
-  // In production midband mode this audit must never act as a local scoring ceiling.
-  // It is only a checklist passed to the AI examiner so simple but functional Band 5 letters
-  // are not pulled back to Band 4 merely because the local keyword classifier is conservative.
+  // In production midband mode this audit must never act as a local scoring ceiling or prompt prior.
+  // It is debug-only evidence; the AI examiner must judge bullet coverage directly from the prompt and essay.
   const taskAchievementCap = midbandPrimary ? null : advisoryTaskAchievementCap;
   return {
-    version: "task1-requirement-audit-v8-2-advisory-midband",
+    version: "task1-requirement-audit-v8-3-debug-only-midband",
     task: "Task 1",
     extractedRequirements: bullets,
     items,
@@ -993,10 +991,12 @@ function auditTask1Requirements(body = {}, signals = {}) {
     taskAchievementCap,
     advisoryTaskAchievementCap,
     midbandAdvisoryOnly: midbandPrimary,
+    debugOnlyInMidband: midbandPrimary,
+    notUsedAsScoringInput: midbandPrimary,
     triggered: !midbandPrimary && Number.isFinite(taskAchievementCap),
     summary: Number.isFinite(advisoryTaskAchievementCap)
       ? (midbandPrimary
-        ? `Task 1 requirement audit is advisory only in midband mode: ${missingCount} bullet(s) appear missing and ${partlyCount} bullet(s) appear partly covered by local keyword audit. AI must judge coverage from the actual prompt and response; this is not a cap and must not be treated as proof of missing coverage.`
+        ? `Task 1 requirement audit is debug-only in midband mode and must not be used as scoring input: ${missingCount} bullet(s) appear missing and ${partlyCount} bullet(s) appear partly covered by local keyword audit. AI must judge coverage from the actual prompt and response; this is not a cap and must not be treated as proof of missing coverage.`
         : `Task 1 requirement audit capped Task Achievement at Band ${advisoryTaskAchievementCap.toFixed(1)} because ${missingCount} bullet(s) are missing and ${partlyCount} bullet(s) are only partly covered.`)
       : "All extracted Task 1 bullet requirements appear covered by local requirement audit."
   };
@@ -1081,12 +1081,14 @@ function auditTask2Requirements(body = {}, signals = {}) {
   const missingCount = items.filter((item) => item.status === "missing").length;
   const partlyCount = items.filter((item) => item.status === "partly_covered").length;
   const severeMissing = items.filter((item) => item.status === "missing" && item.capIfProblem <= 5.0).length;
-  let taskResponseCap = null;
-  if (severeMissing >= 1) taskResponseCap = 5.0;
-  else if (missingCount >= 1 || partlyCount >= 2) taskResponseCap = 5.5;
-  else if (partlyCount === 1) taskResponseCap = 6.0;
+  const midbandPrimary = isMidbandPrimaryScoringRequest(body);
+  let advisoryTaskResponseCap = null;
+  if (severeMissing >= 1) advisoryTaskResponseCap = 5.0;
+  else if (missingCount >= 1 || partlyCount >= 2) advisoryTaskResponseCap = 5.5;
+  else if (partlyCount === 1) advisoryTaskResponseCap = 6.0;
+  const taskResponseCap = midbandPrimary ? null : advisoryTaskResponseCap;
   return {
-    version: "task2-question-type-audit-v8-1",
+    version: "task2-question-type-audit-v8-5-debug-only-midband",
     task: "Task 2",
     questionType: profile.questionType,
     requiredParts: profile.requiredParts || [],
@@ -1098,10 +1100,16 @@ function auditTask2Requirements(body = {}, signals = {}) {
     missingCount,
     partlyCount,
     taskResponseCap,
-    triggered: Number.isFinite(taskResponseCap),
-    summary: Number.isFinite(taskResponseCap)
-      ? `Task 2 question-type audit capped Task Response at Band ${taskResponseCap.toFixed(1)} because ${missingCount} required part(s) are missing and ${partlyCount} are only partly covered.`
-      : "All detected Task 2 question-type requirements appear covered by local audit."
+    advisoryTaskResponseCap,
+    midbandAdvisoryOnly: midbandPrimary,
+    debugOnlyInMidband: midbandPrimary,
+    notUsedAsScoringInput: midbandPrimary,
+    triggered: !midbandPrimary && Number.isFinite(taskResponseCap),
+    summary: Number.isFinite(advisoryTaskResponseCap)
+      ? (midbandPrimary
+        ? `Task 2 question-type audit is debug-only in midband mode and must not be used as scoring input: ${missingCount} required part(s) appear missing and ${partlyCount} are only partly covered by local marker audit. AI must judge task response from the actual prompt and essay.`
+        : `Task 2 question-type audit capped Task Response at Band ${taskResponseCap.toFixed(1)} because ${missingCount} required part(s) are missing and ${partlyCount} are only partly covered.`)
+      : "All detected Task 2 question-type requirements appear covered by local debug audit."
   };
 }
 
@@ -1160,8 +1168,11 @@ function localSignals(body) {
   const rawHardZeroGate = detectHardZeroResponse(body, { task, wordCount: words });
   const hardZeroGate = downgradeSoftHardZeroGate(rawHardZeroGate);
   let rateabilityStatus = "weak_but_rateable";
-  if (isStrictHardZeroGate(hardZeroGate) || !essay.trim() || (task === "Task 1" ? words < 50 : words < 80) || englishRatio < 0.35 || sentences.length === 0) rateabilityStatus = "not_rateable_or_severely_limited";
+  // AI-primary v4.2: local rateability is a minimal safety signal, not a scoring/routing shortcut.
+  // Short or weak attempts must still reach AI scoring unless they are blank or clearly non-English/no assessable English.
+  if (isStrictHardZeroGate(hardZeroGate) || !essay.trim() || englishRatio < 0.2 || (words <= 3 && sentences.length === 0)) rateabilityStatus = "not_rateable_or_severely_limited";
   else if (words >= (task === "Task 1" ? 120 : 180) && paragraphs >= 2 && sentences.length >= 5) rateabilityStatus = "clearly_rateable";
+  else if (words > 0 && words < (task === "Task 1" ? 50 : 80)) rateabilityStatus = "very_limited_but_ai_rateable";
 
   const task1BulletPoints = task === "Task 1" ? extractTask1Bullets(body.questionPrompt || body.promptText || "") : [];
   const task2QuestionProfile = task === "Task 2" ? inferTask2Profile(body.questionPrompt || body.promptText || "") : null;
@@ -1554,7 +1565,7 @@ function normalizeTaskSpecificGate(raw, signals, criteria = {}, anchor = {}, cal
     midBandCheck: normalizeGate(source.midBandCheck || source.midBandGate, "Mid-band check applied: do not over-reward paragraphs, basic connectors, or a stated opinion without development.", false),
     highBandUnlockGate: normalizeGate(source.highBandUnlockGate || source.highBandUnlock, highCandidate.reason, highCandidate.triggered || Object.values(criteria).some((x) => Number(x) >= 7.5)),
     scoreProfileCheck: normalizeGate(source.scoreProfileCheck || source.scoreProfileGate, "Score-profile check applied to challenge all-equal bands and TR/CC versus LR/GRA gaps.", allCriteriaSame(criteria)),
-    taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 2 question-type requirement audit completed.", Boolean(signals.taskRequirementAudit?.triggered))
+    taskRequirementAuditGate: normalizeGate(source.taskRequirementAuditGate, signals.taskRequirementAudit?.summary || "Task 2 question-type requirement audit completed as debug-only evidence.", Boolean(signals.taskRequirementAudit?.triggered && !signals.taskRequirementAudit?.midbandAdvisoryOnly))
   };
 }
 
@@ -1566,8 +1577,8 @@ function buildIndependentAnchorPrompt(body, signals) {
   const task = signals.task;
   const anchorTable = stringifyAnchorTable(task);
   const taskSpecific = task === "Task 1"
-    ? `GT Task 1 letter: judge purpose clarity, bullet coverage, tone/register, letter completeness and language control. Extracted bullets: ${JSON.stringify(signals.task1BulletPoints)}.`
-    : `GT Task 2 essay: judge prompt coverage, position, development, examples/reasons, logical progression and language control. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}. If the prompt has two direct questions, each is a required part and a basic complete answer should not be treated as missing task response just because development is simple.`;
+    ? "GT Task 1 letter: judge purpose clarity, bullet coverage, tone/register, letter completeness and language control directly from the prompt and response. Do not rely on local bullet extraction."
+    : "GT Task 2 essay: judge prompt coverage, position, development, examples/reasons and logical progression directly from the prompt and response. Do not rely on local question-profile or marker audit. If the prompt has two direct questions, each is a required part.";
   const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
   return [
     "You are an IELTS GT Writing anchor-classification examiner. Return JSON only. Do not assign criterion bands in this stage.",
@@ -1743,7 +1754,7 @@ function buildCriterionAudit(task, criteria = {}, signals = {}, body = {}) {
       missing === 0 ? "all bullet points are attempted" : "the letter is still task-related"
     );
     if (covered >= Math.max(2, Math.min(3, bullets.length || 3))) positive[firstName].push("purpose is clear enough to guide the letter");
-    if (taskRequirementAudit?.summary) positive[firstName].push(taskRequirementAudit.summary);
+    if (taskRequirementAudit?.summary && !taskRequirementAudit.midbandAdvisoryOnly) positive[firstName].push(taskRequirementAudit.summary);
     if (partly > 0 || missing > 0) limiting[firstName].push(taskRequirementCoverage);
     if (wordCountValue < 150) limiting[firstName].push(`word count is ${wordCountValue}, so development is constrained`);
 
@@ -1775,7 +1786,7 @@ function buildCriterionAudit(task, criteria = {}, signals = {}, body = {}) {
       positive[firstName].push("a clear opinion or judgement is present");
     }
     if (taskRequirementAudit?.markers?.exampleSupport || taskRequirementAudit?.markers?.explanationMarkers >= 2) positive[firstName].push("reasons are given for the answer");
-    if (taskRequirementAudit?.summary) positive[firstName].push(taskRequirementAudit.summary);
+    if (taskRequirementAudit?.summary && !taskRequirementAudit.midbandAdvisoryOnly) positive[firstName].push(taskRequirementAudit.summary);
     if (!task2Complete || missing > 0 || partly > 0) limiting[firstName].push(taskRequirementCoverage);
     if (wordCountValue < 150) limiting[firstName].push(`development is limited by word count ${wordCountValue}`);
 
@@ -2637,35 +2648,12 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     sentenceCount: signals.sentenceCount,
     rateabilityStatus: signals.rateabilityStatus,
     recommendedMinimum: signals.recommendedMinimum,
-    spellingIssueCount: signals.spellingIssueCount,
-    spellingErrorDensity: signals.spellingErrorDensity,
-    grammarIssueSignalCount: signals.grammarIssueSignalCount,
-    grammarErrorDensity: signals.grammarErrorDensity,
-    weakPhraseCount: signals.weakPhraseCount,
-    lexicalControl: signals.lexicalControl,
-    sentenceControl: signals.sentenceControl,
-    lexicalNaturalnessRisk: signals.lexicalNaturalnessRisk,
-    task1BulletCount: Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints.length : 0,
-    task2QuestionType: signals.task2QuestionProfile?.questionType || "",
-    task2QuestionCount: signals.task2QuestionProfile?.questionCount || 0,
-    task2TwoPartQuestion: Boolean(signals.task2QuestionProfile?.twoPartQuestion),
-    task2DirectQuestions: Array.isArray(signals.task2QuestionProfile?.directQuestions) ? signals.task2QuestionProfile.directQuestions : [],
-    taskRequirementAudit: signals.taskRequirementAudit ? {
-      version: signals.taskRequirementAudit.version,
-      triggered: Boolean(signals.taskRequirementAudit.triggered && !signals.taskRequirementAudit.midbandAdvisoryOnly),
-      advisoryOnly: Boolean(signals.taskRequirementAudit.midbandAdvisoryOnly),
-      missingCount: signals.taskRequirementAudit.missingCount,
-      partlyCount: signals.taskRequirementAudit.partlyCount,
-      taskAchievementCap: signals.taskRequirementAudit.midbandAdvisoryOnly ? null : signals.taskRequirementAudit.taskAchievementCap,
-      advisoryTaskAchievementCap: signals.taskRequirementAudit.advisoryTaskAchievementCap,
-      taskResponseCap: signals.taskRequirementAudit.taskResponseCap,
-      summary: signals.taskRequirementAudit.summary
-    } : null
+    localAuditInfluence: "minimal_debug_only"
   };
   const anchorMini = anchorSetForTask(task).map((item) => `B${item.band}: ${item.profile}`).join(" | ");
   const taskMini = task === "Task 1"
-    ? `Task 1 prompt bullets extracted for orientation only: ${JSON.stringify(signals.task1BulletPoints || [])}. You, the AI examiner, must judge each bullet from the prompt and response yourself as covered, partly_covered, or missing. Do not rely on any local audit.`
-    : `Task 2 question profile for orientation only: ${JSON.stringify(signals.task2QuestionProfile || {})}. You, the AI examiner, must judge the question type and all required parts yourself from the prompt and response. If the prompt has two direct questions, treat each as a required part. Do not rely on any local audit.`;
+    ? "Task 1 orientation: read the original prompt and the student response yourself. Judge purpose, all bullet requirements, tone and letter completeness directly from the text. Do not rely on local bullet extraction or keyword audit."
+    : "Task 2 orientation: read the original prompt and the student response yourself. Judge question type, position, development, examples/reasons and all required parts directly from the text. Do not rely on local marker audit or local coverage summary.";
   return [
     "You are an IELTS GT Writing SCORE KERNEL. Return one tiny valid JSON object only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
@@ -2675,16 +2663,16 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Use bands 0-9 in 0.5 increments. The server will average four AI-returned criteria and run audit-only checks. Do not output overallBand.",
     `IELTS criterion band matrix for the locked ${task}:\n${criterionBandMatrixText(task)}`,
     halfBandDecisionProtocol(),
-    "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English, explicit no-answer, or completely unassessable submissions. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
+    "Band 0 is forbidden for any response containing assessable English, a relevant opinion, a reason, an example, or any real attempt to answer the prompt. Band 0 is only for blank, wholly non-English/no assessable English, or completely unassessable submissions. Explicit no-answer or prompt-copy signals should be judged by AI unless they contain no assessable English. Very weak but rateable writing must be scored from Band 1.0 upward, not Band 0.",
     "If you believe a criterion is near zero but the essay has any topical English content, use a low positive half-band and explain the concrete limitation; do not output 0.0.",
     ...(taskSpecificPositiveRescueRules(task)),
-    "For both Task 1 and Task 2, Band 0 means no assessable response, not merely missing examples, missing bullet points, weak development, poor tone, or limited language.",
+    "For both Task 1 and Task 2, Band 0 means no assessable English response, not merely missing examples, missing bullet points, weak development, poor tone, explicit refusal, prompt copying, or limited language.",
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
-    "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
-    "Midband source-of-truth rule: local taskRequirementAudit is advisory evidence only in midband mode. Do not treat any local advisory cap, missingCount or partlyCount as a ceiling or as proof of coverage. You must decide TA/TR and LR/GRA from the actual prompt and essay, and you may override local keyword audit in either direction.",
+    "Task-specific requirement rule: judge Task 1 bullet coverage and Task 2 required parts directly from the prompt and student response. Do not use local keyword audit, local missingCount, local partlyCount, or local taskAchievementCap/taskResponseCap as evidence or scoring priors.",
+    "AI-primary source-of-truth rule: in midband production scoring, local taskRequirementAudit is debug-only and must not influence bands. You must decide TA/TR, CC, LR and GRA from the actual prompt, the actual response and the IELTS descriptors.",
     "Balanced Band 5 reality rule: Band 5 writing can still have visible errors, simple vocabulary and simple sentence structures. If the main message is clear and the task is basically completed, do not keep LR/GRA below 5.0 merely because the style is basic. However, do not raise LR/GRA to 5.0 if word choice, word form, sentence boundaries, verb control or repeated awkward phrasing still make reading effortful.",
-    "Band 5 evidence rule: before using a Band 5 rescue for a simple corrected response, confirm positive evidence: usable task information, generally clear progression, sufficient vocabulary for the required message, and grammar that remains mostly understandable. If these are not present, stay at 4.5.",
+    "Band 5 evidence rule: before selecting Band 5 for a simple response, confirm positive evidence: usable task information, generally clear progression, sufficient vocabulary for the required message, and grammar that remains mostly understandable. If these are not present, stay at 4.5. Do not use a correctedEssay flag, local bullet audit or local error counters as the reason for Band 5.",
     task === "Task 2" ? "Task 2 midband direction: distinguish basic completion from real development. Band 5 can be simple and error-prone, Band 5.5 needs clearer explanation, and Band 6 needs relevant support and logical progression beyond a list of claims." : "Task 1 midband direction: distinguish corrected surface form from functional communication. Band 5 requires usable bullet information and mostly readable language, not just cleaner spelling.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
@@ -2702,7 +2690,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,
     taskMini,
-    "AI-only rule: ignore all local risk signals, local likely zones, local word-count boundaries, local spelling/grammar counters, and local task-requirement caps when choosing bands. Use only the prompt, the student response, and the 0-9 criterion matrix.",
+    "AI-primary rule: ignore local risk signals, local likely zones, local word-count boundaries, local spelling/grammar counters and local task-requirement audits when choosing bands. Use only the prompt, the student response and the IELTS criterion matrix. Local data is for debug/audit only.",
     "Full-range calibration rule: do not compress scores toward 5.5/6.5. Very weak full-length writing may still be Band 3/4 if communication, control, and development match those descriptors. Strong, polished writing must be allowed to reach 7.5/8/8.5/9 when the matrix supports it.",
     "Adjacent-band rule: before returning each criterion, mentally compare the selected band against the lower 0.5 and higher 0.5. Pick the closest descriptor, not the safest middle score.",
     `Question prompt: ${body.questionPrompt || body.promptText || ""}`,
@@ -2774,7 +2762,7 @@ function freezeReviewedScore(result = {}, body = {}, signals = {}) {
     stabilityWarnings: collectScoreWarnings(criteria, signals),
     scoreCalculation: {
       mode: signals.task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel_feedback_after_freeze" : "task2_essay_v8_3_1_score_kernel_feedback_after_freeze",
-      formula: "v8.5.0 AI-only criterion band matrix core: AI returns task-locked four criterion bands using the 0-9 matrix and 0.5 increments; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI rescue; local cap/floor/regression calibration is disabled. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
+      formula: "v8.5.0 AI-only criterion band matrix core: AI returns task-locked four criterion bands using the 0-9 matrix and 0.5 increments; wrong cross-task criterion keys are rejected; strict hard-zero is limited to blank/non-English; false Band 0 is routed through AI rescue; local cap/floor/regression calibration is disabled. Detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2854,7 +2842,7 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
     stabilityWarnings: warnings,
     scoreCalculation: {
       mode: task === "Task 1" ? "task1_gt_letter_v8_3_1_score_kernel" : "task2_essay_v8_3_1_score_kernel",
-      formula: "v8.4.0 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English/explicit no-answer; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; required detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
+      formula: "v8.4.0 score-kernel pipeline: AI returns a tiny score kernel first; strict hard-zero is limited to blank/non-English; false Band 0 is routed through AI positive-level rescue; final AI-returned bands are frozen and averaged; local audit does not change bands; required detailed feedback is generated only by /api/criterion-feedback and cannot change the score.",
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage,
       finalBand,
@@ -2892,7 +2880,7 @@ async function callScoreKernel(body, signals, boundaryProfile) {
     const emergencyPrompt = [
       "Return one tiny valid JSON object only. No feedback. No Chinese. No evidence. No quotes from the essay.",
       `Task: ${signals.task}. Criteria keys: ${JSON.stringify(names)}.`,
-      `Local signals: ${JSON.stringify(compactSignals)}`,
+      `Minimal non-scoring request signals: ${JSON.stringify(compactSignals)}`,
       `Prompt: ${body.questionPrompt || body.promptText || ""}`,
       `Essay: ${body.essay || ""}`,
       "JSON shape: {\"ok\":true,\"aiStage\":\"score-kernel\",\"task\":\"Task 1 or Task 2\",\"anchorBand\":number,\"candidateRange\":\"x-y\",\"criteria\":{...four numeric bands...},\"reasonCodes\":{\"Criterion Name\":[\"code\",\"code\"]},\"flags\":{\"lowBandRisk\":boolean,\"weakLanguage\":boolean,\"highBandCandidate\":boolean,\"allFourSeven\":boolean,\"boundaryReviewSuggested\":boolean}}"
