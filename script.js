@@ -2686,6 +2686,10 @@
       usefulSentences: []
     };
 
+    // Controlled Exact-Hit Mode: calculate status after plus05/plus10 are defined
+    const status05 = getHitStatus(plus05);
+    const status10 = getHitStatus(plus10);
+
     const guide = result.learningGuide || {};
     const generatedTextMap = {
       model: toText(model.essay),
@@ -2911,6 +2915,7 @@
           <p class="muted">独立作文生成系统：${escapeHtml(taskLabel)}；这一部分只生成作文，不改变已经冻结的分数。</p>
           <div class="score-flow-note generated-score-separation"><strong>分数说明：</strong>${escapeHtml(scoreSeparationNote)}</div>
           <div class="ai-warning"><strong>生成系统状态：</strong>${escapeHtml(systemNote)}</div>
+          ${hitSummary ? `<div class="score-flow-note"><strong>精确命中状态：</strong>${escapeHtml(hitSummary)}</div>` : ""}
           ${result.verification?.summary ? `<div class="score-flow-note"><strong>生产模块验证：</strong>${escapeHtml(result.verification.summary)}</div>` : ""}
           ${Number.isFinite(Number(result.currentBand)) ? `<div class="score-flow-note"><strong>当前参考水平：</strong>Band ${escapeHtml(formatBand(result.currentBand))}。低于 Band 5.0 的作文，第一修改版必须基于你的原文按真实 Band 5 保底清单重写；如果多次仍卡在 4.5，会升级重构；如果多次被判 6.0，会进入 Band 5 降档锁定：保留内容但减少 polish、复杂句和额外展开；Band 5.0 及以上按 +0.5 / +1.0 严格生成。系统会用生产评分路由验证目标窗口：低于目标会重写；题目范文和 Band 5.5 提升版允许略高 0.5 作为可学习版本；Band 5 保底版低于目标不能接受，过高也会标记为不适合作为保底版。</div>` : ""}
           ${card("① 题目范文 / Question-based model answer", verificationBandText(model, result.targetBandModel), generatedTextMap.model, modelExplanation, copyButton("model", "复制范文"))}
