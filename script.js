@@ -3134,7 +3134,7 @@
       return "网络请求失败：无法连接作文生成或生产验证接口。请检查 Vercel 部署是否在线、接口地址是否正确。";
     }
     if (/json|parse|valid json|malformed/i.test(lower)) {
-      return "AI JSON 格式异常：生成结果格式不完整或无法解析。请重新生成；如果持续出现，说明模型输出被截断。";
+      return "AI JSON 格式异常：生成结果格式不完整或无法解析。请重新生成（我们已启用 response_format + 更高 token 限制 + 更强的完整性指令来减少截断）。如果持续出现，请尝试用更短的原文草稿重试，或稍后再试。";
     }
     if (/production|verification|grade-ielts-production-router|router/i.test(lower)) {
       return "production router 验证失败：作文已生成，但生成版本的验证分暂时无法确认。原文考试评分不会被改变。";

@@ -356,7 +356,22 @@ function extractJson(text) {
   }
   const first = raw.indexOf("{");
   const last = raw.lastIndexOf("}");
-  if (first >= 0 && last > first) return JSON.parse(raw.slice(first, last + 1));
+  if (first >= 0 && last > first) {
+    const candidate = raw.slice(first, last + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
+      // If last } exists but parse fails, likely truncation or extra content
+      if (!raw.endsWith("}") && !raw.endsWith("} ")) {
+        throw new Error("AI JSON appears truncated (incomplete closing brace). Model output was cut off.");
+      }
+      throw new Error("AI did not return valid JSON: " + e.message);
+    }
+  }
+  // Detect obvious truncation
+  if (raw.length > 100 && !raw.includes("}") ) {
+    throw new Error("AI JSON appears truncated (no closing structure found). Model output was cut off.");
+  }
   throw new Error("AI did not return valid JSON");
 }
 
@@ -516,6 +531,7 @@ function buildGenerationPrompt(body = {}) {
 
   return [
     "You are an IELTS General Training Writing tutor.",
+    "CRITICAL ANTI-TRUNCATION RULE: Output EXACTLY one complete valid JSON object and NOTHING ELSE. Do not use markdown fences. Do not add any text before or after the JSON. The JSON must be fully finished with the final '}' — do not cut off mid-field or mid-array even if long. Prioritize writing complete 'essay' texts for all three versions and fully populate 'learningGuide' (including all arrays) before ending.",
     "This endpoint is generation-only. You are NOT scoring the user essay and must NOT change any frozen user score.",
     "Use frozen score/current result only as a language-level reference for generating learnable writing.",
     "Generate exactly THREE learning outputs:",
@@ -831,9 +847,10 @@ async function callDeepSeek(prompt, temperature = 0.65) {
         // Controlled Exact-Hit Mode: higher temp (0.65) for initial generation to allow more linguistic variety for delta upgrades.
         // Lower temp (0.25) for rewrite attempts for more controlled, deterministic calibration.
         temperature,
-        max_tokens: 8000,
+        max_tokens: 8192,
+        response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "Return strict JSON only. Generate IELTS GT practice writing only. Never recalculate or change any score." },
+          { role: "system", content: "You MUST return ONLY one single complete valid JSON object. No markdown, no ```json fences, no trailing text, no explanations outside JSON. Ensure the JSON is fully complete and not truncated before the final closing brace. Follow the exact required shape from the user message precisely. Generate full essay texts and all required fields in learningGuide without cutting off." },
           { role: "user", content: prompt }
         ]
       }),
@@ -1503,7 +1520,7 @@ module.exports = async function handler(req, res) {
       errorKind,
       detail: String(error.message || error),
       suggestion: errorKind === "ai_json_format_error"
-        ? "Retry generation. The model returned malformed JSON or an incomplete response."
+        ? "Retry generation. The model returned malformed or truncated JSON (incomplete output). This often happens with very long prompts/outputs. Try a shorter student essay draft or wait and retry. We have added response_format and higher token limit to mitigate."
         : (errorKind === "production_router_verification_failed"
           ? "The generated text may exist, but production verification failed. Retry or check the production router deployment."
           : "Retry later and check the Vercel deployment/runtime logs if the problem continues."),
