@@ -16,7 +16,7 @@ assert(core.includes('midbandAdvisoryOnly'), 'Audit must expose midbandAdvisoryO
 assert(core.includes('taskAchievementCap: signals.taskRequirementAudit.midbandAdvisoryOnly ? null'), 'Compact prompt signals must not expose a midband advisory cap as a real cap.');
 assert(core.includes('Midband source-of-truth rule'), 'Prompt must tell AI that local audit is advisory only.');
 assert(core.includes('Band 5 reality rule'), 'Prompt must explicitly state Band 5 can contain visible errors and simple language.');
-assert(core.includes('Simple but sufficient = Band 5, not Band 4.5'), 'Prompt must protect simple-but-sufficient LR/GRA from being held at 4.5.');
+assert(core.includes('simple but unclear stays 4.5'), 'Prompt must distinguish simple-sufficient from simple-unclear LR/GRA.');
 assert(!/Task 1 requirement audit capped Task Achievement[\s\S]{0,500}midbandOnly/.test(core), 'Midband mode must not use local Task 1 cap language as a scoring ceiling.');
 assert(!/finalBand\s*=\s*Math\.max\s*\(\s*finalBand\s*,\s*5/.test(core), 'No local Band 5 floor is allowed.');
 assert(!/Dear\s+Mark/.test(core), 'No sample-text special case is allowed.');

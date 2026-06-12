@@ -30,11 +30,11 @@ assert(!/finalBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint 
 assert(!/overallBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint + lowband + boundary), 'Forbidden local overall floor found.');
 
 [
-  'score-core-v8-5-10-midband-core-cleanup',
+  'score-core-v8-5-11-midband-balanced-cleanup',
   'MIDBAND_4_TO_6_CALIBRATION_RULES',
   'Band 5.0 Task 1',
   'Band 5 does not mean error-free',
-  'Band 5 may still contain many non-blocking errors',
+  'Band 5 can contain many non-blocking errors',
   'For sophisticated but partially off-task essays, do not flatten all criteria',
   'isMidbandPrimaryScoringRequest',
   'bypassBoundaryReviewForMidband',

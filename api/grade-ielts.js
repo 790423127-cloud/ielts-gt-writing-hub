@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-10-midband-core-cleanup";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-11-midband-balanced-cleanup";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -40,10 +40,12 @@ const TASK2_BAND_ANCHORS_0_TO_9 = [
 ];
 
 const TASK1_CORRECTED_LOWBAND_BAND5_ANCHOR = [
-  "Corrected low-band Task 1 calibration: if a previously weak letter has been corrected so that the reader can clearly understand the purpose, all three bullet points are covered, the tone matches the recipient, and spelling/grammar no longer frequently strain meaning, it should normally be considered around Band 5.0-5.5 rather than remaining in Band 4.",
-  "Band 5 Task 1 is allowed for simple but functional letters: vocabulary can be basic, development can be limited, and sentences can be mostly simple, provided the message is clear and the reader can act on it.",
-  "Do not keep Lexical Resource or Grammar at Band 4 solely because the vocabulary is ordinary or sentence structures are simple. Band 4 language requires frequent errors, awkward word choice, spelling problems, or sentence-boundary issues that still noticeably strain communication.",
-  "For informal letters to friends, a conversational greeting and friendly sign-off can be appropriate. Do not penalise it as insufficiently formal when the task asks for a friend."
+  "Corrected low-band Task 1 calibration: if a previously weak letter is now functional, the reader can clearly understand the purpose, all or nearly all bullet points are actually communicated, the tone matches the recipient, and spelling/grammar no longer frequently strain meaning, it should normally be considered around Band 5.0-5.5 rather than remaining in Band 4.",
+  "Balanced condition: do not apply the corrected Band 5 rule merely because spelling looks cleaner or the letter has greeting/body/closing. The response must still provide usable information for the reader and must not have a serious limiting problem such as a missing bullet, unclear purpose, confusing logic, or repeated sentence-level breakdowns.",
+  "Band 5 Task 1 is allowed for simple but functional letters: vocabulary can be basic, development can be limited, and sentences can be mostly simple, provided the message is clear and the reader can act on it. If details are only mechanically mentioned with almost no usable information, stay nearer 4.5 or 5.0 rather than 5.5.",
+  "Do not keep Lexical Resource or Grammar at Band 4 solely because the vocabulary is ordinary or sentence structures are simple. LR/GRA 4.5 requires concrete evidence that word choice, spelling, word form, sentence boundaries, verb forms, or repeated awkward phrasing still make reading effortful.",
+  "For informal letters to friends, a conversational greeting and friendly sign-off can be appropriate. Do not penalise it as insufficiently formal when the task asks for a friend.",
+  "Evidence requirement: if you use this corrected Band 5 anchor, reasonCodes or audit notes must identify the positive evidence: clear purpose, usable bullet coverage, suitable tone, and mostly readable language. If you reject it and keep LR/GRA below 5.0, identify the concrete language blockers."
 ];
 
 function task1CorrectedBand5AnchorText() {
@@ -142,7 +144,7 @@ const MIDBAND_4_TO_6_CALIBRATION_RULES = {
   "Task 1": [
     "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 1 letters around Band 4.0-6.5. Do not outsource ordinary Band 5 writing to lowband logic.",
     "Priority rule for this midband scorer: these 4.0-6.5 anchors override older low-band protection notes unless the writing is truly not rateable or has hard lowband evidence. Do not let generic 'protect Band 4' language outweigh a clear functional Band 5 response.",
-    "Functional Band 5 rule: if a Task 1 letter has a recognisable greeting/closing, a clear purpose, all or most bullets communicated, and the reader can act on the message, it normally belongs at 5.0 or 5.5 even when the wording is basic and some errors remain.",
+    "Functional Band 5 rule: if a Task 1 letter has a recognisable greeting/closing, a clear purpose, all or most bullets actually communicated, and the reader can act on the message, it normally belongs at 5.0 or 5.5 even when wording is basic and some errors remain. This rule is not automatic: if information is only named but not usable, or if language/logic still strains communication, keep the relevant criteria at 4.5-5.0.",
     "Band 4.0 Task 1: related attempt but communication is unstable; bullet coverage may be partial/thin; frequent basic grammar, spelling, word-form or sentence-control errors make reading effortful.",
     "Band 4.5 Task 1: the main situation is understandable and perhaps all bullets are touched, but language errors remain frequent, vocabulary is narrow/error-prone, progression is mechanical, and the reader still works to understand details.",
     "Band 5.0 Task 1: purpose is clear enough and the main bullet points are addressed. Vocabulary may be basic and grammar may still contain noticeable mistakes, but the reader can understand the main message without serious difficulty. Band 5 does not mean error-free.",
@@ -150,21 +152,24 @@ const MIDBAND_4_TO_6_CALIBRATION_RULES = {
     "Band 6.0 Task 1: all bullets are clear with useful detail, tone and format are suitable, and language is reasonably controlled. Errors may remain, but they do not regularly interrupt the reader.",
     "Band 6.5 Task 1: clearly complete and fairly natural with better detail, lexical range and sentence control, but not yet consistently flexible/natural enough for Band 7.",
     "Do not keep Lexical Resource or Grammatical Range and Accuracy below 5.0 solely because the vocabulary is ordinary or sentence structures are simple. LR/GRA 4.5 requires concrete evidence that errors, spelling, word choice, sentence boundaries, or verb forms still make reading effortful.",
-    "For a mostly corrected Task 1 letter with low local spelling/grammar error signals, LR 5.0 and GRA 5.0 are normal unless the AI can point to non-blocking but still frequent language problems. Simple but sufficient = Band 5, not Band 4.5.",
+    "Balanced LR/GRA rule: for a mostly corrected Task 1 letter with low local spelling/grammar error signals, LR 5.0 and GRA 5.0 are normal only if vocabulary is sufficient for all required information and grammar is simple but mostly readable. Do not raise LR/GRA from 4.5 to 5.0 when word choice is repetitive enough to limit meaning, sentences remain awkward/confusing, or errors still make the reader work. Simple but sufficient can be Band 5; simple but unclear stays 4.5.",
     "For informal letters to friends, simple conversational warmth is appropriate. Do not penalise a friend letter for not sounding formal or professional.",
-    "A corrected low-band letter that now covers all bullets, has recognisable format and tone, and is mostly readable should normally move into Band 5.0-5.5 rather than staying at 4.0-4.5."
+    "A corrected low-band letter that now covers all bullets, has recognisable format and tone, and is mostly readable should normally move into Band 5.0-5.5 rather than staying at 4.0-4.5, unless the bullet coverage remains superficial, the content is too thin to be useful, or repeated awkward language still makes reading effortful.",
+    "Do not overcorrect: Band 5.5 requires more stability than Band 5.0. If the letter is understandable but still thin, repetitive or unnatural, prefer 5.0 over 5.5."
   ],
   "Task 2": [
     "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 2 essays around Band 4.0-6.5. Do not treat length and paragraphing as high quality, but also do not keep a complete understandable answer at lowband solely for simple language.",
     "Priority rule for this midband scorer: these 4.0-6.5 anchors override older low-band protection notes unless the writing is truly not rateable or has hard lowband evidence. Do not let generic 'protect Band 4' language outweigh a clear basic Band 5 response.",
     "Band 4.0 Task 2: a related attempt with weak or repetitive ideas, poor control, and frequent language errors that make reading effortful; the position or prompt coverage may be unstable.",
     "Band 4.5 Task 2: basic response is understandable, but development remains thin/general, cohesion is mechanical, and LR/GRA are limited with frequent errors.",
-    "Band 5.0 Task 2: a clear basic position and the main question parts are addressed. Ideas may be simple and language may have noticeable errors, but the reader can follow the argument. Band 5 can contain many non-blocking errors. Band 5 may still contain many non-blocking errors.",
-    "Band 5.5 Task 2: relevant ideas are more consistently explained, progression is clearer, and language is easier to read than Band 5.0, though examples may still be general and grammar/lexis remain limited.",
-    "Band 6.0 Task 2: the task is answered clearly with relevant support and logical progression. Vocabulary and grammar are adequate and reasonably controlled, though still not highly flexible.",
+    "Band 5.0 Task 2: a clear basic position and the main question parts are addressed. Ideas may be simple and language may have noticeable errors, but the reader can follow the argument. Band 5 can contain many non-blocking errors; it does not require polished grammar or advanced vocabulary.",
+    "Band 5.5 Task 2: relevant ideas are more consistently explained, progression is clearer, and language is easier to read than Band 5.0, though examples may still be general and grammar/lexis remain limited. Prefer 5.5 only when there is more than a list of simple claims.",
+    "Band 6.0 Task 2: the task is answered clearly with relevant support and logical progression. Vocabulary and grammar are adequate and reasonably controlled, though still not highly flexible. Band 6 requires some real explanation, not just paragraphing and a stated opinion.",
     "Band 6.5 Task 2: relevant, developed and coherent with some flexibility, but not consistently precise, mature or accurate enough for Band 7.",
-    "A simple but complete answer to a two-question Task 2 prompt should usually be considered in the 5.0-6.0 range, not lowband, unless language or development seriously restricts communication.",
-    "For sophisticated but partially off-task essays, do not flatten all criteria: TR may be lower while CC/LR/GRA can remain higher if the language and organisation are genuinely stronger."
+    "Task 2 direction for 4-6 scoring: do not reward length, connectors or an introduction/conclusion as development. Judge whether each body paragraph explains why, gives a relevant example, or connects back to the question.",
+    "A simple but complete answer to a two-question Task 2 prompt should usually be considered in the 5.0-6.0 range, not lowband, unless language or development seriously restricts communication. If one required question is missing or only implied, TR should remain lower even if language is better.",
+    "For sophisticated but partially off-task essays, do not flatten all criteria: TR may be lower while CC/LR/GRA can remain higher if the language and organisation are genuinely stronger.",
+    "Do not overcorrect Task 2 upward: a grammatically cleaner essay with shallow, generic, repetitive reasoning can still be 4.5-5.0. Band 6 requires clear, relevant development."
   ]
 };
 
@@ -991,7 +996,7 @@ function auditTask1Requirements(body = {}, signals = {}) {
     triggered: !midbandPrimary && Number.isFinite(taskAchievementCap),
     summary: Number.isFinite(advisoryTaskAchievementCap)
       ? (midbandPrimary
-        ? `Task 1 requirement audit is advisory only in midband mode: ${missingCount} bullet(s) appear missing and ${partlyCount} bullet(s) appear partly covered by local keyword audit. AI must judge coverage from the actual prompt and response; this is not a cap.`
+        ? `Task 1 requirement audit is advisory only in midband mode: ${missingCount} bullet(s) appear missing and ${partlyCount} bullet(s) appear partly covered by local keyword audit. AI must judge coverage from the actual prompt and response; this is not a cap and must not be treated as proof of missing coverage.`
         : `Task 1 requirement audit capped Task Achievement at Band ${advisoryTaskAchievementCap.toFixed(1)} because ${missingCount} bullet(s) are missing and ${partlyCount} bullet(s) are only partly covered.`)
       : "All extracted Task 1 bullet requirements appear covered by local requirement audit."
   };
@@ -2677,8 +2682,10 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Half-band rule: use X.5 when performance is clearly above X.0 but not stable at X+1.0. Do not prefer whole bands by default.",
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
-    "Midband source-of-truth rule: local taskRequirementAudit is advisory evidence only in midband mode. Do not treat any local advisory cap as a ceiling. You must decide TA/TR and LR/GRA from the actual prompt and essay.",
-    "Band 5 reality rule: Band 5 writing can still have visible errors, simple vocabulary and simple sentence structures. If the main message is clear and the task is basically completed, do not keep LR/GRA below 5.0 merely because the style is basic.",
+    "Midband source-of-truth rule: local taskRequirementAudit is advisory evidence only in midband mode. Do not treat any local advisory cap, missingCount or partlyCount as a ceiling or as proof of coverage. You must decide TA/TR and LR/GRA from the actual prompt and essay, and you may override local keyword audit in either direction.",
+    "Balanced Band 5 reality rule: Band 5 writing can still have visible errors, simple vocabulary and simple sentence structures. If the main message is clear and the task is basically completed, do not keep LR/GRA below 5.0 merely because the style is basic. However, do not raise LR/GRA to 5.0 if word choice, word form, sentence boundaries, verb control or repeated awkward phrasing still make reading effortful.",
+    "Band 5 evidence rule: before using a Band 5 rescue for a simple corrected response, confirm positive evidence: usable task information, generally clear progression, sufficient vocabulary for the required message, and grammar that remains mostly understandable. If these are not present, stay at 4.5.",
+    task === "Task 2" ? "Task 2 midband direction: distinguish basic completion from real development. Band 5 can be simple and error-prone, Band 5.5 needs clearer explanation, and Band 6 needs relevant support and logical progression beyond a list of claims." : "Task 1 midband direction: distinguish corrected surface form from functional communication. Band 5 requires usable bullet information and mostly readable language, not just cleaner spelling.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
     `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
     `v8.5.5 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
