@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-8-corrected-task1-band5-shadow";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-9-lowband-hard-evidence-guard";
 const DISCLAIMER = "This is an AI-generated estimated IELTS low-band shadow score, not an official IELTS score.";
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
 
@@ -215,21 +215,21 @@ function lowBandPrompt(task, prompt, essay) {
   ];
   return [
     "You are the LOW-BAND SHADOW IELTS General Training Writing examiner.",
-    "This endpoint is separate from production scoring. It exists only to test Band 3.0-4.5 calibration. Return JSON only.",
+    "This endpoint is a LOWBAND GUARD. It should identify true low-band evidence for Band 3.0-4.5, not suppress ordinary Band 5 writing. Return JSON only.",
     `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.` ,
     "Use IELTS bands 0-9 in 0.5 increments, but focus especially on 3.0, 3.5, 4.0, 4.5, 5.0 and 5.5.",
     "AI-only rule: choose all bands yourself from the prompt and response. Do not apply a local cap, floor, lift, or penalty. The server will only average your four criterion bands.",
-    "Core decision: distinguish a truly low-band script from a merely simple but functional Band 5 script.",
+    "Core decision: distinguish a truly low-band script from a merely simple but functional Band 5 script. Band 5 may still contain noticeable non-blocking errors.",
     "Do NOT reward word count, paragraph count, greeting/sign-off, or template structure as quality. These only make the writing rateable; they do not prove control, development, or coherence.",
     "Frequent basic grammar problems, unnatural phrasing, repetitive sentence patterns, limited vocabulary, thin development, or mechanical progression should keep LR/GRA and sometimes CC/TA/TR in the low band.",
-    "If a response is relevant and complete-looking but the language is very basic, repetitive, awkward, or error-prone, strongly consider Band 4.0-4.5 rather than Band 5.5-6.0.",
-    "If a response is easy to understand, covers the task with usable detail, and errors do not often restrict communication, then Band 5.0+ may be justified. Explain with short reason codes.",
+    "If a response is relevant and complete-looking but the language is very basic, repetitive, awkward, or error-prone, consider Band 4.0-4.5 only when the errors or thinness make reading effortful. Do not punish simple but clear Band 5 writing.",
+    "If a response is easy to understand, covers the task with usable detail, and errors do not often restrict communication, then Band 5.0+ may be justified. In that case lowBandAudit.trueLowBand should be false. Explain with short reason codes.",
     "For corrected low-band writing, separate the original error-dense version from the current corrected version. Score the current text only.",
     ...taskSpecific,
     `Word count: ${wc}. Remember: meeting the IELTS word count does not lift a weak response out of low band by itself.`,
     `Question prompt:\n${prompt || ""}`,
     `Student response:\n${essay || ""}`,
-    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"lowband-shadow-score\",\"task\":\"Task 1 or Task 2\",\"lowBandDecision\":\"band_3_or_3_5_or_4_or_4_5_or_5_plus\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"lowBandAudit\":{\"wordCountRewarded\":false,\"formatRewarded\":false,\"weakLanguage\":boolean,\"thinDevelopment\":boolean,\"trueLowBand\":boolean,\"whyNotHigher\":[\"short_code\"]}}"
+    "Return exactly this JSON shape: {\"ok\":true,\"aiStage\":\"lowband-shadow-score\",\"task\":\"Task 1 or Task 2\",\"lowBandDecision\":\"band_3_or_3_5_or_4_or_4_5_or_5_plus\",\"candidateRange\":\"x-y\",\"criteria\":{...four numeric criterion bands...},\"reasonCodes\":{\"Criterion Name\":[\"short_code\",\"short_code\"]},\"lowBandAudit\":{\"wordCountRewarded\":false,\"formatRewarded\":false,\"weakLanguage\":boolean,\"thinDevelopment\":boolean,\"trueLowBand\":boolean,\"band5AllowedWithErrors\":true,\"whyNotHigher\":[\"short_code\"]}}"
   ].join("\n\n");
 }
 

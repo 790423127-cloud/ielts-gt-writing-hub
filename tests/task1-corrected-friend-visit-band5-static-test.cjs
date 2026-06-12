@@ -2,15 +2,17 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const main = fs.readFileSync(path.join(root, 'grade-ielts.js'), 'utf8');
-const boundary = fs.readFileSync(path.join(root, 'grade-ielts-boundary-adjudicator.js'), 'utf8');
-const lowband = fs.readFileSync(path.join(root, 'grade-ielts-lowband.js'), 'utf8');
+const main = fs.readFileSync(path.join(root, 'api', 'grade-ielts.js'), 'utf8');
+const boundary = fs.readFileSync(path.join(root, 'api', 'grade-ielts-boundary-adjudicator.js'), 'utf8');
+const lowband = fs.readFileSync(path.join(root, 'api', 'grade-ielts-lowband.js'), 'utf8');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 const requiredMainAnchors = [
+  'Primary 4.0-6.5 midband calibration',
+  'Band 5 does not mean error-free',
   'Corrected low-band Task 1 calibration',
   'Corrected Task 1 Band 5 anchor',
   'Corrected low-band letters with clear purpose',
@@ -34,6 +36,8 @@ for (const phrase of requiredBoundaryAnchors) {
 }
 
 const requiredLowbandAnchors = [
+  'LOWBAND GUARD',
+  'Band 5 may still contain noticeable non-blocking errors',
   'Corrected Task 1 Band 5 rule',
   'Score the current text only',
   'do not keep it at 4.0/4.5 just because vocabulary and sentences are simple'

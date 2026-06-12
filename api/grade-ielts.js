@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-7-task1-band5-corrected-letter-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-8-midband-4-to-6-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -136,6 +136,40 @@ const EXTREME_BAND_ANCHOR_CONTRAST_V8_5_5 = {
     "B9 anchor: fully responsive, sophisticated, fluent argumentation with exact wording, unobtrusive cohesion, and negligible errors. If the response fits this, Band 8.5/9 is allowed; do not require literary style."
   ]
 };
+
+
+const MIDBAND_4_TO_6_CALIBRATION_RULES = {
+  "Task 1": [
+    "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 1 letters around Band 4.0-6.5. Do not outsource ordinary Band 5 writing to lowband logic.",
+    "Band 4.0 Task 1: related attempt but communication is unstable; bullet coverage may be partial/thin; frequent basic grammar, spelling, word-form or sentence-control errors make reading effortful.",
+    "Band 4.5 Task 1: the main situation is understandable and perhaps all bullets are touched, but language errors remain frequent, vocabulary is narrow/error-prone, progression is mechanical, and the reader still works to understand details.",
+    "Band 5.0 Task 1: purpose is clear enough and the main bullet points are addressed. Vocabulary may be basic and grammar may still contain noticeable mistakes, but the reader can understand the main message without serious difficulty. Band 5 does not mean error-free.",
+    "Band 5.5 Task 1: bullets are covered more clearly, paragraphing and sequencing are stable, and language is easier to read than Band 5.0, though detail may still be limited and phrasing may remain simple or occasionally awkward.",
+    "Band 6.0 Task 1: all bullets are clear with useful detail, tone and format are suitable, and language is reasonably controlled. Errors may remain, but they do not regularly interrupt the reader.",
+    "Band 6.5 Task 1: clearly complete and fairly natural with better detail, lexical range and sentence control, but not yet consistently flexible/natural enough for Band 7.",
+    "Do not keep Lexical Resource or Grammatical Range and Accuracy below 5.0 solely because the vocabulary is ordinary or sentence structures are simple. LR/GRA 4.5 requires evidence that errors or word choice still make reading effortful.",
+    "For informal letters to friends, simple conversational warmth is appropriate. Do not penalise a friend letter for not sounding formal or professional.",
+    "A corrected low-band letter that now covers all bullets, has recognisable format and tone, and is mostly readable should normally move into Band 5.0-5.5 rather than staying at 4.0-4.5."
+  ],
+  "Task 2": [
+    "Midband scope: this scorer is the primary production scorer for ordinary IELTS GT Task 2 essays around Band 4.0-6.5. Do not treat length and paragraphing as high quality, but also do not keep a complete understandable answer at lowband solely for simple language.",
+    "Band 4.0 Task 2: a related attempt with weak or repetitive ideas, poor control, and frequent language errors that make reading effortful; the position or prompt coverage may be unstable.",
+    "Band 4.5 Task 2: basic response is understandable, but development remains thin/general, cohesion is mechanical, and LR/GRA are limited with frequent errors.",
+    "Band 5.0 Task 2: a clear basic position and the main question parts are addressed. Ideas may be simple and language may have noticeable errors, but the reader can follow the argument. Band 5 can contain many non-blocking errors. Band 5 may still contain many non-blocking errors.",
+    "Band 5.5 Task 2: relevant ideas are more consistently explained, progression is clearer, and language is easier to read than Band 5.0, though examples may still be general and grammar/lexis remain limited.",
+    "Band 6.0 Task 2: the task is answered clearly with relevant support and logical progression. Vocabulary and grammar are adequate and reasonably controlled, though still not highly flexible.",
+    "Band 6.5 Task 2: relevant, developed and coherent with some flexibility, but not consistently precise, mature or accurate enough for Band 7.",
+    "A simple but complete answer to a two-question Task 2 prompt should usually be considered in the 5.0-6.0 range, not lowband, unless language or development seriously restricts communication.",
+    "For sophisticated but partially off-task essays, do not flatten all criteria: TR may be lower while CC/LR/GRA can remain higher if the language and organisation are genuinely stronger."
+  ]
+};
+
+function midbandCalibrationRulesForTask(task) {
+  return (MIDBAND_4_TO_6_CALIBRATION_RULES[task === "Task 1" ? "Task 1" : "Task 2"] || [])
+    .map((rule, index) => `${index + 1}. ${rule}`)
+    .join("\n");
+}
+
 
 function extremeBandAnchorContrastText(task) {
   const rules = EXTREME_BAND_ANCHOR_CONTRAST_V8_5_5[task === "Task 1" ? "Task 1" : "Task 2"] || [];
@@ -1475,6 +1509,7 @@ function buildIndependentAnchorPrompt(body, signals) {
     "The selected task is locked by the request. Do not switch Task 1 and Task 2 inside this stage.",
     taskSpecific,
     task === "Task 1" ? `Corrected Task 1 Band 5 anchor:\n${task1CorrectedBand5AnchorText()}` : "",
+    `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
     "Your only job is to classify the response against the 0-9 anchor benchmarks before criterion scoring.",
     "This anchor must be independent from final criterion bands; do not infer it from a score because no criterion score exists yet.",
     "High-band rule: if the response is mature, fully developed, naturally cohesive, precise and mostly error-free, you must consider Band 8 or Band 9 anchors. Do not default to Band 7 for safety.",
@@ -2172,6 +2207,7 @@ function buildBoundaryReviewPrompt(body, firstResult, audit) {
     "Only re-check scoring boundaries. Do not generate detailed feedback, corrections, translations, or model answers in this boundary review.",
     "If the first score violates a boundary, revise the criterion bands yourself. If you keep them, give compact concrete evidence.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
+    `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
     `v8.5.5 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
     `v8.5.6 forced anchor-comparison calibration for ${task}:\n${v856ForcedAnchorComparisonProtocol(task)}`,
     `${v855ExtremeBandDecisionProtocol(task)}`,
@@ -2579,6 +2615,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Low-band rule: do not lift short/weak writing because it has paragraph labels. Full-length but weak-language writing should usually have lower LR/GRA, while TR/TA and CC may be higher only if content and organisation justify it.",
     "Task-specific requirement rule: for Task 1, judge every extracted bullet separately as covered/partly/missing and let that evidence influence Task Achievement through the matrix. For Task 2, judge the exact question type and all required parts. Missing or thin parts should affect AI scoring, but there is no local cap or floor.",
     `Exam-realism calibration for ${task}:\n${examRealismCalibrationRulesForTask(task)}`,
+    `Primary 4.0-6.5 midband calibration for ${task}:\n${midbandCalibrationRulesForTask(task)}`,
     `v8.5.5 score-scale calibration for ${task}:\n${scoreScaleCalibrationText(task)}`,
     `v8.5.6 forced anchor-comparison calibration for ${task}:\n${v856ForcedAnchorComparisonProtocol(task)}`,
     `${v855ExtremeBandDecisionProtocol(task)}`,

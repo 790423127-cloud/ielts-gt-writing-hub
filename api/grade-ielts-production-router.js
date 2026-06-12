@@ -5,9 +5,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v2-2-task1-corrected-band5-calibration";
-const BOUNDARY_VERSION = "boundary-adjudicator-v4-4-task1-corrected-band5-calibration";
+const ROUTER_VERSION = "production-router-v3-0-three-system-midband-primary";
+const MIDBAND_VERSION = "score-core-v8-5-8-midband-4-to-6-calibration";
+const LOWBAND_VERSION = "score-core-v8-5-9-lowband-hard-evidence-guard";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
+const BOUNDARY_VERSION = "boundary-adjudicator-v4-4-retired-from-production-router";
 
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 180000, 240000));
 const RETRY_COUNT = Math.max(1, Math.min(Number(process.env.PRODUCTION_ROUTER_RETRY_COUNT) || 2, 4));
@@ -66,9 +68,15 @@ function firstNumber(...values) {
   return null;
 }
 
+function roundHalf(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 2) / 2;
+}
+
 function extractBand(payload) {
   if (!payload || typeof payload !== "object") return null;
-  return firstNumber(
+  return roundHalf(firstNumber(
     payload.finalBand,
     payload.score,
     payload.overallBand,
@@ -83,8 +91,9 @@ function extractBand(payload) {
     payload.scores && payload.scores.overall,
     payload.scores && payload.scores.finalBand,
     payload.data && payload.data.finalBand,
-    payload.data && payload.data.score
-  );
+    payload.data && payload.data.score,
+    payload.scoreCalculation && payload.scoreCalculation.finalBand
+  ));
 }
 
 function extractCriteria(payload) {
@@ -99,6 +108,15 @@ function extractCriteria(payload) {
   );
 }
 
+function normalizeTask(body = {}, fallback = {}) {
+  const raw = String(body.task || body.scoringTask || body.selectedTask || body.taskType || fallback.task || "").toLowerCase();
+  if (/task\s*1|task1|letter|gt\s*letter/.test(raw)) return "Task 1";
+  if (/task\s*2|task2|essay/.test(raw)) return "Task 2";
+  const prompt = String(body.questionPrompt || body.promptText || body.prompt || "").toLowerCase();
+  if (/write a letter|dear|yours faithfully|yours sincerely|in your letter/.test(prompt)) return "Task 1";
+  return "Task 2";
+}
+
 function buildLocalLogicAudit() {
   return {
     usedForScoring: false,
@@ -108,7 +126,7 @@ function buildLocalLogicAudit() {
     appliedLocalFloor: false,
     appliedLocalCap: false,
     copiedOverallToCriteria: false,
-    notes: "Local logic only handled routing, hard invalid detection, hard lowband gate, JSON validation and audit."
+    notes: "Local logic only selected which AI scoring system to trust; it did not set, lift, cap, floor, or rewrite any band."
   };
 }
 
@@ -121,59 +139,80 @@ function buildCriterionDifferentiationAudit(criteria, source = "ai-specific-feed
     criterionScoresSource: "ai",
     criterionFeedbackSource: source,
     reason: criteriaAllEqual
-      ? "Criterion scores are identical only because the AI scorer returned identical criterion bands; local code did not copy overallBand to criteria."
-      : "Criterion scores and comments were generated independently by AI."
+      ? "Criterion scores are identical only if the AI scorer returned identical criterion bands; local code did not copy overallBand to criteria."
+      : "Criterion scores were returned independently by the selected AI scorer."
   };
 }
 
 function routeReason(mainBand) {
   if (typeof mainBand !== "number" || !Number.isFinite(mainBand)) {
     return {
-      targetSystem: "boundary",
-      useBoundary: true,
+      targetSystem: "lowband-guard",
+      selectedSystemCandidate: "lowband",
+      useLowbandGuard: true,
+      useBoundary: false,
       useHighbandShadow: false,
-      routeDecision: "boundary_required_main_score_unreadable",
-      routeZone: "unknown_score"
-    };
-  }
-
-  if (mainBand >= 4.0 && mainBand <= 5.5) {
-    return {
-      targetSystem: "boundary",
-      useBoundary: true,
-      useHighbandShadow: false,
-      routeDecision: "boundary_v4_3_for_4_0_to_5_5",
-      routeZone: "boundary_4_0_5_5"
+      routeDecision: "lowband_guard_main_score_unreadable",
+      routeZone: "unknown_score",
+      reasonCodes: ["MAIN_SCORE_UNREADABLE"]
     };
   }
 
   if (mainBand >= 7.0) {
     return {
       targetSystem: "highband-shadow-confirmation",
+      selectedSystemCandidate: "highband",
+      useLowbandGuard: false,
       useBoundary: false,
       useHighbandShadow: true,
       routeDecision: "highband_shadow_confirmation_for_7_0_plus",
-      routeZone: "highband_candidate_7_0_plus"
+      routeZone: "highband_candidate_7_0_plus",
+      reasonCodes: ["MIDBAND_SCORE_7_PLUS"]
     };
   }
 
-  if (mainBand < 4.0) {
+  if (mainBand <= 5.0) {
     return {
-      targetSystem: "main",
+      targetSystem: "midband-with-lowband-guard",
+      selectedSystemCandidate: "midband",
+      useLowbandGuard: true,
       useBoundary: false,
       useHighbandShadow: false,
-      routeDecision: "main_direct_below_boundary_known_lowband_limitation",
-      routeZone: "below_boundary"
+      routeDecision: "midband_primary_lowband_guard_for_5_0_or_below",
+      routeZone: "midband_low_guard_0_5_0",
+      reasonCodes: ["MIDBAND_SCORE_5_OR_BELOW", "LOWBAND_GUARD_CHECK_ONLY"]
     };
   }
 
   return {
-    targetSystem: "main",
+    targetSystem: "midband",
+    selectedSystemCandidate: "midband",
+    useLowbandGuard: false,
     useBoundary: false,
     useHighbandShadow: false,
-    routeDecision: "main_direct_middle_band_6_0_to_6_5",
-    routeZone: "middle_band_6_0_6_5"
+    routeDecision: "midband_primary_direct_for_5_5_to_6_5",
+    routeZone: "midband_5_5_6_5",
+    reasonCodes: ["NO_HARD_LOWBAND_EVIDENCE", "BELOW_HIGHBAND_THRESHOLD"]
   };
+}
+
+function isAiTrueLowband(lowband = {}) {
+  const audit = lowband.lowBandAudit && typeof lowband.lowBandAudit === "object" ? lowband.lowBandAudit : {};
+  const decision = String(lowband.lowBandDecision || lowband.candidateRange || "").toLowerCase();
+  if (audit.hardZero === true) return true;
+  if (audit.trueLowBand === true) return true;
+  if (audit.weakLanguage === true && audit.thinDevelopment === true && !/5\s*\+|5_plus|band_5/.test(decision)) return true;
+  if (/band_3|band_3_5|band_4|low_4|true_low/.test(decision) && !/5\s*\+|5_plus|band_5/.test(decision)) return true;
+  return false;
+}
+
+function shouldUseLowbandFinal(mainBand, lowbandBand, lowband) {
+  if (typeof lowbandBand !== "number" || !Number.isFinite(lowbandBand)) return false;
+  const trueLowband = isAiTrueLowband(lowband);
+  if (lowbandBand < 4.0 && mainBand <= 5.5) return true;
+  if (lowbandBand <= 4.0 && mainBand <= 5.0 && trueLowband) return true;
+  if (lowbandBand <= 4.5 && mainBand <= 4.5 && trueLowband) return true;
+  return false;
 }
 
 async function callJsonWithRetry(url, body, label) {
@@ -212,103 +251,162 @@ async function callJsonWithRetry(url, body, label) {
   throw lastErr || new Error(`${label} failed.`);
 }
 
-function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
-  const finalBand = mainBand;
-  const criteria = extractCriteria(main);
-  const scoringAudit = buildRouterScoringAudit({
-    task: main?.task || main?.scoringTask || "",
-    route,
-    finalBand,
-    finalSource: extra.finalSource || "main-score",
-    main,
-    boundary: null,
-    highband: extra.highband || null,
-    boundaryMainReuseAudit: null
-  });
+function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lowband, highband }) {
+  const source = highband || lowband || main || {};
+  const criteria = extractCriteria(source) || {};
+  const taskProfile = source.taskProfile || main?.taskProfile || lowband?.taskProfile || {};
+  const taskRequirementAudit = taskProfile.taskRequirementAudit || main?.taskProfile?.taskRequirementAudit || null;
+  const values = Object.values(criteria).map(Number).filter(Number.isFinite);
   return {
-    ...main,
-    ok: main.ok !== false,
+    taskDetected: task || taskProfile.task || main?.task || lowband?.task || highband?.task || "",
+    selectedSystem: finalSource,
+    routeDecision: route?.routeDecision || "",
+    routeZone: route?.routeZone || "",
+    routeReasonCodes: Array.isArray(route?.reasonCodes) ? route.reasonCodes : [],
+    finalBand: Number.isFinite(Number(finalBand)) ? Number(finalBand) : null,
+    finalBandSourceIsAI: true,
+    finalBandSource: finalSource || "",
+    criterionScoresSource: "ai-selected-system",
+    localHeuristicAdjustedFinalBand: false,
+    localHeuristicAdjustedCriterionScores: false,
+    localFloorApplied: false,
+    localCapApplied: false,
+    lowbandGuardCalled: Boolean(lowband),
+    lowbandGuardUsedAsFinal: String(finalSource || "").includes("lowband"),
+    boundaryAdjudicatorCalled: false,
+    boundaryAdjudicatorRetiredFromProduction: true,
+    highbandShadowCalled: Boolean(highband),
+    criteriaAllEqual: values.length === 4 && values.every((value) => value === values[0]),
+    taskRequirementAudit: taskRequirementAudit || null,
+    midbandCalibrationAudit: {
+      bandRange: "4.0-6.5",
+      midbandPrimary: true,
+      lowbandOnlyForHardEvidence: true,
+      highbandOnlyForSevenPlus: true,
+      errorsStillAllowedAtBand5: true,
+      simpleButUnderstandableCanBeBand5: true,
+      localHeuristicAdjustedFinalBand: false,
+      finalBandSourceIsAI: true
+    }
+  };
+}
+
+function directAiPayload({ req, res, basePayload, finalSource, finalBand, criteria, task, route, startedAt, endpoints, main, lowband = null, highband = null, attempts = {} }) {
+  const scoringAudit = buildRouterScoringAudit({ task, route, finalBand, finalSource, main, lowband, highband });
+  return sendJson(req, res, 200, {
+    ...basePayload,
+    ok: basePayload?.ok !== false,
     productionRouter: true,
     scoreSystemVersion: ROUTER_VERSION,
     routerVersion: ROUTER_VERSION,
-    boundaryAdjudicatorVersion: BOUNDARY_VERSION,
+    midbandVersion: MIDBAND_VERSION,
+    lowbandVersion: LOWBAND_VERSION,
     highbandVersion: HIGHBAND_VERSION,
+    boundaryAdjudicatorVersion: BOUNDARY_VERSION,
     routeDecision: route.routeDecision,
     routeZone: route.routeZone,
     targetSystem: route.targetSystem,
-    finalSource: extra.finalSource || "main-score",
+    finalSource,
     finalBand,
     score: finalBand,
     criteria,
-    mainScore: mainBand,
-    boundaryScore: null,
-    highbandScore: extra.highbandScore ?? null,
-    highbandShadowCalled: !!extra.highbandShadowCalled,
-    highbandConfirmed: !!extra.highbandConfirmed,
-    main,
+    finalCriteria: criteria,
+    mainScore: extractBand(main),
+    lowbandScore: extractBand(lowband),
+    highbandScore: extractBand(highband),
+    lowbandGuardCalled: Boolean(lowband),
+    lowbandGuardUsedAsFinal: String(finalSource || "").includes("lowband"),
+    boundaryCalled: false,
     boundary: null,
-    highband: extra.highband || null,
+    highbandShadowCalled: Boolean(highband),
+    highbandConfirmed: String(finalSource || "").includes("highband"),
+    main,
+    midband: main,
+    lowband,
+    highband,
     scoringAudit,
+    routerAudit: scoringAudit,
     localLogicAudit: buildLocalLogicAudit(),
     criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
     scoreFrozen: true,
     feedbackCanChangeScore: false,
     routingAudit: {
-      mainAttempts,
+      mainAttempts: attempts.mainAttempts || 0,
+      lowbandAttempts: attempts.lowbandAttempts || 0,
       boundaryAttempts: 0,
-      highbandAttempts: extra.highbandAttempts || 0,
-      highbandShadowCalled: !!extra.highbandShadowCalled,
-      highbandConfirmed: !!extra.highbandConfirmed,
+      highbandAttempts: attempts.highbandAttempts || 0,
+      highbandShadowCalled: Boolean(highband),
+      highbandConfirmed: String(finalSource || "").includes("highband"),
       elapsedMs: Date.now() - startedAt,
-      endpoints,
-      ...extra.audit
+      endpoints
     },
     disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
-  };
+  });
 }
 
-function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, boundary, highband, boundaryMainReuseAudit }) {
-  const source = boundary || main || highband || {};
-  const taskProfile = source.taskProfile || main?.taskProfile || boundary?.taskProfile || {};
-  const taskRequirementAudit = taskProfile.taskRequirementAudit || main?.taskProfile?.taskRequirementAudit || boundary?.taskProfile?.taskRequirementAudit || null;
-  const task2Profile = taskProfile || main?.taskProfile || boundary?.taskProfile || {};
-  const task1Profile = taskProfile || main?.taskProfile || boundary?.taskProfile || {};
-  const items = Array.isArray(taskRequirementAudit?.items) ? taskRequirementAudit.items : [];
-  const coveredOrPartial = items.filter((item) => item.status === "covered" || item.status === "partly_covered");
-  const questionPartsAnswered = coveredOrPartial.map((item) => item.requirement).filter(Boolean);
-  const bulletPointsDetected = Number((Array.isArray(task1Profile.bulletPoints) ? task1Profile.bulletPoints.length : 0) || (taskRequirementAudit?.extractedRequirements || []).length || 0) || 0;
-  const bulletPointsCovered = task === "Task 1"
-    ? items.filter((item) => item.status === "covered" || item.status === "partly_covered").length
-    : null;
-  const directQuestions = Array.isArray(task2Profile.directQuestions) ? task2Profile.directQuestions : [];
-  const questionPartsRequired = task === "Task 2" ? (directQuestions.length ? directQuestions : (Array.isArray(taskRequirementAudit?.requiredParts) ? taskRequirementAudit.requiredParts : [])) : null;
-  const hardLowbandEvidence = [];
-  if (taskRequirementAudit?.triggered && taskRequirementAudit?.summary) hardLowbandEvidence.push(taskRequirementAudit.summary);
-  if (boundaryMainReuseAudit?.mainReusedFromRouter) hardLowbandEvidence.push("boundary reused frozen main result");
 
+// Backwards-compatible local smoke-test helper. It does not send HTTP and does not score locally.
+function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
+  const finalBand = mainBand;
+  const criteria = extractCriteria(main);
+  const finalSource = extra.finalSource || "midband-primary";
+  const lowband = extra.lowband || null;
+  const highband = extra.highband || null;
+  const scoringAudit = buildRouterScoringAudit({
+    task: main?.task || main?.scoringTask || "",
+    route,
+    finalBand,
+    finalSource,
+    main,
+    lowband,
+    highband
+  });
   return {
-    taskDetected: task || taskProfile.task || main?.task || boundary?.task || highband?.task || "",
-    taskTypeDetected: task === "Task 2"
-      ? (task2Profile.questionType || taskProfile.questionType || "")
-      : (task1Profile.letterStyle || task1Profile.scoringProfile || task1Profile.task || taskProfile.task || ""),
-    wordCount: Number(taskProfile.wordCount || source.wordCount || source.localSignals?.wordCount || main?.localSignals?.wordCount || boundary?.localSignals?.wordCount || main?.wordCount || boundary?.wordCount || 0) || null,
-    paragraphCount: Number(taskProfile.paragraphCount || source.paragraphCount || source.localSignals?.paragraphCount || main?.localSignals?.paragraphCount || boundary?.localSignals?.paragraphCount || main?.paragraphCount || boundary?.paragraphCount || 0) || null,
-    hardLowbandEvidence,
-    lowbandEligible: Boolean(route?.routeZone === "below_boundary" || route?.routeZone === "boundary_4_0_5_5" || String(finalSource).includes("lowband")),
-    boundaryEligible: Boolean(route?.useBoundary || route?.routeZone === "boundary_4_0_5_5" || finalSource === "boundary-adjudicator-v4-3"),
-    highbandEligible: Boolean(route?.useHighbandShadow || route?.routeZone === "highband_candidate_7_0_plus" || String(finalSource).includes("highband")),
-    taskResponsePresent: task === "Task 2" ? questionPartsAnswered.length > 0 : Boolean(items.length || bulletPointsDetected),
-    positionPresent: task === "Task 2" ? Boolean(task2Profile.positionRequired || taskRequirementAudit?.markers?.clearOpinion || taskRequirementAudit?.markers?.implicitJudgement || taskRequirementAudit?.markers?.positiveNegativeJudgement || taskRequirementAudit?.markers?.outweighJudgement) : null,
-    bulletPointsDetected: task === "Task 1" ? bulletPointsDetected : null,
-    bulletPointsCovered: task === "Task 1" ? bulletPointsCovered : null,
-    questionPartsRequired: task === "Task 2" ? questionPartsRequired : null,
-    questionPartsAnswered: task === "Task 2" ? questionPartsAnswered : null,
+    ...main,
+    ok: main?.ok !== false,
+    productionRouter: true,
+    scoreSystemVersion: ROUTER_VERSION,
+    routerVersion: ROUTER_VERSION,
+    midbandVersion: MIDBAND_VERSION,
+    lowbandVersion: LOWBAND_VERSION,
+    highbandVersion: HIGHBAND_VERSION,
+    boundaryAdjudicatorVersion: BOUNDARY_VERSION,
     routeDecision: route?.routeDecision || "",
     routeZone: route?.routeZone || "",
-    routeReason: Array.isArray(route?.reasonCodes) ? route.reasonCodes.join(", ") : "",
-    finalBand: Number.isFinite(Number(finalBand)) ? Number(finalBand) : null,
-    finalSource: finalSource || "",
-    boundaryMainReuseAudit: boundaryMainReuseAudit || null
+    targetSystem: route?.targetSystem || "midband",
+    finalSource,
+    finalBand,
+    score: finalBand,
+    criteria,
+    finalCriteria: criteria,
+    mainScore: mainBand,
+    lowbandScore: extractBand(lowband),
+    boundaryScore: null,
+    highbandScore: extractBand(highband),
+    lowbandGuardCalled: Boolean(lowband),
+    boundaryCalled: false,
+    boundary: null,
+    highbandShadowCalled: Boolean(highband),
+    highbandConfirmed: String(finalSource).includes("highband"),
+    main,
+    midband: main,
+    lowband,
+    highband,
+    scoringAudit,
+    routerAudit: scoringAudit,
+    localLogicAudit: buildLocalLogicAudit(),
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
+    scoreFrozen: true,
+    feedbackCanChangeScore: false,
+    routingAudit: {
+      mainAttempts: mainAttempts || 0,
+      lowbandAttempts: extra.lowbandAttempts || 0,
+      boundaryAttempts: 0,
+      highbandAttempts: extra.highbandAttempts || 0,
+      elapsedMs: Date.now() - startedAt,
+      endpoints
+    },
+    disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
   };
 }
 
@@ -335,79 +433,71 @@ module.exports = async function handler(req, res) {
     const requestBody = normalizeBody(req);
     const baseUrl = getBaseUrl(req);
     const endpoints = {
+      midband: `${baseUrl}/api/grade-ielts`,
       main: `${baseUrl}/api/grade-ielts`,
-      boundary: `${baseUrl}/api/grade-ielts-boundary-adjudicator`,
-      highband: `${baseUrl}/api/grade-ielts-highband`
+      lowband: `${baseUrl}/api/grade-ielts-lowband`,
+      highband: `${baseUrl}/api/grade-ielts-highband`,
+      boundary: `${baseUrl}/api/grade-ielts-boundary-adjudicator`
     };
 
-    const mainCall = await callJsonWithRetry(endpoints.main, requestBody, "main scorer");
+    const mainCall = await callJsonWithRetry(endpoints.midband, requestBody, "midband scorer");
     const main = mainCall.data;
     const mainBand = extractBand(main);
+    const task = normalizeTask(requestBody, main);
     const route = routeReason(mainBand);
 
-    if (route.useBoundary) {
-      const boundaryRequestBody = {
-        ...requestBody,
-        frozenMainResult: main,
-        frozenMainScore: mainBand,
-        frozenMainCriteria: extractCriteria(main),
-        productionRouterMainFrozen: true
-      };
-      const boundaryCall = await callJsonWithRetry(endpoints.boundary, boundaryRequestBody, "boundary adjudicator");
-      const boundary = boundaryCall.data;
-      const boundaryBand = extractBand(boundary);
-      const finalBand = boundaryBand == null ? mainBand : boundaryBand;
-      const finalCriteria = extractCriteria(boundary);
-
-      return sendJson(req, res, 200, {
-        ...boundary,
-        ok: boundary.ok !== false,
-        productionRouter: true,
-        scoreSystemVersion: ROUTER_VERSION,
-        routerVersion: ROUTER_VERSION,
-        boundaryAdjudicatorVersion: BOUNDARY_VERSION,
-        highbandVersion: HIGHBAND_VERSION,
-        routeDecision: route.routeDecision,
-        routeZone: route.routeZone,
-        targetSystem: route.targetSystem,
-        finalSource: "boundary-adjudicator-v4-3",
-        finalBand,
-        score: finalBand,
-        criteria: finalCriteria,
-        mainScore: mainBand,
-        boundaryScore: boundaryBand,
-        highbandScore: null,
-        highbandShadowCalled: false,
-        highbandConfirmed: false,
-        scoringAudit: buildRouterScoringAudit({
-          task: requestBody.task || requestBody.scoringTask || requestBody.taskType || boundary?.task || "",
-          route,
+    if (route.useLowbandGuard) {
+      try {
+        const lowbandCall = await callJsonWithRetry(endpoints.lowband, requestBody, "lowband guard scorer");
+        const lowband = lowbandCall.data;
+        const lowbandBand = extractBand(lowband);
+        const useLowband = shouldUseLowbandFinal(mainBand, lowbandBand, lowband);
+        const selected = useLowband ? lowband : main;
+        const finalBand = useLowband ? lowbandBand : mainBand;
+        const criteria = extractCriteria(selected);
+        return directAiPayload({
+          req,
+          res,
+          basePayload: selected,
+          finalSource: useLowband ? "lowband-hard-evidence-guard" : "midband-primary-lowband-not-confirmed",
           finalBand,
-          finalSource: "boundary-adjudicator-v4-3",
+          criteria,
+          task,
+          route: {
+            ...route,
+            routeDecision: useLowband ? "lowband_final_hard_evidence_confirmed" : "midband_final_lowband_not_confirmed",
+            reasonCodes: [
+              ...(route.reasonCodes || []),
+              useLowband ? "AI_LOWBAND_HARD_EVIDENCE_CONFIRMED" : "AI_LOWBAND_DID_NOT_SHOW_HARD_EVIDENCE"
+            ]
+          },
+          startedAt,
+          endpoints,
           main,
-          boundary,
-          highband: null,
-          boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null
-        }),
-        localLogicAudit: buildLocalLogicAudit(),
-        criterionDifferentiationAudit: buildCriterionDifferentiationAudit(finalCriteria),
-        scoreFrozen: true,
-        feedbackCanChangeScore: false,
-        boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null,
-        main,
-        boundary,
-        highband: null,
-        routingAudit: {
-          mainAttempts: mainCall.attempts,
-          boundaryAttempts: boundaryCall.attempts,
-          highbandAttempts: 0,
-          highbandShadowCalled: false,
-          highbandConfirmed: false,
-          elapsedMs: Date.now() - startedAt,
-          endpoints
-        },
-        disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
-      });
+          lowband,
+          attempts: { mainAttempts: mainCall.attempts, lowbandAttempts: lowbandCall.attempts }
+        });
+      } catch (lowbandErr) {
+        const criteria = extractCriteria(main);
+        return directAiPayload({
+          req,
+          res,
+          basePayload: main,
+          finalSource: "midband-primary-lowband-guard-failed",
+          finalBand: mainBand,
+          criteria,
+          task,
+          route: {
+            ...route,
+            routeDecision: "midband_final_lowband_guard_failed",
+            reasonCodes: [...(route.reasonCodes || []), "LOWBAND_GUARD_FAILED_MIDBAND_USED"]
+          },
+          startedAt,
+          endpoints,
+          main,
+          attempts: { mainAttempts: mainCall.attempts, lowbandAttempts: RETRY_COUNT }
+        });
+      }
     }
 
     if (route.useHighbandShadow) {
@@ -416,90 +506,75 @@ module.exports = async function handler(req, res) {
         const highband = highbandCall.data;
         const highbandBand = extractBand(highband);
         const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand) && highbandBand >= 7.5;
-
-        if (highbandConfirmed) {
-          const finalCriteria = extractCriteria(highband);
-          return sendJson(req, res, 200, {
-            ...highband,
-            ok: highband.ok !== false,
-            productionRouter: true,
-            scoreSystemVersion: ROUTER_VERSION,
-            routerVersion: ROUTER_VERSION,
-            boundaryAdjudicatorVersion: BOUNDARY_VERSION,
-            highbandVersion: HIGHBAND_VERSION,
-            routeDecision: route.routeDecision,
-            routeZone: route.routeZone,
-            targetSystem: route.targetSystem,
-            finalSource: "highband-shadow-v8-5-14",
-            finalBand: highbandBand,
-            score: highbandBand,
-            criteria: finalCriteria,
-            mainScore: mainBand,
-            boundaryScore: null,
-          highbandScore: highbandBand,
-          highbandShadowCalled: true,
-          highbandConfirmed: true,
-          scoringAudit: buildRouterScoringAudit({
-            task: requestBody.task || requestBody.scoringTask || requestBody.taskType || main?.task || "",
-            route,
-            finalBand: highbandBand,
-            finalSource: "highband-shadow-v8-5-14",
-            main,
-            boundary: null,
-            highband,
-            boundaryMainReuseAudit: null
-          }),
+        const selected = highbandConfirmed ? highband : main;
+        const finalBand = highbandConfirmed ? highbandBand : mainBand;
+        const criteria = extractCriteria(selected);
+        return directAiPayload({
+          req,
+          res,
+          basePayload: selected,
+          finalSource: highbandConfirmed ? "highband-shadow-confirmed" : "midband-primary-highband-not-confirmed",
+          finalBand,
+          criteria,
+          task,
+          route: {
+            ...route,
+            routeDecision: highbandConfirmed ? "highband_final_confirmed" : "midband_final_highband_not_confirmed",
+            reasonCodes: [
+              ...(route.reasonCodes || []),
+              highbandConfirmed ? "AI_HIGHBAND_CONFIRMED" : "AI_HIGHBAND_NOT_CONFIRMED"
+            ]
+          },
+          startedAt,
+          endpoints,
           main,
-          boundary: null,
-            highband,
-            localLogicAudit: buildLocalLogicAudit(),
-            criterionDifferentiationAudit: buildCriterionDifferentiationAudit(finalCriteria),
-            scoreFrozen: true,
-            feedbackCanChangeScore: false,
-            routingAudit: {
-              mainAttempts: mainCall.attempts,
-              boundaryAttempts: 0,
-              highbandAttempts: highbandCall.attempts,
-              highbandShadowCalled: true,
-              highbandConfirmed: true,
-              elapsedMs: Date.now() - startedAt,
-              endpoints
-            },
-            disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
-          });
-        }
-
-        return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints, {
-          finalSource: "main-score-highband-not-confirmed",
           highband,
-          highbandScore: highbandBand,
-          highbandAttempts: highbandCall.attempts,
-          highbandShadowCalled: true,
-          highbandConfirmed: false,
-          audit: {
-            highbandReason: "highband_score_below_7_5"
-          }
-        }));
+          attempts: { mainAttempts: mainCall.attempts, highbandAttempts: highbandCall.attempts }
+        });
       } catch (highbandErr) {
-        return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints, {
-          finalSource: "main-score-highband-fallback",
-          highbandAttempts: RETRY_COUNT,
-          highbandShadowCalled: true,
-          highbandConfirmed: false,
-          audit: {
-            highbandFallback: true,
-            highbandError: highbandErr && highbandErr.message ? highbandErr.message : "Highband scorer failed."
-          }
-        }));
+        const criteria = extractCriteria(main);
+        return directAiPayload({
+          req,
+          res,
+          basePayload: main,
+          finalSource: "midband-primary-highband-fallback",
+          finalBand: mainBand,
+          criteria,
+          task,
+          route: {
+            ...route,
+            routeDecision: "midband_final_highband_failed",
+            reasonCodes: [...(route.reasonCodes || []), "HIGHBAND_FAILED_MIDBAND_USED"]
+          },
+          startedAt,
+          endpoints,
+          main,
+          attempts: { mainAttempts: mainCall.attempts, highbandAttempts: RETRY_COUNT }
+        });
       }
     }
 
-    return sendJson(req, res, 200, directMainPayload(main, mainBand, route, mainCall.attempts, startedAt, endpoints));
+    return directAiPayload({
+      req,
+      res,
+      basePayload: main,
+      finalSource: "midband-primary",
+      finalBand: mainBand,
+      criteria: extractCriteria(main),
+      task,
+      route,
+      startedAt,
+      endpoints,
+      main,
+      attempts: { mainAttempts: mainCall.attempts }
+    });
   } catch (err) {
     return sendJson(req, res, 500, {
       ok: false,
       productionRouter: true,
       scoreSystemVersion: ROUTER_VERSION,
+      midbandVersion: MIDBAND_VERSION,
+      lowbandVersion: LOWBAND_VERSION,
       boundaryAdjudicatorVersion: BOUNDARY_VERSION,
       highbandVersion: HIGHBAND_VERSION,
       error: err && err.message ? err.message : "Production router failed.",
@@ -507,3 +582,5 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+module.exports.config = { maxDuration: 300 };

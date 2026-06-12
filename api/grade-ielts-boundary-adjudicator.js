@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-4-task1-corrected-band5-calibration";
+const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-5-diagnostic-only-midband-retired";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
@@ -515,8 +515,8 @@ function routeDecision(task, wc, main, lowband) {
 function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
   const names = criterionNames(task);
   return [
-    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR v4.3.",
-    "You resolve conflicts between the main scorer and the low-band shadow scorer.",
+    "You are the IELTS General Training Writing BOUNDARY ADJUDICATOR v4.5 diagnostic-only scorer.",
+    "You resolve conflicts only for offline diagnostics. Production router v3 no longer uses this endpoint as the final score for ordinary 4.0-6.5 writing.",
     "You must not average the two scores. You must choose your own final criteria and final band from the writing evidence.",
     "Use IELTS bands in 0.5 increments.",
     `Locked task: ${task}. Criteria keys must be exactly: ${JSON.stringify(names)}.`,
@@ -529,7 +529,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "",
     "Core v4.3 rule:",
     "Use v4.2 hybrid as the base. Preserve the strong protection for 4.0 and 4.5 boundary samples.",
-    "Do NOT reopen broad basic_5 inflation.",
+    "Do not inflate weak writing, but also do not suppress a genuine Band 5 merely because errors remain. Band 5 allows noticeable non-blocking errors.",
     "v4.3 only tightens two Task 1 boundary cases:",
     "1) Task 1 main=5 / lowband=4 low-band probe;",
     "2) Task 1 main=7 / lowband=5 anti-inflation.",
@@ -550,7 +550,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "Do not choose final 6.0 unless LR and GRA are truly around 6.0 and task development is strong.",
     "",
     "Preserve 4.0 and 4.5 protection:",
-    "If lowbandScore is 4.0, final LR/GRA around 4.0, and the writing is understandable but still has frequent grammar/spelling/word-form errors or unclear sentence control, boundary_4_5 is usually the safest outcome.",
+    "If lowbandScore is 4.0, final LR/GRA around 4.0, and the writing is understandable but still has frequent grammar/spelling/word-form errors or unclear sentence control, boundary_4_5 may be safest. But if the current text is mostly readable and covers the task, Band 5 is allowed even with noticeable non-blocking errors.",
     "Do not lift 4.0/4.5 samples to 5.0/5.5 because of full word count, paragraph count, clear opinion, or correct letter format alone.",
     "However, do not over-apply this protection to a corrected Task 1 letter: once the major grammar/spelling errors are removed and the reader can clearly follow all bullet points, Band 5.0-5.5 becomes plausible even if wording remains simple.",
     "",
