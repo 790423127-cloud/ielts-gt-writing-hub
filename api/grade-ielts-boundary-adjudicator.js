@@ -68,6 +68,13 @@ function wordCount(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g) || []).length;
 }
 
+function countParagraphs(text) {
+  return String(text || "")
+    .split(/\n\s*\n|\r?\n/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .length;
+}
 function roundHalf(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
