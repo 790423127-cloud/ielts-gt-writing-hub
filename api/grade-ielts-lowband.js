@@ -205,6 +205,7 @@ function lowBandPrompt(task, prompt, essay) {
     "Band 5/5.5 Task 1: generally clear purpose and most bullets addressed with some usable detail, but language remains limited. Award this only if the reader can clearly act on the message."
   ] : [
     "Task 2 low-band warning: 250+ words, four paragraphs, and an introduction/conclusion do NOT prove Band 5+.",
+    "If the Task 2 prompt contains two direct questions, a basic but complete response that answers both parts should not be pushed down to 3.0-4.5 merely because development is simple.",
     "Band 3 Task 2: very limited position/content; confused or repetitive organisation; frequent errors make meaning difficult.",
     "Band 3.5 Task 2: relevant attempt but weak answer; mostly simple repeated assertions; poor development; language control is weak.",
     "Band 4 Task 2: basically related but very limited; ideas are simple/repetitive/barely developed; organisation is weak or mechanical; frequent basic errors restrict control.",

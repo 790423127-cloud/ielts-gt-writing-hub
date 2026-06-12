@@ -699,6 +699,8 @@ function inferTask2Profile(promptText) {
   const prompt = String(promptText || "");
   const requiredParts = [];
   const add = (item) => { if (item && !requiredParts.includes(item)) requiredParts.push(item); };
+  const directQuestions = (prompt.match(/[^?]+\?/g) || []).map((x) => x.trim()).filter(Boolean);
+  const questionCount = directQuestions.length;
   const asksOpinion = /\b(your opinion|what is your opinion|give your opinion|to what extent do you agree|agree or disagree|do you agree|disagree)\b/i.test(prompt);
   const asksBothViews = /\b(discuss both views|discuss both these views|both views)\b/i.test(prompt);
   const asksAdvantage = /\b(advantage|advantages|benefit|benefits)\b/i.test(prompt);
@@ -709,6 +711,7 @@ function inferTask2Profile(promptText) {
   const asksSolution = /\b(solution|solutions|solve|measures|what can be done|how can this be)\b/i.test(prompt);
   const asksPositiveNegative = /\b(positive or negative|positive development|negative development|good thing or bad thing|is this a positive|is this a negative)\b/i.test(prompt);
   let questionType = "general_essay";
+  const hasTwoDirectQuestions = questionCount >= 2;
   if (asksBothViews) {
     questionType = "discuss_both_views_with_opinion";
     add("discuss view 1"); add("discuss view 2"); if (asksOpinion) add("give your own opinion");
@@ -721,13 +724,30 @@ function inferTask2Profile(promptText) {
     questionType = "problems_and_solutions"; add("problems"); add("solutions");
   } else if (asksPositiveNegative) {
     questionType = "positive_negative_development"; add("state whether it is mainly positive or negative"); add("support the judgement with reasons");
+  } else if (hasTwoDirectQuestions) {
+    questionType = asksOpinion ? "two_part_question_with_opinion" : "two_part_question";
+    directQuestions.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
   } else if (asksOpinion) {
     questionType = "opinion_agree_disagree"; add("clear position"); add("reasons supporting the position");
   }
-  const questions = (prompt.match(/[^?]+\?/g) || []).map((x) => x.trim()).filter(Boolean);
-  if (questions.length >= 2) questions.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
+  if (hasTwoDirectQuestions && !requiredParts.length) directQuestions.forEach((q, index) => add(`answer question ${index + 1}: ${q}`));
   if (!requiredParts.length) add("answer all parts of the prompt");
-  return { questionType, requiredParts, positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative, bothSidesRequired: asksBothViews, causeRequired: asksCause, problemRequired: asksProblem, solutionRequired: asksSolution, advantageRequired: asksAdvantage, disadvantageRequired: asksDisadvantage, outweighRequired: asksOutweigh, positiveNegativeRequired: asksPositiveNegative };
+  return {
+    questionType,
+    requiredParts,
+    questionCount,
+    directQuestions,
+    twoPartQuestion: hasTwoDirectQuestions,
+    positionRequired: asksOpinion || asksOutweigh || asksPositiveNegative || (hasTwoDirectQuestions && asksOpinion),
+    bothSidesRequired: asksBothViews,
+    causeRequired: asksCause,
+    problemRequired: asksProblem,
+    solutionRequired: asksSolution,
+    advantageRequired: asksAdvantage,
+    disadvantageRequired: asksDisadvantage,
+    outweighRequired: asksOutweigh,
+    positiveNegativeRequired: asksPositiveNegative
+  };
 }
 
 function compactLowerText(text = "") {
@@ -864,6 +884,7 @@ function detectTask2RequirementSignals(essay = "") {
   const source = compactLowerText(essay);
   return {
     clearOpinion: /\b(i\s+(strongly\s+)?(agree|disagree|believe|think)|in\s+my\s+opinion|from\s+my\s+perspective|my\s+view\s+is|i\s+would\s+argue|this\s+is\s+(?:a\s+)?(positive|negative)|i\s+support|i\s+oppose)\b/i.test(source),
+    implicitJudgement: /\b(can\s+be\s+good|can\s+be\s+useful|can\s+help|can\s+make|are\s+good|is\s+good|should\s+be\s+watched|watched\s+sensibly|if\s+watched\s+sensibly|not\s+suitable|too\s+much\s+.*\s+may\s+not\s+be\s+good|best\s+to\s+|prefer|preferable)\b/i.test(source),
     viewOne: /\b(some\s+people|one\s+view|on\s+the\s+one\s+hand|supporters|those\s+who\s+support|people\s+who\s+believe|one\s+argument)\b/i.test(source),
     viewTwo: /\b(other\s+people|others|another\s+view|on\s+the\s+other\s+hand|opponents|however|whereas|while\s+others|critics)\b/i.test(source),
     advantage: /\b(advantage|benefit|beneficial|positive|good\s+point|improve|save|helpful|useful|opportunity|convenient)\b/i.test(source),
@@ -887,12 +908,14 @@ function auditTask2Requirements(body = {}, signals = {}) {
     items.push({ index: items.length + 1, requirement, status, evidence: evidence || "No clear direct evidence found.", issue, capIfProblem: status === "covered" ? null : capIfProblem });
   };
   const evidence = (regex) => firstMatchingSentence(essay, regex) || "No clear direct evidence found.";
+  const questionCount = Number(profile.questionCount) || (Array.isArray(profile.directQuestions) ? profile.directQuestions.length : 0);
+  const directQuestions = Array.isArray(profile.directQuestions) ? profile.directQuestions : [];
 
   if (profile.bothSidesRequired) {
     addItem("discuss both views", markers.viewOne && markers.viewTwo ? "covered" : (markers.viewOne || markers.viewTwo ? "partly_covered" : "missing"), evidence(/\b(some people|other people|others|on the one hand|on the other hand|however|whereas|while)\b/i), "Discuss-both-views essays must clearly cover both sides, not only one side.", 5.0);
   }
   if (profile.positionRequired) {
-    addItem("state a clear position or judgement", markers.clearOpinion || markers.outweighJudgement || markers.positiveNegativeJudgement ? "covered" : "missing", evidence(/\b(i agree|i disagree|i believe|i think|in my opinion|positive|negative|outweigh|overall)\b/i), "This question type requires a clear position or judgement.", 5.5);
+    addItem("state a clear position or judgement", markers.clearOpinion || markers.outweighJudgement || markers.positiveNegativeJudgement || markers.implicitJudgement ? "covered" : "missing", evidence(/\b(i agree|i disagree|i believe|i think|in my opinion|positive|negative|outweigh|overall|good entertainment|help people relax|not suitable|watched sensibly)\b/i), "This question type requires a clear position or judgement.", 5.5);
   }
   if (profile.advantageRequired) {
     addItem("cover advantages/benefits", markers.advantage ? "covered" : "missing", evidence(/\b(advantage|benefit|positive|improve|save|helpful|opportunity|convenient)\b/i), "The advantages/benefits side is required by this prompt.", 5.0);
@@ -916,19 +939,21 @@ function auditTask2Requirements(body = {}, signals = {}) {
     addItem("judge whether the development is positive or negative", markers.positiveNegativeJudgement ? "covered" : "missing", evidence(/\b(positive|negative|beneficial|harmful|good development|bad development|mainly positive|mainly negative)\b/i), "Positive/negative development questions require a clear judgement.", 5.5);
   }
 
-  const questions = (String(body.questionPrompt || body.promptText || body.prompt || "").match(/[^?]+\?/g) || []).map((x) => x.trim()).filter(Boolean);
-  if (questions.length >= 2) {
+  const questions = directQuestions.length ? directQuestions : (String(body.questionPrompt || body.promptText || body.prompt || "").match(/[^?]+\?/g) || []).map((x) => x.trim()).filter(Boolean);
+  if (questionCount >= 2 || questions.length >= 2 || profile.twoPartQuestion) {
     const paraCount = Number(signals.paragraphCount) || countParagraphs(essay);
-    const enoughSeparateTreatment = paraCount >= Math.min(questions.length + 1, 4) || markers.explanationMarkers >= questions.length;
-    addItem("answer all direct question parts", enoughSeparateTreatment ? "covered" : "partly_covered", evidence(/\b(because|therefore|for example|firstly|secondly|in conclusion)\b/i), "Two-part questions must answer each direct question, not just the general topic.", 5.5);
+    const basicCoverage = (markers.explanationMarkers >= 1 || markers.exampleSupport || markers.implicitJudgement || markers.clearOpinion || markers.positiveNegativeJudgement || markers.outweighJudgement) && (Number(signals.wordCount) >= 120 || paraCount >= 2 || Number(signals.sentenceCount) >= 4);
+    const enoughSeparateTreatment = paraCount >= Math.min((questionCount || questions.length) + 1, 4) || markers.explanationMarkers >= Math.max(1, questionCount || questions.length) || basicCoverage;
+    addItem("answer all direct question parts", enoughSeparateTreatment ? "covered" : (basicCoverage ? "partly_covered" : "missing"), evidence(/\b(because|therefore|for example|firstly|secondly|in conclusion|good entertainment|help people relax|not suitable|watched sensibly)\b/i), "Two-part questions must answer each direct question, but a basic complete response should not be treated as off-topic just because the development is simple.", 5.5);
   }
 
   const words = Number(signals.wordCount) || countWords(essay);
   const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(essay).length;
   const paragraphCount = Number(signals.paragraphCount) || countParagraphs(essay);
-  const realDevelopment = words >= 230 && paragraphCount >= 3 && sentenceCount >= 8 && (markers.exampleSupport || markers.explanationMarkers >= 3);
+  const realDevelopment = words >= (profile.twoPartQuestion ? 150 : 230) && paragraphCount >= 3 && sentenceCount >= (profile.twoPartQuestion ? 5 : 8) && (markers.exampleSupport || markers.explanationMarkers >= (profile.twoPartQuestion ? 2 : 3) || markers.implicitJudgement);
   if (!realDevelopment) {
-    addItem("develop ideas with explanation and support", sentenceCount >= 6 && markers.explanationMarkers >= 2 ? "partly_covered" : "missing", evidence(/\b(for example|such as|because|therefore|this means|as a result)\b/i), "Band 6+ Task Response needs real development, not only a position plus paragraph labels.", words < 180 ? 5.0 : 5.5);
+    const basicDevelopment = words >= (profile.twoPartQuestion ? 100 : 180) && sentenceCount >= (profile.twoPartQuestion ? 4 : 6) && (markers.explanationMarkers >= 1 || markers.exampleSupport || markers.implicitJudgement || markers.clearOpinion || markers.positiveNegativeJudgement || markers.outweighJudgement);
+    addItem("develop ideas with explanation and support", basicDevelopment ? "partly_covered" : "missing", evidence(/\b(for example|such as|because|therefore|this means|as a result|good entertainment|help people relax|not suitable|watched sensibly)\b/i), "Band 6+ Task Response needs real development, but a basic complete answer should not be treated as missing task response merely because the ideas are simple.", words < (profile.twoPartQuestion ? 160 : 180) ? 5.0 : 5.5);
   }
 
   const missingCount = items.filter((item) => item.status === "missing").length;
@@ -943,6 +968,9 @@ function auditTask2Requirements(body = {}, signals = {}) {
     task: "Task 2",
     questionType: profile.questionType,
     requiredParts: profile.requiredParts || [],
+    questionCount: questionCount || questions.length || 0,
+    directQuestions: questions,
+    twoPartQuestion: Boolean(profile.twoPartQuestion || (questionCount >= 2) || questions.length >= 2),
     markers,
     items,
     missingCount,
@@ -1535,7 +1563,7 @@ function buildIndependentAnchorPrompt(body, signals) {
   const anchorTable = stringifyAnchorTable(task);
   const taskSpecific = task === "Task 1"
     ? `GT Task 1 letter: judge purpose clarity, bullet coverage, tone/register, letter completeness and language control. Extracted bullets: ${JSON.stringify(signals.task1BulletPoints)}.`
-    : `GT Task 2 essay: judge prompt coverage, position, development, examples/reasons, logical progression and language control. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}.`;
+    : `GT Task 2 essay: judge prompt coverage, position, development, examples/reasons, logical progression and language control. Question profile: ${JSON.stringify(signals.task2QuestionProfile)}. If the prompt has two direct questions, each is a required part and a basic complete answer should not be treated as missing task response just because development is simple.`;
   const localBoundaryProfile = getLocalBandBoundaryProfile(signals);
   return [
     "You are an IELTS GT Writing anchor-classification examiner. Return JSON only. Do not assign criterion bands in this stage.",
@@ -1711,6 +1739,9 @@ function buildTaskProfile(body, signals) {
         gateRules: TASK2_GATE_RULES,
         questionType: signals.task2QuestionProfile?.questionType || body.questionType || "general_essay",
         requiredParts: signals.task2QuestionProfile?.requiredParts || [],
+        questionCount: signals.task2QuestionProfile?.questionCount || 0,
+        directQuestions: signals.task2QuestionProfile?.directQuestions || [],
+        twoPartQuestion: Boolean(signals.task2QuestionProfile?.twoPartQuestion),
         taskRequirementAudit: signals.taskRequirementAudit || null,
         positionRequired: Boolean(signals.task2QuestionProfile?.positionRequired),
         requiredMinimumWords: 250
@@ -2414,6 +2445,9 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     lexicalNaturalnessRisk: signals.lexicalNaturalnessRisk,
     task1BulletCount: Array.isArray(signals.task1BulletPoints) ? signals.task1BulletPoints.length : 0,
     task2QuestionType: signals.task2QuestionProfile?.questionType || "",
+    task2QuestionCount: signals.task2QuestionProfile?.questionCount || 0,
+    task2TwoPartQuestion: Boolean(signals.task2QuestionProfile?.twoPartQuestion),
+    task2DirectQuestions: Array.isArray(signals.task2QuestionProfile?.directQuestions) ? signals.task2QuestionProfile.directQuestions : [],
     taskRequirementAudit: signals.taskRequirementAudit ? {
       version: signals.taskRequirementAudit.version,
       triggered: signals.taskRequirementAudit.triggered,
@@ -2427,7 +2461,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
   const anchorMini = anchorSetForTask(task).map((item) => `B${item.band}: ${item.profile}`).join(" | ");
   const taskMini = task === "Task 1"
     ? `Task 1 prompt bullets extracted for orientation only: ${JSON.stringify(signals.task1BulletPoints || [])}. You, the AI examiner, must judge each bullet from the prompt and response yourself as covered, partly_covered, or missing. Do not rely on any local audit.`
-    : `Task 2 question profile for orientation only: ${JSON.stringify(signals.task2QuestionProfile || {})}. You, the AI examiner, must judge the question type and all required parts yourself from the prompt and response. Do not rely on any local audit.`;
+    : `Task 2 question profile for orientation only: ${JSON.stringify(signals.task2QuestionProfile || {})}. You, the AI examiner, must judge the question type and all required parts yourself from the prompt and response. If the prompt has two direct questions, treat each as a required part. Do not rely on any local audit.`;
   return [
     "You are an IELTS GT Writing SCORE KERNEL. Return one tiny valid JSON object only.",
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}. Criteria keys must be exactly ${JSON.stringify(names)}.`,
@@ -2451,6 +2485,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     `${v856ForcedAnchorComparisonProtocol(task)}`,
     "Task 1 calibration: a complete-looking letter is not automatically Band 7. If it is basic, repetitive, awkward, thin, or error-prone, keep it in Band 4/5/6 according to the matrix. If it is natural, precise and well controlled, allow 7/8/9.",
     "Task 2 calibration: a long essay with paragraphs is not automatically Band 6/7. If reasoning is shallow and language weak, keep it low/mid. If reasoning is mature and language controlled, allow 8/9.",
+    "Task 2 two-question rule: when the prompt contains two direct questions, each direct question is a required part. A basic but complete answer that addresses both questions should not be treated as missing task response merely because the development is simple.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
     "Criterion differentiation rule: score TA/TR, CC, LR and GRA independently before thinking about Overall. Avoid mechanical all-four-same bands. If all four are identical, reasonCodes must prove that each criterion separately deserves that same half-band; otherwise use a justified 0.5 spread.",
     "Calibration failure warning: if a clear Band 8/9-quality sample is scored around 6.0/6.5, that is under-scoring. If a clearly weak Band 3/4 sample is scored around 5.5, that is over-scoring. Use the entire 0-9 scale.",
@@ -2671,6 +2706,7 @@ function taskSpecificPositiveRescueRules(task = "Task 2") {
     "Task 2 zero rule: Band 0 is only for no assessable essay response at all: blank, wholly non-English, explicit no-answer, fully copied prompt, or completely unassessable fragments.",
     "Task 2 positive-band rule: if the response contains any assessable English essay attempt, relevant opinion, position, reason, example, conclusion, or answer to any part of the prompt, Task Response must be a low positive band rather than Band 0.",
     "Task 2 weak-but-rateable rule: no examples, shallow reasoning, undeveloped ideas, weak paragraphing, or vague opinions can justify a low Task Response band, but not Band 0 when there is a real attempt to answer.",
+    "Task 2 two-question prompt rule: when the prompt asks two direct questions, both parts must be answered, but a basic complete response that answers both should be treated as Band 5/5.5 material if the answer is relevant and understandable. Do not misread limited development as missing task response.",
     "Task 2 exam-realism rule: a response can be positive-band but still very low if it is a wrong format, wrong topic, list of assertions, or barely developed. Band 5+ requires some relevant development; Band 6+ requires a clear position and adequately extended ideas, not only a list of assertions.",
     "Task 2 language ceiling rule: frequent basic grammar/spelling/word-form problems should keep Lexical Resource and Grammar around low-mid bands unless the text shows clear stronger control.",
     "Task 2 criteria must be exactly: Task Response, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."

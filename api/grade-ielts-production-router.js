@@ -187,6 +187,16 @@ async function callJsonWithRetry(url, body, label) {
 
 function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
   const finalBand = mainBand;
+  const scoringAudit = buildRouterScoringAudit({
+    task: main?.task || main?.scoringTask || "",
+    route,
+    finalBand,
+    finalSource: extra.finalSource || "main-score",
+    main,
+    boundary: null,
+    highband: extra.highband || null,
+    boundaryMainReuseAudit: null
+  });
   return {
     ...main,
     ok: main.ok !== false,
@@ -210,6 +220,7 @@ function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpo
     main,
     boundary: null,
     highband: extra.highband || null,
+    scoringAudit,
     routingAudit: {
       mainAttempts,
       boundaryAttempts: 0,
@@ -221,6 +232,51 @@ function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpo
       ...extra.audit
     },
     disclaimer: "This is an AI IELTS GT Writing score estimate, not an official IELTS score."
+  };
+}
+
+function buildRouterScoringAudit({ task, route, finalBand, finalSource, main, boundary, highband, boundaryMainReuseAudit }) {
+  const source = boundary || main || highband || {};
+  const taskProfile = source.taskProfile || main?.taskProfile || boundary?.taskProfile || {};
+  const taskRequirementAudit = taskProfile.taskRequirementAudit || main?.taskProfile?.taskRequirementAudit || boundary?.taskProfile?.taskRequirementAudit || null;
+  const task2Profile = taskProfile || main?.taskProfile || boundary?.taskProfile || {};
+  const task1Profile = taskProfile || main?.taskProfile || boundary?.taskProfile || {};
+  const items = Array.isArray(taskRequirementAudit?.items) ? taskRequirementAudit.items : [];
+  const coveredOrPartial = items.filter((item) => item.status === "covered" || item.status === "partly_covered");
+  const questionPartsAnswered = coveredOrPartial.map((item) => item.requirement).filter(Boolean);
+  const bulletPointsDetected = Number((Array.isArray(task1Profile.bulletPoints) ? task1Profile.bulletPoints.length : 0) || (taskRequirementAudit?.extractedRequirements || []).length || 0) || 0;
+  const bulletPointsCovered = task === "Task 1"
+    ? items.filter((item) => item.status === "covered" || item.status === "partly_covered").length
+    : null;
+  const directQuestions = Array.isArray(task2Profile.directQuestions) ? task2Profile.directQuestions : [];
+  const questionPartsRequired = task === "Task 2" ? (directQuestions.length ? directQuestions : (Array.isArray(taskRequirementAudit?.requiredParts) ? taskRequirementAudit.requiredParts : [])) : null;
+  const hardLowbandEvidence = [];
+  if (taskRequirementAudit?.triggered && taskRequirementAudit?.summary) hardLowbandEvidence.push(taskRequirementAudit.summary);
+  if (boundaryMainReuseAudit?.mainReusedFromRouter) hardLowbandEvidence.push("boundary reused frozen main result");
+
+  return {
+    taskDetected: task || taskProfile.task || main?.task || boundary?.task || highband?.task || "",
+    taskTypeDetected: task === "Task 2"
+      ? (task2Profile.questionType || taskProfile.questionType || "")
+      : (task1Profile.letterStyle || task1Profile.scoringProfile || task1Profile.task || taskProfile.task || ""),
+    wordCount: Number(taskProfile.wordCount || source.wordCount || source.localSignals?.wordCount || main?.localSignals?.wordCount || boundary?.localSignals?.wordCount || main?.wordCount || boundary?.wordCount || 0) || null,
+    paragraphCount: Number(taskProfile.paragraphCount || source.paragraphCount || source.localSignals?.paragraphCount || main?.localSignals?.paragraphCount || boundary?.localSignals?.paragraphCount || main?.paragraphCount || boundary?.paragraphCount || 0) || null,
+    hardLowbandEvidence,
+    lowbandEligible: Boolean(route?.routeZone === "below_boundary" || route?.routeZone === "boundary_4_0_5_5" || String(finalSource).includes("lowband")),
+    boundaryEligible: Boolean(route?.useBoundary || route?.routeZone === "boundary_4_0_5_5" || finalSource === "boundary-adjudicator-v4-3"),
+    highbandEligible: Boolean(route?.useHighbandShadow || route?.routeZone === "highband_candidate_7_0_plus" || String(finalSource).includes("highband")),
+    taskResponsePresent: task === "Task 2" ? questionPartsAnswered.length > 0 : Boolean(items.length || bulletPointsDetected),
+    positionPresent: task === "Task 2" ? Boolean(task2Profile.positionRequired || taskRequirementAudit?.markers?.clearOpinion || taskRequirementAudit?.markers?.implicitJudgement || taskRequirementAudit?.markers?.positiveNegativeJudgement || taskRequirementAudit?.markers?.outweighJudgement) : null,
+    bulletPointsDetected: task === "Task 1" ? bulletPointsDetected : null,
+    bulletPointsCovered: task === "Task 1" ? bulletPointsCovered : null,
+    questionPartsRequired: task === "Task 2" ? questionPartsRequired : null,
+    questionPartsAnswered: task === "Task 2" ? questionPartsAnswered : null,
+    routeDecision: route?.routeDecision || "",
+    routeZone: route?.routeZone || "",
+    routeReason: Array.isArray(route?.reasonCodes) ? route.reasonCodes.join(", ") : "",
+    finalBand: Number.isFinite(Number(finalBand)) ? Number(finalBand) : null,
+    finalSource: finalSource || "",
+    boundaryMainReuseAudit: boundaryMainReuseAudit || null
   };
 }
 
@@ -290,6 +346,16 @@ module.exports = async function handler(req, res) {
         highbandScore: null,
         highbandShadowCalled: false,
         highbandConfirmed: false,
+        scoringAudit: buildRouterScoringAudit({
+          task: requestBody.task || requestBody.scoringTask || requestBody.taskType || boundary?.task || "",
+          route,
+          finalBand,
+          finalSource: "boundary-adjudicator-v4-3",
+          main,
+          boundary,
+          highband: null,
+          boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null
+        }),
         boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null,
         main,
         boundary,
@@ -332,12 +398,22 @@ module.exports = async function handler(req, res) {
             criteria: extractCriteria(highband),
             mainScore: mainBand,
             boundaryScore: null,
-            highbandScore: highbandBand,
-            highbandShadowCalled: true,
-            highbandConfirmed: true,
+          highbandScore: highbandBand,
+          highbandShadowCalled: true,
+          highbandConfirmed: true,
+          scoringAudit: buildRouterScoringAudit({
+            task: requestBody.task || requestBody.scoringTask || requestBody.taskType || main?.task || "",
+            route,
+            finalBand: highbandBand,
+            finalSource: "highband-shadow-v8-5-14",
             main,
             boundary: null,
             highband,
+            boundaryMainReuseAudit: null
+          }),
+          main,
+          boundary: null,
+          highband,
             routingAudit: {
               mainAttempts: mainCall.attempts,
               boundaryAttempts: 0,

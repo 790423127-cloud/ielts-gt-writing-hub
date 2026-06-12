@@ -408,6 +408,7 @@ function adjudicatorPrompt(task, questionPrompt, essay, main, lowband, route) {
     "Task 2 relabel awareness:",
     "Some full-length Task 2 low-band-looking samples may be closer to 4.5 than 3.5. Do not force them down to 3.5 unless they are genuinely very weak.",
     "For Task 2, maintain v4.2 behavior: avoid broad basic_5 inflation but do not over-apply Task 1 low-4 probing.",
+    "If the Task 2 prompt has two direct questions and the response answers both with basic but relevant development, do not treat that as missing task response or off-topic just because the ideas are simple.",
     "",
     "5.5 protection:",
     "Do not collapse a plausible 5.5 all the way to 4.5 without clear low-band evidence.",
@@ -519,6 +520,46 @@ function selectWithoutAdjudication(route, main, lowband) {
   };
 }
 
+function buildBoundaryScoringAudit(task, questionPrompt, essay, main, lowband, route, selected, mainReusedFromRouter, mainSource) {
+  const mainTaskProfile = main?.raw?.taskProfile || {};
+  const taskProfile = mainTaskProfile || {};
+  const taskRequirementAudit = taskProfile.taskRequirementAudit || null;
+  const task2Profile = taskProfile || {};
+  const task1Profile = taskProfile || {};
+  const items = Array.isArray(taskRequirementAudit?.items) ? taskRequirementAudit.items : [];
+  const coveredOrPartial = items.filter((item) => item.status === "covered" || item.status === "partly_covered");
+  const questionPartsAnswered = coveredOrPartial.map((item) => item.requirement).filter(Boolean);
+  const questionPartsRequired = task === "Task 2" ? (Array.isArray(task2Profile.directQuestions) && task2Profile.directQuestions.length ? task2Profile.directQuestions : (Array.isArray(taskRequirementAudit?.requiredParts) ? taskRequirementAudit.requiredParts : [])) : null;
+  const bulletPointsDetected = Number((Array.isArray(task1Profile.bulletPoints) ? task1Profile.bulletPoints.length : 0) || (taskRequirementAudit?.extractedRequirements || []).length || 0) || 0;
+
+  return {
+    taskDetected: task,
+    taskTypeDetected: task === "Task 2" ? (task2Profile.questionType || "") : (task1Profile.letterStyle || task1Profile.scoringProfile || task1Profile.task || ""),
+    wordCount: wordCount(essay),
+    paragraphCount: countParagraphs(essay),
+    hardLowbandEvidence: taskRequirementAudit?.triggered && taskRequirementAudit?.summary ? [taskRequirementAudit.summary] : [],
+    lowbandEligible: route.zone === "lowband_zone" || route.decision === "lowband_conflict_adjudicate" || route.decision === "lowband_confirms_low_score",
+    boundaryEligible: Boolean(route.adjudicate),
+    highbandEligible: false,
+    taskResponsePresent: task === "Task 2" ? questionPartsAnswered.length > 0 : Boolean(items.length || bulletPointsDetected),
+    positionPresent: task === "Task 2" ? Boolean(task2Profile.positionRequired || taskRequirementAudit?.markers?.clearOpinion || taskRequirementAudit?.markers?.implicitJudgement || taskRequirementAudit?.markers?.positiveNegativeJudgement || taskRequirementAudit?.markers?.outweighJudgement) : null,
+    bulletPointsDetected: task === "Task 1" ? bulletPointsDetected : null,
+    bulletPointsCovered: task === "Task 1" ? coveredOrPartial.length : null,
+    questionPartsRequired: task === "Task 2" ? questionPartsRequired : null,
+    questionPartsAnswered: task === "Task 2" ? questionPartsAnswered : null,
+    routeDecision: route.decision,
+    routeZone: route.zone,
+    routeReason: Array.isArray(route.reasonCodes) ? route.reasonCodes.join(", ") : "",
+    finalBand: Number.isFinite(Number(selected.finalBand)) ? Number(selected.finalBand) : null,
+    finalSource: selected.finalSource || "",
+    boundaryMainReuseAudit: {
+      mainReusedFromRouter,
+      mainSource,
+      productionRouterMainFrozen: Boolean(mainReusedFromRouter)
+    }
+  };
+}
+
 module.exports = async function handler(req, res) {
   try {
     setCors(req, res);
@@ -572,6 +613,7 @@ module.exports = async function handler(req, res) {
       scoreGap: route.scoreGap,
       main,
       lowband,
+      scoringAudit: buildBoundaryScoringAudit(task, questionPrompt, essay, main, lowband, route, selected, mainReusedFromRouter, mainSource),
       boundaryMainReuseAudit: {
         mainReusedFromRouter,
         mainSource,
