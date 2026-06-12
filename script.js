@@ -2361,7 +2361,8 @@
 
   function renderLearningModuleBody(moduleName, data) {
     const result = data?.moduleResult || data?.result || {};
-    if (!data) return `<div class="learning-empty-state"><p>点击“生成本模块反馈”开始。每个模块会单独请求 AI，反馈必须基于当前题目、你的原文和已经冻结的评分结果；不会重新打分，也不会用本地模板冒充真实反馈。</p></div>`;
+    if (!latestScoreResult) return `<div class="learning-empty-state"><p>??? Writing Studio ?????????????????????????????</p></div>`;
+    if (!data) return `<div class="learning-empty-state"><p>??????????????????????? AI?????????????????????????????????????????????????</p></div>`;
     if (data.status === "loading") return `<div class="learning-loading"><p>正在生成 ${escapeHtml(moduleLabel(moduleName))}，请稍等...</p></div>`;
     if (data.status === "error") return `<div class="learning-error"><p>${escapeHtml(data.error || "反馈生成失败")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
     if (data.fallbackUsed) return `<div class="learning-error"><p>${escapeHtml(data.moduleResult?.summary?.zh || "该模块生成格式异常，请重新生成。")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
@@ -2378,17 +2379,59 @@
     return found ? `${found.label} / ${found.en}` : moduleName;
   }
 
+
+  function learningFeedbackStatusSummary() {
+    const entries = Object.values(latestLearningFeedback || {});
+    if (!latestScoreResult) {
+      return {
+        title: "??? Writing Studio ????????",
+        note: "??????Learning Feedback ??????????????",
+        kind: "empty"
+      };
+    }
+    if (entries.some((item) => item && item.status === "loading")) {
+      return {
+        title: "??????????????",
+        note: "????????????????????????????",
+        kind: "loading"
+      };
+    }
+    if (entries.some((item) => item && item.status === "error")) {
+      return {
+        title: "??????????????????",
+        note: "????????????? Learning Feedback ????????????",
+        kind: "error"
+      };
+    }
+    if (entries.length) {
+      return {
+        title: "?? Learning Feedback",
+        note: "???????????????????????????????",
+        kind: "ready"
+      };
+    }
+    return {
+      title: "?????????",
+      note: "????????? Learning Feedback ??????????????",
+      kind: "idle"
+    };
+  }
   function renderLearningFeedbackHtml() {
     const active = LEARNING_FEEDBACK_MODULES.some((m) => m.key === activeLearningFeedbackModule) ? activeLearningFeedbackModule : "sentenceUpgrade";
     const activeModule = LEARNING_FEEDBACK_MODULES.find((m) => m.key === active) || LEARNING_FEEDBACK_MODULES[0];
     const body = renderLearningModuleBody(active, latestLearningFeedback[active]);
+    const status = learningFeedbackStatusSummary();
     return `<section class="learning-feedback-panel learning-feedback-v2-panel" id="learningFeedbackPanel">
       <div class="learning-feedback-head">
         <div>
-          <h4>学习反馈 / Learning Feedback</h4>
-          <p>每个模块单独请求 AI；反馈必须基于当前题目和你的原文，不重新打分，也不修改已经冻结的 Overall 或四项分。</p>
+          <h4>???? / Learning Feedback</h4>
+          <p>???????? AI???????????????????????????????? Overall ?????</p>
         </div>
-        <button class="primary" type="button" data-learning-feedback-generate="${escapeHtml(active)}">生成本模块反馈</button>
+        <button class="primary" type="button" data-learning-feedback-generate="${escapeHtml(active)}">???????</button>
+      </div>
+      <div class="learning-feedback-status-card learning-feedback-status-${escapeHtml(status.kind)}">
+        <strong>${escapeHtml(status.title)}</strong>
+        <p>${escapeHtml(status.note)}</p>
       </div>
       <div class="learning-tabs" role="tablist">
         ${LEARNING_FEEDBACK_MODULES.map((item) => `<button class="learning-tab ${item.key === active ? "active" : ""}" type="button" data-learning-feedback-tab="${escapeHtml(item.key)}"><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.en)}</small></button>`).join("")}
@@ -2399,12 +2442,13 @@
       </div>
     </section>`;
   }
-
-    function renderLearningFeedbackPanel() {
-    const panel = document.getElementById("learningFeedbackPanel");
-    if (panel) panel.outerHTML = renderLearningFeedbackHtml();
+  function renderLearningFeedbackPanel() {
+    const mount = $("learningFeedbackMount");
+    if (!mount) return;
+    mount.innerHTML = renderLearningFeedbackHtml();
+    const empty = $("feedbackEmpty");
+    empty?.classList.add("hidden");
   }
-
   async function generateLearningFeedback(moduleName) {
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
     const essay = String(els.essayInput?.value || "").trim();
@@ -2463,7 +2507,14 @@
       ${renderFeedbackStatusNotice(result)}
       ${renderCriterionCards(result)}
       ${renderCriterionDifferentiationReview(result)}
-      ${renderLearningFeedbackHtml()}
+      <section class="score-feedback-entry" aria-label="Learning Feedback entry">
+        <div>
+          <p class="eyebrow">LEARNING FEEDBACK</p>
+          <h4>?????? / View Learning Feedback</h4>
+          <p>${escapeHtml(learningFeedbackStatusSummary().note)}</p>
+        </div>
+        <a class="primary" href="#/feedback" data-view-target="feedback">?? Learning Feedback</a>
+      </section>
       ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
       ${renderScoreCalibration(result)}`;
     if (els.gradingResults) els.gradingResults.innerHTML = html;
@@ -3639,13 +3690,10 @@
 
     const feedbackMount = $("learningFeedbackMount");
     const feedbackEmpty = $("feedbackEmpty");
-    const learningPanel = document.getElementById("learningFeedbackPanel");
-    if (feedbackMount && learningPanel && learningPanel.parentElement !== feedbackMount) {
-      feedbackMount.innerHTML = "";
-      feedbackMount.appendChild(learningPanel);
-      feedbackEmpty?.classList.add("hidden");
-    } else if (feedbackMount && !feedbackMount.innerHTML.trim()) {
-      feedbackEmpty?.classList.remove("hidden");
+    if (feedbackMount) {
+      renderLearningFeedbackPanel();
+      const hasFeedbackContent = Boolean(feedbackMount.innerHTML.trim());
+      feedbackEmpty?.classList.toggle("hidden", hasFeedbackContent);
     }
   }
 
