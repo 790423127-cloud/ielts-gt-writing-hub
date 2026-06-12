@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-13-neutral-ai-primary-midband";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-14-criterion-differentiation-3-to-7-v4-4";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -377,6 +377,33 @@ function halfBandDecisionProtocol() {
     "- For every criterion, compare the adjacent lower, exact, and adjacent higher half/full bands.",
     "- Do not prefer whole bands by default; use the evidence.",
     "- Do not use local word-count/spelling/grammar signals as automatic caps or floors; they are only non-scoring risk notes."
+  ].join("\n");
+}
+
+
+function criterionDifferentiationRealismProtocolV44(task) {
+  const firstCriterion = task === "Task 1" ? "Task Achievement" : "Task Response";
+  const taskSpecific = task === "Task 1"
+    ? [
+        "Task 1 differentiation: TA can be higher than LR/GRA when the letter communicates the purpose and usable bullet information but the vocabulary/grammar remain basic or awkward.",
+        "Task 1 differentiation: LR and GRA should remain 4.5 when vocabulary is repetitive/awkward or grammar still makes reading effortful, even if TA/CC are 5.0 or 5.5.",
+        "Task 1 differentiation: a polished, natural letter can have all criteria high, but a simple functional letter usually should not be flattened into four identical 5s without evidence."
+      ]
+    : [
+        "Task 2 differentiation: CC can be higher than TR when the essay is organised but ideas are shallow, repetitive, or weakly supported.",
+        "Task 2 differentiation: LR/GRA can be lower than TR/CC when the argument is understandable but language control is limited; they can also be higher than TR when language is strong but the answer is partial or underdeveloped.",
+        "Task 2 differentiation: do not treat paragraph count, connectors, length, or a stated opinion as proof of development. TR must reflect actual reasoning depth and relevance."
+      ];
+  return [
+    "v4.4 criterion-differentiation realism for Bands 3.0-7.0:",
+    "1. Score the four criteria independently before calculating overall. Do not copy the nearest overall band into all criteria.",
+    "2. Identical criterion bands from 4.0 to 7.0 are allowed only when all four areas genuinely show the same level; otherwise use a realistic 0.5 spread.",
+    `3. ${firstCriterion} is about task fulfilment/response only; CC is about organisation/progression only; LR is about vocabulary control only; GRA is about grammar range and accuracy only.`,
+    "4. Band 3/4 scripts can be full length if communication, development, and language control are very weak. Do not lift them for layout alone.",
+    "5. Band 5 scripts can be understandable and functional while LR/GRA remain 4.5. Overall Band 5 does not require four 5.0 criteria.",
+    "6. Band 6 scripts need clearer development and more stable control; Band 7 needs developed content plus flexible and mostly accurate language. Do not jump from 6.0 to 7.0 for length or fluency alone.",
+    "7. When a response receives four identical bands in the 4.0-7.0 range, actively look for the weakest criterion and the strongest criterion. Keep equality only if reasonCodes give criterion-specific evidence for equality.",
+    ...taskSpecific.map((rule, index) => `${index + 8}. ${rule}`)
   ].join("\n");
 }
 
@@ -2407,9 +2434,9 @@ function shouldRunCriterionDifferentiationReview(result = {}) {
   const same = values.every((x) => x === values[0]);
   if (!same) return false;
   const { finalBand } = averageBand(criteria);
-  // Do not spend an extra AI call for strict-zero or very low severely limited writing.
-  // The main problem we are solving is mid/high-band criterion cloning such as 7/7/7/7.
-  return Number.isFinite(finalBand) && finalBand >= 5;
+  // v4.4: the main realism problem is criterion flattening in the 3-7 development range.
+  // Re-check identical 4.0-7.0 profiles, including four 5s and four 6s.
+  return Number.isFinite(finalBand) && finalBand >= 4 && finalBand <= 7;
 }
 
 function buildCriterionDifferentiationPrompt(body, reviewedResult, audit = {}) {
@@ -2426,6 +2453,7 @@ function buildCriterionDifferentiationPrompt(body, reviewedResult, audit = {}) {
     `Current identical criterion profile: ${JSON.stringify(criteria)}; current overall: ${finalBand}.`,
     `IELTS criterion band matrix for ${task}:\n${criterionBandMatrixText(task)}`,
     halfBandDecisionProtocol(),
+    criterionDifferentiationRealismProtocolV44(task),
     "Independent criterion rule: score each criterion separately. Do not choose a criterion band because the overall score is around that band.",
     "Evidence separation rule:",
     `- ${names[0]}: judge only task fulfilment, prompt coverage, position/development, register and purpose as relevant to the locked task.`,
@@ -2685,7 +2713,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     "Task 2 calibration: a long essay with paragraphs is not automatically Band 6/7. If reasoning is shallow and language weak, keep it low/mid. If reasoning is mature and language controlled, allow 8/9.",
     "Task 2 two-question rule: when the prompt contains two direct questions, each direct question is a required part. A basic but complete answer that addresses both questions should not be treated as missing task response merely because the development is simple.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
-    "Criterion differentiation rule: score TA/TR, CC, LR and GRA independently before thinking about Overall. Avoid mechanical all-four-same bands. If all four are identical, reasonCodes must prove that each criterion separately deserves that same half-band; otherwise use a justified 0.5 spread.",
+    "Criterion differentiation rule: in Band 3.0-7.0 scoring, avoid criterion flattening. A Task 1 response may have TA/CC at 5.0 while LR/GRA are 4.5; a Task 2 response may have CC above TR when organised but thin. If all four criteria are identical, reasonCodes must prove that equality criterion by criterion; otherwise use a justified 0.5 spread.",
     "Calibration failure warning: if a clear Band 8/9-quality sample is scored around 6.0/6.5, that is under-scoring. If a clearly weak Band 3/4 sample is scored around 5.5, that is over-scoring. Use the entire 0-9 scale.",
     `Task boundary protocol: ${bandBoundaryProtocolForTask(task)}`,
     `0-9 anchor mini table: ${anchorMini}`,

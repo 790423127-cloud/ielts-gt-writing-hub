@@ -14,7 +14,7 @@ const lowband = read('api/grade-ielts-lowband.js');
 const boundary = read('api/grade-ielts-boundary-adjudicator.js');
 
 [
-  'production-router-v3-4-neutral-ai-primary-routing',
+  'production-router-v3-5-criterion-differentiation-routing-v4-4',
   '/api/grade-ielts-midband',
   'hasHardLowbandEvidence',
   'LOWBAND_NOT_CALLED_FOR_ORDINARY_BAND5',
@@ -30,7 +30,7 @@ assert(!/finalBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint 
 assert(!/overallBand\s*=\s*Math\.max/.test(router + midbandCore + midbandEndpoint + lowband + boundary), 'Forbidden local overall floor found.');
 
 [
-  'score-core-v8-5-13-neutral-ai-primary-midband',
+  'score-core-v8-5-14-criterion-differentiation-3-to-7-v4-4',
   'MIDBAND_4_TO_6_CALIBRATION_RULES',
   'Band 5.0 Task 1',
   'Band 5 does not mean error-free',
@@ -103,4 +103,4 @@ const notLow = { lowBandDecision: '5_plus', lowBandAudit: { trueLowBand: false, 
 assert(audit.shouldUseLowbandFinal(5.0, 3.5, trueLow) === true, 'AI-confirmed hard lowband should be selectable as final.');
 assert(audit.shouldUseLowbandFinal(5.0, 4.5, notLow) === false, 'Simple Band 5 writing should not be suppressed by lowband guard.');
 
-console.log('PASS midband 4-6 three-system router static test v4.3');
+console.log('PASS midband 4-6 three-system router static test v4.4');

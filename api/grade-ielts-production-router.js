@@ -5,8 +5,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v3-4-neutral-ai-primary-routing";
-const MIDBAND_VERSION = "score-core-v8-5-13-neutral-ai-primary-midband";
+const ROUTER_VERSION = "production-router-v3-5-criterion-differentiation-routing-v4-4";
+const MIDBAND_VERSION = "score-core-v8-5-14-criterion-differentiation-3-to-7-v4-4";
 const LOWBAND_VERSION = "score-core-v8-5-10-lowband-neutral-hard-evidence-guard";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
 const BOUNDARY_VERSION = "boundary-adjudicator-v4-5-neutral-diagnostic-only";
@@ -126,7 +126,7 @@ function buildLocalLogicAudit() {
     appliedLocalFloor: false,
     appliedLocalCap: false,
     copiedOverallToCriteria: false,
-    notes: "Local logic only performs safety checks, AI-system routing, JSON validation and audit logging; it did not set, lift, cap, floor, or rewrite any band."
+    notes: "Local logic only performs safety checks, AI-system routing, JSON validation and audit logging; it did not set, lift, cap, floor, or rewrite any band. v4.4 focuses on AI criterion differentiation for Bands 3.0-7.0."
   };
 }
 

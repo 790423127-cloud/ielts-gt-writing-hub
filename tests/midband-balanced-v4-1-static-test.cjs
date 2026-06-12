@@ -10,7 +10,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(grade.includes('score-core-v8-5-13-neutral-ai-primary-midband'), 'score version should identify v4.3 neutral AI-primary cleanup');
+assert(grade.includes('score-core-v8-5-14-criterion-differentiation-3-to-7-v4-4'), 'score version should identify v4.4 neutral AI-primary cleanup');
 assert(grade.includes('AI-primary source-of-truth rule'), 'Midband prompt must state AI-primary source of truth.');
 assert(grade.includes('Band 5 evidence rule'), 'Prompt must require positive evidence before Band 5 rescue');
 assert(grade.includes('simple but unclear stays 4.5'), 'LR/GRA rule must distinguish simple-sufficient from simple-unclear');

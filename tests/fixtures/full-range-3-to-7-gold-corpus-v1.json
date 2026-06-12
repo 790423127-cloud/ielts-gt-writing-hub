@@ -1,0 +1,349 @@
+{
+  "version": "full-range-3-to-7-gold-corpus-v1",
+  "purpose": "Calibrate IELTS GT scoring realism from Band 3.0 to 7.0 and prevent criterion flattening.",
+  "scoringEndpoint": "/api/grade-ielts-production-router",
+  "items": [
+    {
+      "id": "T1-B3-weak-letter",
+      "task": "Task 1",
+      "targetOverall": 3.0,
+      "targetCriteria": {
+        "Task Achievement": 3.0,
+        "Coherence and Cohesion": 3.0,
+        "Lexical Resource": 3.0,
+        "Grammatical Range and Accuracy": 3.0
+      },
+      "acceptableOverallRange": [
+        2.5,
+        3.5
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear friend,\nChina good. You come. Weather sometimes hot. Beijing is good and food is good. Train good. I wait you. Thank you.\nLi",
+      "notes": "Minimal relevant attempt; purpose partly visible but bullets mostly undeveloped and language very limited.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B3-5-short-confused",
+      "task": "Task 1",
+      "targetOverall": 3.5,
+      "targetCriteria": {
+        "Task Achievement": 3.5,
+        "Coherence and Cohesion": 3.5,
+        "Lexical Resource": 3.5,
+        "Grammatical Range and Accuracy": 3.0
+      },
+      "acceptableOverallRange": [
+        3.0,
+        4.0
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Anna,\nYou can come China in May because not very hot. I think you see Beijing and Great Wall. The bus and train is many. I want you bring cloth because wind. I happy meet you.\nLove,\nMei",
+      "notes": "Some bullets attempted; still short, weak control, limited detail.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B4-limited-letter",
+      "task": "Task 1",
+      "targetOverall": 4.0,
+      "targetCriteria": {
+        "Task Achievement": 4.0,
+        "Coherence and Cohesion": 4.0,
+        "Lexical Resource": 4.0,
+        "Grammatical Range and Accuracy": 4.0
+      },
+      "acceptableOverallRange": [
+        3.5,
+        4.5
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Tom,\nI am happy you will visit my country. I think you should come in spring because the weather is good. You can go to Beijing and see the Great Wall. It is famous. Also you can eat Chinese food.\nFor transport, you can use train or bus. The train is fast but sometimes many people. The weather may change, so bring jacket. I hope you come soon.\nBest,\nChen",
+      "notes": "Related and understandable, but details thin and language basic.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B4-5-basic-functional",
+      "task": "Task 1",
+      "targetOverall": 4.5,
+      "targetCriteria": {
+        "Task Achievement": 5.0,
+        "Coherence and Cohesion": 4.5,
+        "Lexical Resource": 4.5,
+        "Grammatical Range and Accuracy": 4.0
+      },
+      "acceptableOverallRange": [
+        4.0,
+        5.0
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Mike,\nIt is very nice that you will visit China. The best time is April because the weather is not cold and not too hot. You should visit Beijing and maybe Shanghai. In Beijing you can see the Great Wall and eat duck.\nYou can travel by fast train between cities. In the city, the subway is cheaper. Please take a jacket because sometimes it is windy. I can help you when you arrive.\nBest wishes,\nLiu",
+      "notes": "Functional but limited; TA can be 5 while language is weaker.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B5-functional-simple",
+      "task": "Task 1",
+      "targetOverall": 5.0,
+      "targetCriteria": {
+        "Task Achievement": 5.0,
+        "Coherence and Cohesion": 5.0,
+        "Lexical Resource": 4.5,
+        "Grammatical Range and Accuracy": 4.5
+      },
+      "acceptableOverallRange": [
+        4.5,
+        5.5
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Emma,\nI am very glad that you are planning to visit China. I think the best time is in April or May, because the weather is warm but not too hot. It is also easier to travel before the summer holiday.\nYou should visit Beijing first. The Great Wall and the Forbidden City are very interesting, and I can also take you to try local food. If you have more time, you can go to Xi'an to see the Terracotta Warriors.\nFor transport, high speed train is a good choice between cities. In Beijing, the subway is cheap and convenient. Please bring comfortable shoes and a light jacket because spring can be windy.\nI am looking forward to seeing you.\nBest wishes,\nLi Wei",
+      "notes": "Overall Band 5 but not four 5s: task/CC stronger than language control.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B5-5-clearer-basic",
+      "task": "Task 1",
+      "targetOverall": 5.5,
+      "targetCriteria": {
+        "Task Achievement": 5.5,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5.0,
+        "Grammatical Range and Accuracy": 5.0
+      },
+      "acceptableOverallRange": [
+        5.0,
+        6.0
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Emma,\nI was excited to hear that you are coming to China. I suggest you visit in late April or May, because the weather is usually mild and the parks look beautiful at that time. It is also before the busiest tourist season.\nI think you should spend a few days in Beijing. You can visit the Great Wall, the Forbidden City and some old hutong areas. If your trip is longer, Xi'an is also worth visiting for the Terracotta Warriors.\nThe high-speed train is the best way to travel between big cities. In Beijing, the subway is simple to use and not expensive. The weather in spring can be windy, so bring a light jacket and comfortable shoes.\nTell me your dates and I will help you plan everything.\nBest,\nLi Wei",
+      "notes": "Clearer and more complete, but still basic lexis/grammar.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B6-clear-controlled",
+      "task": "Task 1",
+      "targetOverall": 6.0,
+      "targetCriteria": {
+        "Task Achievement": 6.0,
+        "Coherence and Cohesion": 6.0,
+        "Lexical Resource": 6.0,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "acceptableOverallRange": [
+        5.5,
+        6.5
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Emma,\nI am delighted that you are finally coming to China. The best time would be from mid-April to late May, when the weather is pleasant and most tourist places are not too crowded.\nYou should definitely spend several days in Beijing. The Mutianyu part of the Great Wall is beautiful, and the Forbidden City will give you a good sense of Chinese history. If your schedule allows, I also recommend taking the high-speed train to Xi'an to see the Terracotta Warriors.\nFor travel between cities, trains are usually faster and more comfortable than buses. In large cities, the subway is cheap and reliable. Spring is generally mild, but northern China can be windy, so you should bring a light jacket and comfortable walking shoes.\nSend me your travel dates and I will help you arrange the itinerary.\nBest wishes,\nLi Wei",
+      "notes": "Clear task completion and generally controlled language, some limitations remain.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B6-5-strong-letter",
+      "task": "Task 1",
+      "targetOverall": 6.5,
+      "targetCriteria": {
+        "Task Achievement": 6.5,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 6.5,
+        "Grammatical Range and Accuracy": 6.0
+      },
+      "acceptableOverallRange": [
+        6.0,
+        7.0
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Emma,\nIt is wonderful to hear that you are planning your first trip to China. I would strongly recommend visiting in spring, especially from mid-April to late May. The weather is mild, the flowers are out, and you will avoid both the summer heat and the main tourist crowds.\nFor places to visit, Beijing should be your first stop. The Mutianyu section of the Great Wall is impressive and usually less crowded than Badaling. You should also see the Forbidden City and try a proper Peking duck dinner. If you can add a few days, Xi'an would be perfect for the Terracotta Warriors.\nThe high-speed train is the easiest way to travel between cities, while the subway works very well inside Beijing and Shanghai. Bring comfortable shoes, a light jacket and perhaps a mask, as spring can be windy and dusty in the north.\nLet me know your dates and I will help you make a practical plan.\nBest wishes,\nLi Wei",
+      "notes": "Strong but not fully Band 7: natural and detailed, minor limitations.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T1-B7-natural-letter",
+      "task": "Task 1",
+      "targetOverall": 7.0,
+      "targetCriteria": {
+        "Task Achievement": 7.0,
+        "Coherence and Cohesion": 7.0,
+        "Lexical Resource": 7.0,
+        "Grammatical Range and Accuracy": 7.0
+      },
+      "acceptableOverallRange": [
+        6.5,
+        7.5
+      ],
+      "prompt": "A friend from another country is coming to visit your country for the first time. Write a letter to your friend. In your letter: say when the best time to visit is; describe what places they should see; explain what transport and weather they should prepare for.",
+      "response": "Dear Emma,\nI am so pleased that you are finally coming to China. I would choose late April or May for your trip: the weather is usually warm but not exhausting, and you will miss the worst of the summer crowds.\nYou should spend at least four days in Beijing. I can take you to the Mutianyu Great Wall, which is scenic and quieter than the most touristy sections, and we should also visit the Forbidden City and one or two hutong neighbourhoods. If your schedule is flexible, Xi'an would be an excellent second stop for the Terracotta Warriors.\nFor transport, the high-speed rail network is the easiest way to move between cities, and the subway is reliable once you are in Beijing or Shanghai. Spring can be dry and windy in the north, so pack a light jacket and shoes you can walk in all day.\nSend me your dates when you know them, and I will help arrange a sensible route.\nBest wishes,\nLi Wei",
+      "notes": "Genuine Band 7: natural, complete, flexible, but not 8/9 sophistication.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B3-weak-essay",
+      "task": "Task 2",
+      "targetOverall": 3.0,
+      "targetCriteria": {
+        "Task Response": 3.0,
+        "Coherence and Cohesion": 3.0,
+        "Lexical Resource": 3.0,
+        "Grammatical Range and Accuracy": 3.0
+      },
+      "acceptableOverallRange": [
+        2.5,
+        3.5
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "Children study is good. Play is also good. Some people say school more time because children learn. Other people say play because happy. I think both good. If study many time, children tired. So school and play need.",
+      "notes": "Very limited development; relevant but severely underdeveloped.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B3-5-limited-essay",
+      "task": "Task 2",
+      "targetOverall": 3.5,
+      "targetCriteria": {
+        "Task Response": 3.5,
+        "Coherence and Cohesion": 3.5,
+        "Lexical Resource": 3.5,
+        "Grammatical Range and Accuracy": 3.0
+      },
+      "acceptableOverallRange": [
+        3.0,
+        4.0
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "Nowadays many children go to school. Some parents want more study because education is important for future. Other people think children need play. I agree with free time. If children only study they feel bad and not healthy. School should give some lessons and some sport. In conclusion, children need study but also need relax.",
+      "notes": "Has position and basic relevance but very limited explanation and language control.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B4-basic-related",
+      "task": "Task 2",
+      "targetOverall": 4.0,
+      "targetCriteria": {
+        "Task Response": 4.0,
+        "Coherence and Cohesion": 4.0,
+        "Lexical Resource": 4.0,
+        "Grammatical Range and Accuracy": 4.0
+      },
+      "acceptableOverallRange": [
+        3.5,
+        4.5
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "Many people think students should study more time at school. They think it can help students get good jobs and learn many subjects. This is true because education is very important now.\nHowever, other people say children need free time. If they always study, they may become tired and unhappy. They also need play with friends.\nIn my opinion, children should not study all day. School is important, but free time is also important for health.",
+      "notes": "Understandable but thin and repetitive; no real development.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B4-5-structured-thin",
+      "task": "Task 2",
+      "targetOverall": 4.5,
+      "targetCriteria": {
+        "Task Response": 4.5,
+        "Coherence and Cohesion": 5.0,
+        "Lexical Resource": 4.5,
+        "Grammatical Range and Accuracy": 4.0
+      },
+      "acceptableOverallRange": [
+        4.0,
+        5.0
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "It is argued that children should spend more hours studying, while others believe that they need more time for playing and relaxing. I think both are important, but free time should not be reduced too much.\nOn the one hand, more study time can help children learn useful knowledge. They can improve maths, English and science, and these subjects may help them in the future. Parents also feel happy when children get high marks.\nOn the other hand, children are not machines. If they only study, they may feel pressure and lose interest in school. Playing with friends can help them become healthy and social.\nIn conclusion, study is necessary, but schools should also give children enough time to relax.",
+      "notes": "Basic but coherent; TR and language still limited, CC slightly stronger.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B5-complete-basic",
+      "task": "Task 2",
+      "targetOverall": 5.0,
+      "targetCriteria": {
+        "Task Response": 5.0,
+        "Coherence and Cohesion": 5.0,
+        "Lexical Resource": 5.0,
+        "Grammatical Range and Accuracy": 4.5
+      },
+      "acceptableOverallRange": [
+        4.5,
+        5.5
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "Some people believe that children should spend more time studying at school because education is important for their future. If students study longer, they may get better exam results and have more chances to enter a good university.\nHowever, other people think children need more free time to play and relax. I agree more with this view. Children need rest after many lessons, and playing sport or meeting friends can help their health and confidence.\nIn my opinion, schools should keep a balance. Students should learn important subjects, but they should not study until they become too tired. A good school timetable should include study, sport and enough breaks.",
+      "notes": "Complete basic answer; not four 5s necessarily because grammar may lag.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B5-5-developed-basic",
+      "task": "Task 2",
+      "targetOverall": 5.5,
+      "targetCriteria": {
+        "Task Response": 5.5,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5.0,
+        "Grammatical Range and Accuracy": 5.0
+      },
+      "acceptableOverallRange": [
+        5.0,
+        6.0
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "There are different opinions about whether children should study for longer hours or have more free time. In my view, extra study can be useful, but children also need regular time to relax.\nThose who support longer study time argue that competition is increasing. If children spend more time on academic subjects, they may develop stronger basic skills and perform better in exams. This can be especially helpful for students who are weak in reading or mathematics.\nHowever, too much study can create stress. Children also learn important skills through play, such as cooperation, communication and problem solving. If schools remove most free time, students may become tired and less motivated.\nOverall, I believe schools should not simply extend study hours. They should provide effective lessons and protect enough time for rest, exercise and social development.",
+      "notes": "Solid 5.5: relevant explanation but still general and language simple.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B6-clear-development",
+      "task": "Task 2",
+      "targetOverall": 6.0,
+      "targetCriteria": {
+        "Task Response": 6.0,
+        "Coherence and Cohesion": 6.0,
+        "Lexical Resource": 6.0,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "acceptableOverallRange": [
+        5.5,
+        6.5
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "Whether children should study for longer hours or have more free time is a common debate. I believe that academic learning is important, but increasing school hours is not the best solution.\nSupporters of longer study time often argue that children face strong competition. More lessons may help them improve exam performance and prepare for university or employment. For example, students who struggle with basic literacy may benefit from additional guided practice.\nHowever, free time is also essential for healthy development. Play and relaxation help children manage stress, build friendships and develop creativity. If schools focus only on academic results, children may become exhausted and less interested in learning.\nIn my opinion, schools should improve the quality of teaching rather than simply extend the day. A balanced timetable with focused lessons, sport and rest would help children learn more effectively.",
+      "notes": "Clear answer with real development; language not fully flexible.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B6-5-strong-but-not-7",
+      "task": "Task 2",
+      "targetOverall": 6.5,
+      "targetCriteria": {
+        "Task Response": 6.5,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 6.0,
+        "Grammatical Range and Accuracy": 6.5
+      },
+      "acceptableOverallRange": [
+        6.0,
+        7.0
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "The question of whether children should spend more time studying or have more opportunities to play is important because both academic success and emotional health matter. I believe that schools should protect free time while making study time more effective.\nPeople who favour longer study hours usually point to academic competition. In many countries, students need strong results to enter good universities, so extra time at school may seem like a practical way to improve their performance. It can also help children from disadvantaged backgrounds who may not receive support at home.\nNevertheless, play and relaxation are not a waste of time. They allow children to recover from pressure, develop social skills and become more independent. A child who spends every evening on homework may achieve short-term results but lose curiosity and confidence.\nTherefore, I think the best approach is balance. Schools should offer high-quality lessons and targeted support, but they should not replace exercise, friendships and rest with endless study.",
+      "notes": "Approaches Band 7 but lexis/development not consistently high enough.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    },
+    {
+      "id": "T2-B7-developed-coherent",
+      "task": "Task 2",
+      "targetOverall": 7.0,
+      "targetCriteria": {
+        "Task Response": 7.0,
+        "Coherence and Cohesion": 7.0,
+        "Lexical Resource": 7.0,
+        "Grammatical Range and Accuracy": 7.0
+      },
+      "acceptableOverallRange": [
+        6.5,
+        7.5
+      ],
+      "prompt": "Some people think that children should spend more time studying at school, while others believe they need more free time to play and relax. Discuss both views and give your own opinion.",
+      "response": "The debate over extended study time reflects a wider concern about how schools should prepare children for adulthood. While academic achievement is important, I believe that increasing study hours at the expense of play would be a mistake.\nThose in favour of more study time argue that children need strong academic foundations in a competitive world. Extra lessons can be valuable when they are targeted, for instance for pupils who have fallen behind in reading or mathematics. In such cases, additional instruction may prevent long-term educational disadvantage.\nHowever, free time is not merely leisure. Through play, children learn to negotiate, cooperate and manage emotions, which are abilities that formal lessons do not always develop. Moreover, constant academic pressure can reduce motivation and make learning feel like a punishment rather than a process of discovery.\nIn my view, schools should focus on better teaching rather than longer timetables. Children need rigorous lessons, but they also need space for sport, friendships and unstructured exploration. A balanced approach is more likely to produce capable and healthy young people.",
+      "notes": "Band 7 quality: developed, coherent, flexible enough, not native 8/9.",
+      "calibrationFocus": "3_to_7_realism_and_criterion_differentiation"
+    }
+  ]
+}
