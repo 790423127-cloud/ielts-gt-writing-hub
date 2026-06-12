@@ -98,6 +98,32 @@ function allCriteriaSame(criteria = {}, task = "Task 2") {
   return values.length === 4 && values.every((value) => value === values[0]);
 }
 
+function buildLocalLogicAudit() {
+  return {
+    usedForScoring: false,
+    usedForRoutingOnly: true,
+    adjustedOverallBand: false,
+    adjustedCriterionScores: false,
+    appliedLocalFloor: false,
+    appliedLocalCap: false,
+    copiedOverallToCriteria: false,
+    notes: "Local logic only handled routing, hard invalid detection, hard lowband gate, JSON validation and audit."
+  };
+}
+
+function buildCriterionDifferentiationAudit(criteria = {}, task = "Task 2", source = "ai-specific-feedback") {
+  const same = allCriteriaSame(criteria, task);
+  return {
+    criteriaAllEqual: same,
+    overallCopiedToCriteria: false,
+    criterionScoresSource: "ai",
+    criterionFeedbackSource: source,
+    reason: same
+      ? "The AI returned identical criterion bands; local code did not copy overallBand to criteria."
+      : "Criterion scores and comments were generated independently by AI."
+  };
+}
+
 function buildCriterionAudit(task, criteria = {}, main = {}, lowband = {}, essay = "", questionPrompt = "") {
   const names = criterionNames(task);
   const signals = main?.raw?.localSignals || main?.localSignals || {};
@@ -748,6 +774,10 @@ module.exports = async function handler(req, res) {
         finalBand: selected.finalBand,
         finalCriteria: selected.finalCriteria
       },
+      criterionDifferentiationAudit: buildCriterionDifferentiationAudit(selected.finalCriteria, task),
+      localLogicAudit: buildLocalLogicAudit(),
+      scoreFrozen: true,
+      feedbackCanChangeScore: false,
       scoringAudit: buildBoundaryScoringAudit(task, questionPrompt, essay, main, lowband, route, selected, mainReusedFromRouter, mainSource),
       boundaryMainReuseAudit: {
         mainReusedFromRouter,

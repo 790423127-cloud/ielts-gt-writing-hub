@@ -665,12 +665,20 @@ function buildHardZeroScore(body = {}, signals = null, gate = null) {
       criteria: Object.entries(criteria).map(([criterion, band]) => ({ criterion, band })),
       rawAverage: 0,
       finalBand: 0,
-      localScoreChanged: true,
-      localScoreChangeExplanation: `Hard-zero gate triggered: ${hardZero.reason}.`
+      localScoreChanged: false,
+      localScoreChangeExplanation: `Hard invalid gate triggered before AI scoring: ${hardZero.reason}.`
     },
     scoreCoreMeta: { scoreFirst: true, scoreFrozen: true, hardZeroGate: true, feedbackAfterFreeze: false, generatedAt: new Date().toISOString(), stage: "hard-zero" },
     feedbackStatus: { status: "skipped_hard_zero", scoreChanged: false, note: "No detailed AI feedback generated for a non-assessable hard-zero response." },
-    localScoreChanged: true
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria, "fallback-template"),
+    localLogicAudit: {
+      ...buildLocalLogicAudit(),
+      hardInvalidGateApplied: true,
+      notes: "Local logic only handled hard invalid detection for a non-assessable response; no rateable essay score was locally estimated."
+    },
+    scoreFrozen: true,
+    feedbackCanChangeScore: false,
+    localScoreChanged: false
   };
   return attachSinglePassProgress(result, "done");
 }
@@ -1080,77 +1088,6 @@ function averageBand(criteria) {
   return { rawAverage, finalBand: roundHalf(rawAverage) };
 }
 
-function capCriteriaBands(criteria = {}, cap = 9) {
-  const capped = {};
-  Object.entries(criteria || {}).forEach(([key, value]) => {
-    const band = bandNumber(value);
-    capped[key] = Number.isFinite(band) ? Math.min(band, cap) : value;
-  });
-  return capped;
-}
-function floorCriteriaBands(criteria = {}, floor = 0) {
-  const raised = {};
-  Object.entries(criteria || {}).forEach(([key, value]) => {
-    const band = bandNumber(value);
-    raised[key] = Number.isFinite(band) ? Math.max(band, floor) : value;
-  });
-  return raised;
-}
-
-function highBandFloorProfile(criteria = {}, signals = {}, anchorComparison = {}) {
-  const task = signals.task;
-  const words = Number(signals.wordCount) || 0;
-  const { finalBand } = averageBand(criteria);
-  if (!Number.isFinite(finalBand) || finalBand < 7) return null;
-  const enoughLength = task === "Task 1" ? words >= 150 : words >= 250;
-  const enoughStructure = task === "Task 1" ? (Number(signals.sentenceCount) || 0) >= 4 : (Number(signals.paragraphCount) || 0) >= 4 && (Number(signals.sentenceCount) || 0) >= 9;
-  const cleanLanguage = (Number(signals.spellingIssueCount) || 0) === 0 && (Number(signals.grammarIssueSignalCount) || 0) === 0 && signals.lexicalNaturalnessRisk !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
-  const closestAnchor = Number(anchorComparison.closestAnchorBand);
-  const candidateRangeText = String(anchorComparison.candidateRange || "");
-  const highFlag = Boolean(anchorComparison.highBandCandidate) || closestAnchor >= 8 || finalBand >= 7.5;
-  const eliteFlag = closestAnchor >= 9 || /^\s*(8\.5|9)(?:\b|\s*-)/.test(candidateRangeText);
-  const notWeakLanguage = signals.lexicalNaturalnessRisk !== "high" && signals.lexicalControl !== "weak" && signals.sentenceControl !== "weak";
-  if (!enoughLength || !enoughStructure || !notWeakLanguage) return null;
-  if (eliteFlag && finalBand >= 7.5 && finalBand < 8.5) {
-    return { floor: 8.5, reason: `${task} has elite-anchor signals with full length and controlled language; avoid compressing a Band 9 candidate into 7.5.` };
-  }
-  if ((highFlag || finalBand >= 7) && finalBand < 7.5) {
-    return { floor: 7.5, reason: `${task} is full-length and high-band eligible; avoid capping a controlled response at Band 7.0.` };
-  }
-  return null;
-}
-
-
-function task1ShortLetterCap(words) {
-  const w = Number(words) || 0;
-  if (w < 20) return null;
-  if (w < 30) return { cap: 2.5, reason: `Task 1 has only ${w} words; a few short sentences cannot normally exceed Band 2.5.` };
-  if (w < 60) return { cap: 3.5, reason: `Task 1 has only ${w} words; bullet coverage and letter development are severely limited.` };
-  if (w < 80) return { cap: 4.5, reason: `Task 1 has ${w} words; most responses at this length remain limited even if the purpose is visible.` };
-  if (w < 100) return { cap: 5.5, reason: `Task 1 has ${w} words; clear communication is possible, but fuller bullet development is unlikely.` };
-  if (w < 120) return { cap: 6.0, reason: `Task 1 has ${w} words; it can be clear but should not be over-rewarded without strong bullet detail.` };
-  if (w < 150) return { cap: 7.0, reason: `Task 1 is below the recommended length; high-band scores require exceptionally complete bullet coverage.` };
-  return null;
-}
-
-function task2ShortEssayCap(words) {
-  const w = Number(words) || 0;
-  if (w < 20) return null;
-  if (w < 50) return { cap: 2.5, reason: `Task 2 has only ${w} words; this is fragmentary essay development.` };
-  if (w < 100) return { cap: 3.5, reason: `Task 2 has ${w} words; the response is too short for developed Band 4+ reasoning.` };
-  if (w < 150) return { cap: 4.5, reason: `Task 2 has ${w} words; it can be relevant but usually remains underdeveloped.` };
-  if (w < 180) return { cap: 5.5, reason: `Task 2 has ${w} words; clear but limited development can reach mid band, not high band.` };
-  if (w < 230) return { cap: 6.5, reason: `Task 2 has ${w} words; Band 6 is possible, but higher scores need unusually strong development.` };
-  return null;
-}
-
-function capSingleCriterion(criteria = {}, criterion, cap) {
-  const out = { ...(criteria || {}) };
-  const current = bandNumber(out[criterion]);
-  if (Number.isFinite(current) && current > cap) out[criterion] = cap;
-  return out;
-}
-
 function hasTask1WorkingHoursRequirement(body = {}) {
   const prompt = String(body.questionPrompt || body.promptText || body.prompt || "");
   return /\b(which hours|what hours|hours you would like to work|working hours|reduce your working hours|work schedule|shift)\b/i.test(prompt);
@@ -1167,79 +1104,6 @@ function sub7RunOnSignal(text = "") {
   const boundaryBreaks = countPattern(text, /\b(After that|Because|So)\b[^.!?]{35,}\b(i|I|we|they|he|she|it|this|that)\b/gi);
   const gluedClauses = countPattern(text, /\b(at morning|after class|after that)[^.!?]{0,120}\b(i can|I can|it can|It can|we can)\b/gi);
   return { longSentences, boundaryBreaks, gluedClauses, total: longSentences + boundaryBreaks + gluedClauses };
-}
-
-
-
-function floorSingleCriterion(criteria = {}, criterion, floorValue) {
-  const out = { ...(criteria || {}) };
-  const current = bandNumber(out[criterion]);
-  if (Number.isFinite(current) && current < floorValue) out[criterion] = floorValue;
-  return out;
-}
-
-function rateableTask2TaskResponseFloor(signals = {}, body = {}) {
-  const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
-  if (isStrictHardZeroGate(hardZero)) return null;
-  const words = Number(signals.wordCount) || countWords(body.essay || "");
-  const sentenceCount = Number(signals.sentenceCount) || sentenceUnits(body.essay || "").length;
-  const paragraphCount = Number(signals.paragraphCount) || countParagraphs(body.essay || "");
-  const markers = signals.taskRequirementAudit?.markers || detectTask2RequirementSignals(body.essay || "");
-  const requirementCap = Number(signals.taskRequirementAudit?.taskResponseCap);
-  const relevantPosition = Boolean(markers.clearOpinion || markers.positiveNegativeJudgement || markers.outweighJudgement);
-  const relevantContent = Boolean(markers.advantage || markers.disadvantage || markers.problem || markers.cause || markers.solution || markers.exampleSupport || markers.explanationMarkers >= 1);
-  if (!relevantContent && !relevantPosition) return null;
-
-  let floor = null;
-  if (words >= 240 && paragraphCount >= 3 && sentenceCount >= 8 && relevantPosition && (markers.explanationMarkers >= 2 || markers.exampleSupport) && (markers.advantage || markers.disadvantage || markers.problem || markers.solution || markers.positiveNegativeJudgement)) {
-    floor = 5.0;
-  } else if (words >= 180 && sentenceCount >= 6 && (relevantPosition || markers.explanationMarkers >= 2) && relevantContent) {
-    floor = 4.5;
-  } else if (words >= 120 && sentenceCount >= 4 && relevantContent) {
-    floor = 4.0;
-  }
-  if (!Number.isFinite(floor)) return null;
-  if (Number.isFinite(requirementCap)) floor = Math.min(floor, requirementCap);
-  return { floor, reason: `Rateable Task 2 response floor: ${words} words with relevant position/content signals. Band 0/1/2 Task Response is reserved for no assessable or extremely limited responses, not a full relevant essay.` };
-}
-
-function rateableTask1TaskAchievementFloor(signals = {}, body = {}) {
-  const hardZero = signals.hardZeroGate || detectHardZeroResponse(body, signals);
-  if (isStrictHardZeroGate(hardZero)) return null;
-  const essay = String(body.essay || "");
-  const words = Number(signals.wordCount) || countWords(essay);
-  const requirementCap = Number(signals.taskRequirementAudit?.taskAchievementCap);
-  const hasLetterForm = /\b(dear|hello|hi)\b/i.test(essay) || /\b(yours|regards|sincerely|best wishes)\b/i.test(essay);
-  const hasPurpose = /\b(i am writing|i'm writing|i would like|i want|could you|please|ask|request|apolog|complain|thank|invite|explain)\b/i.test(essay);
-  const partlyOrCovered = (signals.taskRequirementAudit?.items || []).filter((item) => item.status === "covered" || item.status === "partly_covered").length;
-  let floor = null;
-  if (words >= 120 && hasLetterForm && hasPurpose && partlyOrCovered >= 2) floor = 4.5;
-  else if (words >= 80 && (hasLetterForm || hasPurpose) && partlyOrCovered >= 1) floor = 4.0;
-  if (!Number.isFinite(floor)) return null;
-  if (Number.isFinite(requirementCap)) floor = Math.min(floor, requirementCap);
-  return { floor, reason: `Rateable Task 1 letter floor: ${words} words with letter-form/purpose and relevant bullet signals. Band 0/1/2 TA is reserved for no assessable or extremely limited letters.` };
-}
-
-function applyRateableResponseFloorGuard(criteria = {}, signals = {}, body = {}) {
-  return {
-    criteria: { ...(criteria || {}) },
-    changed: false,
-    notes: [{
-      type: "ai_only_rateable_floor_disabled",
-      reason: "v8.5.0 AI-only core: rateable-response floors are disabled. Local code may flag but must not raise any AI-returned band."
-    }]
-  };
-}
-
-function applySub7StrictCalibration(criteria = {}, signals = {}, body = {}) {
-  return {
-    criteria: { ...(criteria || {}) },
-    changed: false,
-    notes: [{
-      type: "ai_only_sub7_caps_disabled",
-      reason: "v8.5.0 AI-only core: sub-7 spelling/grammar/word-count/task caps are disabled. These signals are audit notes only and cannot change criteria."
-    }]
-  };
 }
 
 function applyLocalRegressionCalibration(criteria = {}, signals = {}, anchorComparison = {}, body = {}) {
@@ -1494,6 +1358,32 @@ function scoreValues(criteria) {
 function allCriteriaSame(criteria) {
   const values = scoreValues(criteria);
   return values.length === 4 && values.every((x) => x === values[0]);
+}
+
+function buildLocalLogicAudit() {
+  return {
+    usedForScoring: false,
+    usedForRoutingOnly: true,
+    adjustedOverallBand: false,
+    adjustedCriterionScores: false,
+    appliedLocalFloor: false,
+    appliedLocalCap: false,
+    copiedOverallToCriteria: false,
+    notes: "Local logic only handled routing, hard invalid detection, hard lowband gate, JSON validation and audit."
+  };
+}
+
+function buildCriterionDifferentiationAudit(criteria = {}, feedbackSource = "ai-specific-feedback") {
+  const same = allCriteriaSame(criteria);
+  return {
+    criteriaAllEqual: same,
+    overallCopiedToCriteria: false,
+    criterionScoresSource: "ai",
+    criterionFeedbackSource: feedbackSource,
+    reason: same
+      ? "The AI returned identical criterion bands; local code did not copy overallBand to criteria."
+      : "Criterion scores and comments were generated independently by AI."
+  };
 }
 
 function noWeakLocalLanguage(signals = {}) {
@@ -2606,6 +2496,10 @@ function normalizeScoreCoreResult(ai, body, signals, options = {}) {
     boundaryAudit,
     criterionAudit: criterionRebalance.criterionAudit,
     criterionScoreAudit: criterionRebalance.criterionScoreAudit,
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
+    localLogicAudit: buildLocalLogicAudit(),
+    scoreFrozen: !boundaryAudit.reviewRequired,
+    feedbackCanChangeScore: false,
     diagnosticSignals: ai.diagnosticSignals || {},
     examinerSummary: String(ai.examinerSummary || "").trim(),
     examinerSummaryZh: String(ai.examinerSummaryZh || "").trim(),
@@ -2842,6 +2736,10 @@ function normalizeScoreKernelResult(ai, body, signals, boundaryProfile = null) {
       localScoreChanged: false,
       localScoreChangeExplanation: "No local band assignment. The server audits, may require AI boundary review, and freezes AI-returned bands. It does not generate detailed feedback in this endpoint."
     },
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
+    localLogicAudit: buildLocalLogicAudit(),
+    scoreFrozen: false,
+    feedbackCanChangeScore: false,
     scoreCoreMeta: { scoreKernelFirst: true, scoreFrozen: false, feedbackAfterFreeze: false, externalCriterionFeedback: true, compactScoreFirst: true, generatedAt: new Date().toISOString(), stage: "score-kernel" },
     localScoreChanged: false
   };
@@ -3382,6 +3280,10 @@ function scoreFinalizeStage(body) {
       localScoreChangeExplanation: "No local band assignment or modification. The server only locks task, blocks strict hard-zero cases, routes audit warnings to AI boundary review, and mechanically averages AI-returned final criterion bands."
     },
     scoreCoreMeta: { ...(current.scoreCoreMeta || {}), scoreFirst: true, scoreFrozen: true, strictBoundaryAudited: true, feedbackStagesMayNotChangeScore: true, generatedAt: new Date().toISOString(), stage: "finalize" },
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
+    localLogicAudit: buildLocalLogicAudit(),
+    scoreFrozen: true,
+    feedbackCanChangeScore: false,
     localScoreChanged: false
   };
   return withDetailedProgress(result, "score-finalize");

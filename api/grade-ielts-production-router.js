@@ -99,6 +99,33 @@ function extractCriteria(payload) {
   );
 }
 
+function buildLocalLogicAudit() {
+  return {
+    usedForScoring: false,
+    usedForRoutingOnly: true,
+    adjustedOverallBand: false,
+    adjustedCriterionScores: false,
+    appliedLocalFloor: false,
+    appliedLocalCap: false,
+    copiedOverallToCriteria: false,
+    notes: "Local logic only handled routing, hard invalid detection, hard lowband gate, JSON validation and audit."
+  };
+}
+
+function buildCriterionDifferentiationAudit(criteria, source = "ai-specific-feedback") {
+  const values = Object.values(criteria || {}).map(Number).filter(Number.isFinite);
+  const criteriaAllEqual = values.length === 4 && values.every((value) => value === values[0]);
+  return {
+    criteriaAllEqual,
+    overallCopiedToCriteria: false,
+    criterionScoresSource: "ai",
+    criterionFeedbackSource: source,
+    reason: criteriaAllEqual
+      ? "Criterion scores are identical only because the AI scorer returned identical criterion bands; local code did not copy overallBand to criteria."
+      : "Criterion scores and comments were generated independently by AI."
+  };
+}
+
 function routeReason(mainBand) {
   if (typeof mainBand !== "number" || !Number.isFinite(mainBand)) {
     return {
@@ -187,6 +214,7 @@ async function callJsonWithRetry(url, body, label) {
 
 function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpoints, extra = {}) {
   const finalBand = mainBand;
+  const criteria = extractCriteria(main);
   const scoringAudit = buildRouterScoringAudit({
     task: main?.task || main?.scoringTask || "",
     route,
@@ -211,7 +239,7 @@ function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpo
     finalSource: extra.finalSource || "main-score",
     finalBand,
     score: finalBand,
-    criteria: extractCriteria(main),
+    criteria,
     mainScore: mainBand,
     boundaryScore: null,
     highbandScore: extra.highbandScore ?? null,
@@ -221,6 +249,10 @@ function directMainPayload(main, mainBand, route, mainAttempts, startedAt, endpo
     boundary: null,
     highband: extra.highband || null,
     scoringAudit,
+    localLogicAudit: buildLocalLogicAudit(),
+    criterionDifferentiationAudit: buildCriterionDifferentiationAudit(criteria),
+    scoreFrozen: true,
+    feedbackCanChangeScore: false,
     routingAudit: {
       mainAttempts,
       boundaryAttempts: 0,
@@ -325,6 +357,7 @@ module.exports = async function handler(req, res) {
       const boundary = boundaryCall.data;
       const boundaryBand = extractBand(boundary);
       const finalBand = boundaryBand == null ? mainBand : boundaryBand;
+      const finalCriteria = extractCriteria(boundary);
 
       return sendJson(req, res, 200, {
         ...boundary,
@@ -340,7 +373,7 @@ module.exports = async function handler(req, res) {
         finalSource: "boundary-adjudicator-v4-3",
         finalBand,
         score: finalBand,
-        criteria: extractCriteria(boundary),
+        criteria: finalCriteria,
         mainScore: mainBand,
         boundaryScore: boundaryBand,
         highbandScore: null,
@@ -356,6 +389,10 @@ module.exports = async function handler(req, res) {
           highband: null,
           boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null
         }),
+        localLogicAudit: buildLocalLogicAudit(),
+        criterionDifferentiationAudit: buildCriterionDifferentiationAudit(finalCriteria),
+        scoreFrozen: true,
+        feedbackCanChangeScore: false,
         boundaryMainReuseAudit: boundary.boundaryMainReuseAudit || null,
         main,
         boundary,
@@ -381,6 +418,7 @@ module.exports = async function handler(req, res) {
         const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand) && highbandBand >= 7.5;
 
         if (highbandConfirmed) {
+          const finalCriteria = extractCriteria(highband);
           return sendJson(req, res, 200, {
             ...highband,
             ok: highband.ok !== false,
@@ -395,7 +433,7 @@ module.exports = async function handler(req, res) {
             finalSource: "highband-shadow-v8-5-14",
             finalBand: highbandBand,
             score: highbandBand,
-            criteria: extractCriteria(highband),
+            criteria: finalCriteria,
             mainScore: mainBand,
             boundaryScore: null,
           highbandScore: highbandBand,
@@ -413,7 +451,11 @@ module.exports = async function handler(req, res) {
           }),
           main,
           boundary: null,
-          highband,
+            highband,
+            localLogicAudit: buildLocalLogicAudit(),
+            criterionDifferentiationAudit: buildCriterionDifferentiationAudit(finalCriteria),
+            scoreFrozen: true,
+            feedbackCanChangeScore: false,
             routingAudit: {
               mainAttempts: mainCall.attempts,
               boundaryAttempts: 0,
