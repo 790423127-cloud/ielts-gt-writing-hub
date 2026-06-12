@@ -11,7 +11,7 @@ const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DISCLAIMER = "This is an AI-generated estimated score, not an official IELTS score.";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];
-const SCORE_SYSTEM_VERSION = "score-core-v8-5-6-ai-only-forced-anchor-comparison-calibration";
+const SCORE_SYSTEM_VERSION = "score-core-v8-5-7-task1-band5-corrected-letter-calibration";
 
 const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 0, profile: "No assessable GT letter: blank, fully copied, non-English, or wholly unrelated to the task.", zh: "没有可评分书信：空白、完全照抄、非英文或完全跑题。" },
@@ -19,8 +19,8 @@ const TASK1_BAND_ANCHORS_0_TO_9 = [
   { band: 2, profile: "Very little relevant message; not recognisably a complete letter; bullet points are largely missing.", zh: "相关信息极少，不像完整书信，题目要点基本缺失。" },
   { band: 3, profile: "Weak or unclear purpose; only minimal bullet coverage; very short or confused message; frequent errors block clarity.", zh: "目的很弱或不清楚，只覆盖极少要点，内容短或混乱，错误严重影响理解。" },
   { band: 4, profile: "Basically related but limited: bullet points may be attempted, but details are thin, tone/format are unstable, and frequent basic errors or unnatural phrasing reduce clarity.", zh: "基本相关但能力有限：可能尝试回应要点，但细节薄，语气/格式不稳，基础错误或不自然表达频繁影响清晰度。" },
-  { band: 5, profile: "Purpose is generally clear and most bullet points are addressed, but development is simple and language is noticeably limited, repetitive, awkward, or error-prone.", zh: "写信目的基本清楚，大部分要点有回应，但展开简单，语言明显有限、重复、不自然或错误较多。" },
-  { band: 6, profile: "Clear purpose and all bullet points covered with basic useful detail; tone and organisation are generally appropriate; language is understandable but still limited or uneven.", zh: "目的清楚，三个要点都有基本有用细节，语气和结构大体合适，语言可理解但仍有限或不稳定。" },
+  { band: 5, profile: "Purpose is generally clear and most or all bullet points are addressed; development may be simple and language may be limited, but the reader can understand and act on the message. Corrected low-band letters with clear purpose, basic details, appropriate informal/formal tone, and mostly understandable grammar/spelling normally fit here rather than Band 4.", zh: "写信目的基本清楚，大部分或全部要点有回应；展开可以简单、语言可以有限，但读者能理解并采取行动。语法拼写已基本修正、目的清楚、有基本细节且语气合适的低分修正版，通常属于此档而不是4分。" },
+  { band: 6, profile: "Clear purpose and all bullet points covered with useful detail; tone and organisation are generally appropriate; language is understandable and reasonably controlled, though still limited or uneven.", zh: "目的清楚，所有要点都有有用细节，语气和结构大体合适，语言可理解且控制较稳定，但仍有限或不均衡。" },
   { band: 7, profile: "All bullet points are developed well; tone/register is natural; information is logically organised; vocabulary and grammar are flexible with only some errors.", zh: "所有要点展开较充分，语气自然，信息组织清楚，词汇和语法较灵活，错误较少。" },
   { band: 8, profile: "Task requirements are fulfilled fully and naturally; tone, format, and information selection are very appropriate; language is flexible and accurate with rare minor slips.", zh: "任务要求完成充分自然，语气、格式和信息选择很合适，语言灵活准确，只有少量小错。" },
   { band: 9, profile: "A fully natural, mature, precise GT letter; all bullet points are completely and appropriately developed; register is exact and errors are negligible.", zh: "完全自然成熟精准的书信，所有要点充分且得体，语气精准，错误极少。" }
@@ -38,6 +38,17 @@ const TASK2_BAND_ANCHORS_0_TO_9 = [
   { band: 8, profile: "Fully developed response with mature reasoning, natural cohesion, precise flexible vocabulary, strong grammatical control, and rare minor errors.", zh: "回应充分，论证成熟，衔接自然，词汇精准灵活，语法控制强，错误很少。" },
   { band: 9, profile: "A fully responsive, sophisticated essay with natural, fluent argumentation, precise language, and negligible errors.", zh: "完全回应题目，论证自然深入，语言精准流畅，错误极少。" }
 ];
+
+const TASK1_CORRECTED_LOWBAND_BAND5_ANCHOR = [
+  "Corrected low-band Task 1 calibration: if a previously weak letter has been corrected so that the reader can clearly understand the purpose, all three bullet points are covered, the tone matches the recipient, and spelling/grammar no longer frequently strain meaning, it should normally be considered around Band 5.0-5.5 rather than remaining in Band 4.",
+  "Band 5 Task 1 is allowed for simple but functional letters: vocabulary can be basic, development can be limited, and sentences can be mostly simple, provided the message is clear and the reader can act on it.",
+  "Do not keep Lexical Resource or Grammar at Band 4 solely because the vocabulary is ordinary or sentence structures are simple. Band 4 language requires frequent errors, awkward word choice, spelling problems, or sentence-boundary issues that still noticeably strain communication.",
+  "For informal letters to friends, a conversational tone such as 'Dear Mark' and 'Yours, Kevin' can be appropriate. Do not penalise it as insufficiently formal when the task asks for a friend."
+];
+
+function task1CorrectedBand5AnchorText() {
+  return TASK1_CORRECTED_LOWBAND_BAND5_ANCHOR.map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+}
 
 const TASK1_GATE_RULES = [
   "Bullet Coverage Gate: identify each bullet as covered, partly_covered, or missing. Missing two bullets normally keeps Task Achievement at Band 4.0 or below; missing one bullet normally keeps it at Band 5.0 or below; three mentioned but thinly developed is usually 5.0-5.5; clear development of all bullets unlocks 6.0+.",
@@ -61,7 +72,8 @@ const TASK2_GATE_RULES = [
 const TASK1_BAND_BOUNDARY_PROTOCOL = [
   "Task 1 low-band 0-3: no assessable letter, extremely short message, unclear purpose, 0-1 bullet addressed, or errors blocking communication. Do not reward letter-looking layout if communicative purpose is missing.",
   "Task 1 Band 4: basically related but bullet coverage is incomplete or details are very thin; tone/register or letter completeness may be unstable; frequent errors reduce clarity.",
-  "Task 1 Band 5/5.5: purpose is generally clear and most bullets are addressed, but one bullet may be thin, tone may be uneven, and language remains limited or error-prone.",
+  "Task 1 Band 5/5.5: purpose is generally clear and most or all bullets are addressed; details can be simple or one bullet may be thin; tone may be basic/uneven; language remains limited but the message is usually clear.",
+  "Corrected low-band Task 1: if grammar/spelling are mostly corrected, all bullets are covered, and the informal/formal tone matches the prompt, do not keep TA/CC/LR/GRA at Band 4 merely because the style is simple. Consider Band 5.0-5.5.",
   "Task 1 Band 6/6.5: all bullets are covered with useful detail; purpose and tone are generally appropriate; organisation is clear; language errors do not seriously reduce understanding.",
   "Task 1 high-band 7-9: all bullets are developed naturally and proportionately; register is precise; the letter reads like a real response to the reader; vocabulary and grammar are flexible, accurate, and mostly error-free. Consider 7.5/8/8.5/9 when this evidence is present.",
   "Task 1 hard checks: if a bullet is missing, Task Achievement normally cannot exceed 5.0; if two bullets are missing, TA normally cannot exceed 4.0; if tone/register is clearly wrong, TA and LR must be reviewed."
@@ -147,7 +159,8 @@ const FORCED_ANCHOR_COMPARISON_V8_5_6 = {
   "Task 1": [
     "Forced Task 1 low-band comparison: if the response contains frequent basic errors, awkward phrases, weak or unclear purpose, thin detail, unstable register, or merely mentions bullets without effective development, compare first to Band 3/4/4.5 before considering Band 5.5+.",
     "Task 1 Band 3/4 can be 150+ words. Word count, greeting, closing, and three paragraphs do not lift a weak letter above Band 4/4.5 unless the message is clear, controlled and sufficiently developed.",
-    "Task 1 Band 5/5.5 is the normal ceiling for complete but basic letters with simple content, repetitive wording, limited sentence control, or noticeably unnatural phrasing.",
+    "Task 1 Band 5/5.5 is the normal range for complete but basic letters with simple content, repetitive wording, limited sentence control, or some unnatural phrasing. It is also the expected range for corrected low-band letters that clearly cover the task and are no longer error-dense.",
+    "If a Task 1 informal letter answers all three bullets, has a recognisable greeting/closing, and grammar/spelling are mostly corrected so the message is clear, do not hold it at Band 4 for ordinary vocabulary or simple sentences alone.",
     "Task 1 Band 7 requires more than task completion: it needs natural reader-focused development, appropriate register, controlled organisation and flexible language.",
     "Task 1 Band 8/9 should be used for a concise but fully effective letter when tone is exact, detail is well selected, cohesion is unobtrusive, vocabulary is precise, and grammar errors are rare or negligible."
   ],
@@ -176,7 +189,8 @@ function v856ForcedAnchorComparisonProtocol(task) {
 const EXAM_REALISM_CALIBRATION_RULES = {
   "Task 1": [
     "Task 1 Band 4 is possible even when a letter has greeting/body/closing if coverage is thin, tone is unstable, and language is basic, awkward, or frequently wrong.",
-    "Task 1 Band 5/5.5 is for a generally understandable but limited or error-prone letter: most bullets may be addressed, but detail, tone, vocabulary or grammar are not strong enough for Band 6.5/7.",
+    "Task 1 Band 5/5.5 is for a generally understandable but limited letter: most or all bullets may be addressed, detail may be simple, and vocabulary/grammar may be basic, but the reader can follow the message.",
+    "Corrected low-band letter rule: after obvious grammar/spelling errors are fixed, a simple letter that covers all bullets and uses an appropriate tone should usually rise from 4.0-4.5 to about 5.0-5.5, unless content is still missing or language still frequently strains meaning.",
     "Task 1 Band 6/6.5 is for a clear, complete letter with all bullets covered and generally appropriate tone, but still with limited flexibility, some awkwardness, or noticeable non-blocking errors.",
     "Task 1 Band 7/7.5 is for a natural GT letter that clearly covers all three bullets with relevant detail, appropriate register, logical organisation, and mostly accurate language.",
     "Task 1 Band 8+ requires full, reader-focused completion plus natural organisation, precise register, flexible vocabulary and strong grammatical control with rare slips.",
@@ -205,8 +219,8 @@ const IELTS_CRITERION_BAND_MATRIX = {
       "2": "Very little relevant message; not recognisably a complete letter; bullet points are mostly absent.",
       "3": "Weak or unclear purpose; only one requirement may be faintly touched; severe communication problems.",
       "4": "Basically related but incomplete; one or more bullets are missing or very thin; tone/format may be unstable.",
-      "5": "Purpose is generally clear and most bullets are addressed, but development is simple, one bullet may be thin, or tone may be uneven.",
-      "6": "Clear purpose; all bullets are covered with useful basic detail; tone is generally appropriate and the reader can act on the message.",
+      "5": "Purpose is generally clear and most or all bullets are addressed; details may be simple or thin, and tone may be basic/uneven, but the reader can understand the message and act on it.",
+      "6": "Clear purpose; all bullets are covered with useful detail; tone is generally appropriate and there is enough development for the reader to act comfortably.",
       "7": "All bullets are clearly and relevantly developed; tone/register is natural; the letter reads as a complete answer to the reader.",
       "8": "Requirements are fulfilled fully and naturally; information selection is effective; tone/register is very well controlled.",
       "9": "Fully natural, mature, precise GT letter; all requirements are completely fulfilled with exact register and negligible weakness."
@@ -217,7 +231,7 @@ const IELTS_CRITERION_BAND_MATRIX = {
       "2": "Minimal sequencing; message is very hard to follow.",
       "3": "Some order may exist, but progression is weak or confusing.",
       "4": "Basic paragraphing or sequence exists, but links are mechanical/inaccurate and progression is unstable.",
-      "5": "Overall structure is visible; ideas are generally sequenced but may be repetitive, abrupt, or under-linked.",
+      "5": "Overall letter structure is visible; ideas are generally sequenced and understandable, though progression may be repetitive, abrupt, or under-linked.",
       "6": "Clear letter structure; paragraphs serve a purpose; linking generally works.",
       "7": "Logical, smooth organisation; paragraphing, referencing, and progression help the reader.",
       "8": "Natural flow; cohesion is flexible and unobtrusive.",
@@ -241,7 +255,7 @@ const IELTS_CRITERION_BAND_MATRIX = {
       "2": "Very few correct sentence forms.",
       "3": "Frequent errors; sentence control is very weak; meaning is often difficult.",
       "4": "Basic sentence forms attempted; errors are frequent; punctuation and sentence boundaries are unstable.",
-      "5": "Simple and some complex forms attempted; errors are noticeable but the message is usually clear.",
+      "5": "Simple forms are mostly understandable and some complex forms may appear; errors may remain, but the message is usually clear and grammar does not frequently strain reading.",
       "6": "Mix of simple and complex structures; errors occur but rarely block understanding.",
       "7": "Variety of structures with generally good control; only some errors remain.",
       "8": "Wide range with strong control; rare non-systematic errors.",
@@ -1460,6 +1474,7 @@ function buildIndependentAnchorPrompt(body, signals) {
     `Score system: ${SCORE_SYSTEM_VERSION}. Task: ${task}.`,
     "The selected task is locked by the request. Do not switch Task 1 and Task 2 inside this stage.",
     taskSpecific,
+    task === "Task 1" ? `Corrected Task 1 Band 5 anchor:\n${task1CorrectedBand5AnchorText()}` : "",
     "Your only job is to classify the response against the 0-9 anchor benchmarks before criterion scoring.",
     "This anchor must be independent from final criterion bands; do not infer it from a score because no criterion score exists yet.",
     "High-band rule: if the response is mature, fully developed, naturally cohesive, precise and mostly error-free, you must consider Band 8 or Band 9 anchors. Do not default to Band 7 for safety.",
@@ -2569,6 +2584,7 @@ function buildCompactScorePrompt(body, signals, independentAnchor = null) {
     `${v855ExtremeBandDecisionProtocol(task)}`,
     `${v856ForcedAnchorComparisonProtocol(task)}`,
     "Task 1 calibration: a complete-looking letter is not automatically Band 7. If it is basic, repetitive, awkward, thin, or error-prone, keep it in Band 4/5/6 according to the matrix. If it is natural, precise and well controlled, allow 7/8/9.",
+    task === "Task 1" ? `Task 1 corrected Band 5 anchor:\n${task1CorrectedBand5AnchorText()}` : "Task 1 corrected Band 5 anchor: not applicable.",
     "Task 2 calibration: a long essay with paragraphs is not automatically Band 6/7. If reasoning is shallow and language weak, keep it low/mid. If reasoning is mature and language controlled, allow 8/9.",
     "Task 2 two-question rule: when the prompt contains two direct questions, each direct question is a required part. A basic but complete answer that addresses both questions should not be treated as missing task response merely because the development is simple.",
     "High-band rule: if task fulfilment, reasoning/cohesion, lexis and grammar are genuinely high-band, use 7.5/8/8.5/9 where justified; do not cap mature writing at four 7s. For polished, fully relevant, naturally organised answers with few errors, 8.0 is normal, not exceptional. Band 8.5/9 does not require literary native-speaker prose; it requires complete task fulfilment, natural control, precision and negligible errors. If the only limitation is that the text is not flamboyant, do not hold it at 7.5.", 
@@ -2787,6 +2803,7 @@ function taskSpecificPositiveRescueRules(task = "Task 2") {
       "Task 1 positive-band rule: if the response contains any assessable English letter/message attempt, visible purpose, request, complaint, apology, invitation, explanation, greeting/closing, or any relevant bullet-point content, Task Achievement must be a low positive band rather than Band 0.",
       "Task 1 weak-but-rateable rule: missing bullets, wrong tone, thin details, or poor letter layout can justify a low Task Achievement band, but not Band 0 when there is a real message to the reader.",
       "Task 1 exam-realism rule: a weak but understandable letter with many basic grammar/spelling errors and limited detail is usually around Band 4.0-5.0 overall, not automatically 5.0+. Band 5+ needs generally clear purpose and some bullet coverage; Band 6+ needs adequate bullet coverage, detail, tone/register, and language control.",
+      "Task 1 corrected-letter calibration: if obvious grammar/spelling errors are mostly fixed, the message is clear, and all bullets are covered with basic details, then Band 5.0-5.5 is realistic even when vocabulary and sentence patterns remain simple.",
       "Task 1 language ceiling rule: if errors such as wrong verb forms, missing articles/prepositions, misspellings, and awkward word choice are frequent across sentences, keep Lexical Resource and Grammar around low-mid bands unless the text shows clear stronger control.",
       "Task 1 criteria must be exactly: Task Achievement, Coherence and Cohesion, Lexical Resource, Grammatical Range and Accuracy."
     ];

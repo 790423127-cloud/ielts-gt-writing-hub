@@ -5,8 +5,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const ROUTER_VERSION = "production-router-v2-1-highband-shadow-confirmation";
-const BOUNDARY_VERSION = "boundary-adjudicator-v4-3-task1-anchor-calibration";
+const ROUTER_VERSION = "production-router-v2-2-task1-corrected-band5-calibration";
+const BOUNDARY_VERSION = "boundary-adjudicator-v4-4-task1-corrected-band5-calibration";
 const HIGHBAND_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";
 
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 180000, 240000));
