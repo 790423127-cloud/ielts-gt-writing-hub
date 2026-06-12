@@ -386,6 +386,12 @@ function essayGeneratorErrorKind(error) {
   return "essay_generation_error";
 }
 
+function isAbortLikeError(error) {
+  const name = String(error && error.name || "").toLowerCase();
+  const message = String(error && (error.message || error) || "").toLowerCase();
+  return name === "aborterror" || /aborted|abort|timed out|timeout/.test(message);
+}
+
 function normalizeLearningGuide(guideObj = {}) {
   const guide = objectOnly(guideObj);
   const startHere = objectOnly(guide.startHere);
@@ -703,6 +709,251 @@ function buildGenerationPrompt(body = {}) {
     "Student essay:",
     clipText(essay, 7000)
   ].join("\n\n");
+}
+
+function generatedPartTargetBandForKey(key, targets = {}) {
+  if (key === "modelAnswer") return targets.targetBandModel;
+  if (key === "revisionPlus10") return targets.targetBandPlus10;
+  return targets.targetBandPlus05;
+}
+
+function buildSinglePartGenerationPrompt(body = {}, key = "modelAnswer") {
+  const task = normalizeRequestedTask(body);
+  const context = safeFrozenContext(body);
+  const targets = generationTargetsForContext(context);
+  const rescue = band5RescueContext(context);
+  const band5Checklist = band5ChecklistForTask(task);
+  const sourceRules = sourceBasedRevisionRules(task);
+  const prompt = body.questionPrompt || body.prompt || body.promptText || "";
+  const essay = String(body.essay || "").trim();
+  const currentCriteria = objectOnly(
+    (context.currentResult && (context.currentResult.finalCriteria || context.currentResult.criteria)) ||
+    (context.frozenScore && (context.frozenScore.finalCriteria || context.frozenScore.criteria)) ||
+    {}
+  );
+  const currentCriteriaText = Object.keys(currentCriteria).length
+    ? `Current verified criterion bands (frozen score reference only): ${JSON.stringify(currentCriteria)}`
+    : "Current criterion bands unavailable.";
+  const targetBand = generatedPartTargetBandForKey(key, targets);
+  const currentBandText = targets.currentBand == null ? "unknown" : bandLabel(targets.currentBand);
+  const targetBandText = targetBand == null ? "learner-realistic" : bandLabel(targetBand);
+  const partName = key === "modelAnswer"
+    ? "modelAnswer"
+    : (key === "revisionPlus05" ? "revisionPlus05" : "revisionPlus10");
+
+  if (key === "modelAnswer") {
+    return [
+      "You are generating ONLY the modelAnswer part for an IELTS General Training writing learning tool.",
+      "Return strict JSON only. No markdown, no code fences, no commentary outside JSON.",
+      "Do not score the student essay. The frozen score is reference only.",
+      `Task: ${task}`,
+      `Current level reference: ${currentBandText}`,
+      `Target band for model answer: ${targetBandText}`,
+      currentCriteriaText,
+      task === "Task 1"
+        ? "Generate a question-based model letter that clearly covers all bullet points with a suitable tone and learnable language."
+        : "Generate a question-based model essay that answers all task parts with clear organisation and learnable language.",
+      "Keep it only around 0.5 to 1.0 band above the student's current level. Do not make it sound like Band 8/9.",
+      "Return exactly this JSON shape:",
+      JSON.stringify({
+        modelAnswer: {
+          title: "Question-based model answer",
+          targetBand,
+          essay: "...",
+          whyThisIsLearnable: "...",
+          whyHigherThanUserEssay: "...",
+          studyPoints: ["..."],
+          usefulSentences: ["..."]
+        }
+      }, null, 2),
+      `Prompt: ${clipText(prompt, 2200)}`,
+      essay ? `Student essay for level reference only:\n${clipText(essay, 5000)}` : "No student essay was provided."
+    ].join("\n\n");
+  }
+
+  const isPlus05 = key === "revisionPlus05";
+  const title = isPlus05 ? rescue.rescueRevisionTitle : rescue.plus10Title;
+  const whyField = isPlus05 ? "whyItIsPlus05" : "whyItIsPlus10";
+  const changeField = isPlus05 ? "whatChanged" : "whatChangedFromPlus05";
+
+  return [
+    `You are generating ONLY the ${partName} part for an IELTS General Training writing learning tool.`,
+    "Return strict JSON only. No markdown, no code fences, no commentary outside JSON.",
+    "This is generation-only. Do not score the student essay or change any frozen score.",
+    `Task: ${task}`,
+    `Current level reference: ${currentBandText}`,
+    `Target band for ${partName}: ${targetBandText}`,
+    currentCriteriaText,
+    sourceRules,
+    rescue.rescueRule,
+    task === "Task 1"
+      ? "Preserve the student's scenario, relationship, request, reasons, and bullet-point facts."
+      : "Preserve the student's position, main reasons, examples, and idea direction.",
+    isPlus05 && rescue.belowBand5 ? band5Checklist : "",
+    isPlus05 && rescue.belowBand5
+      ? "This is a Band 5 rescue revision. It must clearly fix task coverage, structure, and serious wording/grammar weakness without becoming a polished Band 6 model answer."
+      : `This revision should feel learnable and appropriate for Band ${targetBandText}.`,
+    "Also return up to 2 source-based candidate alternatives for verification. They must preserve the same source facts and meaning.",
+    "Return exactly this JSON shape:",
+    JSON.stringify({
+      [partName]: {
+        title,
+        targetBand,
+        essay: essay ? "..." : "",
+        [whyField]: "...",
+        [changeField]: ["..."],
+        preservedContent: ["..."],
+        changedProblems: ["..."],
+        whyCloserToTarget: "...",
+        imitableSentences: ["..."],
+        whySourceBasedRevision: "...",
+        sourceBasedChanges: ["..."],
+        studyPoints: ["..."],
+        usefulSentences: ["..."]
+      },
+      candidates: [
+        {
+          title: `Alternative source-based candidate for ${partName}`,
+          targetBand,
+          essay: essay ? "..." : "",
+          strategy: isPlus05 ? "source-based rescue" : "source-based stronger candidate",
+          preservedContent: ["..."],
+          changedProblems: ["..."],
+          whyCloserToTarget: "...",
+          imitableSentences: ["..."],
+          whySourceBasedRevision: "..."
+        }
+      ]
+    }, null, 2),
+    `Prompt: ${clipText(prompt, 2200)}`,
+    essay ? `Student essay:\n${clipText(essay, 6000)}` : "No student essay was provided."
+  ].filter(Boolean).join("\n\n");
+}
+
+function buildLearningGuidePrompt(body = {}, generated = {}) {
+  const task = normalizeRequestedTask(body);
+  const prompt = body.questionPrompt || body.prompt || body.promptText || "";
+  const essay = String(body.essay || "").trim();
+  const modelAnswer = objectOnly(generated.modelAnswer);
+  const revisionPlus05 = objectOnly(generated.revisionPlus05);
+  const revisionPlus10 = objectOnly(generated.revisionPlus10);
+  const targets = generationTargetsForContext(safeFrozenContext(body));
+
+  return [
+    "You are generating ONLY the learningGuide part for an IELTS General Training writing learning tool.",
+    "Return strict JSON only. No markdown, no code fences, no commentary outside JSON.",
+    "Chinese explanation should be the main teaching language, but keep reusable sentence patterns in English.",
+    "Do not re-score the student essay.",
+    `Task: ${task}`,
+    `Current band reference: ${targets.currentBand == null ? "unknown" : bandLabel(targets.currentBand)}`,
+    "Write like a practical IELTS teacher for a Chinese learner: be specific, concrete, and based on the student's original text and the generated revisions.",
+    "Return exactly this JSON shape:",
+    JSON.stringify({
+      learningGuide: {
+        startHere: {
+          recommendedFirst: "revisionPlus05 | revisionPlus10 | modelAnswer",
+          whyFirst: "Chinese-first teacher explanation of why the student should start here.",
+          relationToCurrentLevel: "Explain how this version matches the student's current level.",
+          whatToStudy: "What exactly to study from this version.",
+          notPriorityYet: "Which version should not be the first priority and why.",
+          targetAccuracyNote: "Explain honestly whether the version is exact target, slightly high but learnable, or needs verification later."
+        },
+        keyDifferences: [
+          {
+            title: "Difference title",
+            originalProblem: "Chinese explanation of the original problem.",
+            originalEvidence: "Short quote from the original essay.",
+            revisionEvidence: "Short quote from a generated revision.",
+            whyCloserToTarget: "Why this is closer to target.",
+            imitationAction: "What to imitate next time."
+          }
+        ],
+        threeStepStudyPlan: [
+          {
+            step: "Step 1",
+            task: "Detailed Chinese task.",
+            whatToMark: "What to mark.",
+            whatToLearn: "What skill to learn.",
+            practice: "Concrete practice action."
+          }
+        ],
+        imitablePatterns: [
+          {
+            pattern: "I am writing to ask if it would be possible to...",
+            meaningZh: "我写信是想询问是否可以……",
+            source: "revisionPlus05",
+            useCase: "request letter",
+            substitutionPractice: "I am writing to ask if it would be possible to change my working hours.",
+            nextUse: "Explain when to use it next time."
+          }
+        ],
+        nextWritingReminders: ["..."],
+        doNotDo: ["..."]
+      }
+    }, null, 2),
+    `Prompt: ${clipText(prompt, 2200)}`,
+    essay ? `Student essay:\n${clipText(essay, 4500)}` : "No student essay was provided.",
+    `modelAnswer essay:\n${clipText(modelAnswer.essay || "", 2200)}`,
+    `revisionPlus05 essay:\n${clipText(revisionPlus05.essay || "", 2200)}`,
+    `revisionPlus10 essay:\n${clipText(revisionPlus10.essay || "", 2200)}`
+  ].join("\n\n");
+}
+
+function mergeGeneratedPartIntoRaw(raw, key, partPayload = {}) {
+  const spec = generatedPartSpec(key);
+  const objectName = spec.objectName;
+  const incoming = objectOnly(partPayload[objectName] || partPayload[key] || partPayload);
+  raw[objectName] = incoming;
+  if (key === "revisionPlus05") raw.revisionPlus05Candidates = asArray(partPayload.candidates || partPayload.revisionPlus05Candidates);
+  if (key === "revisionPlus10") raw.revisionPlus10Candidates = asArray(partPayload.candidates || partPayload.revisionPlus10Candidates);
+  return raw;
+}
+
+async function generateInPhases(body = {}, originalError = null) {
+  const task = normalizeRequestedTask(body);
+  const context = safeFrozenContext(body);
+  const targets = generationTargetsForContext(context);
+  const raw = {
+    ok: true,
+    aiStage: "essay-generator",
+    task,
+    generationOnly: true,
+    scoreUnaffected: true,
+    currentBand: targets.currentBand,
+    targetBandModel: targets.targetBandModel,
+    targetBandPlus05: targets.targetBandPlus05,
+    targetBandPlus10: targets.targetBandPlus10
+  };
+
+  const modelAnswerRaw = await callDeepSeek(buildSinglePartGenerationPrompt(body, "modelAnswer"), 0.55);
+  mergeGeneratedPartIntoRaw(raw, "modelAnswer", modelAnswerRaw);
+
+  const plus05Raw = await callDeepSeek(buildSinglePartGenerationPrompt(body, "revisionPlus05"), 0.45);
+  mergeGeneratedPartIntoRaw(raw, "revisionPlus05", plus05Raw);
+
+  const plus10Raw = await callDeepSeek(buildSinglePartGenerationPrompt(body, "revisionPlus10"), 0.45);
+  mergeGeneratedPartIntoRaw(raw, "revisionPlus10", plus10Raw);
+
+  const learningGuideRaw = await callDeepSeek(buildLearningGuidePrompt(body, raw), 0.4);
+  raw.learningGuide = objectOnly(learningGuideRaw.learningGuide || learningGuideRaw);
+  raw.legacy = {
+    modelAnswerOutline: "",
+    modelAnswer: objectOnly(raw.modelAnswer).essay || "",
+    revisedEssay: objectOnly(raw.revisionPlus05).essay || ""
+  };
+
+  const normalized = normalizeGenerationResult(raw, body);
+  normalized.generationFallback = {
+    used: true,
+    strategy: "phased-generation-after-timeout",
+    reason: String(originalError && (originalError.message || originalError) || "initial generation request timed out or was aborted")
+  };
+  normalized.systemFeedback = {
+    ...normalized.systemFeedback,
+    status: "generated_in_phases_after_timeout_fallback",
+    message: "Essay generation recovered with phased generation after the initial full-output request was interrupted."
+  };
+  return normalized;
 }
 
 
@@ -1508,8 +1759,17 @@ module.exports = async function handler(req, res) {
       const rewritten = await generateClientSideRewritePart(body);
       return sendJson(req, res, 200, rewritten);
     }
-    const raw = await callDeepSeek(buildGenerationPrompt(body), 0.65);
-    const normalized = normalizeGenerationResult(raw, body);
+    let normalized;
+    try {
+      const raw = await callDeepSeek(buildGenerationPrompt(body), 0.65);
+      normalized = normalizeGenerationResult(raw, body);
+    } catch (error) {
+      if (body.mode === "generation_only" && isAbortLikeError(error)) {
+        normalized = await generateInPhases(body, error);
+      } else {
+        throw error;
+      }
+    }
     const verified = await verifyAndMaybeRewriteGeneratedAnswers(req, body, normalized);
     return sendJson(req, res, 200, verified);
   } catch (error) {
