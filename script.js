@@ -2361,8 +2361,8 @@
 
   function renderLearningModuleBody(moduleName, data) {
     const result = data?.moduleResult || data?.result || {};
-    if (!latestScoreResult) return `<div class="learning-empty-state"><p>??? Writing Studio ?????????????????????????????</p></div>`;
-    if (!data) return `<div class="learning-empty-state"><p>??????????????????????? AI?????????????????????????????????????????????????</p></div>`;
+    if (!latestScoreResult) return `<div class="learning-empty-state"><p>请先在 Writing Studio 中提交作文评分。评分完成后，这里会显示五个模块的详细反馈。</p></div>`;
+    if (!data) return `<div class="learning-empty-state"><p>点击“生成本模块反馈”开始。每个模块会单独请求 AI，反馈必须基于当前题目、你的原文和已经冻结的评分结果；不会重新打分，也不会用本地模板冒充真实反馈。</p></div>`;
     if (data.status === "loading") return `<div class="learning-loading"><p>正在生成 ${escapeHtml(moduleLabel(moduleName))}，请稍等...</p></div>`;
     if (data.status === "error") return `<div class="learning-error"><p>${escapeHtml(data.error || "反馈生成失败")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
     if (data.fallbackUsed) return `<div class="learning-error"><p>${escapeHtml(data.moduleResult?.summary?.zh || "该模块生成格式异常，请重新生成。")}</p><button class="secondary" type="button" data-learning-feedback-generate="${escapeHtml(moduleName)}">重新生成</button></div>`;
@@ -2379,40 +2379,39 @@
     return found ? `${found.label} / ${found.en}` : moduleName;
   }
 
-
   function learningFeedbackStatusSummary() {
     const entries = Object.values(latestLearningFeedback || {});
     if (!latestScoreResult) {
       return {
-        title: "??? Writing Studio ????????",
-        note: "??????Learning Feedback ??????????????",
+        title: "请先在 Writing Studio 中提交作文评分。",
+        note: "评分完成后，Learning Feedback 才会显示五个模块的详细内容。",
         kind: "empty"
       };
     }
     if (entries.some((item) => item && item.status === "loading")) {
       return {
-        title: "??????????????",
-        note: "????????????????????????????",
+        title: "详细反馈正在生成，请稍候……",
+        note: "当前至少有一个模块还在独立生成中，生成完成后会自动显示。",
         kind: "loading"
       };
     }
     if (entries.some((item) => item && item.status === "error")) {
       return {
-        title: "??????????????????",
-        note: "????????????? Learning Feedback ????????????",
+        title: "详细反馈生成失败，请重新生成该模块。",
+        note: "核心评分不受影响；你可以在 Learning Feedback 页面里单独重试某个模块。",
         kind: "error"
       };
     }
     if (entries.length) {
       return {
-        title: "?? Learning Feedback",
-        note: "???????????????????????????????",
+        title: "查看 Learning Feedback",
+        note: "五个模块都可以单独切换，逐个生成，不会改变已经冻结的评分结果。",
         kind: "ready"
       };
     }
     return {
-      title: "?????????",
-      note: "????????? Learning Feedback ??????????????",
+      title: "详细反馈尚未生成。",
+      note: "点击下面的按钮进入 Learning Feedback 页面，然后单独生成各个模块。",
       kind: "idle"
     };
   }
@@ -2424,10 +2423,10 @@
     return `<section class="learning-feedback-panel learning-feedback-v2-panel" id="learningFeedbackPanel">
       <div class="learning-feedback-head">
         <div>
-          <h4>???? / Learning Feedback</h4>
-          <p>???????? AI???????????????????????????????? Overall ?????</p>
+          <h4>学习反馈 / Learning Feedback</h4>
+          <p>每个模块单独请求 AI；反馈必须基于当前题目和你的原文，不重新打分，也不修改已经冻结的 Overall 或四项分。</p>
         </div>
-        <button class="primary" type="button" data-learning-feedback-generate="${escapeHtml(active)}">???????</button>
+        <button class="primary" type="button" data-learning-feedback-generate="${escapeHtml(active)}">生成本模块反馈</button>
       </div>
       <div class="learning-feedback-status-card learning-feedback-status-${escapeHtml(status.kind)}">
         <strong>${escapeHtml(status.title)}</strong>
@@ -2474,9 +2473,7 @@
       renderLearningFeedbackPanel();
       setGradingStatus(`学习反馈生成失败：${error.message || error}`, "error");
     }
-  }
-
-  function renderScoreResult(result = {}) {
+  }  function renderScoreResult(result = {}) {
     latestScoreResult = result;
     if (!latestScoringProgress || latestScoringProgress.status === "running") completeScoringProgress();
     injectScoreStyles();
@@ -2510,10 +2507,10 @@
       <section class="score-feedback-entry" aria-label="Learning Feedback entry">
         <div>
           <p class="eyebrow">LEARNING FEEDBACK</p>
-          <h4>?????? / View Learning Feedback</h4>
+          <h4>查看详细反馈 / View Learning Feedback</h4>
           <p>${escapeHtml(learningFeedbackStatusSummary().note)}</p>
         </div>
-        <a class="primary" href="#/feedback" data-view-target="feedback">?? Learning Feedback</a>
+        <a class="primary" href="#/feedback" data-view-target="feedback">进入 Learning Feedback</a>
       </section>
       ${renderScoreCalculationAccordion(result, rawAverage, finalBand)}
       ${renderScoreCalibration(result)}`;
