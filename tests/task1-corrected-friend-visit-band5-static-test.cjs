@@ -17,7 +17,7 @@ const requiredMainAnchors = [
   'Corrected Task 1 Band 5 anchor',
   'Corrected low-band letters with clear purpose',
   'Do not keep Lexical Resource or Grammar at Band 4 solely because the vocabulary is ordinary or sentence structures are simple',
-  'For informal letters to friends, a conversational tone'
+  'For informal letters to friends, a conversational greeting'
 ];
 
 for (const phrase of requiredMainAnchors) {
