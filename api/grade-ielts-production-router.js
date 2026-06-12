@@ -677,8 +677,16 @@ module.exports = async function handler(req, res) {
         const highband = highbandCall.data;
         const highbandBand = extractBand(highband);
         const task1Band7Review = localRoutingSignals && localRoutingSignals.localTask1Band7ReviewCandidate === true;
+        const highbandGap = typeof highbandBand === "number" && typeof mainBand === "number"
+          ? Math.abs(highbandBand - mainBand)
+          : null;
+
         const highbandConfirmed = typeof highbandBand === "number" && Number.isFinite(highbandBand)
-          && (highbandBand >= 7.5 || (task1Band7Review && highbandBand >= 7.0));
+          && (
+            (mainBand >= 7.0 && highbandBand >= 7.0 && highbandGap !== null && highbandGap <= 1.0)
+            || (mainBand >= 6.5 && mainBand < 7.0 && highbandBand >= 7.0 && highbandBand <= 7.5 && highbandGap !== null && highbandGap <= 1.0)
+            || (task1Band7Review && highbandBand >= 6.5 && highbandBand <= 7.5)
+          );
         const selected = highbandConfirmed ? highband : main;
         const finalBand = highbandConfirmed ? highbandBand : mainBand;
         const criteria = extractCriteria(selected);
