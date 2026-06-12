@@ -827,6 +827,53 @@ function verificationLabel(verifiedBand, targetBand) {
   return "target_met";
 }
 
+function strictVerificationStatus(status, verifiedBand, targetBand) {
+  const raw = String(status || "").trim();
+  if (raw === "verification_failed" || raw === "generation_failed" || raw === "empty_essay" || raw === "verification_unavailable") {
+    return raw;
+  }
+  const comparisonStatus = raw === "verified-too-low"
+    ? "below_target"
+    : raw === "verified-too-high"
+      ? "target_exceeded"
+      : raw === "verified-pass"
+        ? "target_met"
+        : verificationLabel(verifiedBand, targetBand);
+  if (comparisonStatus === "below_target") return "verified-too-low";
+  if (comparisonStatus === "target_exceeded") return "verified-too-high";
+  if (comparisonStatus === "target_met") return "verified-pass";
+  return "verification_unavailable";
+}
+
+function strictVerificationMessageZh(status, targetBand, verifiedBand) {
+  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand);
+  const targetText = bandLabel(targetBand) || "未指定";
+  const verifiedText = bandLabel(verifiedBand) || "暂无";
+  if (verificationStatus === "verified-pass") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本达标，可作为合格学习版本。`;
+  if (verificationStatus === "verified-too-low") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本低于目标，不能作为合格学习版本。`;
+  if (verificationStatus === "verified-too-high") return `目标 Band ${targetText}，生产验证 Band ${verifiedText}。该版本高于目标，可能过难，不作为当前阶段的合格学习版本。`;
+  if (verificationStatus === "verification_failed") return `目标 Band ${targetText} 的生产验证失败。该版本暂时不能作为合格学习版本。`;
+  if (verificationStatus === "generation_failed") return `目标 Band ${targetText} 的生成失败，当前没有可用学习版本。`;
+  if (verificationStatus === "empty_essay") return `目标 Band ${targetText} 尚无可验证文本。`;
+  return "生产验证暂不可用。";
+}
+
+function applyStrictVerificationMeta(payload = {}) {
+  const targetBand = clampBand(payload.targetBand);
+  const verifiedBand = clampBand(payload.verifiedBand);
+  const status = String(payload.status || verificationLabel(verifiedBand, targetBand));
+  const verificationStatus = strictVerificationStatus(status, verifiedBand, targetBand);
+  return {
+    ...payload,
+    targetBand,
+    verifiedBand,
+    status,
+    verificationStatus,
+    isAcceptedForLearning: payload.isAcceptedForLearning === true || verificationStatus === "verified-pass",
+    finalMessageZh: payload.finalMessageZh || strictVerificationMessageZh(verificationStatus, targetBand, verifiedBand)
+  };
+}
+
 function generatedBandDistance(verifiedBand, targetBand) {
   const verified = Number(verifiedBand);
   const target = Number(targetBand);
@@ -844,7 +891,7 @@ function verificationMessage(status) {
 async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
   const essay = String(essayText || "").trim();
   if (!essay) {
-    return {
+    return applyStrictVerificationMeta({
       enabled: true,
       ok: false,
       label,
@@ -852,7 +899,7 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
       verifiedBand: null,
       status: "empty_essay",
       message: "没有可验证的生成文本。"
-    };
+    });
   }
 
   const endpoint = `${baseUrlFromRequest(req)}/api/grade-ielts-production-router`;
@@ -883,7 +930,7 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
     if (!response.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
     const verifiedBand = extractBandFromScoreResult(data);
     const status = verificationLabel(verifiedBand, targetBand);
-    return {
+    return applyStrictVerificationMeta({
       enabled: true,
       ok: true,
       label,
@@ -894,9 +941,9 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
       message: verificationMessage(status),
       criterionBands: data.finalCriteria || data.criteria || null,
       source: data.finalSource || data.scoreSource || data.system || "production-router"
-    };
+    });
   } catch (error) {
-    return {
+    return applyStrictVerificationMeta({
       enabled: true,
       ok: false,
       label,
@@ -906,7 +953,7 @@ async function scoreGeneratedEssay(req, body, essayText, label, targetBand) {
       status: "verification_failed",
       message: "生产评分验证失败；生成作文仍然可用，但目标分未验证。",
       error: String(error.message || error).slice(0, 500)
-    };
+    });
   }
 }
 

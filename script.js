@@ -2690,47 +2690,54 @@
     const applyButton = (id, label) => `<button class="secondary" type="button" data-apply-generated="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
 
     const verificationStatusText = (status) => ({
-      target_met: "精确达到目标",
-      target_exceeded: "超过目标，不等于达标",
-      closest_available: "使用最接近版本",
-      not_exact_target: "未精确达到目标",
-      below_target: "低于目标",
-      verification_failed: "验证失败",
-      verification_running: "正在验证",
-      rewrite_running: "正在按目标重写",
-      empty_essay: "无文本可验证",
-      verification_unavailable: "验证不可用"
-    })[status] || "验证结果未知";
+      target_met: "Exact target met",
+      "verified-pass": "Accepted for learning",
+      target_exceeded: "Too high for target",
+      "verified-too-high": "Too high for target",
+      not_exact_target: "Not an exact target match",
+      below_target: "Below target",
+      "verified-too-low": "Below target",
+      verification_failed: "Verification failed",
+      generation_failed: "Generation failed",
+      verification_running: "Verification running",
+      rewrite_running: "Rewriting for target",
+      empty_essay: "No essay to verify",
+      verification_unavailable: "Verification unavailable"
+    })[status] || "Unknown verification result";
     const verificationBandText = (obj, fallbackTarget) => {
       const target = obj?.targetBand || fallbackTarget;
       const verified = obj?.verification?.verifiedBand;
-      const targetText = Number.isFinite(Number(target)) ? `目标：Band ${formatBand(target)}` : "目标：可学习提升";
-      const verifiedText = Number.isFinite(Number(verified)) ? `生产验证：Band ${formatBand(verified)}` : "生产验证：暂无";
-      const status = obj?.verification?.status ? `状态：${verificationStatusText(obj.verification.status)}` : "";
+      const targetText = Number.isFinite(Number(target)) ? `Target: Band ${formatBand(target)}` : "Target: learnable improvement";
+      const verifiedText = Number.isFinite(Number(verified)) ? `Verified: Band ${formatBand(verified)}` : "Verified: unavailable";
+      const statusKey = obj?.verification?.verificationStatus || obj?.verification?.status;
+      const status = statusKey ? `Status: ${verificationStatusText(statusKey)}` : "";
       return [targetText, verifiedText, status].filter(Boolean).join(" · ");
     };
 
     const verificationBlock = (obj) => {
       const v = obj?.verification || {};
       if (!v.enabled) return "";
-      const safeStatusClass = String(v.status || "unknown").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
-      const target = Number.isFinite(Number(v.targetBand || obj?.targetBand)) ? `Band ${formatBand(v.targetBand || obj?.targetBand)}` : "目标未指定";
-      const verified = Number.isFinite(Number(v.verifiedBand)) ? `Band ${formatBand(v.verifiedBand)}` : "暂无";
-      const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `；首次验证：Band ${formatBand(v.firstVerifiedBand)}` : "";
-      const rewrite = v.rewriteAttempted ? "；已尝试自动重写" : "";
-      const rewriteCount = Number.isFinite(Number(v.rewriteAttemptCount)) ? `；重写次数：${Number(v.rewriteAttemptCount)}` : "";
-      const strategy = v.rewriteStrategy || obj?.rewriteStrategy ? `；策略：${v.rewriteStrategy || obj.rewriteStrategy}` : "";
+      const visibleStatus = v.verificationStatus || v.status || "unknown";
+      const safeStatusClass = String(visibleStatus).replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+      const target = Number.isFinite(Number(v.targetBand || obj?.targetBand)) ? `Band ${formatBand(v.targetBand || obj?.targetBand)}` : "Target not set";
+      const verified = Number.isFinite(Number(v.verifiedBand)) ? `Band ${formatBand(v.verifiedBand)}` : "Unavailable";
+      const first = Number.isFinite(Number(v.firstVerifiedBand)) ? `; first verification: Band ${formatBand(v.firstVerifiedBand)}` : "";
+      const rewrite = v.rewriteAttempted ? "; rewrite attempted" : "";
+      const rewriteCount = Number.isFinite(Number(v.rewriteAttemptCount)) ? `; rewrite count: ${Number(v.rewriteAttemptCount)}` : "";
+      const strategy = v.rewriteStrategy || obj?.rewriteStrategy ? `; strategy: ${v.rewriteStrategy || obj.rewriteStrategy}` : "";
       const candidateInfo = Number.isFinite(Number(v.candidateCount || obj?.candidateCount)) && Number(v.candidateCount || obj?.candidateCount) > 1
-        ? `；候选：${Number(v.candidateIndex ?? obj?.selectedCandidateIndex ?? obj?.candidateIndex ?? 0) + 1}/${Number(v.candidateCount || obj.candidateCount)}`
+        ? `; candidate: ${Number(v.candidateIndex ?? obj?.selectedCandidateIndex ?? obj?.candidateIndex ?? 0) + 1}/${Number(v.candidateCount || obj.candidateCount)}`
         : "";
-      const exact = v.exactTargetMet === true ? "；精确达到目标：是" : (v.exactTargetMet === false ? "；精确达到目标：否" : "");
-      const closest = v.closestVersionUsed || v.status === "closest_available"
-        ? `；最终使用最接近版本${Number.isFinite(Number(v.closestVerifiedBand)) ? `（Band ${formatBand(v.closestVerifiedBand)}）` : ""}`
+      const exact = v.exactTargetMet === true ? "; exact target: yes" : (v.exactTargetMet === false ? "; exact target: no" : "");
+      const closest = v.closestVersionUsed
+        ? "; closest candidate retained for diagnostics" + (Number.isFinite(Number(v.closestVerifiedBand)) ? ` (Band ${formatBand(v.closestVerifiedBand)})` : "")
         : "";
-      const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `；距离目标：${formatBand(v.distanceFromTarget)}` : "";
+      const distance = Number.isFinite(Number(v.distanceFromTarget)) ? `; distance from target: ${formatBand(v.distanceFromTarget)}` : "";
+      const finalMessage = v.finalMessageZh ? `<br><span class="muted">${escapeHtml(v.finalMessageZh)}</span>` : "";
       const err = v.error || v.rewriteError ? `<br><span class="muted">${escapeHtml(v.error || v.rewriteError)}</span>` : "";
-      return `<div class="score-flow-note generated-verification-note status-${escapeHtml(safeStatusClass)}"><strong>生产评分验证：</strong>目标 ${escapeHtml(target)}；验证 ${escapeHtml(verified)}；${escapeHtml(verificationStatusText(v.status))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${err}</div>`;
+      return `<div class="score-flow-note generated-verification-note status-${escapeHtml(safeStatusClass)}"><strong>Production verification:</strong> target ${escapeHtml(target)}; verified ${escapeHtml(verified)}; ${escapeHtml(verificationStatusText(visibleStatus))}${escapeHtml(first)}${escapeHtml(rewrite)}${escapeHtml(rewriteCount)}${escapeHtml(strategy)}${escapeHtml(candidateInfo)}${escapeHtml(exact)}${escapeHtml(closest)}${escapeHtml(distance)}${finalMessage}${err}</div>`;
     };
+
     const candidateHistoryBlock = (obj) => {
       const history = Array.isArray(obj?.candidateHistory) ? obj.candidateHistory : [];
       if (!history.length) return "";
@@ -2947,6 +2954,69 @@
     return "target_met";
   }
 
+  function publicGeneratedVerificationStatus(status, verifiedBand, targetBand) {
+    const raw = String(status || "").trim();
+    if (raw === "verification_failed" || raw === "generation_failed" || raw === "empty_essay" || raw === "verification_running" || raw === "rewrite_running" || raw === "verification_unavailable") {
+      return raw;
+    }
+    const comparisonStatus = raw === "verified-too-low"
+      ? "below_target"
+      : raw === "verified-too-high"
+        ? "target_exceeded"
+        : raw === "verified-pass"
+          ? "target_met"
+          : generatedVerificationStatus(verifiedBand, targetBand);
+    if (comparisonStatus === "below_target") return "verified-too-low";
+    if (comparisonStatus === "target_exceeded") return "verified-too-high";
+    if (comparisonStatus === "target_met") return "verified-pass";
+    return "verification_unavailable";
+  }
+
+  function generatedComparisonStatus(status, verifiedBand, targetBand) {
+    const raw = String(status || "").trim();
+    if (raw === "below_target" || raw === "target_exceeded" || raw === "target_met" || raw === "verification_unavailable") {
+      return raw;
+    }
+    if (raw === "verified-too-low") return "below_target";
+    if (raw === "verified-too-high") return "target_exceeded";
+    if (raw === "verified-pass") return "target_met";
+    return generatedVerificationStatus(verifiedBand, targetBand);
+  }
+
+  function isAcceptedGeneratedVersion(status, verifiedBand, targetBand) {
+    return publicGeneratedVerificationStatus(status, verifiedBand, targetBand) === "verified-pass";
+  }
+
+  function generatedVerificationMessageZh(status, targetBand, verifiedBand) {
+    const verificationStatus = publicGeneratedVerificationStatus(status, verifiedBand, targetBand);
+    const targetText = Number.isFinite(Number(targetBand)) ? `Band ${formatBand(targetBand)}` : "未指定";
+    const verifiedText = Number.isFinite(Number(verifiedBand)) ? `Band ${formatBand(verifiedBand)}` : "暂无";
+    if (verificationStatus === "verified-pass") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本达标，可作为合格学习版本。`;
+    if (verificationStatus === "verified-too-low") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本低于目标，不能作为合格学习版本。`;
+    if (verificationStatus === "verified-too-high") return `目标 ${targetText}，生产验证 ${verifiedText}。该版本高于目标，可能过难，不作为当前阶段的合格学习版本。`;
+    if (verificationStatus === "verification_failed") return `目标 ${targetText} 的生产验证失败。该版本暂时不能作为合格学习版本。`;
+    if (verificationStatus === "generation_failed") return `目标 ${targetText} 的生成失败，当前没有可用学习版本。`;
+    if (verificationStatus === "empty_essay") return `目标 ${targetText} 尚无可验证文本。`;
+    return "生产验证暂不可用。";
+  }
+
+  function normalizeGeneratedVerificationPayload(payload = {}) {
+    const targetBand = Number.isFinite(Number(payload.targetBand)) ? Number(payload.targetBand) : null;
+    const verifiedBand = Number.isFinite(Number(payload.verifiedBand)) ? Number(payload.verifiedBand) : null;
+    const comparisonStatus = generatedComparisonStatus(payload.comparisonStatus || payload.status, verifiedBand, targetBand);
+    const verificationStatus = publicGeneratedVerificationStatus(payload.verificationStatus || payload.status || payload.comparisonStatus, verifiedBand, targetBand);
+    return {
+      ...payload,
+      targetBand,
+      verifiedBand,
+      comparisonStatus,
+      status: payload.status || comparisonStatus,
+      verificationStatus,
+      isAcceptedForLearning: payload.isAcceptedForLearning === true || isAcceptedGeneratedVersion(verificationStatus, verifiedBand, targetBand),
+      finalMessageZh: payload.finalMessageZh || generatedVerificationMessageZh(verificationStatus, targetBand, verifiedBand)
+    };
+  }
+
   function essayGeneratorErrorMessage(error) {
     const raw = String(error?.message || error || "");
     const lower = raw.toLowerCase();
@@ -2971,12 +3041,17 @@
   function generatedVerificationSummary(result = {}) {
     const keys = ["modelAnswer", "revisionPlus05", "revisionPlus10"];
     const counts = keys.reduce((acc, key) => {
-      const status = result[key]?.verification?.status || "unknown";
+      const verification = result[key]?.verification || {};
+      const status = generatedComparisonStatus(
+        verification.comparisonStatus || verification.status || verification.verificationStatus,
+        verification.verifiedBand,
+        verification.targetBand || result[key]?.targetBand
+      ) || "unknown";
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
     const rewrites = keys.reduce((sum, key) => sum + (Number(result[key]?.rewriteAttemptCount) || 0), 0);
-    return `严格生产评分验证完成：目标窗口内 ${counts.target_met || 0} 项，超过目标窗口 ${counts.target_exceeded || 0} 项，未达到目标 ${counts.below_target || 0} 项，验证失败 ${counts.verification_failed || 0} 项，自动重写/降档 ${rewrites} 次。`;
+    return `Strict production verification completed: exact target met ${counts.target_met || 0}, too high ${counts.target_exceeded || 0}, too low ${counts.below_target || 0}, verification failed ${counts.verification_failed || 0}, rewrite/downshift attempts ${rewrites}.`;
   }
 
   function generatedPartChineseName(key) {
@@ -2990,7 +3065,7 @@
     const essay = String(part.essay || "").trim();
     const targetBand = Number(part.targetBand || result.targetBandModel || result.targetBandPlus05 || result.targetBandPlus10);
     if (!essay) {
-      return {
+      return normalizeGeneratedVerificationPayload({
         enabled: true,
         ok: false,
         label,
@@ -2998,8 +3073,8 @@
         targetBand: Number.isFinite(targetBand) ? targetBand : null,
         verifiedBand: null,
         status: "empty_essay",
-        message: "没有可验证的生成文本。"
-      };
+        message: "No generated essay is available for verification."
+      });
     }
 
     const scoreEndpoint = String(els.gradingEndpointInput?.value || DEFAULT_GRADING_ENDPOINT || "/api/grade-ielts-production-router").trim() || "/api/grade-ielts-production-router";
@@ -3015,7 +3090,7 @@
     const score = await postStage(scoreEndpoint, payload);
     const verifiedBand = extractBandFromGeneratedVerificationResult(score);
     const status = generatedVerificationStatus(verifiedBand, targetBand);
-    return {
+    return normalizeGeneratedVerificationPayload({
       enabled: true,
       ok: true,
       label,
@@ -3024,15 +3099,15 @@
       verifiedBand,
       status,
       message: status === "target_met"
-        ? "生产评分验证已达到严格目标分。"
+        ? "Production verification matched the exact target."
         : status === "target_exceeded"
-          ? "生产评分验证超过目标窗口，说明这个版本偏难，需要降档重写。"
+          ? "Production verification is above target, so the version may be too difficult."
           : status === "below_target"
-            ? `生产评分验证低于严格目标；${generatedPartChineseName(key)}将自动重写。`
-            : "生产评分验证暂不可用。",
+            ? `${generatedPartChineseName(key)} is below target, so the system will keep rewriting.`
+            : "Production verification is temporarily unavailable.",
       criterionBands: score.finalCriteria || score.criteria || null,
       source: score.finalSource || score.scoreSource || score.system || "production-router"
-    };
+    });
   }
 
   function mergeRewrittenGeneratedPart(result, key, rewriteResponse, attemptNumber) {
@@ -3286,11 +3361,11 @@
             rewriteAttempted: true,
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts
           };
-          result[key].verification = {
+          const chosenStatus = chosen.verification?.status || result[key]?.verification?.status || generatedVerificationStatus(chosen.verification?.verifiedBand ?? lastVerification.verifiedBand, targetBand);
+          result[key].verification = normalizeGeneratedVerificationPayload({
             ...(chosen.verification || result[key].verification || {}),
-            status: "closest_available",
-            secondaryStatus: "not_exact_target",
-            message: "最终使用最接近版本，但未精确达到目标。",
+            status: chosenStatus,
+            comparisonStatus: chosenStatus,
             exactTargetMet: false,
             closestVersionUsed: true,
             closestVerifiedBand: chosen.verification?.verifiedBand ?? lastVerification.verifiedBand,
@@ -3298,11 +3373,13 @@
             distanceFromTarget: Number.isFinite(chosen.distance) ? Math.round(chosen.distance * 2) / 2 : null,
             rewriteAttempted: true,
             rewriteAttemptCount: Number(result[key]?.rewriteAttemptCount) || maxRewriteAttempts,
-            rewriteStrategy: "closest version used"
-          };
+            rewriteStrategy: "closest candidate retained for diagnostics",
+            isAcceptedForLearning: false,
+            finalMessageZh: `${generatedVerificationMessageZh(chosenStatus, targetBand, chosen.verification?.verifiedBand ?? lastVerification.verifiedBand)} This closest candidate is kept only for diagnostics and is not accepted as a qualified learning version.`
+          });
           result[key].closestVersionUsed = true;
           result[key].exactTargetMet = false;
-          result[key].rewriteStrategy = "closest version used";
+          result[key].rewriteStrategy = "closest candidate retained for diagnostics";
           renderRevisionResult(result);
           return result[key].verification;
         }
