@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const FEEDBACK_VERSION = "learning-feedback-v2-zh-required";
+const FEEDBACK_VERSION = "learning-feedback-v3-teacher-clinic-memory";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBACK_TIMEOUT_MS) || 150000, 240000));
@@ -152,11 +152,164 @@ const MODULES = {
     ]
   },
   expressionBank: {
-    title: "表达积累 / Expression Bank",
-    maxTokens: 4800,
-    maxItems: "3-6 usefulExpressions, 0-4 avoidForNow",
+    title: "老师语言精讲课 / Teacher Language Clinic",
+    maxTokens: 12000,
+    maxItems: "teacherOpening, memoryReview, exactly 5-6 teachingIssues, mustRememberToday 3-6, doNotWriteLikeThis 3-6, memoryUpdate",
     schema: {
       summary: { en: "", zh: "" },
+      teacherOpening: {
+        diagnosisZh: "",
+        whatYouDidWellZh: "",
+        todayMainGoalZh: "",
+        howToUseThisLessonZh: ""
+      },
+      memoryReview: {
+        hasMemoryContext: true,
+        currentTask: "Task 1 | Task 2",
+        teacherMemorySummaryZh: "",
+        repeatedMistakes: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            previousExample: "",
+            currentExample: "",
+            teacherWarningZh: "",
+            whatToPractiseAgainZh: ""
+          }
+        ],
+        improvedMistakes: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            previousProblemZh: "",
+            currentImprovementZh: "",
+            teacherPraiseZh: ""
+          }
+        ],
+        newMistakes: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            teacherNoteZh: ""
+          }
+        ]
+      },
+      teachingIssues: [
+        {
+          index: 1,
+          issueId: "",
+          issueTitleZh: "",
+          issueTitleEn: "",
+          taskScope: "task1 | task2 | sharedLanguage",
+          severity: "high | medium | low",
+          whyTeacherPickedThisZh: "",
+          scoreImpactZh: "",
+          slowLearnerExplanationZh: "",
+          examplesFromYourEssay: [
+            {
+              original: "",
+              survivalCorrection: "",
+              naturalUpgrade: "",
+              whatIsWrongZh: "",
+              whyWrongZh: "",
+              chineseThinkingTrapZh: "",
+              englishLogicZh: "",
+              stepByStepFixZh: ["", "", ""],
+              teacherMemoryHookZh: "",
+              nextTimeCheckZh: ""
+            }
+          ],
+          coreRule: {
+            ruleZh: "",
+            formula: "",
+            correctExamples: ["", ""],
+            wrongExamples: ["", ""],
+            quickCheckZh: ""
+          },
+          miniPractice: [
+            {
+              question: "",
+              answer: "",
+              explanationZh: ""
+            }
+          ],
+          teacherConclusionZh: ""
+        }
+      ],
+      mustRememberToday: [
+        {
+          pointZh: "",
+          formula: "",
+          example: "",
+          whenToUseZh: "",
+          quickCheckZh: ""
+        }
+      ],
+      doNotWriteLikeThis: [
+        {
+          wrongExpression: "",
+          whyWrongZh: "",
+          saferVersion: "",
+          memoryTipZh: ""
+        }
+      ],
+      teacherWrapUp: {
+        todayMainLessonZh: "",
+        threeThingsToRememberZh: ["", "", ""],
+        nextWritingGoalZh: "",
+        encouragementZh: ""
+      },
+      memoryUpdate: {
+        saveToLocalMemory: true,
+        newErrors: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            issueFamilyZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            task: "Task 1 | Task 2",
+            wrongPattern: "",
+            correctPattern: "",
+            originalExample: "",
+            correctedExample: "",
+            explanationZh: "",
+            memoryHookZh: "",
+            nextPracticeZh: ""
+          }
+        ],
+        repeatedErrors: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            issueFamilyZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            task: "Task 1 | Task 2",
+            previousExample: "",
+            currentExample: "",
+            correctedExample: "",
+            wrongPattern: "",
+            correctPattern: "",
+            explanationZh: "",
+            memoryHookZh: "",
+            nextPracticeZh: ""
+          }
+        ],
+        improvedErrors: [
+          {
+            issueId: "",
+            issueTitleZh: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            task: "Task 1 | Task 2",
+            previousProblemZh: "",
+            currentImprovementZh: "",
+            teacherPraiseZh: ""
+          }
+        ],
+        reviewedOldErrors: []
+      },
       groups: [
         {
           categoryZh: "",
@@ -175,12 +328,27 @@ const MODULES = {
       priorityAdvice: { en: "", zh: "" }
     },
     instructions: [
-      "Give 3-6 expressions that grow naturally from this exact essay and prompt.",
-      "Expressions must fit the frozen score level and be usable by this learner in a similar IELTS GT task.",
-      "Do not give random universal IELTS phrases or expressions far above the student's current level.",
-      "Prefer grouped output by function or situation, for example formal opening, asking for requirements, asking about fees, giving an opinion, or balancing advantages and disadvantages.",
-      "For each expression, explain Chinese meaning, usage situation, source connection, and why it is useful.",
-      "Do not translate or rewrite the whole essay."
+      "Turn this module into a detailed teacher-style language clinic, not a vocabulary list.",
+      "Select exactly 5-6 serious language problems that most affect the learner's IELTS writing clarity and score. If the essay is very short and has fewer than 5 genuine issue families, return only the genuine issues and explain why.",
+      "Do not list every small error. Group repeated mistakes into teachable problem types.",
+      "Teach like a patient, very responsible teacher for a very slow learner. Explain slowly and concretely.",
+      "For each issue, explain: what is wrong, why it is wrong, why the learner probably made the mistake, how English works differently, how to fix it step by step, and how to check it next time.",
+      "For every issue, include examples from the student's exact essay.",
+      "For every example, give original sentence, survival correction, and a small natural upgrade.",
+      "Survival correction means the safest grammatically correct version. It is more important than advanced expression.",
+      "Use vivid memory hooks or simple analogies when helpful, such as 'to is like a door; after it, use the base verb'.",
+      "Each issue must include 2-3 mini practice questions with answers.",
+      "Classify every issue by taskScope: task1 for GT letter-only skills, task2 for essay-only skills, and sharedLanguage for grammar/spelling/collocation errors useful in both tasks.",
+      "Use local error memory by task if errorMemoryContext is provided. If currentTask is Task 1, use only Task 1 memory and sharedLanguage memory. If currentTask is Task 2, use only Task 2 memory and sharedLanguage memory.",
+      "Do not use Task 2 argument advice for Task 1 letters. Do not use Task 1 letter-format advice for Task 2 essays.",
+      "If an old error appears again, clearly say in Chinese: 这个错误你之前也犯过，这次又出现了。",
+      "If a previous frequent error does not appear in the current essay, mention it briefly as improvement.",
+      "Return memoryUpdate with newErrors, repeatedErrors, and improvedErrors so the client can save it locally.",
+      "For Band 4-5 learners, teach simple accurate patterns first. Do not push advanced vocabulary.",
+      "For Band 5.5-6.5 learners, teach clearer collocations and sentence patterns, but keep them learnable.",
+      "Chinese is the main teaching language. English is used for original sentences, corrections, formulas, and examples.",
+      "Do not rewrite the whole essay.",
+      "Do not change, estimate, or discuss a new IELTS score."
     ]
   }
 };
@@ -609,6 +777,143 @@ function normalizeModuleResult(moduleName, value) {
   }
 
   if (moduleName === "expressionBank") {
+    const normalizeStringArray = (value, limit = 6) => uniqueBy(flattenTextParts(value), (item) => textFingerprint(item)).slice(0, limit);
+
+    const normalizeMemoryItem = (item = {}) => {
+      const value = item && typeof item === "object" ? item : {};
+      return {
+        issueId: stringValue(value.issueId || value.id || value.issueTitleEn || value.wrongPattern || value.issueTitleZh),
+        issueTitleZh: firstString(value.issueTitleZh, value.titleZh, value.issueFamilyZh, value.familyNameZh),
+        issueFamilyZh: firstString(value.issueFamilyZh, value.familyNameZh, value.problemTypeZh),
+        taskScope: stringValue(value.taskScope || value.scope || value.memoryScope),
+        task: stringValue(value.task),
+        wrongPattern: stringValue(value.wrongPattern || value.wrongExpression),
+        correctPattern: stringValue(value.correctPattern || value.saferVersion),
+        originalExample: stringValue(value.originalExample || value.original || value.currentExample),
+        correctedExample: stringValue(value.correctedExample || value.corrected || value.survivalCorrection),
+        previousExample: stringValue(value.previousExample),
+        currentExample: stringValue(value.currentExample || value.originalExample || value.original),
+        explanationZh: firstString(value.explanationZh, value.whyWrongZh, value.teacherNoteZh, value.reasonZh),
+        memoryHookZh: firstString(value.memoryHookZh, value.memoryTipZh, value.teacherMemoryHookZh),
+        nextPracticeZh: firstString(value.nextPracticeZh, value.whatToPractiseAgainZh, value.practiceAgainZh, value.teacherNoteZh),
+        previousProblemZh: firstString(value.previousProblemZh, value.previousIssueZh),
+        currentImprovementZh: firstString(value.currentImprovementZh, value.improvementZh),
+        teacherPraiseZh: firstString(value.teacherPraiseZh, value.praiseZh)
+      };
+    };
+
+    result.teacherOpening = result.teacherOpening && typeof result.teacherOpening === "object" ? {
+      diagnosisZh: firstString(result.teacherOpening.diagnosisZh, result.teacherOpening.diagnosis),
+      whatYouDidWellZh: firstString(result.teacherOpening.whatYouDidWellZh, result.teacherOpening.strengthZh),
+      todayMainGoalZh: firstString(result.teacherOpening.todayMainGoalZh, result.teacherOpening.todayLessonGoalZh),
+      howToUseThisLessonZh: firstString(result.teacherOpening.howToUseThisLessonZh, result.teacherOpening.teacherToneZh, result.teacherOpening.teacherReminderZh)
+    } : {};
+
+    const memoryReview = result.memoryReview && typeof result.memoryReview === "object" ? result.memoryReview : {};
+    result.memoryReview = {
+      hasMemoryContext: memoryReview.hasMemoryContext !== false,
+      currentTask: stringValue(memoryReview.currentTask),
+      teacherMemorySummaryZh: firstString(memoryReview.teacherMemorySummaryZh, memoryReview.summaryZh),
+      repeatedMistakes: uniqueBy(asArray(memoryReview.repeatedMistakes).map((item) => ({
+        issueId: stringValue(item.issueId || item.id),
+        issueTitleZh: firstString(item.issueTitleZh, item.titleZh),
+        taskScope: stringValue(item.taskScope || item.scope),
+        previousExample: stringValue(item.previousExample),
+        currentExample: stringValue(item.currentExample),
+        teacherWarningZh: firstString(item.teacherWarningZh, item.warningZh),
+        whatToPractiseAgainZh: firstString(item.whatToPractiseAgainZh, item.practiceAgainZh)
+      })), (item) => textFingerprint([item.issueId, item.previousExample, item.currentExample])).slice(0, 8),
+      improvedMistakes: uniqueBy(asArray(memoryReview.improvedMistakes).map((item) => ({
+        issueId: stringValue(item.issueId || item.id),
+        issueTitleZh: firstString(item.issueTitleZh, item.titleZh),
+        taskScope: stringValue(item.taskScope || item.scope),
+        previousProblemZh: firstString(item.previousProblemZh, item.previousIssueZh),
+        currentImprovementZh: firstString(item.currentImprovementZh, item.improvementZh),
+        teacherPraiseZh: firstString(item.teacherPraiseZh, item.praiseZh)
+      })), (item) => textFingerprint([item.issueId, item.previousProblemZh, item.currentImprovementZh])).slice(0, 8),
+      newMistakes: uniqueBy(asArray(memoryReview.newMistakes).map((item) => ({
+        issueId: stringValue(item.issueId || item.id),
+        issueTitleZh: firstString(item.issueTitleZh, item.titleZh),
+        taskScope: stringValue(item.taskScope || item.scope),
+        teacherNoteZh: firstString(item.teacherNoteZh, item.noteZh)
+      })), (item) => textFingerprint([item.issueId, item.issueTitleZh])).slice(0, 8)
+    };
+
+    result.teachingIssues = uniqueBy(asArray(result.teachingIssues || result.languageClinicIssues || result.errorFamilies).map((item, index) => {
+      const value = item && typeof item === "object" ? item : {};
+      const examples = uniqueBy(asArray(value.examplesFromYourEssay || value.examples || value.sentenceTeachingCards).map((example) => ({
+        original: stringValue(example.original || example.evidence),
+        survivalCorrection: stringValue(example.survivalCorrection || example.teacherCorrection || example.corrected),
+        naturalUpgrade: stringValue(example.naturalUpgrade || example.smallUpgrade || example.betterButStillSimple || example.upgradedVersion),
+        whatIsWrongZh: firstString(example.whatIsWrongZh, example.errorPointZh, example.problemTypeZh),
+        whyWrongZh: firstString(example.whyWrongZh, example.explanationZh, example.reasonZh),
+        chineseThinkingTrapZh: firstString(example.chineseThinkingTrapZh, example.whyYouMadeThisMistakeZh),
+        englishLogicZh: firstString(example.englishLogicZh, example.ruleZh),
+        stepByStepFixZh: normalizeStringArray(example.stepByStepFixZh || example.teacherFixStepsZh || example.steps, 5),
+        teacherMemoryHookZh: firstString(example.teacherMemoryHookZh, example.memoryHookZh, example.teacherAnalogyZh),
+        nextTimeCheckZh: firstString(example.nextTimeCheckZh, example.checkMethodZh)
+      })).filter((example) => example.original || example.survivalCorrection || example.naturalUpgrade), (example) => textFingerprint([example.original, example.survivalCorrection])).slice(0, 3);
+
+      const coreRule = value.coreRule && typeof value.coreRule === "object" ? value.coreRule : {};
+      return {
+        index: Number(value.index) || index + 1,
+        issueId: stringValue(value.issueId || value.familyId || value.id || value.issueTitleEn || value.issueTitleZh),
+        issueTitleZh: firstString(value.issueTitleZh, value.familyNameZh, value.titleZh),
+        issueTitleEn: stringValue(value.issueTitleEn || value.familyNameEn || value.titleEn),
+        taskScope: stringValue(value.taskScope || value.scope),
+        severity: stringValue(value.severity || "high"),
+        whyTeacherPickedThisZh: firstString(value.whyTeacherPickedThisZh, value.whyPickedZh, value.teacherDiagnosisZh),
+        scoreImpactZh: firstString(value.scoreImpactZh, value.whyItHurtsScoreZh),
+        slowLearnerExplanationZh: firstString(value.slowLearnerExplanationZh, value.whyThisHappensZh, value.teacherDiagnosisZh),
+        examplesFromYourEssay: examples,
+        coreRule: {
+          ruleZh: firstString(coreRule.ruleZh, value.simpleRuleZh, value.ruleZh),
+          formula: stringValue(coreRule.formula || value.rememberPattern || value.formula),
+          correctExamples: normalizeStringArray(coreRule.correctExamples || value.correctExamples, 3),
+          wrongExamples: normalizeStringArray(coreRule.wrongExamples || value.wrongExamples, 3),
+          quickCheckZh: firstString(coreRule.quickCheckZh, value.nextTimeCheckZh, value.checkMethodZh)
+        },
+        miniPractice: uniqueBy(asArray(value.miniPractice || value.practice || value.miniDrill).map((practice) => ({
+          question: stringValue(practice.question || practice.prompt || practice.learnerTaskZh),
+          learnerTaskZh: firstString(practice.learnerTaskZh, practice.taskZh),
+          answer: stringValue(practice.answer || practice.suggestedAnswer),
+          explanationZh: firstString(practice.explanationZh, practice.reasonZh)
+        })).filter((practice) => practice.question || practice.answer), (practice) => textFingerprint([practice.question, practice.answer])).slice(0, 3),
+        teacherConclusionZh: firstString(value.teacherConclusionZh, value.conclusionZh)
+      };
+    }).filter((item) => item.issueTitleZh || item.examplesFromYourEssay.length || item.coreRule.ruleZh), (item) => textFingerprint([item.issueId, item.issueTitleZh])).slice(0, 6);
+
+    result.mustRememberToday = uniqueBy(asArray(result.mustRememberToday || result.mustLearnPatterns).map((item) => ({
+      pointZh: firstString(item.pointZh, item.meaningZh, item.usedForZh),
+      formula: stringValue(item.formula || item.pattern),
+      example: stringValue(item.example || item.correctExample),
+      whenToUseZh: firstString(item.whenToUseZh, item.nextEssayUseZh, item.usedForZh),
+      quickCheckZh: firstString(item.quickCheckZh, item.nextTimeCheckZh)
+    })).filter((item) => item.pointZh || item.formula || item.example), (item) => textFingerprint([item.pointZh, item.formula, item.example])).slice(0, 8);
+
+    result.doNotWriteLikeThis = uniqueBy(asArray(result.doNotWriteLikeThis || result.avoidForNow || result.avoid).map((item) => ({
+      wrongExpression: stringValue(item.wrongExpression || item.expression || item.wrong),
+      whyWrongZh: firstString(item.whyWrongZh, item.reasonZh, item.reason?.zh),
+      saferVersion: stringValue(item.saferVersion || item.betterChoice || item.correct),
+      memoryTipZh: firstString(item.memoryTipZh, item.noteZh)
+    })).filter((item) => item.wrongExpression || item.saferVersion), (item) => textFingerprint([item.wrongExpression, item.saferVersion])).slice(0, 8);
+
+    result.teacherWrapUp = result.teacherWrapUp && typeof result.teacherWrapUp === "object" ? {
+      todayMainLessonZh: firstString(result.teacherWrapUp.todayMainLessonZh, result.teacherWrapUp.summaryZh),
+      threeThingsToRememberZh: normalizeStringArray(result.teacherWrapUp.threeThingsToRememberZh || result.teacherWrapUp.todayMustRememberZh, 5),
+      nextWritingGoalZh: firstString(result.teacherWrapUp.nextWritingGoalZh, result.teacherWrapUp.nextGoalZh),
+      encouragementZh: firstString(result.teacherWrapUp.encouragementZh, result.teacherWrapUp.praiseZh)
+    } : {};
+
+    const memoryUpdate = result.memoryUpdate && typeof result.memoryUpdate === "object" ? result.memoryUpdate : {};
+    result.memoryUpdate = {
+      saveToLocalMemory: memoryUpdate.saveToLocalMemory !== false,
+      newErrors: uniqueBy(asArray(memoryUpdate.newErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.originalExample])).slice(0, 10),
+      repeatedErrors: uniqueBy(asArray(memoryUpdate.repeatedErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.currentExample])).slice(0, 10),
+      improvedErrors: uniqueBy(asArray(memoryUpdate.improvedErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.currentImprovementZh])).slice(0, 10),
+      reviewedOldErrors: asArray(memoryUpdate.reviewedOldErrors).slice(0, 20)
+    };
+
     const rawGroups = asArray(result.groups).map((group) => {
       const items = uniqueBy(asArray(group.items).map((item) => ({
         phrase: stringValue(item.phrase || item.expression || item.targetVersion),
@@ -624,17 +929,32 @@ function normalizeModuleResult(moduleName, value) {
         items
       };
     }).filter((group) => group.items.length);
-    const fallbackUseful = uniqueBy(asArray(result.usefulExpressions || result.expressions).map((item) => ({
-      phrase: stringValue(item.expression || item.targetVersion || item.phrase),
-      usageZh: firstString(item.meaningZh, item.zh, item.situation?.zh),
-      suitableFor: stringValue(item.situation?.en || item.situation || item.fromEssayOrPrompt),
-      source: stringValue(item.fromEssayOrPrompt || item.source || item.original),
-      sourceZh: firstString(item.sourceZh, item.fromEssayOrPromptZh, item.originalZh),
-      whyUseful: bilingualFallback(item.whyUseful || item.reason || item.pattern, "Use this expression when the task need is the same.")
-    })), (item) => textFingerprint([item.phrase, item.usageZh, item.suitableFor])).slice(0, 8);
-    result.groups = rawGroups.length ? rawGroups : (fallbackUseful.length ? [{ categoryZh: "可直接模仿的表达", categoryEn: "Useful expressions", items: fallbackUseful }] : []);
+
+    const fallbackUseful = uniqueBy([
+      ...asArray(result.usefulExpressions || result.expressions).map((item) => ({
+        phrase: stringValue(item.expression || item.targetVersion || item.phrase),
+        usageZh: firstString(item.meaningZh, item.zh, item.situation?.zh),
+        suitableFor: stringValue(item.situation?.en || item.situation || item.fromEssayOrPrompt),
+        source: stringValue(item.fromEssayOrPrompt || item.source || item.original),
+        sourceZh: firstString(item.sourceZh, item.fromEssayOrPromptZh, item.originalZh),
+        whyUseful: bilingualFallback(item.whyUseful || item.reason || item.pattern, "Use this expression when the task need is the same.")
+      })),
+      ...result.mustRememberToday.map((item) => ({
+        phrase: item.formula || item.example,
+        usageZh: item.pointZh,
+        suitableFor: item.whenToUseZh,
+        source: item.example,
+        sourceZh: "",
+        whyUseful: bilingualFallback({ zh: item.quickCheckZh }, "Use this pattern when the task need is the same.")
+      }))
+    ], (item) => textFingerprint([item.phrase, item.usageZh, item.suitableFor])).filter((item) => item.phrase || item.usageZh).slice(0, 8);
+
+    result.groups = rawGroups.length ? rawGroups : (fallbackUseful.length ? [{ categoryZh: "老师本课必记表达", categoryEn: "Teacher must-remember patterns", items: fallbackUseful }] : []);
     result.usefulExpressions = fallbackUseful;
-    result.avoidForNow = uniqueBy(asArray(result.avoidForNow || result.avoid), (item) => textFingerprint(item)).slice(0, 5);
+    result.avoidForNow = result.doNotWriteLikeThis.map((item) => ({
+      expression: item.wrongExpression,
+      reason: { en: "", zh: item.whyWrongZh || item.memoryTipZh }
+    }));
   }
 
   return result;
@@ -673,6 +993,43 @@ function targetUpgradeGuidance(body) {
   return `Frozen overall band is about ${band.toFixed(1)}. Target feedback should help the learner move toward about Band ${lower}-${upper}, using ${level}. Do not provide expressions far above this level.`;
 }
 
+function normalizedMemoryContextForPrompt(rawContext = {}, task = "Task 2") {
+  if (!rawContext || typeof rawContext !== "object") {
+    return { enabled: false, currentTask: task, taskSpecificMemory: [], sharedLanguageMemory: [] };
+  }
+  const currentTask = task === "Task 1" ? "Task 1" : "Task 2";
+  const pack = (value, limit = 12) => asArray(value).slice(0, limit).map((item) => ({
+    id: stringValue(item.id || item.issueId),
+    issueTitleZh: firstString(item.issueTitleZh, item.titleZh, item.issueFamilyZh),
+    issueFamilyZh: firstString(item.issueFamilyZh, item.familyNameZh),
+    taskScope: stringValue(item.taskScope || item.scope),
+    wrongPattern: stringValue(item.wrongPattern),
+    correctPattern: stringValue(item.correctPattern),
+    originalExample: stringValue(item.originalExample || item.currentExample || item.previousExample),
+    correctedExample: stringValue(item.correctedExample),
+    explanationZh: firstString(item.explanationZh, item.teacherNoteZh),
+    memoryHookZh: firstString(item.memoryHookZh, item.memoryTipZh),
+    occurrenceCount: Number(item.occurrenceCount || 0),
+    repeatedCount: Number(item.repeatedCount || 0),
+    masteryStatus: stringValue(item.masteryStatus || item.status),
+    lastSeenAt: stringValue(item.lastSeenAt),
+    nextPracticeZh: firstString(item.nextPracticeZh, item.practiceAgainZh)
+  })).filter((item) => item.id || item.issueTitleZh || item.wrongPattern || item.originalExample);
+
+  return {
+    enabled: rawContext.enabled !== false,
+    currentTask,
+    taskSpecificMemory: pack(rawContext.taskSpecificMemory || rawContext.recentErrors, 16),
+    sharedLanguageMemory: pack(rawContext.sharedLanguageMemory, 16),
+    frequentErrors: pack(rawContext.frequentErrors, 10),
+    repeatedPatterns: pack(rawContext.repeatedPatterns, 10),
+    improvingPatterns: pack(rawContext.improvingPatterns, 10),
+    instruction: currentTask === "Task 1"
+      ? "Use only Task 1 memory plus sharedLanguage memory. Ignore Task 2-only essay memory."
+      : "Use only Task 2 memory plus sharedLanguage memory. Ignore Task 1-only letter memory."
+  };
+}
+
 function buildPrompt(body, moduleName) {
   const moduleConfig = MODULES[moduleName];
   const task = normalizeRequestedTask(body);
@@ -689,6 +1046,9 @@ function buildPrompt(body, moduleName) {
   const taskSpecificContext = task === "Task 1"
     ? JSON.stringify({ task1BulletPoints: body.task1BulletPoints || [], letterStyle: body.letterStyle || "", requirement: "Use Task 1 GT letter rules only: purpose, tone, recipient relationship, all bullet points, specificity, paragraphing, closing." }, null, 2)
     : JSON.stringify({ task2QuestionProfile: body.task2QuestionProfile || null, requirement: "Use Task 2 essay rules only: direct answer, position if required, topic sentences, development, examples, conclusion." }, null, 2);
+  const memoryContext = moduleName === "expressionBank"
+    ? JSON.stringify(normalizedMemoryContextForPrompt(body.errorMemoryContext || {}, task), null, 2)
+    : "";
 
   return [
     "You are an IELTS General Training writing feedback tutor.",
@@ -726,9 +1086,10 @@ function buildPrompt(body, moduleName) {
     `Task-specific requirements extracted by local code, for context only: ${taskSpecificContext}`,
     `Frozen score and frozen criterion feedback for level reference only: ${frozenScore}`,
     `Target upgrade level for feedback: ${targetUpgradeGuidance(body)}`,
+    moduleName === "expressionBank" ? `Local task-separated error memory for teacher teaching only: ${clipText(memoryContext, 12000)}` : "",
     `Essay word count: ${countWords(body.essay)}`,
     "Student essay:",
-    clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" ? 9000 : 7600)
+    clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" || moduleName === "expressionBank" ? 9000 : 7600)
   ].join("\n\n");
 }
 

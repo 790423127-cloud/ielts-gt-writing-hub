@@ -21,12 +21,247 @@
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
   const DEFAULT_GRADING_ENDPOINT = "/api/grade-ielts-production-router";
 
+  const TEACHER_ERROR_MEMORY_KEY = "ielts-gt-writing-hub:teacherErrorMemory:v1";
+  const TEACHER_ERROR_MEMORY_VERSION = "teacher-error-memory-v1";
+
+  function emptyTeacherErrorMemory() {
+    return {
+      memoryVersion: TEACHER_ERROR_MEMORY_VERSION,
+      updatedAt: "",
+      task1: { records: [] },
+      task2: { records: [] },
+      sharedLanguage: { records: [] }
+    };
+  }
+
+  function normalizeMemoryBucketName(taskScope = "", task = lockedTaskForSelected()) {
+    const scope = String(taskScope || "").toLowerCase().replace(/[\s_-]+/g, "");
+    if (scope.includes("shared") || scope.includes("general") || scope.includes("language")) return "sharedLanguage";
+    if (scope.includes("task1") || scope.includes("letter")) return "task1";
+    if (scope.includes("task2") || scope.includes("essay")) return "task2";
+    return task === "Task 1" ? "task1" : "task2";
+  }
+
+  function memoryTaskFromBucket(bucket) {
+    if (bucket === "task1") return "Task 1";
+    if (bucket === "task2") return "Task 2";
+    return "Shared";
+  }
+
+  function ensureTeacherErrorMemoryShape(raw) {
+    const base = emptyTeacherErrorMemory();
+    const source = raw && typeof raw === "object" ? raw : {};
+    const normalizeRecords = (value) => Array.isArray(value?.records) ? value.records : (Array.isArray(value) ? value : []);
+    return {
+      memoryVersion: source.memoryVersion || TEACHER_ERROR_MEMORY_VERSION,
+      updatedAt: source.updatedAt || "",
+      task1: { records: normalizeRecords(source.task1).slice(-300) },
+      task2: { records: normalizeRecords(source.task2).slice(-300) },
+      sharedLanguage: { records: normalizeRecords(source.sharedLanguage).slice(-300) }
+    };
+  }
+
+  function loadTeacherErrorMemory() {
+    try {
+      return ensureTeacherErrorMemoryShape(JSON.parse(localStorage.getItem(TEACHER_ERROR_MEMORY_KEY) || "{}"));
+    } catch {
+      return emptyTeacherErrorMemory();
+    }
+  }
+
+  function saveTeacherErrorMemory(memory) {
+    const shaped = ensureTeacherErrorMemoryShape(memory);
+    shaped.updatedAt = new Date().toISOString();
+    localStorage.setItem(TEACHER_ERROR_MEMORY_KEY, JSON.stringify(shaped));
+    return shaped;
+  }
+
+  function teacherMemoryRecordKey(item = {}) {
+    return String(item.id || item.issueId || item.wrongPattern || item.issueTitleZh || item.issueFamilyZh || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 120);
+  }
+
+  function recentTeacherMemory(records, limit = 16) {
+    return (Array.isArray(records) ? records : [])
+      .slice()
+      .sort((a, b) => String(b.lastSeenAt || b.firstSeenAt || "").localeCompare(String(a.lastSeenAt || a.firstSeenAt || "")))
+      .slice(0, limit);
+  }
+
+  function frequentTeacherMemory(records, limit = 12) {
+    return (Array.isArray(records) ? records : [])
+      .slice()
+      .sort((a, b) => Number(b.occurrenceCount || 0) - Number(a.occurrenceCount || 0))
+      .slice(0, limit);
+  }
+
+  function compactTeacherMemoryRecord(item = {}) {
+    return {
+      id: item.id || item.issueId || "",
+      issueTitleZh: item.issueTitleZh || "",
+      issueFamilyZh: item.issueFamilyZh || "",
+      taskScope: item.taskScope || "",
+      wrongPattern: item.wrongPattern || "",
+      correctPattern: item.correctPattern || "",
+      originalExample: item.originalExample || "",
+      correctedExample: item.correctedExample || "",
+      explanationZh: item.explanationZh || "",
+      memoryHookZh: item.memoryHookZh || "",
+      occurrenceCount: Number(item.occurrenceCount || 0),
+      repeatedCount: Number(item.repeatedCount || 0),
+      masteryStatus: item.masteryStatus || "",
+      lastSeenAt: item.lastSeenAt || "",
+      nextPracticeZh: item.nextPracticeZh || ""
+    };
+  }
+
+  function buildTeacherErrorMemoryContext(task = lockedTaskForSelected()) {
+    const memory = loadTeacherErrorMemory();
+    const currentBucket = task === "Task 1" ? "task1" : "task2";
+    const taskRecords = memory[currentBucket]?.records || [];
+    const sharedRecords = memory.sharedLanguage?.records || [];
+    const visibleTaskRecords = recentTeacherMemory(taskRecords, 18).map(compactTeacherMemoryRecord);
+    const visibleSharedRecords = recentTeacherMemory(sharedRecords, 18).map(compactTeacherMemoryRecord);
+    const allVisible = [...visibleTaskRecords, ...visibleSharedRecords];
+    return {
+      enabled: true,
+      memoryVersion: memory.memoryVersion || TEACHER_ERROR_MEMORY_VERSION,
+      currentTask: task,
+      taskMemoryBucket: currentBucket,
+      rule: task === "Task 1"
+        ? "Only Task 1-specific records and sharedLanguage records are provided. Do not use Task 2-only essay advice."
+        : "Only Task 2-specific records and sharedLanguage records are provided. Do not use Task 1-only letter advice.",
+      taskSpecificMemory: visibleTaskRecords,
+      sharedLanguageMemory: visibleSharedRecords,
+      frequentErrors: frequentTeacherMemory([...taskRecords, ...sharedRecords], 12).map(compactTeacherMemoryRecord),
+      repeatedPatterns: allVisible.filter((item) => Number(item.repeatedCount || 0) >= 1).slice(0, 12),
+      improvingPatterns: allVisible.filter((item) => /improving|nearly_mastered|mastered/i.test(String(item.masteryStatus || ""))).slice(0, 12)
+    };
+  }
+
+  function normalizeMemoryUpdateItem(item = {}, kind = "new", task = lockedTaskForSelected()) {
+    const scope = normalizeMemoryBucketName(item.taskScope || item.scope, item.task === "Task 1" || item.task === "Task 2" ? item.task : task);
+    const id = teacherMemoryRecordKey({
+      id: item.issueId || item.id,
+      wrongPattern: item.wrongPattern,
+      issueTitleZh: item.issueTitleZh,
+      issueFamilyZh: item.issueFamilyZh
+    });
+    if (!id) return null;
+    return {
+      id,
+      issueId: item.issueId || item.id || id,
+      issueTitleZh: item.issueTitleZh || item.titleZh || "",
+      issueFamilyZh: item.issueFamilyZh || item.familyNameZh || "",
+      taskScope: scope,
+      task: memoryTaskFromBucket(scope),
+      wrongPattern: item.wrongPattern || item.wrongExpression || "",
+      correctPattern: item.correctPattern || item.saferVersion || "",
+      originalExample: item.currentExample || item.originalExample || item.original || item.previousExample || "",
+      correctedExample: item.correctedExample || item.corrected || item.survivalCorrection || "",
+      explanationZh: item.explanationZh || item.whyWrongZh || item.teacherNoteZh || "",
+      memoryHookZh: item.memoryHookZh || item.memoryTipZh || item.teacherMemoryHookZh || "",
+      nextPracticeZh: item.nextPracticeZh || item.whatToPractiseAgainZh || item.practiceAgainZh || "",
+      previousProblemZh: item.previousProblemZh || "",
+      currentImprovementZh: item.currentImprovementZh || "",
+      teacherPraiseZh: item.teacherPraiseZh || "",
+      updateKind: kind
+    };
+  }
+
+  function mergeTeacherErrorMemoryUpdate(memoryUpdate = {}, context = {}) {
+    if (!memoryUpdate || memoryUpdate.saveToLocalMemory === false) return null;
+    const task = context.task || lockedTaskForSelected();
+    const now = new Date().toISOString();
+    const memory = loadTeacherErrorMemory();
+
+    const upsert = (rawItem, kind) => {
+      const item = normalizeMemoryUpdateItem(rawItem, kind, task);
+      if (!item) return;
+      const bucket = item.taskScope || normalizeMemoryBucketName("", task);
+      const container = memory[bucket] || (memory[bucket] = { records: [] });
+      const records = Array.isArray(container.records) ? container.records : (container.records = []);
+      let existing = records.find((record) => record.id === item.id);
+      if (!existing) {
+        existing = {
+          id: item.id,
+          issueId: item.issueId,
+          issueTitleZh: item.issueTitleZh,
+          issueFamilyZh: item.issueFamilyZh,
+          taskScope: bucket,
+          task: item.task,
+          wrongPattern: item.wrongPattern,
+          correctPattern: item.correctPattern,
+          originalExample: item.originalExample,
+          correctedExample: item.correctedExample,
+          explanationZh: item.explanationZh,
+          memoryHookZh: item.memoryHookZh,
+          nextPracticeZh: item.nextPracticeZh,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          occurrenceCount: kind === "improved" ? 0 : 1,
+          repeatedCount: kind === "repeated" ? 1 : 0,
+          status: kind === "improved" ? "improved" : (kind === "repeated" ? "repeated" : "new"),
+          masteryStatus: kind === "improved" ? "improving" : "not_mastered"
+        };
+        records.push(existing);
+        return;
+      }
+
+      existing.lastSeenAt = now;
+      existing.issueTitleZh = item.issueTitleZh || existing.issueTitleZh;
+      existing.issueFamilyZh = item.issueFamilyZh || existing.issueFamilyZh;
+      existing.wrongPattern = item.wrongPattern || existing.wrongPattern;
+      existing.correctPattern = item.correctPattern || existing.correctPattern;
+      existing.originalExample = item.originalExample || existing.originalExample;
+      existing.correctedExample = item.correctedExample || existing.correctedExample;
+      existing.explanationZh = item.explanationZh || existing.explanationZh;
+      existing.memoryHookZh = item.memoryHookZh || existing.memoryHookZh;
+      existing.nextPracticeZh = item.nextPracticeZh || existing.nextPracticeZh;
+
+      if (kind === "improved") {
+        existing.status = "improved";
+        existing.masteryStatus = "improving";
+        existing.improvedAt = now;
+        existing.currentImprovementZh = item.currentImprovementZh || existing.currentImprovementZh || "";
+        existing.teacherPraiseZh = item.teacherPraiseZh || existing.teacherPraiseZh || "";
+      } else {
+        existing.occurrenceCount = Number(existing.occurrenceCount || 0) + 1;
+        if (kind === "repeated") existing.repeatedCount = Number(existing.repeatedCount || 0) + 1;
+        existing.status = kind === "repeated" ? "repeated" : "seen_again";
+        existing.masteryStatus = "still_not_mastered";
+      }
+    };
+
+    [...(memoryUpdate.newErrors || [])].forEach((item) => upsert(item, "new"));
+    [...(memoryUpdate.repeatedErrors || [])].forEach((item) => upsert(item, "repeated"));
+    [...(memoryUpdate.improvedErrors || [])].forEach((item) => upsert(item, "improved"));
+
+    ["task1", "task2", "sharedLanguage"].forEach((bucket) => {
+      const container = memory[bucket] || (memory[bucket] = { records: [] });
+      container.records = recentTeacherMemory(container.records || [], 300);
+    });
+
+    return saveTeacherErrorMemory(memory);
+  }
+
+  function teacherMemoryStatsHtml() {
+    const memory = loadTeacherErrorMemory();
+    const t1 = memory.task1?.records?.length || 0;
+    const t2 = memory.task2?.records?.length || 0;
+    const shared = memory.sharedLanguage?.records?.length || 0;
+    return `<div class="learning-memory-stats"><span>Task 1 错误本：${escapeHtml(t1)}</span><span>Task 2 错误本：${escapeHtml(t2)}</span><span>通用语言错误：${escapeHtml(shared)}</span></div>`;
+  }
+
   const LEARNING_FEEDBACK_MODULES = [
     { key: "overview", label: "全文总览", en: "Overview" },
     { key: "sentenceUpgrade", label: "逐句修改", en: "Sentence Upgrade" },
     { key: "grammarWordFormSpelling", label: "语法词形拼写", en: "Grammar, Word Form & Spelling" },
     { key: "structureCohesionTask", label: "结构与任务回应", en: "Structure, Cohesion & Task" },
-    { key: "expressionBank", label: "表达积累", en: "Expression Bank" }
+    { key: "expressionBank", label: "老师语言精讲课", en: "Teacher Language Clinic" }
   ];
   let latestLearningFeedback = {};
   let activeLearningFeedbackModule = "sentenceUpgrade";
@@ -2156,7 +2391,8 @@
       essay,
       wordCount: countWords(essay),
       frozenScore: frozenScoreForFeedback(),
-      currentResult: safeCurrentResultForTask(lockedTask)
+      currentResult: safeCurrentResultForTask(lockedTask),
+      errorMemoryContext: moduleName === "expressionBank" ? buildTeacherErrorMemoryContext(lockedTask) : undefined
     };
   }
 
@@ -2443,12 +2679,103 @@
   }
 
   function renderExpressionBankModule(result = {}) {
-    const groups = learningArray(result.groups, 6);
-    const expressions = learningArray(result.usefulExpressions || result.expressions, 8);
-    const avoid = learningArray(result.avoidForNow || result.avoid, 5);
+    const renderPlainList = (items, cls = "") => {
+      const list = learningArray(items, 10);
+      return list.length ? `<ul class="${escapeHtml(cls)}">${list.map((item) => `<li>${escapeHtml(learningText(item))}</li>`).join("")}</ul>` : "";
+    };
+
+    const teacherOpening = result.teacherOpening || {};
+    const memoryReview = result.memoryReview || {};
+    const issues = learningArray(result.teachingIssues || result.languageClinicIssues || result.errorFamilies, 6);
+    const mustRemember = learningArray(result.mustRememberToday || result.mustLearnPatterns, 8);
+    const avoid = learningArray(result.doNotWriteLikeThis || result.avoidForNow || result.avoid, 8);
+    const wrapUp = result.teacherWrapUp || {};
+    const hasClinic = hasMeaningfulContent(teacherOpening) || issues.length || hasMeaningfulContent(memoryReview);
+
+    if (!hasClinic) {
+      const groups = learningArray(result.groups, 6);
+      const expressions = learningArray(result.usefulExpressions || result.expressions, 8);
+      return `${pairHtml(result.summary)}
+        ${groups.length ? `<div class="learning-card-list">${groups.map((group) => `<section class="learning-expression-group"><h4>${escapeHtml(learningText(group.categoryZh || group.categoryEn || "Useful expressions"))}</h4><div class="learning-card-list">${learningArray(group.items, 8).map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.phrase || item.expression || item.targetVersion, "is-upgraded", item.usageZh || item.meaningZh || item.zh)}${simpleValueHtml("适用场景 / Suitable for", item.suitableFor || item.situation || item.categoryEn, "", item.suitableForZh)}${simpleValueHtml("来自原文或题目 / Source", item.source || item.fromEssayOrPrompt || item.original, "", item.sourceZh)}${pairHtml(item.whyUseful || item.reason || item.pattern)}</article>`).join("")}</div></section>`).join("")}</div>` : expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的老师语言精讲内容。请重新生成该模块。</p>`}
+        ${avoid.length ? learningListHtml("暂时不要优先模仿 / Avoid for now", avoid, 5) : ""}
+        ${pairHtml(result.priorityAdvice)}`;
+    }
+
+    const memoryBlock = hasMeaningfulContent(memoryReview) ? `<details class="score-accordion learning-subsection" open>
+      <summary>常犯错误追踪 / Local Error Memory</summary>
+      <div class="score-accordion-body">
+        ${simpleValueHtml("老师记忆总结 / Teacher memory summary", "", "", memoryReview.teacherMemorySummaryZh)}
+        ${teacherMemoryStatsHtml()}
+        ${learningListHtml("这次又犯的老错误 / Repeated mistakes", memoryReview.repeatedMistakes, 8)}
+        ${learningListHtml("这次有进步的地方 / Improved mistakes", memoryReview.improvedMistakes, 8)}
+        ${learningListHtml("这次新发现的问题 / New mistakes", memoryReview.newMistakes, 8)}
+      </div>
+    </details>` : "";
+
+    const issueCards = issues.length ? `<div class="learning-card-list teacher-clinic-issue-list">${issues.map((issue, index) => {
+      const examples = learningArray(issue.examplesFromYourEssay || issue.examples, 3);
+      const practices = learningArray(issue.miniPractice || issue.practice, 3);
+      const coreRule = issue.coreRule || {};
+      return `<details class="score-accordion learning-subsection teacher-clinic-issue" ${index < 2 ? "open" : ""}>
+        <summary>问题 ${escapeHtml(issue.index || index + 1)}：${escapeHtml(learningText(issue.issueTitleZh || issue.issueTitleEn || issue.familyNameZh || "语言问题"))}</summary>
+        <div class="score-accordion-body">
+          <article class="learning-card">
+            ${tagListHtml([issue.severity ? `严重程度：${issue.severity}` : "", issue.taskScope ? `记忆分类：${issue.taskScope}` : ""].filter(Boolean))}
+            ${simpleValueHtml("老师为什么挑这个问题 / Why teacher picked this", "", "", issue.whyTeacherPickedThisZh)}
+            ${simpleValueHtml("它怎么影响分数 / Score impact", "", "", issue.scoreImpactZh)}
+            ${simpleValueHtml("慢学生解释 / Slow explanation", "", "", issue.slowLearnerExplanationZh)}
+          </article>
+          ${examples.map((example) => `<article class="learning-card teacher-example-card">
+            ${simpleValueHtml("你的原句 / Original", example.original, "")}
+            ${simpleValueHtml("保底正确版 / Survival correction", example.survivalCorrection || example.teacherCorrection || example.corrected, "is-corrected")}
+            ${simpleValueHtml("稍微自然版 / Natural upgrade", example.naturalUpgrade || example.smallUpgrade || example.upgradedVersion, "is-upgraded")}
+            ${simpleValueHtml("错在哪里 / What is wrong", "", "", example.whatIsWrongZh)}
+            ${simpleValueHtml("为什么错 / Why wrong", "", "", example.whyWrongZh)}
+            ${simpleValueHtml("中文思维陷阱 / Chinese-thinking trap", "", "", example.chineseThinkingTrapZh)}
+            ${simpleValueHtml("英文逻辑 / English logic", "", "", example.englishLogicZh)}
+            ${renderPlainList(example.stepByStepFixZh || example.teacherFixStepsZh, "learning-value-zh")}
+            ${simpleValueHtml("生动记忆法 / Memory hook", "", "", example.teacherMemoryHookZh)}
+            ${simpleValueHtml("下次检查 / Next-time check", "", "", example.nextTimeCheckZh)}
+          </article>`).join("")}
+          ${hasMeaningfulContent(coreRule) ? `<article class="learning-card teacher-rule-card">
+            <div class="learning-card-title">核心规则 / Core rule</div>
+            ${simpleValueHtml("规则 / Rule", coreRule.formula, "is-upgraded", coreRule.ruleZh)}
+            ${renderPlainList(coreRule.correctExamples, "learning-value-en")}
+            ${renderPlainList(coreRule.wrongExamples, "learning-value-en")}
+            ${simpleValueHtml("快速检查 / Quick check", "", "", coreRule.quickCheckZh)}
+          </article>` : ""}
+          ${practices.length ? `<article class="learning-card teacher-practice-card">
+            <div class="learning-card-title">马上练 / Mini practice</div>
+            ${practices.map((practice, pIndex) => `<div class="learning-practice-row">
+              ${simpleValueHtml(`练习 ${pIndex + 1}`, practice.question || practice.learnerTaskZh)}
+              ${simpleValueHtml("答案 / Answer", practice.answer, "is-corrected")}
+              ${simpleValueHtml("讲解 / Explanation", "", "", practice.explanationZh)}
+            </div>`).join("")}
+          </article>` : ""}
+          ${simpleValueHtml("老师小结 / Teacher conclusion", "", "", issue.teacherConclusionZh)}
+        </div>
+      </details>`;
+    }).join("")}</div>` : `<p class="muted">没有可显示的老师精讲问题。请重新生成该模块。</p>`;
+
     return `${pairHtml(result.summary)}
-      ${groups.length ? `<div class="learning-card-list">${groups.map((group) => `<section class="learning-expression-group"><h4>${escapeHtml(learningText(group.categoryZh || group.categoryEn || "Useful expressions"))}</h4><div class="learning-card-list">${learningArray(group.items, 8).map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.phrase || item.expression || item.targetVersion, "is-upgraded", item.usageZh || item.meaningZh || item.zh)}${simpleValueHtml("适用场景 / Suitable for", item.suitableFor || item.situation || item.categoryEn, "", item.suitableForZh)}${simpleValueHtml("来自原文或题目 / Source", item.source || item.fromEssayOrPrompt || item.original, "", item.sourceZh)}${pairHtml(item.whyUseful || item.reason || item.pattern)}</article>`).join("")}</div></section>`).join("")}</div>` : expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的表达积累。请重新生成该模块。</p>`}
-      ${avoid.length ? learningListHtml("暂时不要优先模仿 / Avoid for now", avoid, 5) : ""}
+      <article class="learning-card teacher-opening-card">
+        <div class="learning-card-title">老师开场诊断 / Teacher opening</div>
+        ${simpleValueHtml("诊断 / Diagnosis", "", "", teacherOpening.diagnosisZh)}
+        ${simpleValueHtml("做得好的地方 / What you did well", "", "", teacherOpening.whatYouDidWellZh)}
+        ${simpleValueHtml("今天目标 / Today's goal", "", "", teacherOpening.todayMainGoalZh)}
+        ${simpleValueHtml("怎么学习这一课 / How to use this lesson", "", "", teacherOpening.howToUseThisLessonZh)}
+      </article>
+      ${memoryBlock}
+      ${issueCards}
+      ${mustRemember.length ? learningListHtml("今天必须记住 / Must remember today", mustRemember, 8) : ""}
+      ${avoid.length ? learningListHtml("不要这样写 / Do not write like this", avoid, 8) : ""}
+      ${hasMeaningfulContent(wrapUp) ? `<article class="learning-card teacher-wrap-card">
+        <div class="learning-card-title">老师总结 / Teacher wrap-up</div>
+        ${simpleValueHtml("今天主课 / Main lesson", "", "", wrapUp.todayMainLessonZh)}
+        ${renderPlainList(wrapUp.threeThingsToRememberZh || wrapUp.todayMustRememberZh, "learning-value-zh")}
+        ${simpleValueHtml("下一篇目标 / Next writing goal", "", "", wrapUp.nextWritingGoalZh)}
+        ${simpleValueHtml("鼓励 / Encouragement", "", "", wrapUp.encouragementZh)}
+      </article>` : ""}
       ${pairHtml(result.priorityAdvice)}`;
   }
 
@@ -2558,6 +2885,10 @@
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok || !data.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
+      if (moduleName === "expressionBank") {
+        const savedMemory = mergeTeacherErrorMemoryUpdate(data.moduleResult?.memoryUpdate, { task: lockedTaskForSelected() });
+        if (savedMemory) data.localMemorySaved = true;
+      }
       latestLearningFeedback[moduleName] = data;
       renderLearningFeedbackPanel();
       setGradingStatus(`${moduleLabel(moduleName)} 已生成。分数没有改变。`, "done");
