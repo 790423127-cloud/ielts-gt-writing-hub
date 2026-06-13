@@ -516,6 +516,20 @@
     if (els.revisionCompareArea) els.revisionCompareArea.classList.add("hidden");
   }
 
+  function resetLearningFeedbackForNewGradingRun() {
+    // Learning Feedback modules must only be generated after an explicit user click.
+    // Before each new grading run, clear any previous module output so old Teacher
+    // Language Clinic content is not displayed as if it belongs to the new score.
+    latestLearningFeedback = {};
+    activeLearningFeedbackModule = "sentenceUpgrade";
+
+    const learningMount = $("learningFeedbackMount");
+    if (learningMount) learningMount.innerHTML = "";
+
+    const feedbackEmpty = $("feedbackEmpty");
+    if (feedbackEmpty) feedbackEmpty.classList.remove("hidden");
+  }
+
   function selectPrompt(id) {
     selected = prompts.find((p) => p.id === id);
     if (!selected) return;
@@ -2684,6 +2698,47 @@
       return list.length ? `<ul class="${escapeHtml(cls)}">${list.map((item) => `<li>${escapeHtml(learningText(item))}</li>`).join("")}</ul>` : "";
     };
 
+    const renderDoNotWriteLikeThisCards = (items) => {
+      const list = learningArray(items, 8);
+      if (!list.length) return "";
+      return `<div class="learning-card-list teacher-avoid-list">${list.map((item, index) => {
+        if (typeof item === "string") return `<article class="learning-card"><div class="learning-card-title">提醒 ${escapeHtml(index + 1)}</div><p>${escapeHtml(item)}</p></article>`;
+        const wrong = firstMeaningfulValue(item.wrongExpression, item.wrong, item.expression, item.original, item.wrongPattern, item.fromEssayOrPrompt);
+        const whyZh = firstMeaningfulValue(item.whyWrongZh, item.reasonZh, item.explanationZh, item.memoryTipZh, item.reason?.zh, item.whyWrong?.zh);
+        const safe = firstMeaningfulValue(item.saferVersion, item.safeVersion, item.saferChoice, item.betterChoice, item.correctExpression, item.correctPattern, item.corrected);
+        const tipZh = firstMeaningfulValue(item.memoryTipZh, item.tipZh, item.teacherTipZh, item.avoidReasonZh, item.noteZh, item.doNotOveruseZh);
+        const title = wrong || safe || learningText(item) || `提醒 ${index + 1}`;
+        const body = [
+          `<div class="learning-card-title">${escapeHtml(`不要这样写 ${index + 1} / Do not write like this`)}</div>`,
+          simpleValueHtml("错误写法 / Wrong expression", wrong),
+          simpleValueHtml("为什么错 / Why wrong", "", "", whyZh),
+          simpleValueHtml("安全写法 / Safer version", safe, "is-corrected"),
+          simpleValueHtml("记忆方法 / Memory tip", "", "", tipZh)
+        ].filter(Boolean).join("");
+        return `<article class="learning-card teacher-avoid-card">${body || `<p>${escapeHtml(title)}</p>`}</article>`;
+      }).join("")}</div>`;
+    };
+
+    const renderMustRememberCards = (items) => {
+      const list = learningArray(items, 8);
+      if (!list.length) return "";
+      return `<div class="learning-card-list teacher-must-remember-list">${list.map((item, index) => {
+        if (typeof item === "string") return `<article class="learning-card"><div class="learning-card-title">必须记住 ${escapeHtml(index + 1)}</div><p>${escapeHtml(item)}</p></article>`;
+        const pointZh = firstMeaningfulValue(item.pointZh, item.ruleZh, item.titleZh, item.meaningZh, item.usedForZh, item.nextEssayUseZh);
+        const formula = firstMeaningfulValue(item.formula, item.pattern, item.expression, item.correctPattern);
+        const example = firstMeaningfulValue(item.example, item.correctExample, item.imitate1, item.sentence);
+        const checkZh = firstMeaningfulValue(item.quickCheckZh, item.whenToUseZh, item.checkMethodZh, item.explanationZh);
+        const body = [
+          `<div class="learning-card-title">${escapeHtml(`记住 ${index + 1} / Remember`)}</div>`,
+          simpleValueHtml("要点 / Point", "", "", pointZh),
+          simpleValueHtml("公式 / Formula", formula, "is-upgraded"),
+          simpleValueHtml("例句 / Example", example),
+          simpleValueHtml("检查方法 / Quick check", "", "", checkZh)
+        ].filter(Boolean).join("");
+        return `<article class="learning-card teacher-remember-card">${body || `<p>${escapeHtml(learningText(item))}</p>`}</article>`;
+      }).join("")}</div>`;
+    };
+
     const teacherOpening = result.teacherOpening || {};
     const memoryReview = result.memoryReview || {};
     const issues = learningArray(result.teachingIssues || result.languageClinicIssues || result.errorFamilies, 6);
@@ -2697,11 +2752,11 @@
       const expressions = learningArray(result.usefulExpressions || result.expressions, 8);
       return `${pairHtml(result.summary)}
         ${groups.length ? `<div class="learning-card-list">${groups.map((group) => `<section class="learning-expression-group"><h4>${escapeHtml(learningText(group.categoryZh || group.categoryEn || "Useful expressions"))}</h4><div class="learning-card-list">${learningArray(group.items, 8).map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.phrase || item.expression || item.targetVersion, "is-upgraded", item.usageZh || item.meaningZh || item.zh)}${simpleValueHtml("适用场景 / Suitable for", item.suitableFor || item.situation || item.categoryEn, "", item.suitableForZh)}${simpleValueHtml("来自原文或题目 / Source", item.source || item.fromEssayOrPrompt || item.original, "", item.sourceZh)}${pairHtml(item.whyUseful || item.reason || item.pattern)}</article>`).join("")}</div></section>`).join("")}</div>` : expressions.length ? `<div class="learning-card-list">${expressions.map((item) => `<article class="learning-card">${simpleValueHtml("可积累表达 / Expression", item.expression || item.targetVersion || item.phrase, "is-upgraded", item.meaningZh || item.zh)}${simpleValueHtml("来自本文/题目 / From essay or prompt", item.fromEssayOrPrompt || item.source || item.original, "", item.sourceZh)}${pairHtml(item.situation || item.whenToUse)}${pairHtml(item.pattern || item.howToUse)}${pairHtml(item.whyUseful || item.reason)}</article>`).join("")}</div>` : `<p class="muted">没有可显示的老师语言精讲内容。请重新生成该模块。</p>`}
-        ${avoid.length ? learningListHtml("暂时不要优先模仿 / Avoid for now", avoid, 5) : ""}
+        ${avoid.length ? renderDoNotWriteLikeThisCards(avoid) : ""}
         ${pairHtml(result.priorityAdvice)}`;
     }
 
-    const memoryBlock = hasMeaningfulContent(memoryReview) ? `<details class="score-accordion learning-subsection" open>
+    const memoryBlock = hasMeaningfulContent(memoryReview) ? `<details class="score-accordion learning-subsection">
       <summary>常犯错误追踪 / Local Error Memory</summary>
       <div class="score-accordion-body">
         ${simpleValueHtml("老师记忆总结 / Teacher memory summary", "", "", memoryReview.teacherMemorySummaryZh)}
@@ -2716,7 +2771,7 @@
       const examples = learningArray(issue.examplesFromYourEssay || issue.examples, 3);
       const practices = learningArray(issue.miniPractice || issue.practice, 3);
       const coreRule = issue.coreRule || {};
-      return `<details class="score-accordion learning-subsection teacher-clinic-issue" ${index < 2 ? "open" : ""}>
+      return `<details class="score-accordion learning-subsection teacher-clinic-issue">
         <summary>问题 ${escapeHtml(issue.index || index + 1)}：${escapeHtml(learningText(issue.issueTitleZh || issue.issueTitleEn || issue.familyNameZh || "语言问题"))}</summary>
         <div class="score-accordion-body">
           <article class="learning-card">
@@ -2758,25 +2813,42 @@
     }).join("")}</div>` : `<p class="muted">没有可显示的老师精讲问题。请重新生成该模块。</p>`;
 
     return `${pairHtml(result.summary)}
-      <article class="learning-card teacher-opening-card">
-        <div class="learning-card-title">老师开场诊断 / Teacher opening</div>
-        ${simpleValueHtml("诊断 / Diagnosis", "", "", teacherOpening.diagnosisZh)}
-        ${simpleValueHtml("做得好的地方 / What you did well", "", "", teacherOpening.whatYouDidWellZh)}
-        ${simpleValueHtml("今天目标 / Today's goal", "", "", teacherOpening.todayMainGoalZh)}
-        ${simpleValueHtml("怎么学习这一课 / How to use this lesson", "", "", teacherOpening.howToUseThisLessonZh)}
-      </article>
+      ${hasMeaningfulContent(teacherOpening) ? `<details class="score-accordion learning-subsection teacher-opening-card">
+        <summary>老师开场诊断 / Teacher opening</summary>
+        <div class="score-accordion-body">
+          <article class="learning-card">
+            ${simpleValueHtml("诊断 / Diagnosis", "", "", teacherOpening.diagnosisZh)}
+            ${simpleValueHtml("做得好的地方 / What you did well", "", "", teacherOpening.whatYouDidWellZh)}
+            ${simpleValueHtml("今天目标 / Today's goal", "", "", teacherOpening.todayMainGoalZh)}
+            ${simpleValueHtml("怎么学习这一课 / How to use this lesson", "", "", teacherOpening.howToUseThisLessonZh)}
+          </article>
+        </div>
+      </details>` : ""}
       ${memoryBlock}
       ${issueCards}
-      ${mustRemember.length ? learningListHtml("今天必须记住 / Must remember today", mustRemember, 8) : ""}
-      ${avoid.length ? learningListHtml("不要这样写 / Do not write like this", avoid, 8) : ""}
-      ${hasMeaningfulContent(wrapUp) ? `<article class="learning-card teacher-wrap-card">
-        <div class="learning-card-title">老师总结 / Teacher wrap-up</div>
-        ${simpleValueHtml("今天主课 / Main lesson", "", "", wrapUp.todayMainLessonZh)}
-        ${renderPlainList(wrapUp.threeThingsToRememberZh || wrapUp.todayMustRememberZh, "learning-value-zh")}
-        ${simpleValueHtml("下一篇目标 / Next writing goal", "", "", wrapUp.nextWritingGoalZh)}
-        ${simpleValueHtml("鼓励 / Encouragement", "", "", wrapUp.encouragementZh)}
-      </article>` : ""}
-      ${pairHtml(result.priorityAdvice)}`;
+      ${mustRemember.length ? `<details class="score-accordion learning-subsection">
+        <summary>今天必须记住 / Must remember today</summary>
+        <div class="score-accordion-body">${renderMustRememberCards(mustRemember)}</div>
+      </details>` : ""}
+      ${avoid.length ? `<details class="score-accordion learning-subsection">
+        <summary>不要这样写 / Do not write like this</summary>
+        <div class="score-accordion-body">${renderDoNotWriteLikeThisCards(avoid)}</div>
+      </details>` : ""}
+      ${hasMeaningfulContent(wrapUp) ? `<details class="score-accordion learning-subsection teacher-wrap-card">
+        <summary>老师总结 / Teacher wrap-up</summary>
+        <div class="score-accordion-body">
+          <article class="learning-card">
+            ${simpleValueHtml("今天主课 / Main lesson", "", "", wrapUp.todayMainLessonZh)}
+            ${renderPlainList(wrapUp.threeThingsToRememberZh || wrapUp.todayMustRememberZh, "learning-value-zh")}
+            ${simpleValueHtml("下一篇目标 / Next writing goal", "", "", wrapUp.nextWritingGoalZh)}
+            ${simpleValueHtml("鼓励 / Encouragement", "", "", wrapUp.encouragementZh)}
+          </article>
+        </div>
+      </details>` : ""}
+      ${hasMeaningfulContent(result.priorityAdvice) ? `<details class="score-accordion learning-subsection">
+        <summary>优先建议 / Priority advice</summary>
+        <div class="score-accordion-body">${pairHtml(result.priorityAdvice)}</div>
+      </details>` : ""}`;
   }
 
   function renderLearningModuleBody(moduleName, data) {
@@ -3949,6 +4021,7 @@
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
     const endpoint = String(els.gradingEndpointInput?.value || "").trim();
     if (!endpoint) { setGradingStatus("请先填写批改接口地址。不要把 API key 放在前端网页中。", "error"); return; }
+    resetLearningFeedbackForNewGradingRun();
     const originalText = els.gradeBtn?.textContent || "开始评分";
     if (els.gradeBtn) { els.gradeBtn.disabled = true; els.gradeBtn.textContent = "Scoring..."; els.gradeBtn.setAttribute("aria-busy", "true"); }
     if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
