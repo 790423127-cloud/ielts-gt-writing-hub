@@ -256,6 +256,211 @@
     return `<div class="learning-memory-stats"><span>Task 1 错误本：${escapeHtml(t1)}</span><span>Task 2 错误本：${escapeHtml(t2)}</span><span>通用语言错误：${escapeHtml(shared)}</span></div>`;
   }
 
+  function teacherMemoryEndpointFromGradingEndpoint() {
+    const raw = String(els.gradingEndpointInput?.value || "").trim();
+    if (!raw) return "/api/teacher-memory";
+    try {
+      const url = new URL(raw, window.location.origin);
+      url.pathname = "/api/teacher-memory";
+      return url.toString();
+    } catch {
+      return "/api/teacher-memory";
+    }
+  }
+
+  async function postTeacherMemoryAction(action, payload = {}) {
+    const response = await fetch(teacherMemoryEndpointFromGradingEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    if (!response.ok || data.ok === false) {
+      throw new Error([`teacher-memory ${action} HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
+    }
+    return data;
+  }
+
+  async function loadTeacherCloudMemory() {
+    const data = await postTeacherMemoryAction("load");
+    return data.memory || null;
+  }
+
+  function ensureCloudMemoryShape(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    return {
+      memoryVersion: source.memoryVersion || "ielts-teacher-cloud-memory-v1",
+      learnerPreference: source.learnerPreference || {},
+      task1: {
+        errorRecords: Array.isArray(source.task1?.errorRecords) ? source.task1.errorRecords : [],
+        scoreHistory: Array.isArray(source.task1?.scoreHistory) ? source.task1.scoreHistory : [],
+        masteredPatterns: Array.isArray(source.task1?.masteredPatterns) ? source.task1.masteredPatterns : [],
+        homeworkHistory: Array.isArray(source.task1?.homeworkHistory) ? source.task1.homeworkHistory : [],
+        teacherSummaryHistory: Array.isArray(source.task1?.teacherSummaryHistory) ? source.task1.teacherSummaryHistory : []
+      },
+      task2: {
+        errorRecords: Array.isArray(source.task2?.errorRecords) ? source.task2.errorRecords : [],
+        scoreHistory: Array.isArray(source.task2?.scoreHistory) ? source.task2.scoreHistory : [],
+        masteredPatterns: Array.isArray(source.task2?.masteredPatterns) ? source.task2.masteredPatterns : [],
+        homeworkHistory: Array.isArray(source.task2?.homeworkHistory) ? source.task2.homeworkHistory : [],
+        teacherSummaryHistory: Array.isArray(source.task2?.teacherSummaryHistory) ? source.task2.teacherSummaryHistory : []
+      },
+      sharedLanguage: {
+        errorRecords: Array.isArray(source.sharedLanguage?.errorRecords) ? source.sharedLanguage.errorRecords : [],
+        masteredPatterns: Array.isArray(source.sharedLanguage?.masteredPatterns) ? source.sharedLanguage.masteredPatterns : [],
+        homeworkHistory: Array.isArray(source.sharedLanguage?.homeworkHistory) ? source.sharedLanguage.homeworkHistory : [],
+        spellingWatchlist: Array.isArray(source.sharedLanguage?.spellingWatchlist) ? source.sharedLanguage.spellingWatchlist : [],
+        grammarWatchlist: Array.isArray(source.sharedLanguage?.grammarWatchlist) ? source.sharedLanguage.grammarWatchlist : []
+      },
+      generation: {
+        revisionHistory: Array.isArray(source.generation?.revisionHistory) ? source.generation.revisionHistory : []
+      }
+    };
+  }
+
+  function compactCloudErrorRecord(item = {}) {
+    return compactTeacherMemoryRecord({
+      id: item.id || item.issueId,
+      issueTitleZh: item.issueTitleZh,
+      issueFamilyZh: item.issueFamilyZh,
+      taskScope: item.taskScope || item.taskBucket,
+      wrongPattern: item.wrongPattern,
+      correctPattern: item.correctPattern,
+      originalExample: item.originalExample,
+      correctedExample: item.correctedExample,
+      explanationZh: item.explanationZh,
+      memoryHookZh: item.memoryHookZh,
+      occurrenceCount: item.occurrenceCount,
+      repeatedCount: item.repeatedCount,
+      masteryStatus: item.masteryStatus,
+      lastSeenAt: item.lastSeenAt,
+      nextPracticeZh: item.nextPracticeZh
+    });
+  }
+
+  function buildTeacherCloudMemoryContext(cloudMemory, task = lockedTaskForSelected()) {
+    const memory = ensureCloudMemoryShape(cloudMemory);
+    const taskBucket = task === "Task 1" ? "task1" : "task2";
+    const taskData = memory[taskBucket] || {};
+    const taskErrors = recentTeacherMemory(taskData.errorRecords || [], 20).map(compactCloudErrorRecord);
+    const sharedErrors = recentTeacherMemory(memory.sharedLanguage?.errorRecords || [], 20).map(compactCloudErrorRecord);
+    const allErrors = [...taskErrors, ...sharedErrors];
+
+    return {
+      enabled: true,
+      source: "cloud",
+      memoryVersion: memory.memoryVersion,
+      currentTask: task,
+      taskMemoryBucket: taskBucket,
+      learnerPreference: memory.learnerPreference || {},
+      taskSpecificMemory: taskErrors,
+      sharedLanguageMemory: sharedErrors,
+      frequentErrors: frequentTeacherMemory([...(taskData.errorRecords || []), ...(memory.sharedLanguage?.errorRecords || [])], 12).map(compactCloudErrorRecord),
+      repeatedPatterns: allErrors.filter((item) => Number(item.repeatedCount || 0) >= 1).slice(0, 12),
+      improvingPatterns: allErrors.filter((item) => /improving|nearly_mastered|mastered/i.test(String(item.masteryStatus || ""))).slice(0, 12),
+      scoreHistory: recentTeacherMemory(taskData.scoreHistory || [], 8),
+      homeworkHistory: recentTeacherMemory([...(taskData.homeworkHistory || []), ...(memory.sharedLanguage?.homeworkHistory || [])], 8),
+      masteredPatterns: recentTeacherMemory([...(taskData.masteredPatterns || []), ...(memory.sharedLanguage?.masteredPatterns || [])], 12),
+      teacherSummaryHistory: recentTeacherMemory(taskData.teacherSummaryHistory || [], 6),
+      rule: task === "Task 1"
+        ? "Only Task 1-specific records and sharedLanguage records are provided. Do not use Task 2-only essay advice."
+        : "Only Task 2-specific records and sharedLanguage records are provided. Do not use Task 1-only letter advice."
+    };
+  }
+
+  async function buildTeacherMemoryContextForFeedback(task = lockedTaskForSelected()) {
+    try {
+      const cloudMemory = await loadTeacherCloudMemory();
+      if (cloudMemory) return buildTeacherCloudMemoryContext(cloudMemory, task);
+    } catch (error) {
+      console.warn("Cloud teacher memory unavailable; using localStorage fallback.", error);
+    }
+    return { ...buildTeacherErrorMemoryContext(task), source: "localFallback" };
+  }
+
+  async function saveTeacherFeedbackMemoryUpdate(memoryUpdate = {}, task = lockedTaskForSelected()) {
+    const savedLocal = mergeTeacherErrorMemoryUpdate(memoryUpdate, { task });
+    try {
+      if (memoryUpdate && memoryUpdate.saveToCloudMemory !== false) {
+        await postTeacherMemoryAction("mergeFeedbackMemory", { task, memoryUpdate });
+        return { cloud: true, local: !!savedLocal };
+      }
+    } catch (error) {
+      console.warn("Cloud teacher memory save failed; localStorage already kept fallback.", error);
+    }
+    return { cloud: false, local: !!savedLocal };
+  }
+
+  function scoreRecordFromResult(result = {}) {
+    const task = lockedTaskForSelected();
+    const criteria = result.finalCriteria || result.criteria || {};
+    const finalBand = Number(result.overallBand || result.scoreCalculation?.finalBand);
+    const mainReasonZh = firstMeaningfulValue(
+      result.summaryZh,
+      result.criterionFeedback?.summaryZh,
+      result.scoreCalibration?.summaryZh,
+      result.taskRequirementAnalysis?.summaryZh
+    );
+    return {
+      date: new Date().toISOString(),
+      task,
+      promptId: selected?.id || "",
+      promptTitle: selected?.title || "",
+      promptType: selected?.type || "",
+      overall: Number.isFinite(finalBand) ? finalBand : null,
+      criteria: {
+        taskAchievementOrResponse: criteria.taskAchievement ?? criteria.taskResponse ?? criteria.TA ?? criteria.TR ?? null,
+        coherence: criteria.coherence ?? criteria.coherenceAndCohesion ?? criteria.CC ?? null,
+        lexical: criteria.lexical ?? criteria.lexicalResource ?? criteria.LR ?? null,
+        grammar: criteria.grammar ?? criteria.grammaticalRangeAndAccuracy ?? criteria.GRA ?? null
+      },
+      mainReasonZh: mainReasonZh || ""
+    };
+  }
+
+  async function appendScoreHistoryToTeacherCloud(result = {}) {
+    try {
+      await postTeacherMemoryAction("appendScoreHistory", {
+        task: lockedTaskForSelected(),
+        scoreRecord: scoreRecordFromResult(result)
+      });
+    } catch (error) {
+      console.warn("appendScoreHistory failed", error);
+    }
+  }
+
+  function revisionHistoryRecordFromResult(result = {}) {
+    const part = (key) => result[key] || {};
+    const bandOf = (obj) => Number(obj?.verifiedBand ?? obj?.verification?.verifiedBand);
+    const targetOf = (obj) => Number(obj?.targetBand);
+    return {
+      date: new Date().toISOString(),
+      task: lockedTaskForSelected(),
+      promptId: selected?.id || "",
+      promptTitle: selected?.title || "",
+      frozenBand: Number(frozenScoreForFeedback()?.overallBand ?? frozenScoreForFeedback()?.overall ?? latestScoreResult?.overallBand ?? latestScoreResult?.scoreCalculation?.finalBand),
+      targetBandPlus05: targetOf(part("revisionPlus05")),
+      verifiedBandPlus05: bandOf(part("revisionPlus05")),
+      attemptsPlus05: Number(part("revisionPlus05")?.attempts || part("revisionPlus05")?.verificationAttempts || 0),
+      targetBandPlus10: targetOf(part("revisionPlus10")),
+      verifiedBandPlus10: bandOf(part("revisionPlus10")),
+      attemptsPlus10: Number(part("revisionPlus10")?.attempts || part("revisionPlus10")?.verificationAttempts || 0),
+      status: result.verification?.summary || "verified"
+    };
+  }
+
+  async function appendRevisionHistoryToTeacherCloud(result = {}) {
+    try {
+      await postTeacherMemoryAction("appendRevisionHistory", {
+        revisionRecord: revisionHistoryRecordFromResult(result)
+      });
+    } catch (error) {
+      console.warn("appendRevisionHistory failed", error);
+    }
+  }
+
   const LEARNING_FEEDBACK_MODULES = [
     { key: "overview", label: "全文总览", en: "Overview" },
     { key: "sentenceUpgrade", label: "逐句修改", en: "Sentence Upgrade" },
@@ -2387,7 +2592,7 @@
     };
   }
 
-  function feedbackPayload(moduleName) {
+  function feedbackPayload(moduleName, extra = {}) {
     const essay = String(els.essayInput?.value || "").trim();
     const lockedTask = lockedTaskForSelected();
     return {
@@ -2406,7 +2611,7 @@
       wordCount: countWords(essay),
       frozenScore: frozenScoreForFeedback(),
       currentResult: safeCurrentResultForTask(lockedTask),
-      errorMemoryContext: moduleName === "expressionBank" ? buildTeacherErrorMemoryContext(lockedTask) : undefined
+      errorMemoryContext: moduleName === "expressionBank" ? (extra.errorMemoryContext || buildTeacherErrorMemoryContext(lockedTask)) : undefined
     };
   }
 
@@ -2948,18 +3153,26 @@
     latestLearningFeedback[moduleName] = { status: "loading" };
     renderLearningFeedbackPanel();
     try {
+      const lockedTask = lockedTaskForSelected();
+      let payload = feedbackPayload(moduleName);
+      if (moduleName === "expressionBank") {
+        setGradingStatus("正在读取云端老师记忆；如果云端不可用，将使用本地记忆。", "loading");
+        payload = feedbackPayload(moduleName, {
+          errorMemoryContext: await buildTeacherMemoryContextForFeedback(lockedTask)
+        });
+      }
       const response = await fetch(feedbackEndpointFromGradingEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(feedbackPayload(moduleName))
+        body: JSON.stringify(payload)
       });
       const text = await response.text();
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok || !data.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
       if (moduleName === "expressionBank") {
-        const savedMemory = mergeTeacherErrorMemoryUpdate(data.moduleResult?.memoryUpdate, { task: lockedTaskForSelected() });
-        if (savedMemory) data.localMemorySaved = true;
+        const saveStatus = await saveTeacherFeedbackMemoryUpdate(data.moduleResult?.memoryUpdate, { task: lockedTask });
+        data.teacherMemorySaved = saveStatus;
       }
       latestLearningFeedback[moduleName] = data;
       renderLearningFeedbackPanel();
@@ -3977,6 +4190,7 @@
       };
       renderRevisionResult(result);
     }
+    appendRevisionHistoryToTeacherCloud(result);
     setGradingStatus("作文生成完成，生产评分验证已完成；只有进入学习窗口的版本会标记为可学习。", "done");
     return result;
   }
@@ -4046,6 +4260,7 @@
       latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
       renderScoreResult(resultWithRequiredFeedback);
+      appendScoreHistoryToTeacherCloud(resultWithRequiredFeedback);
       navigateToView("score-report");
       setGradingStatus("批改完成：核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {

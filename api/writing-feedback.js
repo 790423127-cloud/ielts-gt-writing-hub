@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const FEEDBACK_VERSION = "learning-feedback-v3-teacher-clinic-memory";
+const FEEDBACK_VERSION = "learning-feedback-v4-teacher-clinic-cloud-memory";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBACK_TIMEOUT_MS) || 150000, 240000));
@@ -262,8 +262,24 @@ const MODULES = {
         nextWritingGoalZh: "",
         encouragementZh: ""
       },
+      homeworkTemplate: {
+        titleZh: "",
+        timeNeededZh: "",
+        tasks: [
+          {
+            taskType: "correction | imitation | sentence_building | paragraph_writing",
+            instructionZh: "",
+            examples: [],
+            checkMethodZh: "",
+            relatedIssueId: ""
+          }
+        ],
+        selfCheckList: [],
+        nextSubmissionInstructionZh: ""
+      },
       memoryUpdate: {
         saveToLocalMemory: true,
+        saveToCloudMemory: true,
         newErrors: [
           {
             issueId: "",
@@ -308,6 +324,31 @@ const MODULES = {
             teacherPraiseZh: ""
           }
         ],
+        masteredPatterns: [
+          {
+            patternId: "",
+            taskScope: "task1 | task2 | sharedLanguage",
+            pattern: "",
+            status: "practising | usable | mastered",
+            example: "",
+            relatedIssueId: ""
+          }
+        ],
+        homeworkToSave: [
+          {
+            taskScope: "task1 | task2 | sharedLanguage",
+            focus: "",
+            homeworkZh: "",
+            status: "assigned",
+            relatedIssueId: ""
+          }
+        ],
+        teacherSummaryToSave: {
+          task: "Task 1 | Task 2",
+          summaryZh: "",
+          topTakeaways: [],
+          nextLessonFocusZh: ""
+        },
         reviewedOldErrors: []
       },
       groups: [
@@ -339,11 +380,11 @@ const MODULES = {
       "Use vivid memory hooks or simple analogies when helpful, such as 'to is like a door; after it, use the base verb'.",
       "Each issue must include 2-3 mini practice questions with answers.",
       "Classify every issue by taskScope: task1 for GT letter-only skills, task2 for essay-only skills, and sharedLanguage for grammar/spelling/collocation errors useful in both tasks.",
-      "Use local error memory by task if errorMemoryContext is provided. If currentTask is Task 1, use only Task 1 memory and sharedLanguage memory. If currentTask is Task 2, use only Task 2 memory and sharedLanguage memory.",
+      "Use cloud/local error memory by task if errorMemoryContext is provided. If currentTask is Task 1, use only Task 1 memory and sharedLanguage memory. If currentTask is Task 2, use only Task 2 memory and sharedLanguage memory.",
       "Do not use Task 2 argument advice for Task 1 letters. Do not use Task 1 letter-format advice for Task 2 essays.",
       "If an old error appears again, clearly say in Chinese: 这个错误你之前也犯过，这次又出现了。",
       "If a previous frequent error does not appear in the current essay, mention it briefly as improvement.",
-      "Return memoryUpdate with newErrors, repeatedErrors, and improvedErrors so the client can save it locally.",
+      "Return memoryUpdate with newErrors, repeatedErrors, improvedErrors, masteredPatterns, homeworkToSave, and teacherSummaryToSave so the client can save it locally and in cloud memory.",
       "For Band 4-5 learners, teach simple accurate patterns first. Do not push advanced vocabulary.",
       "For Band 5.5-6.5 learners, teach clearer collocations and sentence patterns, but keep them learnable.",
       "Chinese is the main teaching language. English is used for original sentences, corrections, formulas, and examples.",
@@ -905,12 +946,49 @@ function normalizeModuleResult(moduleName, value) {
       encouragementZh: firstString(result.teacherWrapUp.encouragementZh, result.teacherWrapUp.praiseZh)
     } : {};
 
+    const rawHomework = result.homeworkTemplate && typeof result.homeworkTemplate === "object" ? result.homeworkTemplate : {};
+    result.homeworkTemplate = {
+      titleZh: firstString(rawHomework.titleZh, rawHomework.title),
+      timeNeededZh: firstString(rawHomework.timeNeededZh, rawHomework.timeNeeded),
+      tasks: uniqueBy(asArray(rawHomework.tasks || rawHomework.steps || rawHomework.homework).map((item) => ({
+        taskType: stringValue(item.taskType || item.type || "practice"),
+        instructionZh: firstString(item.instructionZh, item.taskZh, item.stepZh, item.homeworkZh),
+        examples: normalizeStringArray(item.examples || item.example, 5),
+        checkMethodZh: firstString(item.checkMethodZh, item.checkZh),
+        relatedIssueId: stringValue(item.relatedIssueId || item.issueId)
+      })).filter((item) => item.instructionZh || item.examples.length), (item) => textFingerprint([item.taskType, item.instructionZh, item.relatedIssueId])).slice(0, 8),
+      selfCheckList: normalizeStringArray(rawHomework.selfCheckList || rawHomework.checklist, 8),
+      nextSubmissionInstructionZh: firstString(rawHomework.nextSubmissionInstructionZh, rawHomework.nextStepZh)
+    };
+
     const memoryUpdate = result.memoryUpdate && typeof result.memoryUpdate === "object" ? result.memoryUpdate : {};
     result.memoryUpdate = {
       saveToLocalMemory: memoryUpdate.saveToLocalMemory !== false,
+      saveToCloudMemory: memoryUpdate.saveToCloudMemory !== false,
       newErrors: uniqueBy(asArray(memoryUpdate.newErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.originalExample])).slice(0, 10),
       repeatedErrors: uniqueBy(asArray(memoryUpdate.repeatedErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.currentExample])).slice(0, 10),
       improvedErrors: uniqueBy(asArray(memoryUpdate.improvedErrors).map(normalizeMemoryItem), (item) => textFingerprint([item.issueId, item.taskScope, item.currentImprovementZh])).slice(0, 10),
+      masteredPatterns: uniqueBy(asArray(memoryUpdate.masteredPatterns).map((item) => ({
+        patternId: stringValue(item.patternId || item.id || item.pattern),
+        taskScope: stringValue(item.taskScope || item.scope),
+        pattern: stringValue(item.pattern),
+        status: stringValue(item.status || "practising"),
+        example: stringValue(item.example),
+        relatedIssueId: stringValue(item.relatedIssueId || item.issueId)
+      })).filter((item) => item.pattern || item.patternId), (item) => textFingerprint([item.patternId, item.pattern, item.taskScope])).slice(0, 10),
+      homeworkToSave: uniqueBy(asArray(memoryUpdate.homeworkToSave).map((item) => ({
+        taskScope: stringValue(item.taskScope || item.scope),
+        focus: stringValue(item.focus || item.relatedIssueId || item.issueTitleZh),
+        homeworkZh: firstString(item.homeworkZh, item.instructionZh, item.taskZh),
+        status: stringValue(item.status || "assigned"),
+        relatedIssueId: stringValue(item.relatedIssueId || item.issueId)
+      })).filter((item) => item.homeworkZh || item.focus), (item) => textFingerprint([item.taskScope, item.focus, item.homeworkZh])).slice(0, 8),
+      teacherSummaryToSave: memoryUpdate.teacherSummaryToSave && typeof memoryUpdate.teacherSummaryToSave === "object" ? {
+        task: stringValue(memoryUpdate.teacherSummaryToSave.task),
+        summaryZh: firstString(memoryUpdate.teacherSummaryToSave.summaryZh, memoryUpdate.teacherSummaryToSave.summary),
+        topTakeaways: normalizeStringArray(memoryUpdate.teacherSummaryToSave.topTakeaways || memoryUpdate.teacherSummaryToSave.threeThingsToRememberZh, 6),
+        nextLessonFocusZh: firstString(memoryUpdate.teacherSummaryToSave.nextLessonFocusZh, memoryUpdate.teacherSummaryToSave.nextWritingGoalZh)
+      } : null,
       reviewedOldErrors: asArray(memoryUpdate.reviewedOldErrors).slice(0, 20)
     };
 
@@ -1018,12 +1096,46 @@ function normalizedMemoryContextForPrompt(rawContext = {}, task = "Task 2") {
 
   return {
     enabled: rawContext.enabled !== false,
+    source: stringValue(rawContext.source || "local"),
+    memoryVersion: stringValue(rawContext.memoryVersion),
     currentTask,
+    learnerPreference: rawContext.learnerPreference && typeof rawContext.learnerPreference === "object" ? rawContext.learnerPreference : {},
     taskSpecificMemory: pack(rawContext.taskSpecificMemory || rawContext.recentErrors, 16),
     sharedLanguageMemory: pack(rawContext.sharedLanguageMemory, 16),
     frequentErrors: pack(rawContext.frequentErrors, 10),
     repeatedPatterns: pack(rawContext.repeatedPatterns, 10),
     improvingPatterns: pack(rawContext.improvingPatterns, 10),
+    scoreHistory: asArray(rawContext.scoreHistory).slice(0, 8).map((item) => ({
+      date: stringValue(item.date || item.createdAt),
+      task: stringValue(item.task),
+      promptType: stringValue(item.promptType || item.questionType),
+      overall: item.overall,
+      criteria: item.criteria || {},
+      mainReasonZh: firstString(item.mainReasonZh, item.summaryZh)
+    })),
+    homeworkHistory: asArray(rawContext.homeworkHistory).slice(0, 8).map((item) => ({
+      id: stringValue(item.id),
+      taskScope: stringValue(item.taskScope),
+      focus: stringValue(item.focus),
+      homeworkZh: firstString(item.homeworkZh, item.instructionZh),
+      status: stringValue(item.status),
+      relatedIssueId: stringValue(item.relatedIssueId)
+    })),
+    masteredPatterns: asArray(rawContext.masteredPatterns).slice(0, 10).map((item) => ({
+      patternId: stringValue(item.patternId || item.id),
+      taskScope: stringValue(item.taskScope),
+      pattern: stringValue(item.pattern),
+      status: stringValue(item.status),
+      example: stringValue(item.example),
+      relatedIssueId: stringValue(item.relatedIssueId)
+    })),
+    teacherSummaryHistory: asArray(rawContext.teacherSummaryHistory).slice(0, 6).map((item) => ({
+      date: stringValue(item.date || item.createdAt),
+      task: stringValue(item.task),
+      summaryZh: firstString(item.summaryZh),
+      topTakeaways: asArray(item.topTakeaways).slice(0, 5),
+      nextLessonFocusZh: firstString(item.nextLessonFocusZh)
+    })),
     instruction: currentTask === "Task 1"
       ? "Use only Task 1 memory plus sharedLanguage memory. Ignore Task 2-only essay memory."
       : "Use only Task 2 memory plus sharedLanguage memory. Ignore Task 1-only letter memory."
@@ -1086,7 +1198,7 @@ function buildPrompt(body, moduleName) {
     `Task-specific requirements extracted by local code, for context only: ${taskSpecificContext}`,
     `Frozen score and frozen criterion feedback for level reference only: ${frozenScore}`,
     `Target upgrade level for feedback: ${targetUpgradeGuidance(body)}`,
-    moduleName === "expressionBank" ? `Local task-separated error memory for teacher teaching only: ${clipText(memoryContext, 12000)}` : "",
+    moduleName === "expressionBank" ? `Cloud/local task-separated learner memory for teacher teaching only. Use for teaching, homework, repeated-error review, and summary only; never use it to change the frozen score: ${clipText(memoryContext, 14000)}` : "",
     `Essay word count: ${countWords(body.essay)}`,
     "Student essay:",
     clipText(body.essay || "", moduleName === "sentenceUpgrade" || moduleName === "grammarWordFormSpelling" || moduleName === "expressionBank" ? 9000 : 7600)
