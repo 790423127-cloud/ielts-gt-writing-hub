@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const LIVE_TIMEOUT_MS = Math.max(5000, Math.min(Number(process.env.LIVE_CHECK_TIMEOUT_MS) || 8500, 12000));
+const MIN_CONFIDENCE = Math.max(0.5, Math.min(Number(process.env.LIVE_CHECK_MIN_CONFIDENCE) || 0.72, 0.95));
 
 function setCors(req, res) {
   const origin = req.headers.origin || "";
@@ -85,33 +86,72 @@ function extractAiText(data) {
 
 function typeSafe(value) {
   const raw = String(value || "").toLowerCase();
-  if (["grammar", "vocabulary", "spelling", "clarity", "coherence", "task"].includes(raw)) return raw;
+  if (["grammar", "vocabulary", "spelling", "clarity"].includes(raw)) return raw;
   if (/spell/.test(raw)) return "spelling";
   if (/word|lexical|collocation|vocab/.test(raw)) return "vocabulary";
-  if (/cohesion|coherence|logic|link/.test(raw)) return "coherence";
-  if (/task|tone|bullet|position/.test(raw)) return "task";
+  if (/clear|sentence|meaning|fragment|run[- ]?on/.test(raw)) return "clarity";
   return "grammar";
+}
+
+function compactText(value) {
+  return String(value || "").toLowerCase().replace(/[\s.,!?;:'"“”‘’()\[\]{}]+/g, " ").trim();
+}
+
+function isSubstantiveChange(original, replacement) {
+  const a = compactText(original);
+  const b = compactText(replacement);
+  if (!a || !b || a === b) return false;
+  if (String(original || "").trim().toLowerCase() === String(replacement || "").trim().toLowerCase()) return false;
+  return true;
+}
+
+function chooseNearestOccurrence(text, original, proposedStart) {
+  if (!original) return -1;
+  const positions = [];
+  let from = 0;
+  while (from <= text.length) {
+    const found = text.indexOf(original, from);
+    if (found < 0) break;
+    positions.push(found);
+    from = found + Math.max(1, original.length);
+    if (positions.length > 20) break;
+  }
+  if (!positions.length) return -1;
+  if (positions.length === 1) return positions[0];
+  return positions.reduce((best, current) => Math.abs(current - proposedStart) < Math.abs(best - proposedStart) ? current : best, positions[0]);
 }
 
 function normalizeSuggestion(item, text, offsetStart, index) {
   if (!item || typeof item !== "object") return null;
-  const original = String(item.original || item.source || "").trim();
+  const original = String(item.original || item.source || "");
   const replacement = String(item.replacement || item.corrected || item.suggestion || "").trim();
+  const confidenceRaw = Number(item.confidence ?? item.confidenceScore ?? item.certainty ?? 0.8);
+  const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(confidenceRaw, 1)) : 0.8;
+  if (confidence < MIN_CONFIDENCE) return null;
+  if (!original.trim() || !replacement || !isSubstantiveChange(original, replacement)) return null;
+
   let start = Number(item.start);
   let end = Number(item.end);
+  const proposedStart = Number.isFinite(start) ? start : 0;
 
-  if ((!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > text.length) && original) {
-    const found = text.indexOf(original);
-    if (found >= 0) {
+  if (Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= text.length) {
+    const actualOriginal = text.slice(start, end);
+    if (actualOriginal !== original) {
+      if (original.trim().length < 4) return null;
+      const found = chooseNearestOccurrence(text, original, proposedStart);
+      if (found < 0) return null;
       start = found;
       end = found + original.length;
     }
+  } else {
+    if (original.trim().length < 4) return null;
+    const found = chooseNearestOccurrence(text, original, proposedStart);
+    if (found < 0) return null;
+    start = found;
+    end = found + original.length;
   }
 
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > text.length) return null;
-  const actualOriginal = text.slice(start, end);
-  const stableOriginal = original || actualOriginal;
-  if (!stableOriginal.trim() || !replacement || stableOriginal.trim() === replacement.trim()) return null;
+  if (text.slice(start, end) !== original) return null;
 
   return {
     id: String(item.id || `live-${Date.now()}-${index}`),
@@ -119,11 +159,13 @@ function normalizeSuggestion(item, text, offsetStart, index) {
     end,
     globalStart: Number(offsetStart || 0) + start,
     globalEnd: Number(offsetStart || 0) + end,
-    original: stableOriginal,
+    original,
     replacement,
     type: typeSafe(item.type),
-    message: String(item.message || item.reason || item.explanation || "This part can be improved.").trim(),
-    messageZh: String(item.messageZh || item.explanationZh || "这里可以修改得更准确。").trim(),
+    confidence,
+    sentenceOnly: true,
+    message: String(item.message || item.reason || item.explanation || "This sentence has a clear language issue.").trim(),
+    messageZh: String(item.messageZh || item.explanationZh || "这个句子里有一个比较明确的语言问题。").trim(),
     ieltsImpact: String(item.ieltsImpact || item.bandImpact || "This may affect IELTS Writing accuracy and clarity.").trim()
   };
 }
@@ -139,18 +181,20 @@ function normalizeSuggestions(raw, text, offsetStart) {
       seen.add(key);
       return true;
     })
-    .slice(0, 5);
+    .slice(0, 3);
 }
 
 async function callDeepSeekLive({ apiKey, model, text, task, prompt, mode }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LIVE_TIMEOUT_MS);
   const userPrompt = [
-    "You are a live IELTS General Training writing checker.",
-    "Check ONLY the supplied text segment, not the whole essay.",
-    "Return at most 5 high-value issues. Prefer obvious grammar, spelling, word choice, collocation, sentence clarity, Task 1 tone/bullet relevance, or Task 2 position/coherence problems.",
-    "Do not score the essay. Do not rewrite the whole paragraph. Do not invent text that is not in the segment.",
-    "Use 0-based character indexes relative to the supplied segment. The substring text.slice(start,end) must be the original text.",
+    "You are a conservative IELTS General Training live sentence checker.",
+    "Check ONLY the one supplied sentence. Do not evaluate the surrounding paragraph or the whole essay.",
+    "Return only clear, high-confidence mistakes in this sentence. If a phrase is acceptable but could be stylistically improved, DO NOT flag it.",
+    "Prefer objective errors: subject-verb agreement, verb tense/form, article/plural errors, spelling, wrong word form, clearly wrong collocation, sentence fragment, run-on sentence, or unclear grammar.",
+    "Do not flag simple vocabulary. Do not suggest advanced Band 7 wording in live mode. Do not rewrite a whole sentence unless the sentence has a clear error.",
+    "Return at most 3 issues. If you are not at least 0.72 confident, return suggestions: [].",
+    "Use 0-based character indexes relative to the supplied sentence. The substring text.slice(start,end) MUST exactly equal original. If you cannot provide exact indexes, return no suggestion for that issue.",
     "Return exactly one JSON object with this shape:",
     JSON.stringify({
       suggestions: [{
@@ -160,6 +204,7 @@ async function callDeepSeekLive({ apiKey, model, text, task, prompt, mode }) {
         original: "",
         replacement: "",
         type: "grammar",
+        confidence: 0.9,
         message: "",
         messageZh: "",
         ieltsImpact: ""
@@ -168,7 +213,7 @@ async function callDeepSeekLive({ apiKey, model, text, task, prompt, mode }) {
     `Mode: ${mode || "help"}`,
     `Task: ${task || "Unknown"}`,
     `Question prompt: ${String(prompt || "").slice(0, 1200)}`,
-    "Text segment:",
+    "Sentence:",
     text
   ].join("\n");
 
@@ -184,12 +229,12 @@ async function callDeepSeekLive({ apiKey, model, text, task, prompt, mode }) {
       body: JSON.stringify({
         model: model || DEFAULT_MODEL,
         messages: [
-          { role: "system", content: "You are a precise IELTS live writing correction engine. Return valid JSON only." },
+          { role: "system", content: "You are a conservative IELTS sentence correction engine. Return valid JSON only. Precision is more important than recall." },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.05,
+        temperature: 0,
         stream: false,
-        max_tokens: 1200,
+        max_tokens: 900,
         response_format: { type: "json_object" }
       }),
       signal: controller.signal
@@ -231,10 +276,10 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const text = String(body.text || "").replace(/\r/g, "").slice(0, 1400);
+    const text = String(body.text || "").replace(/\r/g, "").slice(0, 650);
     const offsetStart = Math.max(0, Number(body.offsetStart) || 0);
     if (text.trim().length < 8) {
-      sendJson(req, res, 200, { ok: true, suggestions: [], skipped: "too_short" });
+      sendJson(req, res, 200, { ok: true, suggestions: [], skipped: "sentence_too_short" });
       return;
     }
 
@@ -249,8 +294,9 @@ module.exports = async function handler(req, res) {
 
     sendJson(req, res, 200, {
       ok: true,
-      engine: "live-check-v1",
+      engine: "live-check-sentence-v2",
       offsetStart,
+      sentenceOnly: true,
       suggestions: normalizeSuggestions(ai, text, offsetStart)
     });
   } catch (error) {
