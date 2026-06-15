@@ -54,11 +54,14 @@
   const LIVE_LIST_ID = "liveSuggestions";
   const LIVE_TOGGLE_ID = "liveCheckToggle";
   const LIVE_MODE_ID = "liveCheckMode";
+  const LIVE_OVERLAY_ID = "liveCheckOverlay";
+  const LIVE_UNDERLINE_TOGGLE_ID = "liveUnderlineToggle";
   const LIVE_DEBOUNCE_MS = 1200;
   const MIN_CHECK_CHARS = 12;
   const MAX_SEGMENT_CHARS = 1200;
   const LIVE_MODE_KEY = "ielts-gt-writing-hub:liveCheckMode";
   const LIVE_ENABLED_KEY = "ielts-gt-writing-hub:liveCheckEnabled";
+  const LIVE_UNDERLINE_KEY = "ielts-gt-writing-hub:liveUnderlineEnabled";
 
   let booted = false;
   let checkTimer = null;
@@ -101,7 +104,19 @@
       .live-actions button[data-live-action="apply"] { background: #2563eb; color: #fff; border-color: #2563eb; }
       .live-hidden-answer .live-replacement, .live-hidden-answer .live-message-answer { display: none; }
       .live-error { color: #b91c1c; }
+      .live-editor-wrap { position: relative; width: 100%; }
+      .live-editor-wrap .essay { position: relative; z-index: 2; width: 100%; }
+      .live-editor-wrap.live-underline-on .essay { background: transparent !important; color: transparent !important; caret-color: #0f172a; }
+      .live-editor-wrap.live-underline-on .essay::selection { background: rgba(96,165,250,.35); color: transparent; }
+      .live-check-overlay { position: absolute; inset: 0; z-index: 1; overflow: auto; pointer-events: none; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: break-word; color: #0f172a; background: transparent; }
+      .live-check-overlay::-webkit-scrollbar { width: 0; height: 0; }
+      .live-underline-mark { background: transparent; color: inherit; text-decoration-line: underline; text-decoration-style: wavy; text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: pointer; }
+      .live-underline-mark[data-live-type="grammar"], .live-underline-mark[data-live-type="spelling"] { text-decoration-color: #dc2626; }
+      .live-underline-mark[data-live-type="vocabulary"], .live-underline-mark[data-live-type="clarity"] { text-decoration-color: #d97706; }
+      .live-underline-mark[data-live-type="coherence"], .live-underline-mark[data-live-type="task"] { text-decoration-color: #2563eb; }
       body.dark .live-check-select, body.dark .live-suggestion-card, body.dark .live-actions button { background: rgba(15,23,42,.85); color: #e5e7eb; }
+      body.dark .live-editor-wrap.live-underline-on .essay { caret-color: #f8fafc; }
+      body.dark .live-check-overlay { color: #e5e7eb; }
     `;
     document.head.appendChild(style);
   }
@@ -148,6 +163,11 @@
     return String(select?.value || localStorage.getItem(LIVE_MODE_KEY) || "practice");
   }
 
+  function underlineEnabled() {
+    const toggle = document.getElementById(LIVE_UNDERLINE_TOGGLE_ID);
+    return Boolean(toggle?.checked);
+  }
+
   function isEnabled() {
     const toggle = document.getElementById(LIVE_TOGGLE_ID);
     return Boolean(toggle?.checked) && getMode() !== "exam";
@@ -186,11 +206,99 @@
     };
   }
 
+  function getEssayWrap() {
+    return document.getElementById("essayInput")?.closest(".live-editor-wrap") || null;
+  }
+
+  function syncOverlayMetrics() {
+    const essay = document.getElementById("essayInput");
+    const overlay = document.getElementById(LIVE_OVERLAY_ID);
+    if (!essay || !overlay) return;
+    const style = window.getComputedStyle(essay);
+    [
+      "fontFamily", "fontSize", "fontWeight", "fontStyle", "lineHeight", "letterSpacing",
+      "textTransform", "textAlign", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+      "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth", "borderRadius",
+      "boxSizing", "tabSize"
+    ].forEach((key) => { overlay.style[key] = style[key]; });
+    overlay.style.borderStyle = "solid";
+    overlay.style.borderColor = "transparent";
+    overlay.style.minHeight = `${essay.offsetHeight}px`;
+    overlay.scrollTop = essay.scrollTop;
+    overlay.scrollLeft = essay.scrollLeft;
+  }
+
+  function setupEditorUnderlineLayer() {
+    const essay = document.getElementById("essayInput");
+    if (!essay) return null;
+    let wrap = essay.closest(".live-editor-wrap");
+    if (wrap) return wrap;
+
+    wrap = document.createElement("div");
+    wrap.className = "live-editor-wrap";
+    const overlay = document.createElement("div");
+    overlay.id = LIVE_OVERLAY_ID;
+    overlay.className = "live-check-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+
+    essay.parentElement.insertBefore(wrap, essay);
+    wrap.appendChild(overlay);
+    wrap.appendChild(essay);
+
+    essay.addEventListener("scroll", () => {
+      overlay.scrollTop = essay.scrollTop;
+      overlay.scrollLeft = essay.scrollLeft;
+    });
+    essay.addEventListener("input", () => renderUnderlines());
+    window.addEventListener("resize", syncOverlayMetrics);
+    syncOverlayMetrics();
+    return wrap;
+  }
+
+  function renderUnderlines() {
+    const essay = document.getElementById("essayInput");
+    const overlay = document.getElementById(LIVE_OVERLAY_ID);
+    const wrap = getEssayWrap();
+    if (!essay || !overlay || !wrap) return;
+    syncOverlayMetrics();
+
+    const text = essay.value || "";
+    const activeItems = underlineEnabled() && getMode() !== "exam"
+      ? lastSuggestions
+          .map(normalizeSuggestion)
+          .filter(Boolean)
+          .filter((item) => item.start >= 0 && item.end <= text.length && item.start < item.end)
+          .sort((a, b) => a.start - b.start || a.end - b.end)
+      : [];
+
+    if (!activeItems.length || !text) {
+      overlay.textContent = "";
+      wrap.classList.remove("live-underline-on");
+      return;
+    }
+
+    let html = "";
+    let cursor = 0;
+    activeItems.forEach((item, index) => {
+      if (item.start < cursor) return;
+      html += escapeHtml(text.slice(cursor, item.start));
+      const marked = text.slice(item.start, item.end);
+      html += `<mark class="live-underline-mark" data-live-index="${index}" data-live-type="${escapeHtml(item.type)}" title="${escapeHtml(item.messageZh || item.message)}">${escapeHtml(marked)}</mark>`;
+      cursor = item.end;
+    });
+    html += escapeHtml(text.slice(cursor));
+    overlay.innerHTML = html || " ";
+    wrap.classList.add("live-underline-on");
+    overlay.scrollTop = essay.scrollTop;
+    overlay.scrollLeft = essay.scrollLeft;
+  }
+
   function renderSuggestions(items = []) {
     const list = document.getElementById(LIVE_LIST_ID);
     if (!list) return;
     lastSuggestions = items.map(normalizeSuggestion).filter(Boolean);
     const mode = getMode();
+    renderUnderlines();
 
     if (mode === "exam") {
       list.innerHTML = `<div class="live-empty">Exam Mode 已开启：实时提醒关闭。写完后再点“开始批改”，更接近考试训练。</div>`;
@@ -198,7 +306,7 @@
     }
 
     if (!lastSuggestions.length) {
-      list.innerHTML = `<div class="live-empty">继续写。系统会在你停顿约 1 秒后检查当前句子/段落。</div>`;
+      list.innerHTML = `<div class="live-empty">继续写。系统会在你停顿约 1 秒后检查当前句子/段落。开启“文内波浪线”后，问题会直接标在作文里。</div>`;
       return;
     }
 
@@ -298,7 +406,7 @@
         return;
       }
       renderSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
-      setStatus(data.suggestions?.length ? `发现 ${data.suggestions.length} 条实时建议。` : "当前句子/段落没有明显问题。");
+      setStatus(data.suggestions?.length ? `发现 ${data.suggestions.length} 条实时建议，已在文中标线。` : "当前句子/段落没有明显问题。");
     } catch (error) {
       if (error?.name === "AbortError") return;
       if (version !== requestVersion) return;
@@ -309,6 +417,7 @@
 
   function scheduleLiveCheck() {
     clearTimeout(checkTimer);
+    renderUnderlines();
     if (!isEnabled()) return;
     checkTimer = setTimeout(runLiveCheck, LIVE_DEBOUNCE_MS);
   }
@@ -330,9 +439,10 @@
         </div>
         <span class="live-badge">Beta</span>
       </div>
-      <p class="muted">停顿约 1 秒后，只检查当前句子/段落，不会重写整篇作文。</p>
+      <p class="muted">停顿约 1 秒后，只检查当前句子/段落，不会重写整篇作文。开启波浪线后会像 Grammarly 一样在文中标记。</p>
       <div class="live-check-controls">
         <label class="live-check-toggle"><input id="${LIVE_TOGGLE_ID}" type="checkbox"> 开启实时检查</label>
+        <label class="live-check-toggle"><input id="${LIVE_UNDERLINE_TOGGLE_ID}" type="checkbox"> 文内波浪线</label>
         <select id="${LIVE_MODE_ID}" class="live-check-select">
           <option value="practice">Practice：先提示，点开看答案</option>
           <option value="help">Help：直接显示修改建议</option>
@@ -351,17 +461,21 @@
     const essay = document.getElementById("essayInput");
     if (!essay) return;
     injectLiveStyles();
+    setupEditorUnderlineLayer();
     const panel = createPanel();
     if (!panel) return;
 
     const toggle = document.getElementById(LIVE_TOGGLE_ID);
+    const underlineToggle = document.getElementById(LIVE_UNDERLINE_TOGGLE_ID);
     const mode = document.getElementById(LIVE_MODE_ID);
     if (toggle) toggle.checked = localStorage.getItem(LIVE_ENABLED_KEY) !== "off";
+    if (underlineToggle) underlineToggle.checked = localStorage.getItem(LIVE_UNDERLINE_KEY) !== "off";
     if (mode) mode.value = localStorage.getItem(LIVE_MODE_KEY) || "practice";
 
     essay.addEventListener("input", scheduleLiveCheck);
     essay.addEventListener("keyup", scheduleLiveCheck);
     essay.addEventListener("click", scheduleLiveCheck);
+    essay.addEventListener("scroll", renderUnderlines);
 
     toggle?.addEventListener("change", () => {
       localStorage.setItem(LIVE_ENABLED_KEY, toggle.checked ? "on" : "off");
@@ -373,6 +487,11 @@
       } else {
         scheduleLiveCheck();
       }
+    });
+
+    underlineToggle?.addEventListener("change", () => {
+      localStorage.setItem(LIVE_UNDERLINE_KEY, underlineToggle.checked ? "on" : "off");
+      renderUnderlines();
     });
 
     mode?.addEventListener("change", () => {
