@@ -7,7 +7,7 @@ const ALLOWED_ORIGINS = new Set([
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-const LIVE_TIMEOUT_MS = Math.max(8000, Math.min(Number(process.env.LIVE_CHECK_TIMEOUT_MS) || 18000, 30000));
+const LIVE_TIMEOUT_MS = Math.max(5000, Math.min(Number(process.env.LIVE_CHECK_TIMEOUT_MS) || 8500, 12000));
 
 function setCors(req, res) {
   const origin = req.headers.origin || "";
@@ -261,3 +261,5 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+module.exports.config = { maxDuration: 30 };
