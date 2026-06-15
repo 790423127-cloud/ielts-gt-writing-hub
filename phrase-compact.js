@@ -58,7 +58,7 @@
   const LIVE_UNDERLINE_TOGGLE_ID = "liveUnderlineToggle";
   const LIVE_DEBOUNCE_MS = 1200;
   const MIN_CHECK_CHARS = 12;
-  const MAX_SEGMENT_CHARS = 1200;
+  const MAX_SENTENCE_CHARS = 650;
   const LIVE_MODE_KEY = "ielts-gt-writing-hub:liveCheckMode";
   const LIVE_ENABLED_KEY = "ielts-gt-writing-hub:liveCheckEnabled";
   const LIVE_UNDERLINE_KEY = "ielts-gt-writing-hub:liveUnderlineEnabled";
@@ -173,35 +173,87 @@
     return Boolean(toggle?.checked) && getMode() !== "exam";
   }
 
-  function currentSegment(text, cursor) {
-    const safeCursor = Math.max(0, Math.min(Number(cursor) || text.length, text.length));
-    let start = text.lastIndexOf("\n\n", safeCursor - 1);
-    if (start < 0) start = text.lastIndexOf("\n", safeCursor - 1);
-    start = start < 0 ? 0 : start + 1;
-    let end = text.indexOf("\n\n", safeCursor);
-    if (end < 0) end = text.indexOf("\n", safeCursor);
-    if (end < 0) end = text.length;
-
-    if (end - start > MAX_SEGMENT_CHARS) {
-      start = Math.max(0, safeCursor - Math.floor(MAX_SEGMENT_CHARS * 0.55));
-      end = Math.min(text.length, start + MAX_SEGMENT_CHARS);
-    }
-    return { text: text.slice(start, end), offsetStart: start };
+  function isSentenceBoundary(ch) {
+    return /[.!?。！？\n]/.test(ch || "");
   }
 
-  function normalizeSuggestion(raw, index) {
-    const start = Number(raw.globalStart ?? raw.start);
-    const end = Number(raw.globalEnd ?? raw.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  function currentSentence(text, cursor) {
+    const source = String(text || "");
+    const safeCursor = Math.max(0, Math.min(Number(cursor) || source.length, source.length));
+    let start = 0;
+    let end = source.length;
+
+    for (let i = safeCursor - 1; i >= 0; i -= 1) {
+      if (isSentenceBoundary(source[i])) {
+        start = i + 1;
+        break;
+      }
+    }
+    for (let i = safeCursor; i < source.length; i += 1) {
+      if (isSentenceBoundary(source[i])) {
+        end = i + 1;
+        break;
+      }
+    }
+
+    while (start < end && /\s/.test(source[start])) start += 1;
+    while (end > start && /\s/.test(source[end - 1])) end -= 1;
+
+    if (end - start > MAX_SENTENCE_CHARS) {
+      start = Math.max(0, safeCursor - Math.floor(MAX_SENTENCE_CHARS * 0.45));
+      end = Math.min(source.length, start + MAX_SENTENCE_CHARS);
+      while (start < end && /\s/.test(source[start])) start += 1;
+      while (end > start && /\s/.test(source[end - 1])) end -= 1;
+    }
+
+    return { text: source.slice(start, end), offsetStart: start };
+  }
+
+  function uniqueOccurrencePosition(text, needle) {
+    const source = String(text || "");
+    const target = String(needle || "");
+    if (!target) return -1;
+    let count = 0;
+    let only = -1;
+    let from = 0;
+    while (from <= source.length) {
+      const found = source.indexOf(target, from);
+      if (found < 0) break;
+      count += 1;
+      only = found;
+      if (count > 1) return -1;
+      from = found + Math.max(1, target.length);
+    }
+    return count === 1 ? only : -1;
+  }
+
+  function normalizeSuggestion(raw, index, fullText = "") {
+    let start = Number(raw.globalStart ?? raw.start);
+    let end = Number(raw.globalEnd ?? raw.end);
+    const original = String(raw.original || "");
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !original.trim()) return null;
+
+    const source = String(fullText || "");
+    if (source) {
+      if (source.slice(start, end) !== original) {
+        const unique = uniqueOccurrencePosition(source, original);
+        if (unique < 0) return null;
+        start = unique;
+        end = unique + original.length;
+      }
+      if (source.slice(start, end) !== original) return null;
+    }
+
     return {
       id: String(raw.id || `s-${index}`),
       start,
       end,
-      original: String(raw.original || ""),
+      original,
       replacement: String(raw.replacement || ""),
       type: String(raw.type || "grammar"),
-      message: String(raw.message || "This part can be improved."),
-      messageZh: String(raw.messageZh || "这里可以修改得更准确。"),
+      confidence: Number(raw.confidence || 0),
+      message: String(raw.message || "This sentence has a clear language issue."),
+      messageZh: String(raw.messageZh || "这个句子里有一个比较明确的语言问题。"),
       ieltsImpact: String(raw.ieltsImpact || "This may affect IELTS Writing accuracy and clarity.")
     };
   }
@@ -265,9 +317,10 @@
     const text = essay.value || "";
     const activeItems = underlineEnabled() && getMode() !== "exam"
       ? lastSuggestions
-          .map(normalizeSuggestion)
+          .map((item, index) => normalizeSuggestion(item, index, text))
           .filter(Boolean)
           .filter((item) => item.start >= 0 && item.end <= text.length && item.start < item.end)
+          .filter((item) => text.slice(item.start, item.end) === item.original)
           .sort((a, b) => a.start - b.start || a.end - b.end)
       : [];
 
@@ -296,7 +349,8 @@
   function renderSuggestions(items = []) {
     const list = document.getElementById(LIVE_LIST_ID);
     if (!list) return;
-    lastSuggestions = items.map(normalizeSuggestion).filter(Boolean);
+    const essayText = document.getElementById("essayInput")?.value || "";
+    lastSuggestions = items.map((item, index) => normalizeSuggestion(item, index, essayText)).filter(Boolean);
     const mode = getMode();
     renderUnderlines();
 
@@ -306,7 +360,7 @@
     }
 
     if (!lastSuggestions.length) {
-      list.innerHTML = `<div class="live-empty">继续写。系统会在你停顿约 1 秒后检查当前句子/段落。开启“文内波浪线”后，问题会直接标在作文里。</div>`;
+      list.innerHTML = `<div class="live-empty">继续写。系统会在你停顿约 1 秒后只检查当前句子。现在只有精确匹配的明确错误才会画线。</div>`;
       return;
     }
 
@@ -316,7 +370,7 @@
         <article class="live-suggestion-card${hiddenClass}" data-live-index="${index}">
           <div class="live-suggestion-head">
             <span class="live-badge">${escapeHtml(item.type)}</span>
-            <small>${escapeHtml(item.start)}-${escapeHtml(item.end)}</small>
+            <small>sentence-level</small>
           </div>
           <p class="live-original"><del>${escapeHtml(item.original)}</del></p>
           <p class="live-replacement"><strong>${escapeHtml(item.replacement)}</strong></p>
@@ -338,24 +392,15 @@
     const value = essay.value || "";
     let start = item.start;
     let end = item.end;
-    const current = value.slice(start, end);
 
-    if (current !== item.original) {
-      const nearStart = Math.max(0, start - 80);
-      const nearEnd = Math.min(value.length, end + 160);
-      const local = value.slice(nearStart, nearEnd).indexOf(item.original);
-      if (local >= 0) {
-        start = nearStart + local;
-        end = start + item.original.length;
-      } else {
-        const global = value.indexOf(item.original);
-        if (global < 0) {
-          setStatus("原文已经变化，请继续输入后让系统重新检查。", "live-error");
-          return;
-        }
-        start = global;
-        end = global + item.original.length;
+    if (value.slice(start, end) !== item.original) {
+      const unique = uniqueOccurrencePosition(value, item.original);
+      if (unique < 0) {
+        setStatus("原文已经变化，未自动替换。请继续输入后让系统重新检查。", "live-error");
+        return;
       }
+      start = unique;
+      end = unique + item.original.length;
     }
 
     essay.value = `${value.slice(0, start)}${item.replacement}${value.slice(end)}`;
@@ -374,17 +419,17 @@
     const fullText = essay.value || "";
     if (fullText.trim().length < MIN_CHECK_CHARS) {
       renderSuggestions([]);
-      setStatus("输入更多内容后开始实时检查。");
+      setStatus("输入更多内容后开始检查当前句子。");
       return;
     }
 
     const version = ++requestVersion;
     if (activeRequest) activeRequest.abort();
     activeRequest = new AbortController();
-    const segment = currentSegment(fullText, essay.selectionStart ?? fullText.length);
+    const segment = currentSentence(fullText, essay.selectionStart ?? fullText.length);
     if (segment.text.trim().length < MIN_CHECK_CHARS) return;
 
-    setStatus("正在检查当前句子/段落……");
+    setStatus("正在检查当前句子……");
     try {
       const response = await fetch(liveEndpoint(), {
         method: "POST",
@@ -394,7 +439,8 @@
           offsetStart: segment.offsetStart,
           task: getCurrentTask(),
           prompt: getPromptText(),
-          mode: getMode()
+          mode: getMode(),
+          sentenceOnly: true
         }),
         signal: activeRequest.signal
       });
@@ -406,7 +452,7 @@
         return;
       }
       renderSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
-      setStatus(data.suggestions?.length ? `发现 ${data.suggestions.length} 条实时建议，已在文中标线。` : "当前句子/段落没有明显问题。");
+      setStatus(data.suggestions?.length ? `发现 ${data.suggestions.length} 条句子级建议，已精确标线。` : "当前句子没有明显问题。");
     } catch (error) {
       if (error?.name === "AbortError") return;
       if (version !== requestVersion) return;
@@ -437,9 +483,9 @@
           <p class="eyebrow">LIVE CHECK</p>
           <h3>实时写作建议</h3>
         </div>
-        <span class="live-badge">Beta</span>
+        <span class="live-badge">Sentence</span>
       </div>
-      <p class="muted">停顿约 1 秒后，只检查当前句子/段落，不会重写整篇作文。开启波浪线后会像 Grammarly 一样在文中标记。</p>
+      <p class="muted">停顿约 1 秒后，只检查光标所在的当前句子。现在不会按段落检查，误标会更少。</p>
       <div class="live-check-controls">
         <label class="live-check-toggle"><input id="${LIVE_TOGGLE_ID}" type="checkbox"> 开启实时检查</label>
         <label class="live-check-toggle"><input id="${LIVE_UNDERLINE_TOGGLE_ID}" type="checkbox"> 文内波浪线</label>
@@ -449,7 +495,7 @@
           <option value="exam">Exam：关闭实时提醒</option>
         </select>
       </div>
-      <p id="${LIVE_STATUS_ID}" class="muted live-check-status">输入后停顿一下开始检查。</p>
+      <p id="${LIVE_STATUS_ID}" class="muted live-check-status">输入后停顿一下开始检查当前句子。</p>
       <div id="${LIVE_LIST_ID}" class="live-suggestions"></div>
     `;
     anchor.parentElement?.insertBefore(section, anchor);
