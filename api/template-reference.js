@@ -554,13 +554,19 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
   const minWords = body.task === "Task 1" ? 155 : 260;
   return [
     "You are an IELTS General Training Band 5.0 safety editor.",
-    "You will receive a fixed-template practice answer. Keep the same task, same meaning, same paragraph order, and same simple Band 5 style.",
+    "You will receive a fixed-template practice answer. Keep the same task, paragraph order, and simple Band 5 style.",
     "You may delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
-    "Do not make the language advanced. Do not add new ideas. Do not make it sound Band 7/8.",
+    "Do not make the language advanced. Do not make it sound Band 7/8.",
     "The goal is stable IELTS Band 5.0 in all four criteria, especially Lexical Resource and Grammatical Range and Accuracy.",
+    "The current risk is LR/GRA 4.5 when the answer is too formulaic, too repetitive, too generic, or has only very short simple sentences.",
+    "You may add one or two small prompt-related details if they make the writing clearer and more natural, but do not change the main answer.",
     "Use common but not childish topic words. Prefer clear words like local people, sleep, health, money, work, study, noise, rules, manager, meeting, family, problem, solution, useful, important.",
     "Use a few safe complex sentences with because, when, if, although, and which. Keep them short and accurate.",
-    "Avoid very hard words, but do not make every sentence too short or too simple.",
+    "Avoid very hard words, but do not make every sentence too short or too simple. Vary sentence openings a little.",
+    "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
+    body.task === "Task 1"
+      ? "For Task 1, aim for 170-190 words and clear useful details for all three bullet points."
+      : "For Task 2, aim for 280-310 words with clear basic explanation and one concrete example in each body paragraph.",
     `Keep the answer at least ${minWords} words.`,
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
     "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
