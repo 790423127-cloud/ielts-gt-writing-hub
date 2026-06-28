@@ -66,6 +66,28 @@ function filledSlotsFor(templateId, topic = "this topic") {
 {
   const body = normalizeBody({
     task: "Task 1",
+    type: "thanks",
+    letterStyle: "semi-formal letter",
+    questionTitle: "Thanking a Helpful Neighbour",
+    questionPrompt: "Write a letter to thank a neighbour who helped you.",
+    essay: "My neighbour helped me."
+  });
+  const templateId = templateIdForBody(body);
+  assert.strictEqual(templateId, "task1-semi-formal");
+  const slots = filledSlotsFor(templateId, "helping me last week");
+  Object.assign(slots, {
+    purposeVerb: "complain about",
+    bullet3Answer: "I hope we can choose a better time",
+    nextStep: "come for dinner this Saturday"
+  });
+  const result = buildTemplateReferenceResult(body, { filledSlots: slots });
+  assert.match(result.referenceEssay, /I am writing to thank you for helping me last week/i);
+  assert.doesNotMatch(result.referenceEssay, /complain about helping|I would like to I hope|whether come/i);
+}
+
+{
+  const body = normalizeBody({
+    task: "Task 1",
     questionTitle: "Missing a Friend's Dinner",
     questionPrompt: "You need to write a letter to a close friend. In your letter: apologise for not coming, explain what happened, suggest a new time to meet.",
     essay: "I missed dinner because I was sick."

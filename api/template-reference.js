@@ -140,9 +140,9 @@ function normalizeRecipientName(value, templateId) {
 function normalizePurposeVerb(value, topic, templateId) {
   const text = String(value || "").toLowerCase();
   const topicText = String(topic || "").toLowerCase();
+  if (/thank|helpful neighbour|helpful neighbor|kindness/.test(text) || /thank|helpful neighbour|helpful neighbor|kindness/.test(topicText)) return "thank you for";
   if (/complain/.test(text) || /noise|problem|service|delivery|damage/.test(topicText)) return "complain about";
   if (/apolog/.test(text) || /sorry|missing/.test(topicText)) return "apologise for";
-  if (/thank/.test(text)) return "thank you for";
   if (/apply/.test(text) || /application|assistant|volunteer/.test(topicText)) return "apply for";
   if (/invite/.test(text) || /invitation|event|celebration/.test(topicText)) return templateId === "task1-informal" ? "invite you to" : "invite you to";
   if (/ask|request|information|advice|course|experience/.test(text) || /information|advice|course|experience|rental|hours/.test(topicText)) return templateId === "task1-informal" ? "ask you about" : "ask about";
@@ -252,6 +252,7 @@ function cleanSlotByKey(key, value) {
       /^(can you please\s+)/i,
       /^(i would like to\s+)/i,
       /^(i would be happy to\s+)/i,
+      /^(i hope (we can|to)\s+)/i,
       /^(i can\s+)/i,
       /^(i will\s+)/i,
       /^(i would\s+)/i,
@@ -474,7 +475,7 @@ function normalizeSlots(rawSlots = {}, spec, body) {
   }, {});
   if (spec.requiredSlots.includes("recipientName")) slots.recipientName = normalizeRecipientName(slots.recipientName, templateIdForBody(body));
   if (spec.requiredSlots.includes("friendName")) slots.friendName = normalizeRecipientName(slots.friendName, "task1-informal");
-  if (spec.requiredSlots.includes("purposeVerb")) slots.purposeVerb = normalizePurposeVerb(slots.purposeVerb, slots.topic, templateIdForBody(body));
+  if (spec.requiredSlots.includes("purposeVerb")) slots.purposeVerb = normalizePurposeVerb(slots.purposeVerb, `${slots.topic} ${body.questionTitle} ${body.type} ${body.questionPrompt}`, templateIdForBody(body));
   if (spec.requiredSlots.includes("topic")) slots.topic = normalizeTopicForPurpose(slots.topic, slots.purposeVerb);
   return slots;
 }
