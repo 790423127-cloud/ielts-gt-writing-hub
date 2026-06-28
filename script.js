@@ -596,10 +596,10 @@
       els.gradingModeSelect = null;
     }
     ensureGenerateRevisionButton();
+    ensureTemplateReferenceButton();
   }
 
   function ensureGenerateRevisionButton() {
-    if (els.generateRevisionBtn && document.body.contains(els.generateRevisionBtn)) return els.generateRevisionBtn;
     let btn = $("generateRevisionBtn");
     if (!btn) {
       btn = document.createElement("button");
@@ -607,11 +607,37 @@
       btn.type = "button";
       btn.className = "secondary";
       btn.textContent = "生成作文 / Generate essay";
-      const anchor = els.gradeBtn;
-      if (anchor && anchor.parentElement) anchor.insertAdjacentElement("afterend", btn);
     }
-    btn.addEventListener("click", generateEssayOnly);
+    const anchor = els.gradeBtn;
+    if (anchor && anchor.parentElement && btn.previousElementSibling !== anchor) {
+      anchor.insertAdjacentElement("afterend", btn);
+    }
+    if (btn.dataset.generateEssayBound !== "true") {
+      btn.addEventListener("click", generateEssayOnly);
+      btn.dataset.generateEssayBound = "true";
+    }
     els.generateRevisionBtn = btn;
+    return btn;
+  }
+
+  function ensureTemplateReferenceButton() {
+    let btn = $("templateReferenceBtn");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "templateReferenceBtn";
+      btn.type = "button";
+      btn.className = "secondary";
+      btn.textContent = "按模板生成作文";
+    }
+    const anchor = els.restoreOriginalBtn || els.generateRevisionBtn || els.gradeBtn;
+    if (anchor && anchor.parentElement && btn.previousElementSibling !== anchor) {
+      anchor.insertAdjacentElement("afterend", btn);
+    }
+    if (btn.dataset.templateReferenceBound !== "true") {
+      btn.addEventListener("click", generateTemplateReferenceOnly);
+      btn.dataset.templateReferenceBound = "true";
+    }
+    els.templateReferenceBtn = btn;
     return btn;
   }
 
@@ -2468,6 +2494,21 @@
     }
   }
 
+  function templateReferenceEndpointFromGradingEndpoint() {
+    const raw = String(els.gradingEndpointInput?.value || "").trim();
+    if (!raw) return "/api/template-reference";
+    try {
+      const url = new URL(raw, window.location.origin);
+      url.pathname = url.pathname.replace(/\/api\/grade-ielts\/?$/i, "/api/template-reference");
+      url.pathname = url.pathname.replace(/\/api\/writing-feedback\/?$/i, "/api/template-reference");
+      url.pathname = url.pathname.replace(/\/api\/essay-generator\/?$/i, "/api/template-reference");
+      if (!/\/api\/template-reference\/?$/i.test(url.pathname)) url.pathname = "/api/template-reference";
+      return url.toString();
+    } catch {
+      return "/api/template-reference";
+    }
+  }
+
   function criterionFeedbackEndpointFromGradingEndpoint() {
     const raw = String(els.gradingEndpointInput?.value || "").trim();
     if (!raw) return "/api/criterion-feedback";
@@ -4195,6 +4236,101 @@
     return result;
   }
 
+  function renderTemplateReferenceResult(result = {}, originalEssay = "") {
+    if (!els.gradingResults) return;
+    els.gradingResults.querySelectorAll(".template-reference-learning-block").forEach((node) => node.remove());
+    const referenceEssay = String(result.referenceEssay || "").trim();
+    const memorisable = Array.isArray(result.memorisableSentences) ? result.memorisableSentences.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    const notes = Array.isArray(result.slotNotesZh) ? result.slotNotesZh.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    const slotRows = result.filledSlots && typeof result.filledSlots === "object"
+      ? Object.entries(result.filledSlots).slice(0, 16).map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(value)}</td></tr>`).join("")
+      : "";
+    const html = `<section class="grading-section revision-block template-reference-learning-block">
+      <details class="score-accordion generated-writing-panel" open>
+        <summary>按模板生成作文 <span class="muted">${escapeHtml(result.templateUsed || "Fixed template reference")}</span></summary>
+        <div class="score-accordion-body">
+          <div class="score-flow-note"><strong>固定模板说明：</strong>这个功能只让 AI 填关键句子，最终作文由服务器按固定模板拼接；不改变原来的 Generate essay 逻辑。</div>
+          <section class="generated-essay-compare" aria-label="Template reference essay comparison">
+            <div class="generated-essay-compare-head">
+              <div>
+                <h4>左右对照 / Side-by-side comparison</h4>
+                <p class="muted">左边是你写的作文，右边是按固定模板生成的参考作文。</p>
+              </div>
+            </div>
+            <div class="generated-essay-compare-grid">
+              <article class="generated-essay-compare-pane">
+                <h5>我的作文 / My essay</h5>
+                <pre>${escapeHtml(originalEssay || "暂无原文。请先在 Writing Studio 输入作文。")}</pre>
+              </article>
+              <article class="generated-essay-compare-pane is-generated">
+                <h5>模板生成作文 / Template generated essay</h5>
+                <pre>${escapeHtml(referenceEssay || "暂未生成。")}</pre>
+              </article>
+            </div>
+          </section>
+          <div class="actions generated-essay-actions">
+            <button class="secondary" type="button" data-copy-template-reference>复制模板作文</button>
+          </div>
+          ${memorisable.length ? `<div class="generated-study-list"><h5>可背句子</h5>${listHtml(memorisable)}</div>` : ""}
+          ${notes.length ? `<div class="generated-study-list"><h5>模板填充说明</h5>${listHtml(notes)}</div>` : ""}
+          ${slotRows ? `<details class="score-accordion template-slot-details"><summary>查看模板槽位 / Filled slots</summary><div class="score-accordion-body"><table class="template-slot-table"><tbody>${slotRows}</tbody></table></div></details>` : ""}
+        </div>
+      </details>
+    </section>`;
+    els.gradingResults.insertAdjacentHTML("beforeend", html);
+    const block = els.gradingResults.querySelector(".template-reference-learning-block:last-child");
+    block?.addEventListener("click", async (event) => {
+      const copy = event.target.closest("[data-copy-template-reference]");
+      if (!copy) return;
+      try { await navigator.clipboard.writeText(referenceEssay); }
+      catch {
+        const tmp = document.createElement("textarea");
+        tmp.value = referenceEssay;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand("copy");
+        tmp.remove();
+      }
+      showStatus("已复制模板作文");
+    });
+    syncSpaOutputPanels();
+  }
+
+  async function generateTemplateReferenceOnly() {
+    if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
+    const endpoint = templateReferenceEndpointFromGradingEndpoint();
+    const btn = els.templateReferenceBtn || $("templateReferenceBtn");
+    const originalText = btn?.textContent || "按模板生成作文";
+    const originalEssay = String(els.essayInput?.value || "").trim();
+    if (btn) { btn.disabled = true; btn.textContent = "模板生成中..."; btn.setAttribute("aria-busy", "true"); }
+    if (els.gradeBtn) els.gradeBtn.disabled = true;
+    if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
+    if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
+    try {
+      setGradingStatus("正在按固定模板生成作文。旧的 Generate essay 逻辑不会被调用。", "loading");
+      const result = await postStage(endpoint, gradingPayload({
+        aiStage: "template-reference",
+        mode: "template_reference",
+        essay: originalEssay,
+        type: selected?.type || "",
+        questionType: selected?.type || "",
+        targetBand: 5.5
+      }));
+      if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
+      renderTemplateReferenceResult(result, originalEssay);
+      navigateToView("model-revision");
+      setGradingStatus("模板作文生成完成。", "done");
+    } catch (error) {
+      setGradingStatus(String(error.message || error), "error");
+      if (els.gradingResults) els.gradingResults.insertAdjacentHTML("beforeend", `<section class="grading-section error-details"><h4>模板作文生成错误</h4><pre>${escapeHtml(error.stack || error.message || error)}</pre></section>`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = originalText; btn.removeAttribute("aria-busy"); }
+      if (els.gradeBtn) els.gradeBtn.disabled = false;
+      if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = false;
+      if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
+    }
+  }
+
 
   async function generateEssayOnly() {
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
@@ -4598,7 +4734,7 @@
     const modelMount = $("modelRevisionResults");
     const modelEmpty = $("modelRevisionEmpty");
     if (modelMount && els.gradingResults) {
-      const generatedBlocks = [...els.gradingResults.querySelectorAll(".generated-writing-learning-block")];
+      const generatedBlocks = [...els.gradingResults.querySelectorAll(".generated-writing-learning-block, .template-reference-learning-block")];
       if (generatedBlocks.length) {
         modelMount.innerHTML = "";
         generatedBlocks.forEach((block) => modelMount.appendChild(block));

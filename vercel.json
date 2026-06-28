@@ -3,6 +3,9 @@
   "functions": {
     "api/grade-ielts.js": {
       "maxDuration": 300
+    },
+    "api/template-reference.js": {
+      "maxDuration": 300
     }
   }
 }
