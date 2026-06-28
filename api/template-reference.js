@@ -158,6 +158,13 @@ function normalizeTopicForPurpose(topic, purposeVerb) {
   return text || topic;
 }
 
+function formatTimePlace(value) {
+  const text = String(value || "").trim();
+  if (!text) return "around the most relevant time";
+  if (/^(in|on|at|during|every|last|next|this|that|after|before|from)\b/i.test(text)) return text;
+  return `around ${text}`;
+}
+
 function cleanSlotByKey(key, value) {
   const commonLead = [
     /^(for example,?\s*)/i,
@@ -202,6 +209,11 @@ function cleanSlotByKey(key, value) {
       };
       text = actionFallbacks[key] || "take a simple practical action";
     }
+  }
+  if (/^(requestedAction)$/i.test(key)) {
+    text = text
+      .replace(/\s+(as soon as possible|as soon as convenient|soon)$/i, "")
+      .trim();
   }
   if (/^(feelingOrDetail)$/i.test(key)) {
     text = stripLead(text, [/^(it was|it is|it will be)\s+/i]);
@@ -251,12 +263,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       const recipient = slots.recipientName || "Sir or Madam";
+      const timePlace = formatTimePlace(slots.timePlace);
       return [
         `Dear ${recipient},`,
         "",
         `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. I hope this letter explains the matter clearly and politely.`,
         "",
-        `First of all, ${slots.bullet1Answer}. This usually happens around ${slots.timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
+        `First of all, ${slots.bullet1Answer}. This usually happens ${timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
         `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}.`,
         "",
