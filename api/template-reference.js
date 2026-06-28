@@ -239,6 +239,12 @@ function cleanSlotByKey(key, value) {
   if (/^(solutionOrAction|finalSolution)$/i.test(key)) {
     text = stripLead(text, [/^(people should\s+)/i, /^(we should\s+)/i, /^(governments should\s+)/i]);
   }
+  if (/^(bullet2Impact|benefitOrResult|explanation2)$/i.test(key) && /^(cannot|can|need|needs|have|has|will|would|should|may|might)\b/i.test(text)) {
+    text = `they ${text}`;
+  }
+  if (/^(requestedAction)$/i.test(key)) {
+    text = text.replace(/^finish music\b/i, "finish the music");
+  }
   if (/^(overallJudgement)$/i.test(key)) {
     text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(it is mostly\s+)/i]);
     if (!text || /^(this problem can be solved|this issue can be solved)$/i.test(text)) {

@@ -87,7 +87,8 @@ function localWarnings(text, task) {
     [/\bI believe\s+I\s+(think|believe|prefer|agree)\b/i, "duplicated opinion lead-in"],
     [/\bIn my opinion,\s+I\s+(think|believe|prefer|agree)\b/i, "duplicated intro opinion lead-in"],
     [/\baround\s+(in|on|at|during|every)\b/i, "duplicated time preposition after around"],
-    [/\bsoon\s+as soon as convenient\b/i, "duplicated soon phrase"]
+    [/\bsoon\s+as soon as convenient\b/i, "duplicated soon phrase"],
+    [/\bbecause\s+(cannot|can|need|needs|have|has|will|would|should|may|might)\b/i, "missing subject after because"]
   ];
   for (const [pattern, label] of checks) {
     if (pattern.test(text)) warnings.push(label);
