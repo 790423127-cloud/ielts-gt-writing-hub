@@ -164,9 +164,9 @@ function cleanSlotByKey(key, value) {
     /^(as a result,?\s*)/i,
     /^(this means that\s*)/i,
     /^(this is because\s*)/i,
-    /^(because\s*)/i,
-    /^(and\s*)/i,
-    /^(so\s*)/i,
+    /^because\b[,\s]*/i,
+    /^and\b[,\s]*/i,
+    /^so\b[,\s]*/i,
     /^(one\s+(main|major|important)\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i,
     /^(another\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i,
     /^(the\s+first\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i
@@ -178,7 +178,7 @@ function cleanSlotByKey(key, value) {
     .replace(/\breason\/problem\b/gi, "point")
     .replace(/\s+/g, " ")
     .trim();
-  if (/^(nextStep|requestedAction|bullet3Action|bullet3Answer|offerHelp|sharedAction)$/i.test(key)) {
+  if (/^(nextStep|requestOrPlan|requestedAction|bullet3Action|bullet3Answer|offerHelp|sharedAction)$/i.test(key)) {
     text = stripLead(text, [
       /^(please\s+)/i,
       /^(could you please\s+)/i,
@@ -186,11 +186,14 @@ function cleanSlotByKey(key, value) {
       /^(i would like to\s+)/i,
       /^(i would be happy to\s+)/i,
       /^(i can\s+)/i,
-      /^(let me know if\s+)/i
+      /^(we could\s+)/i,
+      /^(let me know (if|whether)\s+)/i,
+      /^(please let me know (if|whether)\s+)/i
     ]);
     if (/^(there\s+(is|are)|the\s+(problem|issue)|a\s+(problem|solution)|this\s+(problem|issue)|i\s+(want|hope|need)\s+)/i.test(text)) {
       const actionFallbacks = {
         nextStep: "you are available this week",
+        requestOrPlan: "you are free this weekend",
         requestedAction: "look into this matter and reply to me",
         bullet3Action: "ask for your help with this matter",
         bullet3Answer: "I hope we can choose a better time",
@@ -202,6 +205,21 @@ function cleanSlotByKey(key, value) {
   }
   if (/^(feelingOrDetail)$/i.test(key)) {
     text = stripLead(text, [/^(it was|it is|it will be)\s+/i]);
+  }
+  if (/^(sideA|sideB)$/i.test(key)) {
+    text = stripLead(text, [/^(some people think\s+)/i, /^(other people believe\s+)/i, /^(others believe\s+)/i]);
+  }
+  if (/^(opinion|yourSide)$/i.test(key)) {
+    text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(i agree that\s+)/i, /^(i prefer\s+)/i]);
+  }
+  if (/^(situation|extraCondition)$/i.test(key)) {
+    text = stripLead(text, [/^(when\s+)/i, /^(if\s+)/i]);
+  }
+  if (/^(result|result1|result2)$/i.test(key)) {
+    text = stripLead(text, [/^(they may\s+)/i, /^(people may\s+)/i, /^(this leads to\s+)/i, /^(this can lead to\s+)/i]);
+  }
+  if (/^(explanation1|explanation2)$/i.test(key)) {
+    text = stripLead(text, [/^(this shows that\s+)/i]);
   }
   if (/^(overallJudgement)$/i.test(key)) {
     text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(it is mostly\s+)/i]);
@@ -230,13 +248,13 @@ const TEMPLATE_SPECS = {
       return [
         `Dear ${recipient},`,
         "",
-        `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}.`,
+        `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. I hope this letter explains the matter clearly and politely.`,
         "",
         `First of all, ${slots.bullet1Answer}. This usually happens around ${slots.timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
         `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}.`,
         "",
-        `Finally, I would like to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} as soon as convenient. I believe this would be a fair and helpful solution.`,
+        `Finally, I would like to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} as soon as convenient. I believe this would be a fair and helpful solution, and it would help me avoid the same difficulty in the future.`,
         "",
         recipient === "Sir or Madam" ? "Yours faithfully," : "Yours sincerely,",
         "John Smith"
@@ -256,13 +274,13 @@ const TEMPLATE_SPECS = {
       return [
         `Dear ${slots.recipientName || "[Name]"},`,
         "",
-        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I thought it would be best to explain the situation clearly.`,
+        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I thought it would be best to explain the situation clearly, because this matter is important to me and I value your understanding.`,
         "",
         `First, ${slots.bullet1Answer}. This is because ${slots.bullet1Reason}. I know this may be a little inconvenient, but ${slots.extraExplanation}.`,
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This would help because ${slots.benefitOrResult}.`,
         "",
-        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed.`,
+        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed, and I really appreciate your patience with this situation.`,
         "",
         "Kind regards,",
         "John Smith"
@@ -282,13 +300,13 @@ const TEMPLATE_SPECS = {
       return [
         `Hi ${slots.friendName || "[Name]"},`,
         "",
-        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I have been meaning to write to you about this for a while because ${slots.openingReason}.`,
+        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I have been meaning to write to you about this for a while because ${slots.openingReason}. I wanted to tell you clearly because I value our friendship.`,
         "",
         `First, ${slots.bullet1Answer}. ${slots.feelingOrDetail}. I think you would understand this because ${slots.personalReason}.`,
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. That is why I feel ${slots.feelingWord} about it.`,
         "",
-        `Finally, ${slots.bullet3Answer}. Please let me know if ${slots.requestOrPlan}. It would be great if we could ${slots.sharedAction} soon.`,
+        `Finally, ${slots.bullet3Answer}. Please let me know if ${slots.requestOrPlan}. It would be great if we could ${slots.sharedAction} soon, and I hope we can enjoy a relaxed time together.`,
         "",
         "Best wishes,",
         "John"
@@ -306,13 +324,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Many people have different opinions about ${slots.topic}. Some people think ${slots.sideA}, while others believe ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}.`,
+        `Many people have different opinions about ${slots.topic}. Some people think ${slots.sideA}, while others believe ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question matters because it can influence normal choices in study, work, and family life.`,
         "",
         `On the one hand, ${slots.sideA} can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
         "",
         `On the other hand, I believe ${slots.yourSide} is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
-        `In conclusion, although ${slots.oppositeSide} has some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more practical for ${slots.beneficiary}.`
+        `In conclusion, although ${slots.oppositeSide} may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more practical for ${slots.beneficiary}, especially when people want a balanced and realistic result.`
       ].join("\n");
     }
   },
@@ -327,13 +345,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}.`,
+        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}. It also shows how everyday habits can create bigger problems over time.`,
         "",
         `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult.`,
         "",
         `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage.`
+        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both individuals and society.`
       ].join("\n");
     }
   }
@@ -383,6 +401,8 @@ function buildPrompt(body, spec, templateId) {
     "For recipientName or friendName, return only a simple name or 'Sir or Madam'. Do not return roles such as 'the manager', 'the owner', or 'the organiser'.",
     "For purposeVerb, return only a short verb phrase such as 'complain about', 'ask about', 'thank you for', 'apologise for', 'invite you to', or 'apply for'.",
     "For action slots after 'please', 'I would like to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
+    "For situation slots after 'If people', do not start with 'when' or 'if'. For result slots after 'they may' or 'people may', do not start with 'they may', 'people may', or 'this leads to'.",
+    "For sideA and sideB, do not start with 'some people think' or 'others believe'. For opinion and yourSide, do not start with 'I think', 'I believe', 'I agree', or 'I prefer'.",
     "For overallJudgement, make it fit after 'I think'. Do not start with 'I think' or include slash alternatives.",
     `Task: ${body.task}`,
     `Selected fixed template: ${templateId} - ${spec.name}`,

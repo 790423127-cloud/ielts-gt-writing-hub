@@ -57,4 +57,30 @@ function filledSlotsFor(templateId, topic = "this topic") {
   assert.strictEqual(result.scoreUnaffected, true);
 }
 
+{
+  const body = normalizeBody({
+    task: "Task 2",
+    type: "discussion",
+    questionTitle: "Socialising with Work Colleagues",
+    questionPrompt: "Some people think socialising with work colleagues is good, while others prefer to keep work and private life separate. Discuss both views and give your opinion.",
+    essay: "Some people like socialising, but society also needs private time."
+  });
+  const templateId = templateIdForBody(body);
+  assert.strictEqual(templateId, "task2-opinion-judgement");
+  const slots = filledSlotsFor(templateId, "socialising with work colleagues");
+  Object.assign(slots, {
+    sideA: "some people think socialising with colleagues improves teamwork",
+    sideB: "others believe people need private time after work",
+    opinion: "I think socialising is useful if people keep balance",
+    yourSide: "I believe socialising sometimes is helpful",
+    situation: "when people spend all their free time with colleagues",
+    result: "they may feel tired and lose family time",
+    extraCondition: "if people do not set clear limits"
+  });
+  const result = buildTemplateReferenceResult(body, { filledSlots: slots });
+  assert.match(result.referenceEssay, /socialising with work colleagues/);
+  assert.doesNotMatch(result.referenceEssay, /\b(cialising|ciety|me people)\b/i);
+  assert.doesNotMatch(result.referenceEssay, /If people when|they may they may|I believe I believe|In my opinion, I think/i);
+}
+
 console.log("PASS template-reference static test.");

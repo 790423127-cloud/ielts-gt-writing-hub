@@ -76,9 +76,16 @@ function localWarnings(text) {
     [/As a result,\s*as a result/i, "duplicated As a result lead-in"],
     [/This means that\s+(This|Without|Because|As|For)\b/i, "awkward This means that lead-in"],
     [/Please let me know whether\s*(please|if)\b/i, "duplicated request lead-in"],
+    [/Please let me know if\s*please\b/i, "duplicated informal request lead-in"],
     [/I would be happy to\s*I\s+(can|will|would)\b/i, "duplicated offer lead-in"],
     [/I would like to\s*(there\s+(is|are)|I\s+(want|hope|need))\b/i, "action slot is a full sentence"],
-    [/I am writing to\s+\w+\s+to\s+/i, "duplicated purpose verb"]
+    [/I am writing to\s+\w+\s+to\s+/i, "duplicated purpose verb"],
+    [/\b(cialising|ciety|me people)\b/i, "word damaged by over-broad lead trimming"],
+    [/If people\s+(when|if)\b/i, "duplicated condition lead-in"],
+    [/\b(they|people) may\s+(they|people|this leads|this can lead)\b/i, "duplicated result lead-in"],
+    [/we could\s+we could\b/i, "duplicated shared action lead-in"],
+    [/\bI believe\s+I\s+(think|believe|prefer|agree)\b/i, "duplicated opinion lead-in"],
+    [/\bIn my opinion,\s+I\s+(think|believe|prefer|agree)\b/i, "duplicated intro opinion lead-in"]
   ];
   for (const [pattern, label] of checks) {
     if (pattern.test(text)) warnings.push(label);
