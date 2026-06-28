@@ -565,6 +565,9 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "These grammar patterns must use simple words. Example level: 'Although this is a small problem, it affects my daily life.' / 'This can help people, which is useful for families.'",
     "If grammar is too simple, combine two existing short ideas with because, when, if, although, or which. Do not add a new idea just to make the answer longer.",
     "Avoid sentence fragments like 'This is because I was tired.' when it follows another very short sentence; combine it into one clear sentence when possible.",
+    "Avoid comma-splice patterns. Do not write: 'This is especially true when..., they may...' Instead write: 'When..., they may...' or 'This is especially true because...'.",
+    "Avoid broken relative clauses. Do not write: 'for people who try new things often have more fun'. Instead write: 'for people who try new things often' or 'because people can have more fun'.",
+    "If a sentence contains 'which', make sure it clearly refers to the idea before it and has a complete verb.",
     "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
     "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
@@ -584,8 +587,17 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
 }
 
 function safePolishedEssay(value, fallback, task) {
-  const text = String(value || "").trim();
+  let text = String(value || "").trim();
   if (!text) return fallback;
+  text = text
+    .replace(/This is especially true when ([^.!?]{5,90}),\s*they may\s+/gi, "When $1, they may ")
+    .replace(/This is especially true when ([^.!?]{5,90}),\s*they\s+/gi, "When $1, they ")
+    .replace(/for people who ([^,.!?]{3,80}) often have more fun/gi, "because people who $1 can often have more fun")
+    .replace(/for everyone can enjoy life more/gi, "because everyone can enjoy life more")
+    .split(/\n/)
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .trim();
   if (countWords(text) < Math.max(90, Math.floor(countWords(fallback) * 0.65))) return fallback;
   if (!/[.!?]\s*\n\n|Yours|Best wishes|Kind regards|In conclusion/i.test(text)) return fallback;
   return text;
