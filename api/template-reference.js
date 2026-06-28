@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v4";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v5";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -575,9 +575,13 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Do not rewrite the essay freely. Do not chase a score by adding new content. Do not add filler just to reach 150 or 250 words.",
     "The goal is a stable memorisable template: clear format, complete basic meaning, Grammar 5.0 safety, and words a Band 5 learner can copy.",
     "Grammar 5.0 safety means: most basic sentences have clear subjects and verbs; verb tense is mostly correct; there are a few safe complex sentences, but no broken sentence parts.",
+    "Before returning, silently audit the answer against IELTS criteria. Do not return an answer that would be described as simple_forms, frequent_errors, repetitive, noticeable_errors, mechanical_links, or limited_progression.",
+    "If the grammar would be only 4.5 because it is too simple, revise it to Band 5.0 by adding controlled clauses with because, although, when, if, and which. Check articles, plurals, verb forms, and punctuation after revising.",
+    "If the vocabulary would be only 4.5 because it is repetitive, replace repeated basic words with simple topic collocations. Keep the words common and exam-safe.",
     "Use common but not childish topic words. Prefer clear words like local people, sleep, health, money, work, study, noise, rules, manager, meeting, family, problem, solution, useful, important.",
     "Keep vocabulary simple, but make it precise. Use everyday collocations such as loud noise, sleep properly, concentrate at work, daily routine, feel under pressure, reduce the noise, solve the problem, keep in touch, make a plan, and learn from experience.",
     "Do not overuse vague words such as good, bad, important, problem, people, thing, and way. Replace some of them with simple precise words from the topic.",
+    "Do not start many sentences with 'This'. Use simple noun phrases instead, such as this noise, this habit, this choice, the main problem, the second reason, or the best answer.",
     "Do not use advanced words just to raise Lexical Resource.",
     "Keep sentences short and accurate, but do not leave the whole answer as only very short simple sentences.",
     "For Grammar 5.0, include at least three safe grammar patterns in the full answer: one because sentence, one if/when sentence, and one although/which sentence.",
