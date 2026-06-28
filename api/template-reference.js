@@ -114,6 +114,107 @@ function templateIdForBody(body = {}) {
   return body.task === "Task 1" ? inferTask1Template(body) : inferTask2Template(body);
 }
 
+function stripLead(text, patterns = []) {
+  let value = String(text || "").trim();
+  for (let guard = 0; guard < 3; guard += 1) {
+    const before = value;
+    for (const pattern of patterns) value = value.replace(pattern, "").trim();
+    if (value === before) break;
+  }
+  return value;
+}
+
+function normalizeRecipientName(value, templateId) {
+  let text = stripLead(value, [/^dear\s+/i]).replace(/\s+/g, " ").trim();
+  text = text.replace(/^(the|a|an)\s+/i, "").trim();
+  if (!text) return templateId === "task1-informal" ? "Tom" : "Sir or Madam";
+  if (templateId === "task1-formal" && /^(manager|owner|director|customer service|admissions office|transport company|company|council|coordinator|office|department)\b/i.test(text)) {
+    return "Sir or Madam";
+  }
+  if (templateId === "task1-semi-formal" && /^(your\s+)?(friend'?s sister|sister|neighbour|neighbor|landlord|organiser|organizer|colleague)\b/i.test(text)) {
+    return "Alex";
+  }
+  return text.slice(0, 40);
+}
+
+function normalizePurposeVerb(value, topic, templateId) {
+  const text = String(value || "").toLowerCase();
+  const topicText = String(topic || "").toLowerCase();
+  if (/complain/.test(text) || /noise|problem|service|delivery|damage/.test(topicText)) return "complain about";
+  if (/apolog/.test(text) || /sorry|missing/.test(topicText)) return "apologise for";
+  if (/thank/.test(text)) return "thank you for";
+  if (/apply/.test(text) || /application|assistant|volunteer/.test(topicText)) return "apply for";
+  if (/invite/.test(text) || /invitation|event|celebration/.test(topicText)) return templateId === "task1-informal" ? "invite you to" : "invite you to";
+  if (/ask|request|information|advice|course|experience/.test(text) || /information|advice|course|experience|rental|hours/.test(topicText)) return templateId === "task1-informal" ? "ask you about" : "ask about";
+  if (/tell|share/.test(text)) return "tell you about";
+  return templateId === "task1-informal" ? "tell you about" : "explain";
+}
+
+function normalizeTopicForPurpose(topic, purposeVerb) {
+  let text = String(topic || "").trim();
+  const verb = String(purposeVerb || "").trim().toLowerCase();
+  if (/\b(about|for)$/.test(verb)) text = text.replace(/^(about|regarding|concerning)\s+/i, "").trim();
+  if (/\bto$/.test(verb)) text = text.replace(/^to\s+/i, "").trim();
+  return text || topic;
+}
+
+function cleanSlotByKey(key, value) {
+  const commonLead = [
+    /^(for example,?\s*)/i,
+    /^(as a result,?\s*)/i,
+    /^(this means that\s*)/i,
+    /^(this is because\s*)/i,
+    /^(because\s*)/i,
+    /^(and\s*)/i,
+    /^(so\s*)/i,
+    /^(one\s+(main|major|important)\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i,
+    /^(another\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i,
+    /^(the\s+first\s+(reason|problem|point|reason\/problem)\s+is\s+that\s*)/i
+  ];
+  let text = stripLead(value, commonLead);
+  text = text
+    .replace(/\bpositive\/negative\s*\/?\s*/gi, "")
+    .replace(/\bbetter\/worse\b/gi, "more difficult")
+    .replace(/\breason\/problem\b/gi, "point")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/^(nextStep|requestedAction|bullet3Action|bullet3Answer|offerHelp|sharedAction)$/i.test(key)) {
+    text = stripLead(text, [
+      /^(please\s+)/i,
+      /^(could you please\s+)/i,
+      /^(can you please\s+)/i,
+      /^(i would like to\s+)/i,
+      /^(i would be happy to\s+)/i,
+      /^(i can\s+)/i,
+      /^(let me know if\s+)/i
+    ]);
+    if (/^(there\s+(is|are)|the\s+(problem|issue)|a\s+(problem|solution)|this\s+(problem|issue)|i\s+(want|hope|need)\s+)/i.test(text)) {
+      const actionFallbacks = {
+        nextStep: "you are available this week",
+        requestedAction: "look into this matter and reply to me",
+        bullet3Action: "ask for your help with this matter",
+        bullet3Answer: "I hope we can choose a better time",
+        offerHelp: "send you more details",
+        sharedAction: "meet and talk about it"
+      };
+      text = actionFallbacks[key] || "take a simple practical action";
+    }
+  }
+  if (/^(feelingOrDetail)$/i.test(key)) {
+    text = stripLead(text, [/^(it was|it is|it will be)\s+/i]);
+  }
+  if (/^(overallJudgement)$/i.test(key)) {
+    text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(it is mostly\s+)/i]);
+    if (!text || /^(this problem can be solved|this issue can be solved)$/i.test(text)) {
+      text = "this issue can be reduced with careful action";
+    }
+  }
+  if (!/^(recipientName|friendName)$/i.test(key) && /^[A-Z][a-z]/.test(text) && !/^I\b/.test(text)) {
+    text = text.charAt(0).toLowerCase() + text.slice(1);
+  }
+  return text;
+}
+
 const TEMPLATE_SPECS = {
   "task1-formal": {
     name: "Task 1 Formal fixed template",
@@ -131,14 +232,14 @@ const TEMPLATE_SPECS = {
         "",
         `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}.`,
         "",
-        `First of all, ${slots.bullet1Answer}. This happened / will happen on ${slots.timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
+        `First of all, ${slots.bullet1Answer}. This usually happens around ${slots.timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
         `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}.`,
         "",
-        `Finally, I would like to ${slots.bullet3Action}. If possible, I would appreciate it if you could ${slots.requestedAction} as soon as convenient. I believe this would be a fair and helpful solution.`,
+        `Finally, I would like to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} as soon as convenient. I believe this would be a fair and helpful solution.`,
         "",
         recipient === "Sir or Madam" ? "Yours faithfully," : "Yours sincerely,",
-        "[Your Name]"
+        "John Smith"
       ].join("\n");
     }
   },
@@ -161,10 +262,10 @@ const TEMPLATE_SPECS = {
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This would help because ${slots.benefitOrResult}.`,
         "",
-        `Finally, ${slots.bullet3Answer}. Please let me know if ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed.`,
+        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed.`,
         "",
         "Kind regards,",
-        "[Your Name]"
+        "John Smith"
       ].join("\n");
     }
   },
@@ -183,14 +284,14 @@ const TEMPLATE_SPECS = {
         "",
         `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I have been meaning to write to you about this for a while because ${slots.openingReason}.`,
         "",
-        `First, ${slots.bullet1Answer}. It was / is / will be ${slots.feelingOrDetail}. I think you would understand this because ${slots.personalReason}.`,
+        `First, ${slots.bullet1Answer}. ${slots.feelingOrDetail}. I think you would understand this because ${slots.personalReason}.`,
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. That is why I feel ${slots.feelingWord} about it.`,
         "",
         `Finally, ${slots.bullet3Answer}. Please let me know if ${slots.requestOrPlan}. It would be great if we could ${slots.sharedAction} soon.`,
         "",
         "Best wishes,",
-        "[Your Name]"
+        "John"
       ].join("\n");
     }
   },
@@ -226,13 +327,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Nowadays, ${slots.topic} is becoming common. There are two main reasons for this, and I think it is mostly ${slots.overallJudgement} / this problem can be solved in several ways. This issue is important because it can affect ${slots.affectedArea}.`,
+        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}.`,
         "",
-        `The first reason/problem is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make the situation better/worse.`,
+        `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult.`,
         "",
-        `Another reason/problem is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}.`,
+        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe it is mostly ${slots.overallJudgement} / it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage.`
+        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage.`
       ].join("\n");
     }
   }
@@ -246,14 +347,19 @@ function sanitizeSlotValue(value, fallback) {
 
 function normalizeSlots(rawSlots = {}, spec, body) {
   const topicFallback = body.questionTitle || "this topic";
-  return spec.requiredSlots.reduce((slots, key) => {
+  const slots = spec.requiredSlots.reduce((acc, key) => {
     let fallback = key.toLowerCase().includes("topic") ? topicFallback : "a clear point related to the question";
     if (/recipient/i.test(key)) fallback = "Sir or Madam";
     if (/friendName/i.test(key)) fallback = "Tom";
     if (/purposeVerb/i.test(key)) fallback = body.task === "Task 1" ? "explain" : "discuss";
-    slots[key] = sanitizeSlotValue(rawSlots[key], fallback);
-    return slots;
+    acc[key] = cleanSlotByKey(key, sanitizeSlotValue(rawSlots[key], fallback));
+    return acc;
   }, {});
+  if (spec.requiredSlots.includes("recipientName")) slots.recipientName = normalizeRecipientName(slots.recipientName, templateIdForBody(body));
+  if (spec.requiredSlots.includes("friendName")) slots.friendName = normalizeRecipientName(slots.friendName, "task1-informal");
+  if (spec.requiredSlots.includes("purposeVerb")) slots.purposeVerb = normalizePurposeVerb(slots.purposeVerb, slots.topic, templateIdForBody(body));
+  if (spec.requiredSlots.includes("topic")) slots.topic = normalizeTopicForPurpose(slots.topic, slots.purposeVerb);
+  return slots;
 }
 
 function slotInstruction(spec) {
@@ -272,6 +378,12 @@ function buildPrompt(body, spec, templateId) {
       : "Each slot should normally contain 10-18 English words so the final fixed-template essay reaches about 260-290 words.",
     "Each slot must be one phrase or one simple sentence fragment that fits inside the fixed line. No numbering, no markdown, no paragraph text inside a slot.",
     "Do not end slot values with a full stop, question mark, exclamation mark, colon, or semicolon because the server template adds punctuation.",
+    "Do not repeat template lead-in words inside slots. Avoid: Dear, For example, As a result, This means that, Please let me know if, I would be happy to, I would like to, The first reason/problem is that.",
+    "Do not use slash choices such as positive/negative, better/worse, reason/problem, happened/will happen, or is/will be. Choose one natural phrase.",
+    "For recipientName or friendName, return only a simple name or 'Sir or Madam'. Do not return roles such as 'the manager', 'the owner', or 'the organiser'.",
+    "For purposeVerb, return only a short verb phrase such as 'complain about', 'ask about', 'thank you for', 'apologise for', 'invite you to', or 'apply for'.",
+    "For action slots after 'please', 'I would like to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
+    "For overallJudgement, make it fit after 'I think'. Do not start with 'I think' or include slash alternatives.",
     `Task: ${body.task}`,
     `Selected fixed template: ${templateId} - ${spec.name}`,
     `Target word range after server composition: ${spec.targetWords}`,

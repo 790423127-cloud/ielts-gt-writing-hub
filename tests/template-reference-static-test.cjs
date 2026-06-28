@@ -35,7 +35,8 @@ function filledSlotsFor(templateId, topic = "this topic") {
   assert.strictEqual(result.templateStructureLocked, true);
   assert.strictEqual(result.aiOnlyFilledSlots, true);
   assert.match(result.referenceEssay, /^Nowadays, buying too many clothes is becoming common\./);
-  assert.match(result.referenceEssay, /The first reason\/problem is that/);
+  assert.match(result.referenceEssay, /The first point is that/);
+  assert.doesNotMatch(result.referenceEssay, /reason\/problem|better\/worse|positive\/negative|\[[^\]]+\]/i);
 }
 
 {
@@ -52,6 +53,7 @@ function filledSlotsFor(templateId, topic = "this topic") {
   });
   assert.match(result.referenceEssay, /^Hi Tom,/);
   assert.match(result.referenceEssay, /Best wishes,/);
+  assert.doesNotMatch(result.referenceEssay, /\[[^\]]+\]|It was \/ is \/ will be/i);
   assert.strictEqual(result.scoreUnaffected, true);
 }
 
