@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v6";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v7";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -570,9 +570,10 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
 function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
   return [
     "You are an IELTS General Training Band 5.0 template-format safety editor.",
-    "You will receive a fixed-template practice answer. Keep the same template format, same task, same paragraph order, and simple Band 5 style.",
-    "You may delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
-    "Do not rewrite the essay freely. Do not chase a score by adding new content. Do not add filler just to reach 150 or 250 words.",
+    "You will receive a fixed-template practice answer. Keep the same task, same paragraph order, same letter/essay format, and simple Band 5 style.",
+    "You may rewrite sentences inside the same paragraph when needed, but do not change the paragraph purpose or remove required task points.",
+    "Delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
+    "Do not rewrite the answer into a high-band essay. Do not chase a score by adding unrelated content. Do not add filler just to reach 150 or 250 words.",
     "The goal is a stable memorisable template: clear format, complete basic meaning, Grammar 5.0 safety, and words a Band 5 learner can copy.",
     "Grammar 5.0 safety means: most basic sentences have clear subjects and verbs; verb tense is mostly correct; there are a few safe complex sentences, but no broken sentence parts.",
     "Before returning, silently audit the answer against IELTS criteria. Do not return an answer that would be described as simple_forms, frequent_errors, repetitive, noticeable_errors, mechanical_links, or limited_progression.",
@@ -582,6 +583,7 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Keep vocabulary simple, but make it precise. Use everyday collocations such as loud noise, sleep properly, concentrate at work, daily routine, feel under pressure, reduce the noise, solve the problem, keep in touch, make a plan, and learn from experience.",
     "Do not overuse vague words such as good, bad, important, problem, people, thing, and way. Replace some of them with simple precise words from the topic.",
     "Do not start many sentences with 'This'. Use simple noun phrases instead, such as this noise, this habit, this choice, the main problem, the second reason, or the best answer.",
+    "Avoid visibly mechanical template phrases when a simple natural sentence works better, such as 'This question is important because', 'This is why people should think carefully', 'which is a real problem', and 'fair and helpful'.",
     "Do not use advanced words just to raise Lexical Resource.",
     "Keep sentences short and accurate, but do not leave the whole answer as only very short simple sentences.",
     "For Grammar 5.0, include at least three safe grammar patterns in the full answer: one because sentence, one if/when sentence, and one although/which sentence.",
