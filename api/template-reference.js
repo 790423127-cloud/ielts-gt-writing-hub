@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v5";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v6";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -628,6 +628,8 @@ function safePolishedEssay(value, fallback, task) {
     .replace(/\bI am sorry because\b/gi, "I am sorry that")
     .replace(/I have been meaning to write to you about this for a while because I am sorry [^.]*\./gi, "I wanted to write sooner because I did not want you to feel upset.")
     .replace(/\bBecause of this, they did not die\b/gi, "Because of this, they stayed healthy")
+    .replace(/\b(baby|child|neighbour|neighbor|friend|student|teacher|manager|boss|colleague|person), which\b/gi, "$1, who")
+    .replace(/\b(people|children|students|neighbours|neighbors|friends|workers), which\b/gi, "$1, who")
     .replace(/\bdifficulties getting enough sleep can create problems because it affects\b/gi, "difficulties getting enough sleep can create problems because they affect")
     .replace(/\bI would be happy to ([^.]{3,80})\. I would be happy to ([^.]{3,80})\./gi, "I would be happy to $1. I can also $2.")
     .replace(/the best solution is for your team to ([^.]{3,80})\. If possible, please \1\./gi, "the best solution is for your team to control the problem. If possible, please $1.")
@@ -640,6 +642,8 @@ function safePolishedEssay(value, fallback, task) {
     .join("\n")
     .trim();
   if (countWords(text) < Math.max(90, Math.floor(countWords(fallback) * 0.65))) return fallback;
+  if (task === "Task 1" && countWords(text) < 145 && countWords(fallback) >= 145) return fallback;
+  if (task === "Task 2" && countWords(text) < 245 && countWords(fallback) >= 245) return fallback;
   if (!/[.!?]\s*\n\n|Yours|Best wishes|Kind regards|In conclusion/i.test(text)) return fallback;
   return text;
 }
