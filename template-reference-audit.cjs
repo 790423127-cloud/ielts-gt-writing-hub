@@ -101,8 +101,8 @@ function localWarnings(text, task) {
     if (pattern.test(text)) warnings.push(label);
   }
   const words = countWords(text);
-  if (task === "Task 1" && words < 150) warnings.push(`Task 1 below 150 words: ${words}`);
-  if (task === "Task 2" && words < 250) warnings.push(`Task 2 below 250 words: ${words}`);
+  if (task === "Task 1" && words < 120) warnings.push(`Task 1 too short for template practice: ${words}`);
+  if (task === "Task 2" && words < 180) warnings.push(`Task 2 too short for template practice: ${words}`);
   return warnings;
 }
 

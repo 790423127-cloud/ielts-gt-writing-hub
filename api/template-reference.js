@@ -336,7 +336,7 @@ const TEMPLATE_SPECS = {
   "task1-formal": {
     name: "Task 1 Formal fixed template",
     task: "Task 1",
-    targetWords: "170-200",
+    targetWords: "format-first; 150+ when possible",
     requiredSlots: [
       "recipientName", "purposeVerb", "topic", "background", "bullet1Answer", "timePlace",
       "bullet1Reason", "bullet1Extra", "bullet2Answer", "bullet2Example", "affectedGroup",
@@ -364,7 +364,7 @@ const TEMPLATE_SPECS = {
   "task1-semi-formal": {
     name: "Task 1 Semi-formal fixed template",
     task: "Task 1",
-    targetWords: "170-200",
+    targetWords: "format-first; 150+ when possible",
     requiredSlots: [
       "recipientName", "purposeVerb", "topic", "situation", "bullet1Answer", "bullet1Reason",
       "extraExplanation", "bullet2Answer", "bullet2Example", "benefitOrResult",
@@ -390,7 +390,7 @@ const TEMPLATE_SPECS = {
   "task1-informal": {
     name: "Task 1 Informal fixed template",
     task: "Task 1",
-    targetWords: "170-200",
+    targetWords: "format-first; 150+ when possible",
     requiredSlots: [
       "friendName", "purposeVerb", "topic", "openingReason", "bullet1Answer", "feelingOrDetail",
       "personalReason", "bullet2Answer", "bullet2Example", "feelingWord", "bullet3Answer",
@@ -416,7 +416,7 @@ const TEMPLATE_SPECS = {
   "task2-opinion-judgement": {
     name: "Task 2 Template 1: Opinion judgement",
     task: "Task 2",
-    targetWords: "260-290",
+    targetWords: "format-first; 250+ when possible",
     requiredSlots: [
       "topic", "sideA", "sideB", "opinion", "reason1", "reason2", "example1",
       "explanation1", "yourSide", "situation", "result", "extraCondition",
@@ -437,7 +437,7 @@ const TEMPLATE_SPECS = {
   "task2-reasons-results-solutions": {
     name: "Task 2 Template 2: Reasons/results/solutions",
     task: "Task 2",
-    targetWords: "260-290",
+    targetWords: "format-first; 250+ when possible",
     requiredSlots: [
       "topic", "overallJudgement", "affectedArea", "point1", "explanation1", "example1",
       "result1", "point2", "result2", "explanation2", "solutionOrAction",
@@ -495,8 +495,8 @@ function buildPrompt(body, spec, templateId) {
     "Do not use difficult or formal words such as soundproofing, disturbance, inconvenient, significant, considerable, facilitate, implement, utilise, residents, constant, ensure, consequently, nevertheless.",
     "Preserve the student's main position, scenario, relationship, request, reasons, and examples when the student essay provides them. If missing, infer modest prompt-related details.",
     body.task === "Task 1"
-      ? "Each slot should normally contain 7-14 English words so the final fixed-template letter reaches about 170-200 words."
-      : "Each slot should normally contain 10-18 English words so the final fixed-template essay reaches about 260-290 words.",
+      ? "Each slot should normally contain 4-10 English words. Do not force the letter longer just to reach 150 words."
+      : "Each slot should normally contain 6-14 English words. Do not force the essay longer just to reach 250 words.",
     "Each slot must be one phrase or one simple sentence fragment that fits inside the fixed line. No numbering, no markdown, no paragraph text inside a slot.",
     "Do not end slot values with a full stop, question mark, exclamation mark, colon, or semicolon because the server template adds punctuation.",
     "Do not repeat template lead-in words inside slots. Avoid: Dear, For example, As a result, This means that, Please let me know if, I would be happy to, I would like to, The first reason/problem is that.",
@@ -551,23 +551,16 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
 }
 
 function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
-  const minWords = body.task === "Task 1" ? 155 : 260;
   return [
-    "You are an IELTS General Training Band 5.0 safety editor.",
-    "You will receive a fixed-template practice answer. Keep the same task, paragraph order, and simple Band 5 style.",
+    "You are an IELTS General Training Band 5.0 template-format safety editor.",
+    "You will receive a fixed-template practice answer. Keep the same template format, same task, same paragraph order, and simple Band 5 style.",
     "You may delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
-    "Do not make the language advanced. Do not make it sound Band 7/8.",
-    "The goal is stable IELTS Band 5.0 in all four criteria, especially Lexical Resource and Grammatical Range and Accuracy.",
-    "The current risk is LR/GRA 4.5 when the answer is too formulaic, too repetitive, too generic, or has only very short simple sentences.",
-    "You may add one or two small prompt-related details if they make the writing clearer and more natural, but do not change the main answer.",
+    "Do not rewrite the essay freely. Do not chase a score by adding new content. Do not add filler just to reach 150 or 250 words.",
+    "The goal is a stable memorisable template: clear format, complete basic meaning, safe grammar, and words a Band 5 learner can copy.",
     "Use common but not childish topic words. Prefer clear words like local people, sleep, health, money, work, study, noise, rules, manager, meeting, family, problem, solution, useful, important.",
-    "Use a few safe complex sentences with because, when, if, although, and which. Keep them short and accurate.",
-    "Avoid very hard words, but do not make every sentence too short or too simple. Vary sentence openings a little.",
+    "Keep sentences short and accurate. Use because, when, if, and although only when the grammar is safe.",
     "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
-    body.task === "Task 1"
-      ? "For Task 1, aim for 170-190 words and clear useful details for all three bullet points."
-      : "For Task 2, aim for 280-310 words with clear basic explanation and one concrete example in each body paragraph.",
-    `Keep the answer at least ${minWords} words.`,
+    "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
     "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
     `Task: ${body.task}`,
@@ -587,9 +580,7 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
 function safePolishedEssay(value, fallback, task) {
   const text = String(value || "").trim();
   if (!text) return fallback;
-  const minWords = task === "Task 1" ? 150 : 250;
-  if (countWords(text) < minWords) return fallback;
-  if (countWords(text) < Math.max(120, Math.floor(countWords(fallback) * 0.75))) return fallback;
+  if (countWords(text) < Math.max(90, Math.floor(countWords(fallback) * 0.65))) return fallback;
   if (!/[.!?]\s*\n\n|Yours|Best wishes|Kind regards|In conclusion/i.test(text)) return fallback;
   return text;
 }
