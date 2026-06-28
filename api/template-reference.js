@@ -374,9 +374,9 @@ const TEMPLATE_SPECS = {
         "",
         `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult and create extra pressure for families or communities.`,
         "",
-        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}.`,
+        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem is not only personal but also social.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both individuals and society.`
+        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both individuals and society. Small changes in daily choices can make a clear difference.`
       ].join("\n");
     }
   }
