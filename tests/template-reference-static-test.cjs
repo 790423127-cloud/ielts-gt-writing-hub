@@ -59,7 +59,7 @@ function filledSlotsFor(templateId, topic = "this topic") {
   const result = buildTemplateReferenceResult(body, { filledSlots: slots });
   assert.doesNotMatch(result.referenceEssay, /\bsoundproof|residents|ensure|as soon as convenient|I would like to install\b|local local people/i);
   assert.match(result.referenceEssay, /better noise control|make sure|local people/i);
-  assert.match(result.referenceEssay, /because they cannot relax or sleep/i);
+  assert.match(result.referenceEssay, /The main result is that they cannot relax or sleep/i);
   assert.match(result.referenceEssay, /the best solution is for your team to/i);
 }
 

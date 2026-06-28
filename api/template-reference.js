@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -307,8 +307,17 @@ function cleanSlotByKey(key, value) {
   if (/^(solutionOrAction|finalSolution)$/i.test(key)) {
     text = stripLead(text, [/^(people should\s+)/i, /^(we should\s+)/i, /^(governments should\s+)/i]);
   }
-  if (/^(bullet1Reason|bullet1Extra|bullet2Impact|benefitOrResult|explanation1|explanation2|mainReason)$/i.test(key) && startsWithFiniteVerb(text)) {
+  if (/^(bullet1Reason|bullet1Extra|bullet2Impact|benefitOrResult|explanation1|explanation2|mainReason|summaryPoint1|summaryPoint2)$/i.test(key) && startsWithFiniteVerb(text)) {
     text = `they ${text}`;
+  }
+  if (/^(summaryPoint1|summaryPoint2)$/i.test(key)) {
+    text = text
+      .replace(/^they\s+(makes|causes|creates|helps|affects)\b/i, "it $1")
+      .replace(/^they\s+make\b/i, "it makes")
+      .replace(/^they\s+cause\b/i, "it causes")
+      .replace(/^they\s+create\b/i, "it creates")
+      .replace(/^they\s+help\b/i, "it helps")
+      .replace(/^they\s+affect\b/i, "it affects");
   }
   if (/^(requestedAction)$/i.test(key)) {
     text = text.replace(/^finish music\b/i, "finish the music");
@@ -350,9 +359,9 @@ const TEMPLATE_SPECS = {
         "",
         `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. Although this may seem like a small matter, it affects my daily life.`,
         "",
-        `First of all, ${slots.bullet1Answer}. This usually happens ${timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
+        `First of all, ${slots.bullet1Answer}. This usually happens ${timePlace}, and this is a problem because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
-        `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}, which is a real problem.`,
+        `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup}. The main result is that ${slots.bullet2Impact}, which is a real problem.`,
         "",
         `Finally, I think the best solution is for your team to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} when you can. I believe this would be fair and helpful, and it would help me avoid the same problem in the future.`,
         "",
@@ -451,7 +460,7 @@ const TEMPLATE_SPECS = {
         "",
         `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem can affect one person and also other people.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if people ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
+        `In conclusion, ${slots.topic} can create problems because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if people ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
       ].join("\n");
     }
   }
@@ -506,6 +515,8 @@ function buildPrompt(body, spec, templateId) {
     "For action slots after 'please', 'the best solution is to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
     "For situation slots after 'If people', do not start with 'when' or 'if'. For result slots after 'they may' or 'people may', do not start with 'they may', 'people may', or 'this leads to'.",
     "For sideA and sideB, do not start with 'some people think' or 'others believe'. For opinion and yourSide, do not start with 'I think', 'I believe', 'I agree', or 'I prefer'.",
+    "For Task 2 opinion templates, keep opinion, reason2, situation, result, extraCondition, finalComparison, and mainReason on the same side. Do not say you prefer one side and then support the opposite side.",
+    "For Task 2 problem/solution templates, summaryPoint1 and summaryPoint2 must fit after 'because'. Prefer simple clauses such as 'it makes people tired' or 'it can harm health'.",
     "For overallJudgement, make it fit after 'I think'. Do not start with 'I think' or include slash alternatives.",
     `Task: ${body.task}`,
     `Selected fixed template: ${templateId} - ${spec.name}`,
@@ -532,6 +543,8 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
     "Return the same filledSlots object with improved values. Keep every required slot key. Do not add new keys.",
     "Use simple Band 5 words and safe grammar. Prefer short subject + verb phrases.",
     "Fix these common problems if present: missing subject after because, repeated I/we/people, 'Some people think like', 'Please let me know whether come', 'I would be happy to I will', 'This shows that this', difficult vocabulary.",
+    "For Task 2 opinion templates, check that the opinion, body paragraph 3, and conclusion support the same side. If they conflict, change the slot values so the answer has one clear position.",
+    "For Task 2 problem/solution templates, check that summaryPoint1 and summaryPoint2 are simple clauses that fit after 'because', such as 'it makes people tired' or 'it can harm health'.",
     "Do not use difficult or formal words such as soundproofing, disturbance, inconvenient, significant, considerable, facilitate, implement, utilise, residents, constant, ensure, consequently, nevertheless.",
     "Do not put template lead-in words inside slots. Do not return a full paragraph inside any slot.",
     `Task: ${body.task}`,
@@ -569,6 +582,8 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Avoid broken relative clauses. Do not write: 'for people who try new things often have more fun'. Instead write: 'for people who try new things often' or 'because people can have more fun'.",
     "If a sentence contains 'which', make sure it clearly refers to the idea before it and has a complete verb.",
     "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
+    "Check logic as well as grammar: do not let a Task 2 opinion answer support one side in the introduction and the opposite side in the conclusion.",
+    "For problem/solution essays, do not write that a problem 'happens because' of its result. Say it 'can create problems because' the result is harmful.",
     "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
     "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
