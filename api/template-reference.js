@@ -253,6 +253,9 @@ function cleanSlotByKey(key, value) {
       /^(i would like to\s+)/i,
       /^(i would be happy to\s+)/i,
       /^(i can\s+)/i,
+      /^(i will\s+)/i,
+      /^(i would\s+)/i,
+      /^(i'll\s+)/i,
       /^(we could\s+)/i,
       /^(let me know (if|whether)\s+)/i,
       /^(please let me know (if|whether)\s+)/i
@@ -295,7 +298,7 @@ function cleanSlotByKey(key, value) {
     text = stripLead(text, [/^(they may\s+)/i, /^(people may\s+)/i, /^(they\s+)/i, /^(people\s+)/i, /^(this leads to\s+)/i, /^(this can lead to\s+)/i]);
   }
   if (/^(explanation1|explanation2)$/i.test(key)) {
-    text = stripLead(text, [/^(this shows that\s+)/i]);
+    text = stripLead(text, [/^(this shows that\s+)/i, /^(this\s+)/i]);
   }
   if (/^(summaryPoint1|summaryPoint2)$/i.test(key)) {
     text = stripLead(text, [/^(the main reasons? (is|are)\s+)/i, /^(the results? (is|are)\s+)/i]);
@@ -426,7 +429,7 @@ const TEMPLATE_SPECS = {
         "",
         `On the other hand, I believe my view is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
-        `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result.`
+        `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result. This is why people should think carefully before making a choice.`
       ].join("\n");
     }
   },
