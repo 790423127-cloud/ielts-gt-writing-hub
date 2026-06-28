@@ -62,7 +62,7 @@ function countWords(text) {
   return (String(text || "").trim().match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length;
 }
 
-function localWarnings(text) {
+function localWarnings(text, task) {
   const warnings = [];
   const checks = [
     [/Dear the\b/i, "awkward greeting: Dear the ..."],
@@ -90,6 +90,9 @@ function localWarnings(text) {
   for (const [pattern, label] of checks) {
     if (pattern.test(text)) warnings.push(label);
   }
+  const words = countWords(text);
+  if (task === "Task 1" && words < 150) warnings.push(`Task 1 below 150 words: ${words}`);
+  if (task === "Task 2" && words < 250) warnings.push(`Task 2 below 250 words: ${words}`);
   return warnings;
 }
 
@@ -124,7 +127,7 @@ async function generate(prompt) {
     templateId: data.templateId,
     templateUsed: data.templateUsed,
     wordCount: countWords(essay),
-    warnings: localWarnings(essay),
+    warnings: localWarnings(essay, prompt.task),
     essay,
     filledSlots: data.filledSlots || {}
   };

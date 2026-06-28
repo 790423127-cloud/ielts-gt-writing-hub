@@ -276,7 +276,7 @@ const TEMPLATE_SPECS = {
         "",
         `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I thought it would be best to explain the situation clearly, because this matter is important to me and I value your understanding.`,
         "",
-        `First, ${slots.bullet1Answer}. This is because ${slots.bullet1Reason}. I know this may be a little inconvenient, but ${slots.extraExplanation}.`,
+        `First, ${slots.bullet1Answer}. This is because ${slots.bullet1Reason}. I know this may be a little inconvenient, but ${slots.extraExplanation}. This detail matters because it helps both of us avoid confusion.`,
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This would help because ${slots.benefitOrResult}.`,
         "",
@@ -345,9 +345,9 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}. It also shows how everyday habits can create bigger problems over time.`,
+        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}. It also shows how everyday habits can create bigger problems over time. For this reason, it is useful to look at the causes and possible solutions.`,
         "",
-        `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult.`,
+        `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult and create extra pressure for families or communities.`,
         "",
         `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}.`,
         "",
