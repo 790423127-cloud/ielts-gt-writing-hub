@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v3";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v4";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -282,6 +282,9 @@ function cleanSlotByKey(key, value) {
   if (/^(feelingOrDetail)$/i.test(key)) {
     text = stripLead(text, [/^(it was|it is|it will be)\s+/i]);
   }
+  if (/^(openingReason)$/i.test(key) && /\b(sorry|apolog)/i.test(text)) {
+    text = "I wanted to explain what happened";
+  }
   if (/^(sideA|sideB)$/i.test(key)) {
     text = stripLead(text, [/^(some people think\s+)/i, /^(other people believe\s+)/i, /^(others believe\s+)/i]);
     text = makePeopleClause(text);
@@ -437,7 +440,7 @@ const TEMPLATE_SPECS = {
         "",
         `On the one hand, the first view can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
         "",
-        `On the other hand, the second view can also be reasonable because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
+        `On the other hand, the second view can also be reasonable because ${slots.reason2}. For example, this can help people when ${slots.extraCondition}. Therefore, this view is understandable for many people.`,
         "",
         `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people make decisions in study, work, or family life. This is why people should think carefully before making a choice.`
       ].join("\n");
@@ -458,9 +461,9 @@ const TEMPLATE_SPECS = {
         "",
         `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult and create extra pressure for families or local areas.`,
         "",
-        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem can affect one person and also other people.`,
+        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This simple habit can help people sleep more easily and feel better the next day.`,
         "",
-        `In conclusion, ${slots.topic} can create problems because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if people ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
+        `In conclusion, ${slots.topic} can create problems because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if people ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for families and workplaces. Small changes in daily choices can make a clear difference.`
       ].join("\n");
     }
   }
@@ -589,7 +592,9 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Avoid broken relative clauses. Do not write: 'for people who try new things often have more fun'. Instead write: 'for people who try new things often' or 'because people can have more fun'.",
     "If a sentence contains 'which', make sure it clearly refers to the idea before it and has a complete verb.",
     "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
+    "Do not repeat the same action in two sentences in a row. If the solution sentence and request sentence are the same, make the first one general and the second one specific.",
     "Check logic as well as grammar: in a Task 2 discuss-both-views answer, paragraph 2 should discuss one side and paragraph 3 should discuss the other side. The conclusion should state the final opinion clearly.",
+    "In the second body paragraph of a discuss-both-views essay, explain why the second view is reasonable. Do not attack the second view in that paragraph.",
     "For problem/solution essays, do not write that a problem 'happens because' of its result. Say it 'can create problems because' the result is harmful.",
     "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
@@ -617,9 +622,13 @@ function safePolishedEssay(value, fallback, task) {
     .replace(/This is especially true when ([^.!?]{5,90}),\s*they may\s+/gi, "When $1, they may ")
     .replace(/This is especially true when ([^.!?]{5,90}),\s*they\s+/gi, "When $1, they ")
     .replace(/\bI am sorry because\b/gi, "I am sorry that")
+    .replace(/I have been meaning to write to you about this for a while because I am sorry [^.]*\./gi, "I wanted to write sooner because I did not want you to feel upset.")
     .replace(/\bBecause of this, they did not die\b/gi, "Because of this, they stayed healthy")
     .replace(/\bdifficulties getting enough sleep can create problems because it affects\b/gi, "difficulties getting enough sleep can create problems because they affect")
     .replace(/\bI would be happy to ([^.]{3,80})\. I would be happy to ([^.]{3,80})\./gi, "I would be happy to $1. I can also $2.")
+    .replace(/the best solution is for your team to ([^.]{3,80})\. If possible, please \1\./gi, "the best solution is for your team to control the problem. If possible, please $1.")
+    .replace(/\bPlease let me know if I can cook your favourite food\./gi, "Please let me know if you can come.")
+    .replace(/\bThis can help one person and also other people\./gi, "This simple habit can help people sleep more easily and feel better the next day.")
     .replace(/for people who ([^,.!?]{3,80}) often have more fun/gi, "because people who $1 can often have more fun")
     .replace(/for everyone can enjoy life more/gi, "because everyone can enjoy life more")
     .split(/\n/)
