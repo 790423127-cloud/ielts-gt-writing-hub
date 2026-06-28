@@ -215,11 +215,17 @@ function cleanSlotByKey(key, value) {
   if (/^(situation|extraCondition)$/i.test(key)) {
     text = stripLead(text, [/^(when\s+)/i, /^(if\s+)/i]);
   }
-  if (/^(result|result1|result2)$/i.test(key)) {
-    text = stripLead(text, [/^(they may\s+)/i, /^(people may\s+)/i, /^(this leads to\s+)/i, /^(this can lead to\s+)/i]);
+  if (/^(result|result1)$/i.test(key)) {
+    text = stripLead(text, [/^(they may\s+)/i, /^(people may\s+)/i, /^(they\s+)/i, /^(people\s+)/i, /^(this leads to\s+)/i, /^(this can lead to\s+)/i]);
   }
   if (/^(explanation1|explanation2)$/i.test(key)) {
     text = stripLead(text, [/^(this shows that\s+)/i]);
+  }
+  if (/^(summaryPoint1|summaryPoint2)$/i.test(key)) {
+    text = stripLead(text, [/^(the main reasons? (is|are)\s+)/i, /^(the results? (is|are)\s+)/i]);
+  }
+  if (/^(solutionOrAction|finalSolution)$/i.test(key)) {
+    text = stripLead(text, [/^(people should\s+)/i, /^(we should\s+)/i, /^(governments should\s+)/i]);
   }
   if (/^(overallJudgement)$/i.test(key)) {
     text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(it is mostly\s+)/i]);
