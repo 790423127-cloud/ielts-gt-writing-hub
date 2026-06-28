@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-structure-slots-only-ai-slot-review";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -550,6 +550,37 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
   ].join("\n\n");
 }
 
+function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
+  return [
+    "You are an IELTS General Training Band 5.0 grammar safety editor.",
+    "You will receive a fixed-template practice answer. Keep the same task, same meaning, same paragraph order, and same simple Band 5 style.",
+    "You may delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
+    "Do not make the language advanced. Do not add new ideas. Do not make it sound Band 7/8. Do not use difficult vocabulary.",
+    "The goal is stable IELTS Grammar 5.0: basic sentences should be mostly accurate, with clear subjects and verbs.",
+    "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
+    "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
+    `Task: ${body.task}`,
+    `Selected fixed template: ${templateId} - ${spec.name}`,
+    `Question title: ${body.questionTitle || "(none)"}`,
+    `Question prompt:\n${clipText(body.questionPrompt, 3000)}`,
+    `Essay to polish:\n${clipText(referenceEssay, 7000)}`,
+    "Return strict JSON only with exactly this shape:",
+    JSON.stringify({
+      ok: true,
+      referenceEssay: "...",
+      grammarPolishNotesZh: ["..."]
+    }, null, 2)
+  ].join("\n\n");
+}
+
+function safePolishedEssay(value, fallback) {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  if (countWords(text) < Math.max(120, Math.floor(countWords(fallback) * 0.75))) return fallback;
+  if (!/[.!?]\s*\n\n|Yours|Best wishes|Kind regards|In conclusion/i.test(text)) return fallback;
+  return text;
+}
+
 async function callDeepSeek(prompt, temperature = 0.25) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY");
@@ -627,10 +658,19 @@ async function generateTemplateReference(body) {
     slotNotesZh: Array.isArray(reviewPayload.auditNotesZh) ? reviewPayload.auditNotesZh : aiPayload.slotNotesZh,
     memorisableSentences: aiPayload.memorisableSentences
   });
+  const polishPayload = await callDeepSeek(
+    buildFinalGrammarPolishPrompt(body, spec, templateId, reviewed.referenceEssay),
+    0.05
+  );
+  const polishedEssay = safePolishedEssay(polishPayload.referenceEssay, reviewed.referenceEssay);
   return {
     ...reviewed,
+    referenceEssay: polishedEssay,
+    wordCount: countWords(polishedEssay),
     aiSelfReviewedSlots: true,
+    aiFinalGrammarPolish: true,
     aiSelfReviewNotesZh: Array.isArray(reviewPayload.auditNotesZh) ? reviewPayload.auditNotesZh.slice(0, 6).map(String) : [],
+    aiFinalGrammarPolishNotesZh: Array.isArray(polishPayload.grammarPolishNotesZh) ? polishPayload.grammarPolishNotesZh.slice(0, 6).map(String) : [],
     firstPassWordCount: firstPass.wordCount
   };
 }
