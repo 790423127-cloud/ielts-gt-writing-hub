@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v2";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -357,7 +357,7 @@ const TEMPLATE_SPECS = {
       return [
         `Dear ${recipient},`,
         "",
-        `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. Although this may seem like a small matter, it affects my daily life.`,
+        `I am writing to ${slots.purposeVerb} ${slots.topic}. The reason is that ${slots.background}. Although this may seem like a small matter, it affects my daily life.`,
         "",
         `First of all, ${slots.bullet1Answer}. This usually happens ${timePlace}, and this is a problem because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
@@ -439,7 +439,7 @@ const TEMPLATE_SPECS = {
         "",
         `On the other hand, I believe my view is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
-        `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result. This is why people should think carefully before making a choice.`
+        `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people make decisions in study, work, or family life. This is why people should think carefully before making a choice.`
       ].join("\n");
     }
   },
@@ -572,9 +572,12 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "The goal is a stable memorisable template: clear format, complete basic meaning, Grammar 5.0 safety, and words a Band 5 learner can copy.",
     "Grammar 5.0 safety means: most basic sentences have clear subjects and verbs; verb tense is mostly correct; there are a few safe complex sentences, but no broken sentence parts.",
     "Use common but not childish topic words. Prefer clear words like local people, sleep, health, money, work, study, noise, rules, manager, meeting, family, problem, solution, useful, important.",
-    "Keep vocabulary simple. Do not use advanced words just to raise Lexical Resource.",
+    "Keep vocabulary simple, but make it precise. Use everyday collocations such as loud noise, sleep properly, concentrate at work, daily routine, feel under pressure, reduce the noise, solve the problem, keep in touch, make a plan, and learn from experience.",
+    "Do not overuse vague words such as good, bad, important, problem, people, thing, and way. Replace some of them with simple precise words from the topic.",
+    "Do not use advanced words just to raise Lexical Resource.",
     "Keep sentences short and accurate, but do not leave the whole answer as only very short simple sentences.",
     "For Grammar 5.0, include at least three safe grammar patterns in the full answer: one because sentence, one if/when sentence, and one although/which sentence.",
+    "Target Grammar 5.0, not 4.5: each body paragraph should include one controlled complex sentence, but the sentence must still be easy to copy.",
     "These grammar patterns must use simple words. Example level: 'Although this is a small problem, it affects my daily life.' / 'This can help people, which is useful for families.'",
     "If grammar is too simple, combine two existing short ideas with because, when, if, although, or which. Do not add a new idea just to make the answer longer.",
     "Avoid sentence fragments like 'This is because I was tired.' when it follows another very short sentence; combine it into one clear sentence when possible.",
@@ -586,6 +589,8 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "For problem/solution essays, do not write that a problem 'happens because' of its result. Say it 'can create problems because' the result is harmful.",
     "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
+    "Fix unnatural simple sentences: change 'I am sorry because...' to 'I am sorry that...'; change 'Because of this, they did not die' to 'Because of this, they stayed healthy'; change singular 'it' to plural 'they' when the subject is plural.",
+    "For Task 2, make sure the final paragraph does not introduce a new or opposite opinion. It should repeat the same opinion in simpler words.",
     "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
     `Task: ${body.task}`,
     `Selected fixed template: ${templateId} - ${spec.name}`,
@@ -607,6 +612,9 @@ function safePolishedEssay(value, fallback, task) {
   text = text
     .replace(/This is especially true when ([^.!?]{5,90}),\s*they may\s+/gi, "When $1, they may ")
     .replace(/This is especially true when ([^.!?]{5,90}),\s*they\s+/gi, "When $1, they ")
+    .replace(/\bI am sorry because\b/gi, "I am sorry that")
+    .replace(/\bBecause of this, they did not die\b/gi, "Because of this, they stayed healthy")
+    .replace(/\bdifficulties getting enough sleep can create problems because it affects\b/gi, "difficulties getting enough sleep can create problems because they affect")
     .replace(/for people who ([^,.!?]{3,80}) often have more fun/gi, "because people who $1 can often have more fun")
     .replace(/for everyone can enjoy life more/gi, "because everyone can enjoy life more")
     .split(/\n/)
