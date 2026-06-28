@@ -551,12 +551,17 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
 }
 
 function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
+  const minWords = body.task === "Task 1" ? 155 : 260;
   return [
-    "You are an IELTS General Training Band 5.0 grammar safety editor.",
+    "You are an IELTS General Training Band 5.0 safety editor.",
     "You will receive a fixed-template practice answer. Keep the same task, same meaning, same paragraph order, and same simple Band 5 style.",
     "You may delete repeated words, add missing subjects or small grammar words, fix verb tense, fix pronouns, and split or join short sentences if needed.",
-    "Do not make the language advanced. Do not add new ideas. Do not make it sound Band 7/8. Do not use difficult vocabulary.",
-    "The goal is stable IELTS Grammar 5.0: basic sentences should be mostly accurate, with clear subjects and verbs.",
+    "Do not make the language advanced. Do not add new ideas. Do not make it sound Band 7/8.",
+    "The goal is stable IELTS Band 5.0 in all four criteria, especially Lexical Resource and Grammatical Range and Accuracy.",
+    "Use common but not childish topic words. Prefer clear words like local people, sleep, health, money, work, study, noise, rules, manager, meeting, family, problem, solution, useful, important.",
+    "Use a few safe complex sentences with because, when, if, although, and which. Keep them short and accurate.",
+    "Avoid very hard words, but do not make every sentence too short or too simple.",
+    `Keep the answer at least ${minWords} words.`,
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
     "Keep Task 1 letters as letters with greeting and sign-off. Keep Task 2 as four paragraphs.",
     `Task: ${body.task}`,
@@ -573,9 +578,11 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
   ].join("\n\n");
 }
 
-function safePolishedEssay(value, fallback) {
+function safePolishedEssay(value, fallback, task) {
   const text = String(value || "").trim();
   if (!text) return fallback;
+  const minWords = task === "Task 1" ? 150 : 250;
+  if (countWords(text) < minWords) return fallback;
   if (countWords(text) < Math.max(120, Math.floor(countWords(fallback) * 0.75))) return fallback;
   if (!/[.!?]\s*\n\n|Yours|Best wishes|Kind regards|In conclusion/i.test(text)) return fallback;
   return text;
@@ -662,7 +669,7 @@ async function generateTemplateReference(body) {
     buildFinalGrammarPolishPrompt(body, spec, templateId, reviewed.referenceEssay),
     0.05
   );
-  const polishedEssay = safePolishedEssay(polishPayload.referenceEssay, reviewed.referenceEssay);
+  const polishedEssay = safePolishedEssay(polishPayload.referenceEssay, reviewed.referenceEssay, body.task);
   return {
     ...reviewed,
     referenceEssay: polishedEssay,
