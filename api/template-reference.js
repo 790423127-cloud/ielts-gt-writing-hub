@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-structure-slots-only";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-structure-slots-only-ai-slot-review";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -523,6 +523,33 @@ function buildPrompt(body, spec, templateId) {
   ].join("\n\n");
 }
 
+function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEssay) {
+  return [
+    "You are checking IELTS Band 5.0-5.5 fixed-template writing for grammar safety.",
+    "CRITICAL: Do not write a new essay. Do not change the template. Only improve slot values.",
+    "The final essay below was composed by a fixed server template from the filled slots.",
+    "Your job is to identify slot values that cause grammar errors, repeated words, awkward joins, or too-difficult vocabulary.",
+    "Return the same filledSlots object with improved values. Keep every required slot key. Do not add new keys.",
+    "Use simple Band 5 words and safe grammar. Prefer short subject + verb phrases.",
+    "Fix these common problems if present: missing subject after because, repeated I/we/people, 'Some people think like', 'Please let me know whether come', 'I would be happy to I will', 'This shows that this', difficult vocabulary.",
+    "Do not use difficult or formal words such as soundproofing, disturbance, inconvenient, significant, considerable, facilitate, implement, utilise, residents, constant, ensure, consequently, nevertheless.",
+    "Do not put template lead-in words inside slots. Do not return a full paragraph inside any slot.",
+    `Task: ${body.task}`,
+    `Selected fixed template: ${templateId} - ${spec.name}`,
+    `Question title: ${body.questionTitle || "(none)"}`,
+    `Question prompt:\n${clipText(body.questionPrompt, 3000)}`,
+    `Current filled slots:\n${JSON.stringify(filledSlots, null, 2)}`,
+    `Composed essay to audit:\n${clipText(referenceEssay, 6000)}`,
+    "Return strict JSON only with exactly this shape:",
+    JSON.stringify({
+      ok: true,
+      filledSlots: JSON.parse(`{${slotInstruction(spec)}}`),
+      grammarRiskFixed: true,
+      auditNotesZh: ["..."]
+    }, null, 2)
+  ].join("\n\n");
+}
+
 async function callDeepSeek(prompt, temperature = 0.25) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY");
@@ -589,7 +616,23 @@ async function generateTemplateReference(body) {
   const templateId = templateIdForBody(body);
   const spec = TEMPLATE_SPECS[templateId];
   const aiPayload = await callDeepSeek(buildPrompt(body, spec, templateId), 0.15);
-  return buildTemplateReferenceResult(body, aiPayload);
+  const firstPass = buildTemplateReferenceResult(body, aiPayload);
+  const reviewPayload = await callDeepSeek(
+    buildSlotReviewPrompt(body, spec, templateId, firstPass.filledSlots, firstPass.referenceEssay),
+    0.05
+  );
+  const reviewed = buildTemplateReferenceResult(body, {
+    ...aiPayload,
+    filledSlots: reviewPayload.filledSlots || firstPass.filledSlots,
+    slotNotesZh: Array.isArray(reviewPayload.auditNotesZh) ? reviewPayload.auditNotesZh : aiPayload.slotNotesZh,
+    memorisableSentences: aiPayload.memorisableSentences
+  });
+  return {
+    ...reviewed,
+    aiSelfReviewedSlots: true,
+    aiSelfReviewNotesZh: Array.isArray(reviewPayload.auditNotesZh) ? reviewPayload.auditNotesZh.slice(0, 6).map(String) : [],
+    firstPassWordCount: firstPass.wordCount
+  };
 }
 
 module.exports = async function handler(req, res) {
