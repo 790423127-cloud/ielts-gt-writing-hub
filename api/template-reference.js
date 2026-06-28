@@ -165,6 +165,42 @@ function formatTimePlace(value) {
   return `around ${text}`;
 }
 
+const BAND5_WORD_SWAPS = [
+  [/\bsoundproofing materials?\b/gi, "better noise control"],
+  [/\bsoundproofing\b/gi, "noise control"],
+  [/\bdisturbing\b/gi, "bothering"],
+  [/\bdisturb\b/gi, "bother"],
+  [/\bconstant\b/gi, "continuous"],
+  [/\bensure\b/gi, "make sure"],
+  [/\binconvenient\b/gi, "a problem"],
+  [/\bconvenient\b/gi, "easy"],
+  [/\bappreciate\b/gi, "thank you for"],
+  [/\bresidents\b/gi, "local people"],
+  [/\bresident\b/gi, "local person"],
+  [/\bapproximately\b/gi, "about"],
+  [/\btherefore\b/gi, "so"],
+  [/\bbeneficiary\b/gi, "people"],
+  [/\bcommunities\b/gi, "local areas"],
+  [/\bcommunity\b/gi, "local area"],
+  [/\brealistic\b/gi, "real"],
+  [/\bpractical\b/gi, "useful"],
+  [/\bflexibility\b/gi, "more choice"],
+  [/\bfinancial\b/gi, "money"],
+  [/\benvironmental\b/gi, "about the environment"],
+  [/\bnegative development\b/gi, "bad change"],
+  [/\bpositive development\b/gi, "good change"]
+];
+
+function applyBand5Vocabulary(value) {
+  let text = String(value || "");
+  for (const [pattern, replacement] of BAND5_WORD_SWAPS) text = text.replace(pattern, replacement);
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function startsWithFiniteVerb(text) {
+  return /^(cannot|can|need|needs|have|has|will|would|should|may|might|want|wants|feel|feels|make|makes|cause|causes|create|creates|help|helps|bother|bothers)\b/i.test(String(text || "").trim());
+}
+
 function cleanSlotByKey(key, value) {
   const commonLead = [
     /^(for example,?\s*)/i,
@@ -185,6 +221,7 @@ function cleanSlotByKey(key, value) {
     .replace(/\breason\/problem\b/gi, "point")
     .replace(/\s+/g, " ")
     .trim();
+  text = applyBand5Vocabulary(text);
   if (/^(nextStep|requestOrPlan|requestedAction|bullet3Action|bullet3Answer|offerHelp|sharedAction)$/i.test(key)) {
     text = stripLead(text, [
       /^(please\s+)/i,
@@ -239,7 +276,7 @@ function cleanSlotByKey(key, value) {
   if (/^(solutionOrAction|finalSolution)$/i.test(key)) {
     text = stripLead(text, [/^(people should\s+)/i, /^(we should\s+)/i, /^(governments should\s+)/i]);
   }
-  if (/^(bullet2Impact|benefitOrResult|explanation2)$/i.test(key) && /^(cannot|can|need|needs|have|has|will|would|should|may|might)\b/i.test(text)) {
+  if (/^(bullet1Reason|bullet1Extra|bullet2Impact|benefitOrResult|explanation1|explanation2|mainReason)$/i.test(key) && startsWithFiniteVerb(text)) {
     text = `they ${text}`;
   }
   if (/^(requestedAction)$/i.test(key)) {
@@ -254,7 +291,7 @@ function cleanSlotByKey(key, value) {
   if (!/^(recipientName|friendName)$/i.test(key) && /^[A-Z][a-z]/.test(text) && !/^I\b/.test(text)) {
     text = text.charAt(0).toLowerCase() + text.slice(1);
   }
-  return text;
+  return applyBand5Vocabulary(text);
 }
 
 const TEMPLATE_SPECS = {
@@ -273,13 +310,13 @@ const TEMPLATE_SPECS = {
       return [
         `Dear ${recipient},`,
         "",
-        `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. I hope this letter explains the matter clearly and politely.`,
+        `I am writing to ${slots.purposeVerb} ${slots.topic}. I am doing this because ${slots.background}. I hope this letter explains the problem clearly.`,
         "",
         `First of all, ${slots.bullet1Answer}. This usually happens ${timePlace}, and it has become important because ${slots.bullet1Reason}. In my opinion, this point needs attention because ${slots.bullet1Extra}.`,
         "",
         `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}.`,
         "",
-        `Finally, I would like to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} as soon as convenient. I believe this would be a fair and helpful solution, and it would help me avoid the same difficulty in the future.`,
+        `Finally, I think the best solution is to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} when you can. I believe this would be fair and helpful, and it would help me avoid the same problem in the future.`,
         "",
         recipient === "Sir or Madam" ? "Yours faithfully," : "Yours sincerely,",
         "John Smith"
@@ -299,13 +336,13 @@ const TEMPLATE_SPECS = {
       return [
         `Dear ${slots.recipientName || "[Name]"},`,
         "",
-        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I thought it would be best to explain the situation clearly, because this matter is important to me and I value your understanding.`,
+        `I hope you are well. I am writing to ${slots.purposeVerb} ${slots.topic}. I want to explain the situation clearly because this matter is important to me.`,
         "",
-        `First, ${slots.bullet1Answer}. This is because ${slots.bullet1Reason}. I know this may be a little inconvenient, but ${slots.extraExplanation}. This detail matters because it helps both of us avoid confusion.`,
+        `First, ${slots.bullet1Answer}. This is because ${slots.bullet1Reason}. I know this may be a small problem, but ${slots.extraExplanation}. This detail is important because it helps both of us understand the situation.`,
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This would help because ${slots.benefitOrResult}.`,
         "",
-        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed, and I really appreciate your patience with this situation.`,
+        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed, and thank you for understanding this situation.`,
         "",
         "Kind regards,",
         "John Smith"
@@ -349,13 +386,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Many people have different opinions about ${slots.topic}. Some people think ${slots.sideA}, while others believe ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question matters because it can influence normal choices in study, work, and family life.`,
+        `Many people have different opinions about ${slots.topic}. Some people think ${slots.sideA}, while others believe ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question is important because it can affect normal choices in study, work, and family life.`,
         "",
         `On the one hand, ${slots.sideA} can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
         "",
         `On the other hand, I believe ${slots.yourSide} is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
-        `In conclusion, although ${slots.oppositeSide} may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more practical for ${slots.beneficiary}, especially when people want a balanced and realistic result.`
+        `In conclusion, although ${slots.oppositeSide} may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result.`
       ].join("\n");
     }
   },
@@ -370,13 +407,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}. It also shows how everyday habits can create bigger problems over time. For this reason, it is useful to look at the causes and possible solutions.`,
+        `Nowadays, ${slots.topic} is becoming common. There are two main points to consider, and I think ${slots.overallJudgement}. This issue is important because it can affect ${slots.affectedArea}. It also shows how daily habits can create bigger problems over time. For this reason, it is useful to look at the causes and possible answers.`,
         "",
-        `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult and create extra pressure for families or communities.`,
+        `The first point is that ${slots.point1}. This means that ${slots.explanation1}. For example, ${slots.example1}. As a result, people may ${slots.result1}, which can make daily life more difficult and create extra pressure for families or local areas.`,
         "",
-        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem is not only personal but also social.`,
+        `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem can affect one person and also other people.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both individuals and society. Small changes in daily choices can make a clear difference.`
+        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
       ].join("\n");
     }
   }
@@ -414,7 +451,10 @@ function buildPrompt(body, spec, templateId) {
     "You are an IELTS General Training Writing tutor for a Chinese learner aiming for Band 5.0-5.5.",
     "CRITICAL: Do NOT write a full essay or letter. Do NOT change the template structure. Only fill the requested slots.",
     "The server will compose the final answer using a fixed template. Your job is only to provide short slot values that fit grammatically into the fixed lines.",
-    "Use simple, learnable Band 5.0-5.5 language. Do not use Band 8/9 vocabulary.",
+    "Use very simple, learnable Band 5.0-5.5 language. Prefer common words that a lower-intermediate learner can copy in an exam.",
+    "Keep grammar safe: use short subject + verb phrases. Avoid long noun phrases and avoid complex clauses inside slots.",
+    "Avoid difficult words when a simple word works. Prefer: local people, problem, help, make sure, buy, use, work, study, money, time, noise, health, family, school, company.",
+    "Do not use difficult or formal words such as soundproofing, disturbance, inconvenient, significant, considerable, facilitate, implement, utilise, residents, constant, ensure, consequently, nevertheless.",
     "Preserve the student's main position, scenario, relationship, request, reasons, and examples when the student essay provides them. If missing, infer modest prompt-related details.",
     body.task === "Task 1"
       ? "Each slot should normally contain 7-14 English words so the final fixed-template letter reaches about 170-200 words."
@@ -425,7 +465,7 @@ function buildPrompt(body, spec, templateId) {
     "Do not use slash choices such as positive/negative, better/worse, reason/problem, happened/will happen, or is/will be. Choose one natural phrase.",
     "For recipientName or friendName, return only a simple name or 'Sir or Madam'. Do not return roles such as 'the manager', 'the owner', or 'the organiser'.",
     "For purposeVerb, return only a short verb phrase such as 'complain about', 'ask about', 'thank you for', 'apologise for', 'invite you to', or 'apply for'.",
-    "For action slots after 'please', 'I would like to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
+    "For action slots after 'please', 'the best solution is to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
     "For situation slots after 'If people', do not start with 'when' or 'if'. For result slots after 'they may' or 'people may', do not start with 'they may', 'people may', or 'this leads to'.",
     "For sideA and sideB, do not start with 'some people think' or 'others believe'. For opinion and yourSide, do not start with 'I think', 'I believe', 'I agree', or 'I prefer'.",
     "For overallJudgement, make it fit after 'I think'. Do not start with 'I think' or include slash alternatives.",
@@ -510,7 +550,7 @@ function buildTemplateReferenceResult(body, aiPayload = {}) {
 async function generateTemplateReference(body) {
   const templateId = templateIdForBody(body);
   const spec = TEMPLATE_SPECS[templateId];
-  const aiPayload = await callDeepSeek(buildPrompt(body, spec, templateId), 0.25);
+  const aiPayload = await callDeepSeek(buildPrompt(body, spec, templateId), 0.15);
   return buildTemplateReferenceResult(body, aiPayload);
 }
 

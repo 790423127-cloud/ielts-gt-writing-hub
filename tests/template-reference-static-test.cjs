@@ -42,6 +42,30 @@ function filledSlotsFor(templateId, topic = "this topic") {
 {
   const body = normalizeBody({
     task: "Task 1",
+    letterStyle: "formal letter",
+    questionTitle: "Noise from a Community Hall",
+    questionPrompt: "Write a letter to the manager of a community hall about noise. Describe the problem, explain how it affects local people, and suggest action.",
+    essay: "The music is loud and local people cannot sleep."
+  });
+  const templateId = templateIdForBody(body);
+  assert.strictEqual(templateId, "task1-formal");
+  const slots = filledSlotsFor(templateId, "the noise from the local hall");
+  Object.assign(slots, {
+    bullet2Impact: "cannot relax or sleep",
+    bullet3Action: "install soundproofing materials",
+    requestedAction: "ensure loud activities finish before 9 pm soon",
+    affectedGroup: "residents"
+  });
+  const result = buildTemplateReferenceResult(body, { filledSlots: slots });
+  assert.doesNotMatch(result.referenceEssay, /\bsoundproofing|residents|ensure|as soon as convenient|I would like to install\b/i);
+  assert.match(result.referenceEssay, /better noise control|make sure|local people/i);
+  assert.match(result.referenceEssay, /because they cannot relax or sleep/i);
+  assert.match(result.referenceEssay, /the best solution is to/i);
+}
+
+{
+  const body = normalizeBody({
+    task: "Task 1",
     questionTitle: "Missing a Friend's Dinner",
     questionPrompt: "You need to write a letter to a close friend. In your letter: apologise for not coming, explain what happened, suggest a new time to meet.",
     essay: "I missed dinner because I was sick."
