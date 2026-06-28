@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v2";
+const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v3";
 const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
@@ -433,11 +433,11 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Many people have different opinions about ${slots.topic}. One view is that ${slots.sideA}. Another view is that ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question is important because it can affect normal choices in study, work, and family life.`,
+        `Many people have different opinions about ${slots.topic}. One view is that ${slots.sideA}. Another view is that ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view mainly because ${slots.mainReason}. This question is important because it can affect normal choices in study, work, and family life.`,
         "",
         `On the one hand, the first view can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
         "",
-        `On the other hand, I believe my view is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
+        `On the other hand, the second view can also be reasonable because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
         `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people make decisions in study, work, or family life. This is why people should think carefully before making a choice.`
       ].join("\n");
@@ -515,7 +515,8 @@ function buildPrompt(body, spec, templateId) {
     "For action slots after 'please', 'the best solution is to', 'I would be happy to', or 'we could', return an action phrase, not a full sentence.",
     "For situation slots after 'If people', do not start with 'when' or 'if'. For result slots after 'they may' or 'people may', do not start with 'they may', 'people may', or 'this leads to'.",
     "For sideA and sideB, do not start with 'some people think' or 'others believe'. For opinion and yourSide, do not start with 'I think', 'I believe', 'I agree', or 'I prefer'.",
-    "For Task 2 opinion templates, keep opinion, reason2, situation, result, extraCondition, finalComparison, and mainReason on the same side. Do not say you prefer one side and then support the opposite side.",
+    "For Task 2 opinion templates, reason1 must support sideA, and reason2/situation/result/extraCondition/finalComparison must support sideB. The conclusion opinion and mainReason must support the student's final opinion.",
+    "For Task 2 opinion templates, body paragraph 1 and body paragraph 2 must discuss different sides. Do not make both body paragraphs support the same side.",
     "For Task 2 problem/solution templates, summaryPoint1 and summaryPoint2 must fit after 'because'. Prefer simple clauses such as 'it makes people tired' or 'it can harm health'.",
     "For overallJudgement, make it fit after 'I think'. Do not start with 'I think' or include slash alternatives.",
     `Task: ${body.task}`,
@@ -543,7 +544,7 @@ function buildSlotReviewPrompt(body, spec, templateId, filledSlots, referenceEss
     "Return the same filledSlots object with improved values. Keep every required slot key. Do not add new keys.",
     "Use simple Band 5 words and safe grammar. Prefer short subject + verb phrases.",
     "Fix these common problems if present: missing subject after because, repeated I/we/people, 'Some people think like', 'Please let me know whether come', 'I would be happy to I will', 'This shows that this', difficult vocabulary.",
-    "For Task 2 opinion templates, check that the opinion, body paragraph 3, and conclusion support the same side. If they conflict, change the slot values so the answer has one clear position.",
+    "For Task 2 opinion templates, check that body paragraph 1 discusses sideA and body paragraph 2 discusses sideB. Then check that the conclusion gives one clear final opinion.",
     "For Task 2 problem/solution templates, check that summaryPoint1 and summaryPoint2 are simple clauses that fit after 'because', such as 'it makes people tired' or 'it can harm health'.",
     "Do not use difficult or formal words such as soundproofing, disturbance, inconvenient, significant, considerable, facilitate, implement, utilise, residents, constant, ensure, consequently, nevertheless.",
     "Do not put template lead-in words inside slots. Do not return a full paragraph inside any slot.",
@@ -578,6 +579,9 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Keep sentences short and accurate, but do not leave the whole answer as only very short simple sentences.",
     "For Grammar 5.0, include at least three safe grammar patterns in the full answer: one because sentence, one if/when sentence, and one although/which sentence.",
     "Target Grammar 5.0, not 4.5: each body paragraph should include one controlled complex sentence, but the sentence must still be easy to copy.",
+    body.task === "Task 1"
+      ? "For Task 1, keep the answer around 150-170 words when natural. If it is under 145 words, add one short useful detail, not filler."
+      : "For Task 2, keep the answer around 250-280 words when natural. If it is under 245 words, add one short useful explanation, not filler.",
     "These grammar patterns must use simple words. Example level: 'Although this is a small problem, it affects my daily life.' / 'This can help people, which is useful for families.'",
     "If grammar is too simple, combine two existing short ideas with because, when, if, although, or which. Do not add a new idea just to make the answer longer.",
     "Avoid sentence fragments like 'This is because I was tired.' when it follows another very short sentence; combine it into one clear sentence when possible.",
@@ -585,7 +589,7 @@ function buildFinalGrammarPolishPrompt(body, spec, templateId, referenceEssay) {
     "Avoid broken relative clauses. Do not write: 'for people who try new things often have more fun'. Instead write: 'for people who try new things often' or 'because people can have more fun'.",
     "If a sentence contains 'which', make sure it clearly refers to the idea before it and has a complete verb.",
     "Avoid repeating the same phrase many times, such as this problem, this issue, people, important, good, bad, or I think.",
-    "Check logic as well as grammar: do not let a Task 2 opinion answer support one side in the introduction and the opposite side in the conclusion.",
+    "Check logic as well as grammar: in a Task 2 discuss-both-views answer, paragraph 2 should discuss one side and paragraph 3 should discuss the other side. The conclusion should state the final opinion clearly.",
     "For problem/solution essays, do not write that a problem 'happens because' of its result. Say it 'can create problems because' the result is harmful.",
     "If the essay is under the official IELTS word count, do not force it longer. Only add words when they are needed to repair grammar or complete a template sentence.",
     "Fix problems like: 'because cannot', 'whether you can let me know', 'for everyone can enjoy', repeated because, repeated people, wrong subject, missing capital letter.",
@@ -615,6 +619,7 @@ function safePolishedEssay(value, fallback, task) {
     .replace(/\bI am sorry because\b/gi, "I am sorry that")
     .replace(/\bBecause of this, they did not die\b/gi, "Because of this, they stayed healthy")
     .replace(/\bdifficulties getting enough sleep can create problems because it affects\b/gi, "difficulties getting enough sleep can create problems because they affect")
+    .replace(/\bI would be happy to ([^.]{3,80})\. I would be happy to ([^.]{3,80})\./gi, "I would be happy to $1. I can also $2.")
     .replace(/for people who ([^,.!?]{3,80}) often have more fun/gi, "because people who $1 can often have more fun")
     .replace(/for everyone can enjoy life more/gi, "because everyone can enjoy life more")
     .split(/\n/)
