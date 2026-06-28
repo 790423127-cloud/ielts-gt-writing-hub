@@ -166,8 +166,12 @@ function formatTimePlace(value) {
 }
 
 const BAND5_WORD_SWAPS = [
+  [/\blocal residents\b/gi, "local people"],
   [/\bsoundproofing materials?\b/gi, "better noise control"],
+  [/\bsoundproof materials?\b/gi, "better noise control"],
+  [/\bsoundproof material\b/gi, "better noise control"],
   [/\bsoundproofing\b/gi, "noise control"],
+  [/\bsoundproof\b/gi, "noise control"],
   [/\bdisturbing\b/gi, "bothering"],
   [/\bdisturb\b/gi, "bother"],
   [/\bconstant\b/gi, "continuous"],
@@ -181,7 +185,6 @@ const BAND5_WORD_SWAPS = [
   [/\btherefore\b/gi, "so"],
   [/\bbeneficiary\b/gi, "people"],
   [/\bcommunities\b/gi, "local areas"],
-  [/\bcommunity\b/gi, "local area"],
   [/\brealistic\b/gi, "real"],
   [/\bpractical\b/gi, "useful"],
   [/\bflexibility\b/gi, "more choice"],
@@ -199,6 +202,26 @@ function applyBand5Vocabulary(value) {
 
 function startsWithFiniteVerb(text) {
   return /^(cannot|can|need|needs|have|has|will|would|should|may|might|want|wants|feel|feels|make|makes|cause|causes|create|creates|help|helps|bother|bothers)\b/i.test(String(text || "").trim());
+}
+
+function capitaliseSentence(value) {
+  const text = String(value || "").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+function makePeopleClause(value) {
+  let text = String(value || "").trim();
+  text = stripLead(text, [/^(some people\s+)/i, /^(other people\s+)/i, /^(others\s+)/i]);
+  if (/^(like|prefer|want|choose|need|try|keep|use|buy|work|study|pay|think|believe)\b/i.test(text)) {
+    text = `people ${text}`;
+  }
+  return text;
+}
+
+function makeWhetherClause(value) {
+  const text = String(value || "").trim();
+  if (/^(come|visit|meet|join|help|swap|change|send|reply|call|tell|let|give)\b/i.test(text)) return `you can ${text}`;
+  return text;
 }
 
 function cleanSlotByKey(key, value) {
@@ -257,12 +280,16 @@ function cleanSlotByKey(key, value) {
   }
   if (/^(sideA|sideB)$/i.test(key)) {
     text = stripLead(text, [/^(some people think\s+)/i, /^(other people believe\s+)/i, /^(others believe\s+)/i]);
+    text = makePeopleClause(text);
   }
   if (/^(opinion|yourSide)$/i.test(key)) {
     text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(i agree that\s+)/i, /^(i prefer\s+)/i]);
   }
   if (/^(situation|extraCondition)$/i.test(key)) {
     text = stripLead(text, [/^(when\s+)/i, /^(if\s+)/i]);
+  }
+  if (/^(situation)$/i.test(key)) {
+    text = stripLead(text, [/^(people\s+)/i]);
   }
   if (/^(result|result1)$/i.test(key)) {
     text = stripLead(text, [/^(they may\s+)/i, /^(people may\s+)/i, /^(they\s+)/i, /^(people\s+)/i, /^(this leads to\s+)/i, /^(this can lead to\s+)/i]);
@@ -282,13 +309,20 @@ function cleanSlotByKey(key, value) {
   if (/^(requestedAction)$/i.test(key)) {
     text = text.replace(/^finish music\b/i, "finish the music");
   }
+  if (/^(nextStep)$/i.test(key)) {
+    text = makeWhetherClause(text);
+  }
+  if (/^(feelingOrDetail)$/i.test(key)) {
+    text = capitaliseSentence(text);
+  }
   if (/^(overallJudgement)$/i.test(key)) {
     text = stripLead(text, [/^(i think\s+)/i, /^(i believe\s+)/i, /^(it is mostly\s+)/i]);
     if (!text || /^(this problem can be solved|this issue can be solved)$/i.test(text)) {
       text = "this issue can be reduced with careful action";
     }
   }
-  if (!/^(recipientName|friendName)$/i.test(key) && /^[A-Z][a-z]/.test(text) && !/^I\b/.test(text)) {
+  const sentenceStartSlots = /^(feelingOrDetail)$/i;
+  if (!sentenceStartSlots.test(key) && !/^(recipientName|friendName)$/i.test(key) && /^[A-Z][a-z]/.test(text) && !/^I\b/.test(text)) {
     text = text.charAt(0).toLowerCase() + text.slice(1);
   }
   return applyBand5Vocabulary(text);
@@ -316,7 +350,7 @@ const TEMPLATE_SPECS = {
         "",
         `In addition, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This has affected ${slots.affectedGroup} because ${slots.bullet2Impact}.`,
         "",
-        `Finally, I think the best solution is to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} when you can. I believe this would be fair and helpful, and it would help me avoid the same problem in the future.`,
+        `Finally, I think the best solution is for your team to ${slots.bullet3Action}. If possible, please ${slots.requestedAction} when you can. I believe this would be fair and helpful, and it would help me avoid the same problem in the future.`,
         "",
         recipient === "Sir or Madam" ? "Yours faithfully," : "Yours sincerely,",
         "John Smith"
@@ -342,7 +376,7 @@ const TEMPLATE_SPECS = {
         "",
         `Also, ${slots.bullet2Answer}. For example, ${slots.bullet2Example}. This would help because ${slots.benefitOrResult}.`,
         "",
-        `Finally, ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed, and thank you for understanding this situation.`,
+        `Finally, I would like to ${slots.bullet3Answer}. Please let me know whether ${slots.nextStep}. I would be happy to ${slots.offerHelp} if needed, and thank you for understanding this situation.`,
         "",
         "Kind regards,",
         "John Smith"
@@ -386,13 +420,13 @@ const TEMPLATE_SPECS = {
     ],
     compose(slots) {
       return [
-        `Many people have different opinions about ${slots.topic}. Some people think ${slots.sideA}, while others believe ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question is important because it can affect normal choices in study, work, and family life.`,
+        `Many people have different opinions about ${slots.topic}. One view is that ${slots.sideA}. Another view is that ${slots.sideB}. In my opinion, ${slots.opinion}. I hold this view because ${slots.reason1} and ${slots.reason2}. This question is important because it can affect normal choices in study, work, and family life.`,
         "",
-        `On the one hand, ${slots.sideA} can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
+        `On the one hand, the first view can be reasonable because ${slots.reason1}. For example, ${slots.example1}. This shows that ${slots.explanation1}. Therefore, it is easy to understand why some people support this idea.`,
         "",
-        `On the other hand, I believe ${slots.yourSide} is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
+        `On the other hand, I believe my view is more important because ${slots.reason2}. If people ${slots.situation}, they may ${slots.result}. This is especially true when ${slots.extraCondition}. Therefore, ${slots.finalComparison}.`,
         "",
-        `In conclusion, although ${slots.oppositeSide} may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result.`
+        `In conclusion, although the opposite view may have some value, I think ${slots.opinion} because ${slots.mainReason}. In the long term, this choice is more useful for ${slots.beneficiary}, especially when people want a fair and real result.`
       ].join("\n");
     }
   },
@@ -413,7 +447,7 @@ const TEMPLATE_SPECS = {
         "",
         `Another point is that ${slots.point2}. As a result, ${slots.result2}. This can affect people because ${slots.explanation2}. A useful way to deal with this is to ${slots.solutionOrAction}. This problem can affect one person and also other people.`,
         "",
-        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
+        `In conclusion, ${slots.topic} happens mainly because ${slots.summaryPoint1} and ${slots.summaryPoint2}. I believe ${slots.overallJudgement}, and it can be improved if people ${slots.finalSolution}. If people take this seriously, the situation will become easier to manage, and the result will be better for both people and society. Small changes in daily choices can make a clear difference.`
       ].join("\n");
     }
   }

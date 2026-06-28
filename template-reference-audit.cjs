@@ -90,7 +90,12 @@ function localWarnings(text, task) {
     [/\bsoon\s+as soon as convenient\b/i, "duplicated soon phrase"],
     [/\bbecause\s+(cannot|can|need|needs|have|has|will|would|should|may|might)\b/i, "missing subject after because"],
     [/\b(soundproofing|disturbance|inconvenient|significant|considerable|facilitate|implement|utilise|residents|constant|ensure|consequently|nevertheless)\b/i, "vocabulary above Band 5 safe mode"],
-    [/\bI would like to install\b/i, "wrong subject for requested action"]
+    [/\bI would like to install\b/i, "wrong subject for requested action"],
+    [/\blocal local people\b/i, "duplicated local people phrase"],
+    [/\bSome people think\s+(like|prefer|want|choose|need|try|keep|use|buy|work|study|pay)\b/i, "missing subject in sideA"],
+    [/\bothers believe\s+(like|prefer|want|choose|need|try|keep|use|buy|work|study|pay)\b/i, "missing subject in sideB"],
+    [/\bIf people people\b/i, "duplicated people in condition"],
+    [/\bPlease let me know whether\s+(come|visit|meet|join|help|swap|change|send|reply|call|tell|let|give)\b/i, "missing subject after whether"]
   ];
   for (const [pattern, label] of checks) {
     if (pattern.test(text)) warnings.push(label);

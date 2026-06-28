@@ -57,10 +57,10 @@ function filledSlotsFor(templateId, topic = "this topic") {
     affectedGroup: "residents"
   });
   const result = buildTemplateReferenceResult(body, { filledSlots: slots });
-  assert.doesNotMatch(result.referenceEssay, /\bsoundproofing|residents|ensure|as soon as convenient|I would like to install\b/i);
+  assert.doesNotMatch(result.referenceEssay, /\bsoundproof|residents|ensure|as soon as convenient|I would like to install\b|local local people/i);
   assert.match(result.referenceEssay, /better noise control|make sure|local people/i);
   assert.match(result.referenceEssay, /because they cannot relax or sleep/i);
-  assert.match(result.referenceEssay, /the best solution is to/i);
+  assert.match(result.referenceEssay, /the best solution is for your team to/i);
 }
 
 {
@@ -105,6 +105,28 @@ function filledSlotsFor(templateId, topic = "this topic") {
   assert.match(result.referenceEssay, /socialising with work colleagues/);
   assert.doesNotMatch(result.referenceEssay, /\b(cialising|ciety|me people)\b/i);
   assert.doesNotMatch(result.referenceEssay, /If people when|they may they may|I believe I believe|In my opinion, I think/i);
+}
+
+{
+  const body = normalizeBody({
+    task: "Task 2",
+    type: "discussion",
+    questionTitle: "Trying New Things",
+    questionPrompt: "Some people like to try new things. Others prefer familiar habits. Discuss both views and give your opinion.",
+    essay: "Trying new things can be good."
+  });
+  const templateId = templateIdForBody(body);
+  const slots = filledSlotsFor(templateId, "trying new things");
+  Object.assign(slots, {
+    sideA: "like to try new things such as new food",
+    sideB: "prefer to keep doing familiar things",
+    situation: "people always do the same things every day",
+    result: "feel bored and miss new chances"
+  });
+  const result = buildTemplateReferenceResult(body, { filledSlots: slots });
+  assert.doesNotMatch(result.referenceEssay, /Some people think like|others believe prefer|If people people/i);
+  assert.match(result.referenceEssay, /One view is that people like/i);
+  assert.match(result.referenceEssay, /Another view is that people prefer/i);
 }
 
 console.log("PASS template-reference static test.");
