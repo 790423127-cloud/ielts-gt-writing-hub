@@ -179,8 +179,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     const list = byId("promptList");
     if (list) new MutationObserver(queueRefresh).observe(list, { childList: true, subtree: true });
-    const app = document.querySelector(".app-shell");
-    if (app) new MutationObserver(queueRefresh).observe(app, { childList: true, subtree: true });
     queueRefresh();
   });
 })();
