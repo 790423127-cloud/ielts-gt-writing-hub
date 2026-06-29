@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IELTS GT 写作模板学习地图</title>
+  <style>
+    :root {
+      --ink:#172033; --muted:#667085; --line:#e7eaf0; --bg:#f6f8fc; --card:#ffffff;
+      --task1:#087a70; --task1-soft:#e9fbf7; --task2:#6633c7; --task2-soft:#f3efff;
+      --blue:#246bdd; --orange:#b45309; --orange-soft:#fff7ed; --shadow:0 12px 32px rgba(26,38,60,.08);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.65}
+    a{color:inherit;text-decoration:none}
+    .shell{max-width:1180px;margin:auto;padding:22px}
+    .hero{background:linear-gradient(125deg,#fff 0%,#f6f1ff 56%,#e8fbf7 100%);border:1px solid var(--line);border-radius:26px;padding:34px;box-shadow:var(--shadow)}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:800;color:var(--muted)}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--task2)}
+    h1{font-size:clamp(31px,5vw,53px);letter-spacing:-1.3px;line-height:1.1;margin:15px 0 12px}
+    .hero p{margin:0;max-width:850px;color:var(--muted);font-size:16px}
+    .goal-row{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
+    .goal{padding:8px 11px;background:#fff;border:1px solid var(--line);border-radius:11px;font-size:13px;font-weight:800}
+    .top-nav{position:sticky;top:0;z-index:10;background:rgba(246,248,252,.94);backdrop-filter:blur(10px);padding:13px 0 10px;display:flex;gap:8px;overflow:auto}
+    .top-nav a{white-space:nowrap;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:13px;font-weight:800;color:var(--muted)}
+    .top-nav a:hover{color:var(--ink);border-color:#c9d1df}
+    section{scroll-margin-top:72px}
+    .section{margin-top:24px}
+    .section-title{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+    .section-title h2{font-size:26px;letter-spacing:-.5px;margin:0;line-height:1.25}
+    .chip{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:.03em}
+    .chip.t1{color:var(--task1);background:var(--task1-soft)} .chip.t2{color:var(--task2);background:var(--task2-soft)} .chip.orange{color:var(--orange);background:var(--orange-soft)}
+    .lead{margin:0;color:var(--muted)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .step{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;min-height:130px}
+    .step-no{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border-radius:50%;font-size:12px;font-weight:900;color:#fff;background:var(--task2)}
+    .step h3{font-size:16px;margin:10px 0 5px}.step p{margin:0;color:var(--muted);font-size:14px}
+    .decision{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .decision-card{border-radius:18px;padding:22px;border:1px solid var(--line)}
+    .decision-card.task1{background:var(--task1-soft);border-color:#c9eee6}.decision-card.task2{background:var(--task2-soft);border-color:#dfd4ff}
+    .decision-card h3{margin:0 0 10px;font-size:20px}.decision-card p{margin:0 0 14px;color:#425065;font-size:14px}
+    .arrow-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}.arrow-list li{padding:9px 11px;background:rgba(255,255,255,.75);border-radius:10px;font-size:13px;font-weight:750}.arrow-list li::before{content:'→ ';font-weight:900}
+    .framework{border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);background:#fff}
+    .framework-head{padding:17px 19px;color:#fff}.framework-head.t1{background:var(--task1)}.framework-head.t2{background:var(--task2)}
+    .framework-head h3{margin:0;font-size:19px}.framework-head p{margin:5px 0 0;font-size:13px;opacity:.9}
+    .framework-body{padding:18px}
+    .signal{font-size:13px;color:var(--muted);margin:0 0 12px}.signal b{color:var(--ink)}
+    .subtypes{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.subtype{padding:6px 8px;background:#f7f8fb;border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:800}
+    .outline{border-left:4px solid var(--blue);background:#f8fbff;border-radius:9px;padding:13px 15px;white-space:pre-line;font-size:14px;line-height:1.75}
+    .blank{color:var(--blue);font-weight:900}
+    .use-list{margin:12px 0 0;padding-left:19px;font-size:14px}.use-list li{margin:6px 0}.use-list b{color:#23314a}
+    .callout{margin-top:15px;border:1px solid #fed7aa;background:var(--orange-soft);border-radius:12px;padding:12px 14px;font-size:14px}.callout b{color:var(--orange)}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:var(--shadow)}
+    table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}th{font-size:12px;color:var(--muted);background:#f9fafc;letter-spacing:.02em}tr:last-child td{border-bottom:0}td:first-child{font-weight:900}
+    .mini-template{background:#111827;color:#f8fafc;border-radius:13px;padding:16px;white-space:pre-line;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.75;margin-top:14px}.mini-template .blank{color:#8ab4ff}
+    .warning{border-radius:13px;background:#fff0f0;border:1px solid #ffd2d2;padding:13px 15px;font-size:14px}.warning b{color:#b42318}
+    .practice-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.plan-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}.plan-card h3{margin:0 0 10px;font-size:18px}.plan-card ul{padding-left:18px;margin:0}.plan-card li{margin:7px 0;font-size:14px}.plan-card strong{color:var(--task2)}
+    .quiz{display:grid;gap:12px}.quiz-item{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.quiz-item p{margin:0 0 10px;font-size:14px}.quiz-item button{border:1px solid var(--line);background:#f7f8fb;border-radius:8px;padding:7px 10px;cursor:pointer;font-weight:800;color:var(--ink)}.answer{display:none;margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--task2-soft);font-size:13px}.answer.show{display:block}
+    .check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.check{border:1px solid var(--line);padding:11px 13px;border-radius:11px;background:#fff;font-size:14px}.check input{width:16px;height:16px;vertical-align:-3px;margin-right:8px;accent-color:var(--blue)}
+    .footer{padding:26px 4px 4px;text-align:center;color:var(--muted);font-size:12px}
+    @media(max-width:820px){.shell{padding:14px}.hero{padding:24px 20px}.grid-2,.decision,.practice-grid{grid-template-columns:1fr}.grid-3{grid-template-columns:1fr}.check-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="eyebrow"><span class="dot"></span> IELTS General Training · Band 5–6</div>
+      <h1>先分类，再套模板</h1>
+      <p>你不需要背几十篇范文。你只要记住：<b>Task 1 的 3 个书信框架</b>，加上 <b>Task 2 的 5 个议论文框架</b>。看到题目后，先选大题型，再找小题型，最后替换蓝色内容。</p>
+      <div class="goal-row">
+        <span class="goal">Task 1：3 个固定框架</span>
+        <span class="goal">Task 2：5 个固定框架</span>
+        <span class="goal">小题型决定主体段写什么</span>
+        <span class="goal">蓝色 [方括号] 才需要改</span>
+      </div>
+    </header>
+
+    <nav class="top-nav" aria-label="页面导航">
+      <a href="#start">先学这个</a>
+      <a href="#task1">Task 1</a>
+      <a href="#task2">Task 2</a>
+      <a href="#practice">怎么练</a>
+      <a href="#quiz">分类自测</a>
+      <a href="#exam">考试检查</a>
+      <a href="index.html#/practice">返回题库</a>
+    </nav>
+
+    <section class="section" id="start">
+      <div class="section-title"><span class="chip orange">最重要</span><h2>每次写作只做 4 步</h2></div>
+      <div class="grid-3">
+        <article class="step"><span class="step-no">1</span><h3>先看题目线索</h3><p>Task 1 看“写给谁”；Task 2 看题目的动词和问法。</p></article>
+        <article class="step"><span class="step-no">2</span><h3>选大题型</h3><p>例如：正式信、观点题、双方观点题、问题解决题。</p></article>
+        <article class="step"><span class="step-no">3</span><h3>看小题型</h3><p>例如：投诉、申请、原因+正负判断、问题+解决。</p></article>
+        <article class="step"><span class="step-no">4</span><h3>按段落回答</h3><p>不要把所有想法混在一起。每个主体段只完成一个任务。</p></article>
+        <article class="step"><span class="step-no">5</span><h3>替换内容</h3><p>保留框架句，只改 <span class="blank">[主题] [原因] [例子]</span>。</p></article>
+        <article class="step"><span class="step-no">6</span><h3>最后检查</h3><p>Task 1：3 个 bullet points。Task 2：题目的每一个问题都回答。</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><span class="chip orange">判断地图</span><h2>先判断：我应该用哪套？</h2></div>
+      <div class="decision">
+        <article class="decision-card task1">
+          <h3>Task 1：先看收信人</h3>
+          <p>Task 1 的大题型不是“投诉”或“申请”，而是 <b>书信语气</b>。投诉、申请等属于小题型。</p>
+          <ul class="arrow-list">
+            <li>公司、酒店、学校、政府、陌生人 → <b>正式信</b></li>
+            <li>房东、老师、经理、同事、邻居 → <b>半正式信</b></li>
+            <li>朋友、家人、亲密熟人 → <b>非正式信</b></li>
+          </ul>
+        </article>
+        <article class="decision-card task2">
+          <h3>Task 2：先看题目动词</h3>
+          <p>Task 2 的大题型由题目最后一句决定。看到关键词就直接选。</p>
+          <ul class="arrow-list">
+            <li>Do you agree / good or bad → <b>观点 / 判断类</b></li>
+            <li>Discuss both views → <b>双方观点类</b></li>
+            <li>Advantages and disadvantages / outweigh → <b>优缺点类</b></li>
+            <li>Problems / causes / solutions → <b>原因、问题、解决类</b></li>
+            <li>题目有两个不同问题 → <b>双问题 / 混合问法</b></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="task1">
+      <div class="section-title"><span class="chip t1">TASK 1</span><h2>3 个书信框架：先选语气，再选目的</h2></div>
+      <p class="lead">Task 1 的核心不是写得很复杂，而是：称呼正确、语气正确、3 个 bullet points 全部写到。</p>
+
+      <div class="table-wrap" style="margin-top:15px">
+        <table>
+          <thead><tr><th>大题型</th><th>写给谁</th><th>常见小题型</th><th>结尾</th></tr></thead>
+          <tbody>
+            <tr><td>正式信 Formal</td><td>公司、酒店、学校、政府、陌生人</td><td>投诉、咨询、申请、请求、反馈、正式邀请</td><td>Yours faithfully</td></tr>
+            <tr><td>半正式信 Semi-formal</td><td>房东、老师、经理、同事、邻居、旧老师</td><td>请求、道歉+赔偿、感谢、邀请、安排、分享经历</td><td>Yours sincerely</td></tr>
+            <tr><td>非正式信 Informal</td><td>朋友、家人、亲密熟人</td><td>邀请、道歉、建议、感谢、安排、借东西、分享</td><td>Best wishes / Take care</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid-3" style="margin-top:16px">
+        <article class="framework">
+          <div class="framework-head t1"><h3>01 · 正式信</h3><p>Formal Letter · 180–200 words</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>write to the manager / company / office / council</p>
+            <div class="subtypes"><span class="subtype">complaint 投诉</span><span class="subtype">enquiry 咨询</span><span class="subtype">application 申请</span><span class="subtype">request 请求</span><span class="subtype">feedback 反馈</span></div>
+            <div class="outline">Dear Sir or Madam,
+
+I am writing to <span class="blank">[写信目的]</span>.
+
+Firstly, I would like to explain <span class="blank">[背景 / 问题]</span>.
+
+In addition, <span class="blank">[第二个 bullet point]</span>.
+
+Finally, I would be grateful if you could <span class="blank">[你的请求 / 解决办法]</span>.
+
+Yours faithfully,</div>
+            <ul class="use-list"><li><b>投诉：</b>问题 → 影响 → 要求怎么解决。</li><li><b>咨询：</b>你想参加什么 → 问 2–3 个信息。</li><li><b>申请：</b>申请什么 → 经验 → 可工作时间。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework">
+          <div class="framework-head t1"><h3>02 · 半正式信</h3><p>Semi-formal Letter · 180–200 words</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>your landlord / teacher / manager / neighbour</p>
+            <div class="subtypes"><span class="subtype">request 请求</span><span class="subtype">apology 道歉</span><span class="subtype">thanks 感谢</span><span class="subtype">invitation 邀请</span><span class="subtype">arrangement 安排</span></div>
+            <div class="outline">Dear Mr / Ms <span class="blank">[姓]</span>,
+
+I hope you are well. I am writing about <span class="blank">[事情]</span>.
+
+The reason is that <span class="blank">[原因 / 背景]</span>.
+
+I would also like to explain <span class="blank">[第二个 bullet point]</span>.
+
+Could you please <span class="blank">[请求 / 行动]</span>?
+
+Yours sincerely,</div>
+            <ul class="use-list"><li><b>请求：</b>为什么需要 → 具体请求 → 你会怎样配合。</li><li><b>道歉：</b>道歉 → 解释 → 赔偿 / 修复。</li><li><b>邀请：</b>活动 → 为什么希望对方来 → 时间地点。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework">
+          <div class="framework-head t1"><h3>03 · 非正式信</h3><p>Informal Letter · 180–200 words</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>write to a friend / family member / close friend</p>
+            <div class="subtypes"><span class="subtype">invitation 邀请</span><span class="subtype">apology 道歉</span><span class="subtype">advice 建议</span><span class="subtype">sharing 分享</span><span class="subtype">arrangement 安排</span></div>
+            <div class="outline">Dear <span class="blank">[名字]</span>,
+
+How are you? I am writing to <span class="blank">[目的]</span>.
+
+First of all, <span class="blank">[第一个 bullet point]</span>.
+
+Also, <span class="blank">[第二个 bullet point]</span>.
+
+I hope you can <span class="blank">[第三个 bullet point / 请求]</span>.
+
+Best wishes,</div>
+            <ul class="use-list"><li><b>建议：</b>直接给建议 + 原因 + 小例子。</li><li><b>分享+邀请：</b>介绍新东西 → 为什么喜欢 → 邀请对方。</li><li><b>借东西：</b>借什么 → 为什么 → 什么时候归还。</li></ul>
+          </div>
+        </article>
+      </div>
+
+      <div class="callout"><b>Task 1 套用口诀：</b>先决定语气，再决定目的。题目有 3 个 bullet points，就用 3 个主体任务。不要为了“高级”把信写得像 Task 2。</div>
+    </section>
+
+    <section class="section" id="task2">
+      <div class="section-title"><span class="chip t2">TASK 2</span><h2>5 个议论文框架：小题型决定两段主体写什么</h2></div>
+      <p class="lead">Task 2 不需要每道题都背一篇新的作文。固定使用四段：引言、主体一、主体二、结论。</p>
+
+      <div class="mini-template">Introduction: It is often argued that <span class="blank">[改写主题]</span>. I <span class="blank">[明确立场 / 说明文章方向]</span>.
+
+Body 1: The main reason is that <span class="blank">[第一个任务]</span>. For example, <span class="blank">[简单例子]</span>.
+
+Body 2: Another important point is that <span class="blank">[第二个任务]</span>. This means that <span class="blank">[结果]</span>.
+
+Conclusion: In conclusion, <span class="blank">[重申你的答案]</span>.</div>
+
+      <div class="grid-2" style="margin-top:16px">
+        <article class="framework">
+          <div class="framework-head t2"><h3>01 · 观点 / 判断类</h3><p>Opinion / Judgement</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>Do you agree or disagree? / Is this good or bad? / What's your opinion?</p>
+            <div class="subtypes"><span class="subtype">agree / disagree</span><span class="subtype">good / bad</span><span class="subtype">positive / negative</span><span class="subtype">opinion</span></div>
+            <div class="outline">引言：明确写 I agree / disagree / think it is positive.
+主体一：支持你立场的理由 1。
+主体二：支持你立场的理由 2。
+结论：重复同一个立场。</div>
+            <ul class="use-list"><li><b>关键：</b>一开始就选边，不要结尾才选。</li><li><b>主体段：</b>每段都支持你的立场，不要两边平均写。</li><li><b>让步：</b>可以写一句 Admittedly...，但不要变成第三个主体段。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework">
+          <div class="framework-head t2"><h3>02 · 双方观点类</h3><p>Discuss both views + opinion</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>Discuss both views and give your own opinion.</p>
+            <div class="subtypes"><span class="subtype">discussion + opinion</span></div>
+            <div class="outline">引言：说明有两种观点，并写自己的看法。
+主体一：解释 View A 为什么有人支持。
+主体二：解释 View B；写你为什么更支持这一边。
+结论：明确你的最终看法。</div>
+            <ul class="use-list"><li><b>关键：</b>两种观点都要写，不能只写自己。</li><li><b>段落分配：</b>On the one hand = A；On the other hand = B。</li><li><b>个人观点：</b>在引言和结论必须出现。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework">
+          <div class="framework-head t2"><h3>03 · 优缺点 / 权衡类</h3><p>Advantages / Disadvantages / Outweigh</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>What are the advantages and disadvantages? / Do advantages outweigh disadvantages?</p>
+            <div class="subtypes"><span class="subtype">advantages + disadvantages</span><span class="subtype">outweigh</span></div>
+            <div class="outline">普通优缺点：主体一写优点；主体二写缺点。
+Outweigh：同样写优点和缺点，但引言与结论要说哪一边更大。</div>
+            <ul class="use-list"><li><b>普通题：</b>可以中立，不必说哪一边更重要。</li><li><b>Outweigh：</b>必须回答“谁更大”，不要只列清单。</li><li><b>每段：</b>一个主要优点 / 缺点 + 解释 + 例子就够。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework">
+          <div class="framework-head t2"><h3>04 · 原因 / 问题 / 解决类</h3><p>Cause / Problem / Solution</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>What problems does this cause? / What are the reasons? / What can be done?</p>
+            <div class="subtypes"><span class="subtype">problems + solutions</span><span class="subtype">damage + solutions</span><span class="subtype">reasons + solutions</span></div>
+            <div class="outline">引言：说明这是一个问题。
+主体一：只回答第一问：原因 / 问题 / 影响。
+主体二：只回答第二问：解决办法。
+结论：总结问题和可行解决办法。</div>
+            <ul class="use-list"><li><b>关键：</b>题目问 problems，就不要主体一写 causes。</li><li><b>解决办法：</b>谁做 + 做什么 + 为什么有效。</li><li><b>最常用：</b>政府、学校、公司、个人可以做什么。</li></ul>
+          </div>
+        </article>
+
+        <article class="framework" style="grid-column:1/-1">
+          <div class="framework-head t2"><h3>05 · 双问题 / 混合问法</h3><p>Two-part / Mixed Questions</p></div>
+          <div class="framework-body">
+            <p class="signal"><b>题目线索：</b>题目连续问两个不同问题。例如 Why is this happening? Is it positive or negative?</p>
+            <div class="subtypes"><span class="subtype">reasons + opinion</span><span class="subtype">reasons + positive/negative</span><span class="subtype">reasons + advantages/disadvantages</span><span class="subtype">prediction + reasons</span><span class="subtype">two judgement questions</span><span class="subtype">opinion + extension</span></div>
+            <div class="outline">引言：直接说明这篇文章会回答两个问题。
+主体一：只回答 Question 1。
+主体二：只回答 Question 2。
+结论：分别总结两个答案。</div>
+            <div class="warning" style="margin-top:14px"><b>最容易错：</b>“Why is this happening? Is it a positive or negative trend?” 不是普通观点题。主体一必须回答 <b>Why</b>，主体二才写 <b>positive / negative</b>。</div>
+            <ul class="use-list"><li><b>原因 + 正负：</b>第一段原因，第二段判断正面或负面。</li><li><b>原因 + 优缺点：</b>第一段原因，第二段优点与缺点。</li><li><b>两个判断：</b>第一段回答第一个 Yes/No，第二段回答第二个 Yes/No。</li></ul>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="practice">
+      <div class="section-title"><span class="chip orange">学习方法</span><h2>怎么学，才能真的在考场套出来？</h2></div>
+      <div class="practice-grid">
+        <article class="plan-card">
+          <h3>第一阶段：先练“分类”，不要急着写全文</h3>
+          <ul>
+            <li><strong>第 1 天：</strong>拿 24 道 Task 1，只做两件事：写给谁？正式 / 半正式 / 非正式？</li>
+            <li><strong>第 2 天：</strong>给每道 Task 1 标一个小题型：投诉、咨询、申请、邀请、道歉等。</li>
+            <li><strong>第 3 天：</strong>拿 24 道 Task 2，只圈题目动词：agree、discuss、advantages、problems、why。</li>
+            <li><strong>目标：</strong>看到题目后 20 秒内能说出“大题型 + 小题型”。</li>
+          </ul>
+        </article>
+        <article class="plan-card">
+          <h3>第二阶段：先写提纲，再写全文</h3>
+          <ul>
+            <li><strong>Task 1：</strong>写称呼 + 每个 bullet point 后面写 2 个细节。</li>
+            <li><strong>Task 2：</strong>先写四行：立场 / 主体一 / 主体二 / 结论。</li>
+            <li><strong>不要：</strong>一看到题目就开始写第一句。这样很容易漏题。</li>
+            <li><strong>目标：</strong>提纲用 3 分钟，写作更稳。</li>
+          </ul>
+        </article>
+        <article class="plan-card">
+          <h3>第三阶段：一套模板，换 3 道题</h3>
+          <ul>
+            <li>同一天只练一种大题型。</li>
+            <li>例如今天练“观点题”：远程办公、校服、爱好重要性。</li>
+            <li>框架不变，只换 <span class="blank">[主题] [理由] [例子]</span>。</li>
+            <li><strong>目标：</strong>明白模板是“框架”，不是死背内容。</li>
+          </ul>
+        </article>
+        <article class="plan-card">
+          <h3>第四阶段：开始限时</h3>
+          <ul>
+            <li>Task 1：先用 25 分钟，熟练后降到 20 分钟。</li>
+            <li>Task 2：先用 45 分钟，熟练后降到 40 分钟。</li>
+            <li>写完后只检查：题目是否回答完、时态、单复数、拼写。</li>
+            <li><strong>目标：</strong>稳定完成，比追求难词更重要。</li>
+          </ul>
+        </article>
+      </div>
+      <div class="callout"><b>最适合你的背法：</b>每天背 1 个大框架，不背 10 篇范文。先读框架 → 自己填 1 道题 → 换题再填 1 道 → 最后写 1 篇完整作文。</div>
+    </section>
+
+    <section class="section" id="quiz">
+      <div class="section-title"><span class="chip orange">快速自测</span><h2>看到这些题，你会选哪套？</h2></div>
+      <div class="quiz">
+        <article class="quiz-item"><p><b>题目 A：</b>You stayed at a hotel and were unhappy with the service. Write to the manager.</p><button data-answer="a">查看分类</button><div class="answer" id="a">大题型：<b>Task 1 正式信</b>。小题型：<b>complaint / 投诉</b>。结构：问题 → 影响 → 要求解决。</div></article>
+        <article class="quiz-item"><p><b>题目 B：</b>Your friend will visit your city. Give advice about the best time to visit and things to do.</p><button data-answer="b">查看分类</button><div class="answer" id="b">大题型：<b>Task 1 非正式信</b>。小题型：<b>advice / 建议</b>。结构：建议 → 原因 → 补充建议。</div></article>
+        <article class="quiz-item"><p><b>题目 C：</b>Many people work from home. To what extent do you agree or disagree?</p><button data-answer="c">查看分类</button><div class="answer" id="c">大题型：<b>Task 2 观点 / 判断类</b>。小题型：<b>agree or disagree</b>。主体一和主体二都支持你的立场。</div></article>
+        <article class="quiz-item"><p><b>题目 D：</b>More people take photos at famous places. Why is this happening? Is it a positive or negative trend?</p><button data-answer="d">查看分类</button><div class="answer" id="d">大题型：<b>Task 2 双问题 / 混合问法</b>。小题型：<b>reasons + positive/negative</b>。主体一回答 Why；主体二回答 positive or negative。</div></article>
+        <article class="quiz-item"><p><b>题目 E：</b>Discuss both views and give your own opinion.</p><button data-answer="e">查看分类</button><div class="answer" id="e">大题型：<b>Task 2 双方观点类</b>。小题型：<b>discussion + opinion</b>。主体一 A，主体二 B，开头和结尾写你的看法。</div></article>
+      </div>
+    </section>
+
+    <section class="section" id="exam">
+      <div class="section-title"><span class="chip orange">考前检查</span><h2>写完最后 60 秒，逐项打勾</h2></div>
+      <div class="check-grid">
+        <label class="check"><input type="checkbox"> 我已经确定了大题型。</label>
+        <label class="check"><input type="checkbox"> 我已经确定了小题型。</label>
+        <label class="check"><input type="checkbox"> Task 1：3 个 bullet points 都回答了。</label>
+        <label class="check"><input type="checkbox"> Task 1：称呼和结尾与语气一致。</label>
+        <label class="check"><input type="checkbox"> Task 2：题目里的每一个问题都回答了。</label>
+        <label class="check"><input type="checkbox"> Task 2：引言和结论的立场一致。</label>
+        <label class="check"><input type="checkbox"> 每个主体段都有原因或解释。</label>
+        <label class="check"><input type="checkbox"> 我没有为了难词而写错简单句。</label>
+      </div>
+    </section>
+
+    <footer class="footer">IELTS GT 写作模板学习地图 · 先分类，再套用 · 基础词汇 Band 5–6 版本</footer>
+  </main>
+  <script>
+    document.querySelectorAll('[data-answer]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const box = document.getElementById(button.dataset.answer);
+        const open = box.classList.toggle('show');
+        button.textContent = open ? '收起答案' : '查看分类';
+      });
+    });
+  </script>
+</body>
+</html>
