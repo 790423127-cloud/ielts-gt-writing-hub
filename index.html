@@ -95,7 +95,7 @@
           <div>
             <p class="eyebrow">PRACTICE LIBRARY</p>
             <h2>题目选择区</h2>
-            <p>筛选 Cambridge IELTS GT 题目。点击题目后会自动进入 Writing Studio。</p>
+            <p>筛选 Cambridge IELTS GT 题目。先选大题型，再选小题型；点击题目后会自动进入 Writing Studio。</p>
           </div>
           <span id="countLabel" class="report-badge"></span>
         </div>
@@ -103,12 +103,12 @@
         <section class="filters command-bar" aria-label="筛选区">
           <label class="wide">
             <span>搜索关键词</span>
-            <input id="searchInput" type="search" placeholder="搜索 book、test、题型、标题或题目关键词">
+            <input id="searchInput" type="search" placeholder="搜索 book、test、题型、小题型、标题或题目关键词">
           </label>
           <label><span>Book</span><select id="bookFilter"></select></label>
           <label><span>Test</span><select id="testFilter"></select></label>
           <label><span>Task</span><select id="taskFilter"></select></label>
-          <label><span>题型</span><select id="typeFilter"></select></label>
+          <label><span>大题型</span><select id="typeFilter"></select></label>
         </section>
 
         <section class="prompt-board-full">
@@ -332,8 +332,9 @@
     </main>
   </div>
 
-  <script src="data.js?v=20260604-1"></script>
+  <script src="data.js?v=20260629-classification-v2"></script>
   <script src="script.js?v=20260611-hybrid-spa-v1"></script>
   <script src="phrase-compact.js?v=20260603-5"></script>
+  <script src="subtype-ui.js?v=20260629-subtype-v1"></script>
 </body>
 </html>
