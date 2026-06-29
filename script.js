@@ -408,7 +408,8 @@
       task,
       promptId: selected?.id || "",
       promptTitle: selected?.title || "",
-      promptType: selected?.type || "",
+      promptType: bigTypeOf(selected),
+      promptSubtype: subtypeOf(selected),
       overall: Number.isFinite(finalBand) ? finalBand : null,
       criteria: {
         taskAchievementOrResponse: criteria.taskAchievement ?? criteria.taskResponse ?? criteria.TA ?? criteria.TR ?? null,
@@ -473,7 +474,7 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), searchInput: $("searchInput"),
+    themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), subtypeFilter: $("subtypeFilter"), searchInput: $("searchInput"),
     promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradingModeSelect: $("gradingModeSelect"), gradeBtn: $("gradeBtn"), generateRevisionBtn: $("generateRevisionBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
   };
 
@@ -487,6 +488,12 @@
   function save(id, part, value) { localStorage.setItem(storageKey(id, part), value); }
   function load(id, part) { return localStorage.getItem(storageKey(id, part)) || ""; }
   function tag(text, cls) { return `<span class="tag ${cls}">${escapeHtml(text)}</span>`; }
+  function bigTypeOf(prompt) { return String(prompt?.bigType || prompt?.type || ""); }
+  function subtypeOf(prompt) { return String(prompt?.subtype || prompt?.purpose || ""); }
+  function classificationTags(prompt) {
+    const subtype = subtypeOf(prompt);
+    return tag(bigTypeOf(prompt), "type") + (subtype ? tag(subtype, "type subtype-tag") : "");
+  }
   function listHtml(items) {
     const arr = Array.isArray(items) ? items.filter(Boolean) : [];
     return arr.length ? `<ul>${arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="muted">暂无内容</p>`;
@@ -644,22 +651,41 @@
   function typeOptionsForSelectedTask() {
     const taskValue = els.taskFilter?.value || "all";
     const filtered = taskValue === "all" ? prompts : prompts.filter((p) => p.task === taskValue);
-    return unique(filtered.map((p) => p.type)).sort();
+    return unique(filtered.map(bigTypeOf)).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }
+
+  function subtypeOptionsForSelectedFilters() {
+    const taskValue = els.taskFilter?.value || "all";
+    const typeValue = els.typeFilter?.value || "all";
+    return unique(prompts
+      .filter((p) => taskValue === "all" || p.task === taskValue)
+      .filter((p) => typeValue === "all" || bigTypeOf(p) === typeValue)
+      .map(subtypeOf))
+      .sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }
+
+  function updateSubtypeFilterOptions() {
+    if (!els.subtypeFilter) return;
+    const previous = els.subtypeFilter.value || "all";
+    const options = subtypeOptionsForSelectedFilters();
+    fillSelect(els.subtypeFilter, options, "\u5168\u90e8\u5c0f\u9898\u578b");
+    els.subtypeFilter.value = previous === "all" || options.includes(previous) ? previous : "all";
   }
 
   function updateTypeFilterOptions() {
     if (!els.typeFilter) return;
     const previous = els.typeFilter.value || "all";
     const taskValue = els.taskFilter?.value || "all";
-    const allText = taskValue === "Task 1" ? "全部书信类型" : taskValue === "Task 2" ? "全部作文题型" : "全部题型";
+    const allText = taskValue === "Task 1" ? "\u5168\u90e8\u4e66\u4fe1\u5927\u9898\u578b" : taskValue === "Task 2" ? "\u5168\u90e8\u4f5c\u6587\u5927\u9898\u578b" : "\u5168\u90e8\u5927\u9898\u578b";
     const options = typeOptionsForSelectedTask();
     fillSelect(els.typeFilter, options, allText);
     els.typeFilter.value = previous === "all" || options.includes(previous) ? previous : "all";
+    updateSubtypeFilterOptions();
   }
 
   function initFilters() {
-    fillSelect(els.bookFilter, DATA.meta?.books || unique(prompts.map((p) => p.book)), "全部 Books");
-    fillSelect(els.testFilter, ["Test 1", "Test 2", "Test 3", "Test 4"], "全部 Test");
+    fillSelect(els.bookFilter, DATA.meta?.books || unique(prompts.map((p) => p.book)), "\u5168\u90e8 Books");
+    fillSelect(els.testFilter, ["Test 1", "Test 2", "Test 3", "Test 4"], "\u5168\u90e8 Test");
     fillSelect(els.taskFilter, ["Task 1", "Task 2"], "Task 1 + Task 2");
     updateTypeFilterOptions();
     if ($("booksStat")) $("booksStat").textContent = (DATA.meta?.books || unique(prompts.map((p) => p.book))).length;
@@ -671,12 +697,15 @@
   function filteredPrompts() {
     const q = String(els.searchInput?.value || "").trim().toLowerCase();
     return prompts.filter((p) => {
-      const text = [p.book, p.test, p.module, p.task, p.type, p.letterStyle || "", p.title, p.prompt, p.difficulty].join(" ").toLowerCase();
+      const bigType = bigTypeOf(p);
+      const subtype = subtypeOf(p);
+      const text = [p.book, p.test, p.module, p.task, bigType, subtype, p.letterStyle || "", p.title, p.prompt, p.difficulty].join(" ").toLowerCase();
       return text.includes(q)
         && (!els.bookFilter || els.bookFilter.value === "all" || p.book === els.bookFilter.value)
         && (!els.testFilter || els.testFilter.value === "all" || p.test === els.testFilter.value)
         && (!els.taskFilter || els.taskFilter.value === "all" || p.task === els.taskFilter.value)
-        && (!els.typeFilter || els.typeFilter.value === "all" || p.type === els.typeFilter.value);
+        && (!els.typeFilter || els.typeFilter.value === "all" || bigType === els.typeFilter.value)
+        && (!els.subtypeFilter || els.subtypeFilter.value === "all" || subtype === els.subtypeFilter.value);
     });
   }
 
@@ -686,10 +715,10 @@
     if (els.countLabel) els.countLabel.textContent = `${list.length} / ${prompts.length}`;
     els.promptList.innerHTML = list.length ? list.map((p) => `
       <button class="prompt-btn ${selected && selected.id === p.id ? "active" : ""}" type="button" data-id="${escapeHtml(p.id)}">
-        <div class="tags">${tag(String(p.book || "").replace("Cambridge IELTS ", "C"), "book")}${tag(p.test, "book")}${tag(p.task, p.task === "Task 1" ? "task1" : "task2")}${tag(p.type, "type")}</div>
+        <div class="tags">${tag(String(p.book || "").replace("Cambridge IELTS ", "C"), "book")}${tag(p.test, "book")}${tag(p.task, p.task === "Task 1" ? "task1" : "task2")}${classificationTags(p)}</div>
         <h3>${escapeHtml(p.title)}</h3>
         <span class="muted">${escapeHtml(p.sourceStatus || "")}</span>
-      </button>`).join("") : `<p class="muted">没有匹配的练习题，请调整筛选或搜索关键词。</p>`;
+      </button>`).join("") : `<p class="muted">\u6ca1\u6709\u5339\u914d\u7684\u7ec3\u4e60\u9898\uff0c\u8bf7\u8c03\u6574\u7b5b\u9009\u6216\u641c\u7d22\u5173\u952e\u8bcd\u3002</p>`;
     els.promptList.querySelectorAll("button[data-id]").forEach((btn) => btn.addEventListener("click", () => selectPrompt(btn.dataset.id)));
   }
 
@@ -697,11 +726,13 @@
     if (!els.infoGrid) return;
     const info = [
       ["Module", p.module],
-      [p.task === "Task 1" ? "书信类型" : "题型", p.task === "Task 1" ? p.letterStyle : p.type],
-      ["建议字数", `至少 ${p.recommendedWords} words`],
-      ["计时", `${p.timeLimit} 分钟`],
-      ["难度", p.difficulty],
-      ["来源状态", p.sourceStatus]
+      ["\u5927\u9898\u578b", bigTypeOf(p)],
+      ["\u5c0f\u9898\u578b", subtypeOf(p)],
+      ...(p.task === "Task 1" ? [["\u8bed\u6c14", p.letterStyle || ""]] : []),
+      ["\u5efa\u8bae\u5b57\u6570", `\u81f3\u5c11 ${p.recommendedWords} words`],
+      ["\u8ba1\u65f6", `${p.timeLimit} \u5206\u949f`],
+      ["\u96be\u5ea6", p.difficulty],
+      ["\u6765\u6e90\u72b6\u6001", p.sourceStatus]
     ];
     els.infoGrid.innerHTML = info.map(([k, v]) => `<div class="info"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join("");
   }
@@ -768,7 +799,7 @@
     navigateToView("writing");
     els.emptyState?.classList.add("hidden");
     els.practiceView?.classList.remove("hidden");
-    if (els.metaTags) els.metaTags.innerHTML = tag(selected.book, "book") + tag(selected.test, "book") + tag(selected.task, selected.task === "Task 1" ? "task1" : "task2") + tag(selected.type, "type");
+    if (els.metaTags) els.metaTags.innerHTML = tag(selected.book, "book") + tag(selected.test, "book") + tag(selected.task, selected.task === "Task 1" ? "task1" : "task2") + classificationTags(selected);
     if (els.sourceStatus) els.sourceStatus.textContent = `Source status: ${selected.sourceStatus || ""}`;
     if (els.practiceTitle) els.practiceTitle.textContent = `${selected.book} · ${selected.test} · ${selected.task}: ${selected.title}`;
     if (els.practicePrompt) els.practicePrompt.textContent = selected.prompt || "";
@@ -882,7 +913,10 @@
       promptId: selected?.id || "",
       title: selected?.title || "",
       letterStyle: selected?.letterStyle || "",
-      questionType: selected?.type || "",
+      bigType: bigTypeOf(selected),
+      subtype: subtypeOf(selected),
+      questionType: bigTypeOf(selected),
+      questionSubtype: subtypeOf(selected),
       questionPrompt: selected?.prompt || "",
       promptText: selected?.prompt || "",
       prompt: selected?.prompt || "",
@@ -2642,7 +2676,10 @@
       promptId: selected?.id || "",
       title: selected?.title || "",
       letterStyle: selected?.letterStyle || "",
-      questionType: selected?.type || "",
+      bigType: bigTypeOf(selected),
+      subtype: subtypeOf(selected),
+      questionType: bigTypeOf(selected),
+      questionSubtype: subtypeOf(selected),
       prompt: selected?.prompt || "",
       questionPrompt: selected?.prompt || "",
       promptText: selected?.prompt || "",
@@ -4312,8 +4349,11 @@
         aiStage: "template-reference",
         mode: "template_reference",
         essay: originalEssay,
-        type: selected?.type || "",
-        questionType: selected?.type || "",
+        type: bigTypeOf(selected),
+        bigType: bigTypeOf(selected),
+        subtype: subtypeOf(selected),
+        questionType: bigTypeOf(selected),
+        questionSubtype: subtypeOf(selected),
         targetBand: 5.5
       }));
       if (!latestScoreResult && els.gradingResults) els.gradingResults.innerHTML = "";
@@ -4444,7 +4484,10 @@
       test: prompt?.test || "",
       title: prompt?.title || "",
       questionTitle: prompt?.title || "",
-      questionType: prompt?.type || "",
+      bigType: bigTypeOf(prompt),
+      subtype: subtypeOf(prompt),
+      questionType: bigTypeOf(prompt),
+      questionSubtype: subtypeOf(prompt),
       letterStyle: prompt?.letterStyle || "",
       questionPrompt: prompt?.prompt || "",
       promptText: prompt?.prompt || "",
@@ -4484,7 +4527,7 @@
     const node = $(targetId);
     if (!node || !prompt) return;
     node.innerHTML = `
-      <div class="tags">${tag(prompt.book, "book")}${tag(prompt.test, "book")}${tag(prompt.task, prompt.task === "Task 1" ? "task1" : "task2")}${tag(prompt.type, "type")}</div>
+      <div class="tags">${tag(prompt.book, "book")}${tag(prompt.test, "book")}${tag(prompt.task, prompt.task === "Task 1" ? "task1" : "task2")}${classificationTags(prompt)}</div>
       <h4>${escapeHtml(prompt.title)}</h4>
       <p class="prompt-text">${escapeHtml(prompt.prompt)}</p>`;
   }
@@ -4793,7 +4836,8 @@
 
   function bind() {
     bindSpaNavigation();
-    [els.bookFilter, els.testFilter, els.typeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
+    [els.bookFilter, els.testFilter, els.subtypeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
+    els.typeFilter?.addEventListener("change", () => { updateSubtypeFilterOptions(); renderList(); });
     els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); renderList(); });
     els.searchInput?.addEventListener("input", renderList);
     els.timerBtn?.addEventListener("click", toggleTimer);

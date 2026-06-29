@@ -1,7 +1,7 @@
-// IELTS GT Writing Hub — user-provided prompts with reviewed classifications.
+// IELTS GT Writing Hub - user-provided prompts with reviewed classifications.
 // Classification audit: 2026-06-29
-// Task 1: formal / semi-formal / informal + letter purpose.
-// Task 2: opinion, discussion, advantages/disadvantages, problem/solution, or mixed two-part question.
+// Task 1 hierarchy: Task -> bigType/formality -> subtype/letter purpose.
+// Task 2 hierarchy: Task -> bigType/question family -> subtype/required response pattern.
 
 const TASK1_PHRASES = {
   "Formal letter 常用开头": [
@@ -129,11 +129,39 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "Unfortunately, I was not satisfied with ...", "This caused a great deal of inconvenience.", "I would be grateful if you could look into this matter.", "I hope that a suitable solution can be found soon.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "Unfortunately, I was not satisfied with ...",
+      "This caused a great deal of inconvenience.",
+      "I would be grateful if you could look into this matter.",
+      "I hope that a suitable solution can be found soon.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：complaint / 投诉；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：complaint / 投诉；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "complaint / 投诉",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "complaint / 投诉",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b15-t2-task1",
@@ -148,11 +176,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：request / 请求；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：request / 请求；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "request / 请求",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "request / 请求",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b15-t3-task1",
@@ -167,11 +223,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "Please accept my sincere apologies for ...", "I am very sorry for any inconvenience this may have caused.", "I would like to explain what happened.", "I will make sure this does not happen again.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "Please accept my sincere apologies for ...",
+      "I am very sorry for any inconvenience this may have caused.",
+      "I would like to explain what happened.",
+      "I will make sure this does not happen again.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：apology / 道歉；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：apology / 道歉；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "apology / 道歉",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "apology / 道歉",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b15-t4-task1",
@@ -186,11 +270,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I am writing to apply for the position of ...", "I believe that my experience makes me a suitable candidate.", "I would welcome the opportunity to discuss my application further.", "Please find below a summary of my relevant experience.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I am writing to apply for the position of ...",
+      "I believe that my experience makes me a suitable candidate.",
+      "I would welcome the opportunity to discuss my application further.",
+      "Please find below a summary of my relevant experience.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：application / 申请；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：application / 申请；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "application / 申请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "application / 申请",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b16-t1-task1",
@@ -205,11 +317,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：enquiry / 咨询；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：enquiry / 咨询；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "enquiry / 咨询",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "enquiry / 咨询",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b16-t2-task1",
@@ -224,11 +364,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：arrangement / 安排；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：arrangement / 安排；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "arrangement / 安排",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "arrangement / 安排",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b16-t3-task1",
@@ -243,11 +411,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I am writing to thank you for ...", "I really appreciated the help and service provided.", "One aspect that could be improved is ...", "I hope this feedback will be useful.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I am writing to thank you for ...",
+      "I really appreciated the help and service provided.",
+      "One aspect that could be improved is ...",
+      "I hope this feedback will be useful.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：thanks / 感谢；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：thanks / 感谢；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "thanks / 感谢",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "thanks / 感谢",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b16-t4-task1",
@@ -262,11 +458,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：invitation / 邀请；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：invitation / 邀请；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "invitation / 邀请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "invitation / 邀请",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b17-t1-task1",
@@ -281,11 +505,39 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "Unfortunately, I was not satisfied with ...", "This caused a great deal of inconvenience.", "I would be grateful if you could look into this matter.", "I hope that a suitable solution can be found soon.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "Unfortunately, I was not satisfied with ...",
+      "This caused a great deal of inconvenience.",
+      "I would be grateful if you could look into this matter.",
+      "I hope that a suitable solution can be found soon.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：complaint / 投诉；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：complaint / 投诉；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "complaint / 投诉",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "complaint / 投诉",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b17-t2-task1",
@@ -300,11 +552,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "Unfortunately, I was not satisfied with ...", "This caused a great deal of inconvenience.", "I would be grateful if you could look into this matter.", "I hope that a suitable solution can be found soon.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "Unfortunately, I was not satisfied with ...",
+      "This caused a great deal of inconvenience.",
+      "I would be grateful if you could look into this matter.",
+      "I hope that a suitable solution can be found soon.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：complaint / 投诉；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：complaint / 投诉；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "complaint / 投诉",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "complaint / 投诉",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b17-t3-task1",
@@ -319,11 +599,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：sharing + invitation / 分享 + 邀请；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：sharing + invitation / 分享 + 邀请；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "sharing + invitation / 分享 + 邀请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "sharing + invitation / 分享 + 邀请",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b17-t4-task1",
@@ -338,11 +646,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I am writing to thank you for ...", "I really appreciated the help and service provided.", "One aspect that could be improved is ...", "I hope this feedback will be useful.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I am writing to thank you for ...",
+      "I really appreciated the help and service provided.",
+      "One aspect that could be improved is ...",
+      "I hope this feedback will be useful.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：feedback + enquiry / 反馈 + 咨询；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：feedback + enquiry / 反馈 + 咨询；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "feedback + enquiry / 反馈 + 咨询",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "feedback + enquiry / 反馈 + 咨询",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b18-t1-task1",
@@ -357,11 +693,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：enquiry / 咨询；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：enquiry / 咨询；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "enquiry / 咨询",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "enquiry / 咨询",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b18-t2-task1",
@@ -376,11 +740,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "Please accept my sincere apologies for ...", "I am very sorry for any inconvenience this may have caused.", "I would like to explain what happened.", "I will make sure this does not happen again.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "Please accept my sincere apologies for ...",
+      "I am very sorry for any inconvenience this may have caused.",
+      "I would like to explain what happened.",
+      "I will make sure this does not happen again.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：apology + offer / 道歉 + 赔偿；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：apology + offer / 道歉 + 赔偿；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "apology + offer / 道歉 + 赔偿",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "apology + offer / 道歉 + 赔偿",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b18-t3-task1",
@@ -395,11 +787,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I am writing to apply for the position of ...", "I believe that my experience makes me a suitable candidate.", "I would welcome the opportunity to discuss my application further.", "Please find below a summary of my relevant experience.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I am writing to apply for the position of ...",
+      "I believe that my experience makes me a suitable candidate.",
+      "I would welcome the opportunity to discuss my application further.",
+      "Please find below a summary of my relevant experience.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：application / 申请；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：application / 申请；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "application / 申请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "application / 申请",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b18-t4-task1",
@@ -414,11 +834,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "I think the best time would be ...", "You may also wish to ...", "This would be a good choice because ...", "I hope these suggestions are helpful.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "I think the best time would be ...",
+      "You may also wish to ...",
+      "This would be a good choice because ...",
+      "I hope these suggestions are helpful.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：advice / 建议；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：advice / 建议；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "advice / 建议",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "advice / 建议",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b19-t1-task1",
@@ -433,11 +881,39 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：offer + suggestion / 提议 + 建议；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：offer + suggestion / 提议 + 建议；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "offer + suggestion / 提议 + 建议",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "offer + suggestion / 提议 + 建议",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b19-t2-task1",
@@ -452,11 +928,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：invitation / 邀请；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：invitation / 邀请；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "invitation / 邀请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "invitation / 邀请",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b19-t3-task1",
@@ -471,11 +975,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：request / 请求；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：request / 请求；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "request / 请求",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "request / 请求",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b19-t4-task1",
@@ -490,11 +1022,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：request / 请求；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：request / 请求；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "request / 请求",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "request / 请求",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b20-t1-task1",
@@ -509,11 +1069,39 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "非正式 / Informal",
-    "usefulPhrases": ["Dear [First name],", "How are you? I hope you are well.", "I am writing to tell you about ...", "It would be great to hear from you.", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear [First name],",
+      "How are you? I hope you are well.",
+      "I am writing to tell you about ...",
+      "It would be great to hear from you.",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 非正式信；写信目的：arrangement / 安排；语气：非正式 / Informal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 非正式信；小题型：arrangement / 安排；语气：非正式 / Informal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 非正式信",
+    "subtype": "arrangement / 安排",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 非正式信",
+      "subtype": "arrangement / 安排",
+      "tone": "非正式 / Informal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b20-t2-task1",
@@ -528,11 +1116,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "半正式 / Semi-formal",
-    "usefulPhrases": ["Dear Mr / Ms [Surname],", "I hope you are well.", "I am writing to ask for your help with ...", "I am writing about ...", "I would be grateful if you could provide more information about ...", "Could you please let me know whether ...?", "It would be very helpful if you could ...", "Please let me know if you need any further details.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Mr / Ms [Surname],",
+      "I hope you are well.",
+      "I am writing to ask for your help with ...",
+      "I am writing about ...",
+      "I would be grateful if you could provide more information about ...",
+      "Could you please let me know whether ...?",
+      "It would be very helpful if you could ...",
+      "Please let me know if you need any further details.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 半正式信；写信目的：information / 分享经历；语气：半正式 / Semi-formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 半正式信；小题型：information / 分享经历；语气：半正式 / Semi-formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 半正式信",
+    "subtype": "information / 分享经历",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 半正式信",
+      "subtype": "information / 分享经历",
+      "tone": "半正式 / Semi-formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b20-t3-task1",
@@ -547,11 +1163,39 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I would be delighted if you could join us for ...", "It would be wonderful to see you there.", "The event will take place on ...", "Please let me know whether you are able to come.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I would be delighted if you could join us for ...",
+      "It would be wonderful to see you there.",
+      "The event will take place on ...",
+      "Please let me know whether you are able to come.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：invitation / 邀请；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：invitation / 邀请；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "invitation / 邀请",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "invitation / 邀请",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b20-t4-task1",
@@ -566,11 +1210,39 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 20,
     "recommendedWords": 150,
-    "sourceStatus": "user-provided · classification reviewed",
+    "sourceStatus": "user-provided - classification reviewed",
     "letterStyle": "正式 / Formal",
-    "usefulPhrases": ["Dear Sir or Madam,", "I am writing to enquire about ...", "I am writing to express my concern about ...", "I would be grateful if you could ...", "I am writing to thank you for ...", "I really appreciated the help and service provided.", "One aspect that could be improved is ...", "I hope this feedback will be useful.", "Thank you for your attention to this matter.", "I look forward to hearing from you soon.", "Yours faithfully,", "Yours sincerely,", "Best wishes,"],
+    "usefulPhrases": [
+      "Dear Sir or Madam,",
+      "I am writing to enquire about ...",
+      "I am writing to express my concern about ...",
+      "I would be grateful if you could ...",
+      "I am writing to thank you for ...",
+      "I really appreciated the help and service provided.",
+      "One aspect that could be improved is ...",
+      "I hope this feedback will be useful.",
+      "Thank you for your attention to this matter.",
+      "I look forward to hearing from you soon.",
+      "Yours faithfully,",
+      "Yours sincerely,",
+      "Best wishes,"
+    ],
     "sampleStructure": task1Structure,
-    "notes": {"focus": "题型：Task 1 正式信；写信目的：feedback / 反馈；语气：正式 / Formal。", "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.", "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."}
+    "notes": {
+      "focus": "大题型：Task 1 正式信；小题型：feedback / 反馈；语气：正式 / Formal。",
+      "band5": "Use a clear opening, cover all three bullet points, and use a suitable closing.",
+      "band6": "Add precise details, keep the tone consistent, and make the purpose or requested action easy to identify."
+    },
+    "bigType": "Task 1 正式信",
+    "subtype": "feedback / 反馈",
+    "classification": {
+      "task": "Task 1",
+      "bigType": "Task 1 正式信",
+      "subtype": "feedback / 反馈",
+      "tone": "正式 / Formal",
+      "reviewedAt": "2026-06-29",
+      "basis": "reader relationship + communicative purpose"
+    }
   },
   {
     "id": "b15-t1-task2",
@@ -579,16 +1251,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + opinion / 原因+观点",
+    "purpose": "reasons + opinion / 原因 + 观点",
     "title": "Crime Fiction and TV Crime Dramas",
     "prompt": "In many countries today, crime novels and TV crime dramas are becoming more and more popular.\nWhy do you think these books and TV shows are popular?\nWhat is your opinion of crime fiction and TV crime dramas?",
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + opinion / 原因+观点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + opinion / 原因 + 观点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + opinion / 原因 + 观点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + opinion / 原因 + 观点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b15-t2-task2",
@@ -597,16 +1300,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 原因 / 问题 / 解决类",
-    "purpose": "problems + solutions / 问题+解决",
+    "purpose": "problems + solutions / 问题 + 解决",
     "title": "Difficulties Getting Enough Sleep",
     "prompt": "Nowadays many people complain that they have difficulties getting enough sleep.\nWhat problems can lack of sleep cause?\nWhat can be done about lack of sleep?",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 原因 / 问题 / 解决类；本题目的：problems + solutions / 问题+解决。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 原因 / 问题 / 解决类；小题型：problems + solutions / 问题 + 解决。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 原因 / 问题 / 解决类",
+    "subtype": "problems + solutions / 问题 + 解决",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 原因 / 问题 / 解决类",
+      "subtype": "problems + solutions / 问题 + 解决",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b15-t3-task2",
@@ -621,10 +1355,41 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：agree or disagree / 同意或不同意。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：agree or disagree / 同意或不同意。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "agree or disagree / 同意或不同意",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "agree or disagree / 同意或不同意",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b15-t4-task2",
@@ -639,10 +1404,41 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 优缺点 / 权衡类；本题目的：advantages vs disadvantages / 优缺点比较。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 优缺点 / 权衡类；小题型：advantages vs disadvantages / 优缺点比较。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 优缺点 / 权衡类",
+    "subtype": "advantages vs disadvantages / 优缺点比较",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 优缺点 / 权衡类",
+      "subtype": "advantages vs disadvantages / 优缺点比较",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b16-t1-task2",
@@ -651,16 +1447,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 原因 / 问题 / 解决类",
-    "purpose": "damage + solutions / 影响+解决",
+    "purpose": "damage + solutions / 影响 + 解决",
     "title": "Plastic Waste and the Environment",
     "prompt": "Plastic bags, plastic bottles and plastic packaging are bad for the environment.\nWhat damage does plastic do to the environment?\nWhat can be done by governments and individuals to solve this problem?",
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 原因 / 问题 / 解决类；本题目的：damage + solutions / 影响+解决。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 原因 / 问题 / 解决类；小题型：damage + solutions / 影响 + 解决。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 原因 / 问题 / 解决类",
+    "subtype": "damage + solutions / 影响 + 解决",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 原因 / 问题 / 解决类",
+      "subtype": "damage + solutions / 影响 + 解决",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b16-t2-task2",
@@ -669,16 +1496,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双方观点类",
-    "purpose": "discussion + opinion / 双方观点+个人观点",
+    "purpose": "discussion + opinion / 双方观点 + 个人观点",
     "title": "Trying New Things or Keeping Familiar Habits",
     "prompt": "Some people like to try new things, for example, places to visit and types of food. Other people prefer to keep doing things they are familiar with.\nDiscuss both these attitudes and give your own opinion.",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双方观点类；本题目的：discussion + opinion / 双方观点+个人观点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双方观点类；小题型：discussion + opinion / 双方观点 + 个人观点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双方观点类",
+    "subtype": "discussion + opinion / 双方观点 + 个人观点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双方观点类",
+      "subtype": "discussion + opinion / 双方观点 + 个人观点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b16-t3-task2",
@@ -687,16 +1545,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + advantages/disadvantages / 原因+优缺点",
+    "purpose": "reasons + advantages / disadvantages / 原因 + 优缺点",
     "title": "Living Close to Where People Were Born",
     "prompt": "Some people spend most of their lives living close to where they were born.\nWhat might be the reasons for this?\nWhat are the advantages and disadvantages?",
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + advantages/disadvantages / 原因+优缺点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + advantages / disadvantages / 原因 + 优缺点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + advantages / disadvantages / 原因 + 优缺点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + advantages / disadvantages / 原因 + 优缺点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b16-t4-task2",
@@ -705,16 +1594,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "opinion + extension / 观点+延伸问题",
+    "purpose": "opinion + extension / 观点 + 延伸问题",
     "title": "The Best Time in History to Be Living",
     "prompt": "Some people say that now is the best time in history to be living.\nWhat is your opinion about this?\nWhat other time in history would be interesting to live in?",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：opinion + extension / 观点+延伸问题。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：opinion + extension / 观点 + 延伸问题。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "opinion + extension / 观点 + 延伸问题",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "opinion + extension / 观点 + 延伸问题",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b17-t1-task2",
@@ -723,16 +1643,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "prediction + reasons / 预测+原因",
+    "purpose": "prediction + reasons / 预测 + 原因",
     "title": "Future Cashless Payments",
     "prompt": "In the future, people may no longer be able to pay for things in shops using cash. All payments may have to be made by card or using phones.\nDo you think this will happen one day?\nWhy do you think some people might not be happy to give up using cash?",
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：prediction + reasons / 预测+原因。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：prediction + reasons / 预测 + 原因。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "prediction + reasons / 预测 + 原因",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "prediction + reasons / 预测 + 原因",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b17-t2-task2",
@@ -741,16 +1692,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + positive/negative / 原因+正负判断",
+    "purpose": "reasons + positive / negative / 原因 + 正负判断",
     "title": "Hiring Personal Fitness Trainers",
     "prompt": "In some countries, more and more people are hiring a personal fitness trainer, rather than playing sports or doing exercise classes.\nWhat are the reasons for this?\nIs this a positive or a negative development?",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + positive/negative / 原因+正负判断。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + positive / negative / 原因 + 正负判断。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + positive / negative / 原因 + 正负判断",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + positive / negative / 原因 + 正负判断",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b17-t3-task2",
@@ -765,10 +1747,41 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：agree or disagree / 同意或不同意。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：agree or disagree / 同意或不同意。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "agree or disagree / 同意或不同意",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "agree or disagree / 同意或不同意",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b17-t4-task2",
@@ -777,16 +1790,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双方观点类",
-    "purpose": "discussion + opinion / 双方观点+个人观点",
+    "purpose": "discussion + opinion / 双方观点 + 个人观点",
     "title": "Socialising with Work Colleagues",
     "prompt": "Some people think that it's a good idea to socialise with work colleagues during evenings and weekends. Other people think it's important to keep working life completely separate from social life.\nDiscuss both these views and give your own opinion.",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双方观点类；本题目的：discussion + opinion / 双方观点+个人观点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双方观点类；小题型：discussion + opinion / 双方观点 + 个人观点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双方观点类",
+    "subtype": "discussion + opinion / 双方观点 + 个人观点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双方观点类",
+      "subtype": "discussion + opinion / 双方观点 + 个人观点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b18-t1-task2",
@@ -801,10 +1845,41 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：agree or disagree / 同意或不同意。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：agree or disagree / 同意或不同意。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "agree or disagree / 同意或不同意",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "agree or disagree / 同意或不同意",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b18-t2-task2",
@@ -819,10 +1894,41 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：good or bad / 好坏判断。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：good or bad / 好坏判断。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "good or bad / 好坏判断",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "good or bad / 好坏判断",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b18-t3-task2",
@@ -831,16 +1937,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + advantages/disadvantages / 原因+优缺点",
+    "purpose": "reasons + advantages / disadvantages / 原因 + 优缺点",
     "title": "Having More Than One Job",
     "prompt": "In the past, most working people had only one job. However, nowadays, more and more people have more than one job at the same time.\nWhat are the reasons for this development?\nWhat are the advantages and disadvantages of having more than one job?",
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + advantages/disadvantages / 原因+优缺点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + advantages / disadvantages / 原因 + 优缺点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + advantages / disadvantages / 原因 + 优缺点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + advantages / disadvantages / 原因 + 优缺点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b18-t4-task2",
@@ -849,16 +1986,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + positive view / 原因+正面论证",
+    "purpose": "reasons + positive view / 原因 + 正面论证",
     "title": "Disliking Changes in Society and Life",
     "prompt": "Some people dislike changes in their society and in their own lives, and want things to stay the same.\nWhy do some people want things to stay the same?\nWhy should change be regarded as something positive?",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + positive view / 原因+正面论证。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + positive view / 原因 + 正面论证。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + positive view / 原因 + 正面论证",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + positive view / 原因 + 正面论证",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b19-t1-task2",
@@ -867,16 +2035,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + positive/negative / 原因+正负判断",
+    "purpose": "reasons + positive / negative / 原因 + 正负判断",
     "title": "Taking Photos at Famous Places",
     "prompt": "More and more people nowadays visit well-known places to take photographs of themselves, without looking at the place.\nWhy do you think this is happening?\nIs it a positive or a negative trend?",
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + positive/negative / 原因+正负判断。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + positive / negative / 原因 + 正负判断。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + positive / negative / 原因 + 正负判断",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + positive / negative / 原因 + 正负判断",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b19-t2-task2",
@@ -891,10 +2090,41 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：two judgement questions / 双判断问题。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：two judgement questions / 双判断问题。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "two judgement questions / 双判断问题",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "two judgement questions / 双判断问题",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b19-t3-task2",
@@ -903,16 +2133,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双问题 / 混合问法",
-    "purpose": "reasons + positive/negative / 原因+正负判断",
+    "purpose": "reasons + positive / negative / 原因 + 正负判断",
     "title": "Imported Goods",
     "prompt": "Some consumers are increasingly choosing to buy goods that are produced in their local area, rather than imported goods.\nWhat are the reasons for this?\nIs this a positive or a negative trend?",
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双问题 / 混合问法；本题目的：reasons + positive/negative / 原因+正负判断。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双问题 / 混合问法；小题型：reasons + positive / negative / 原因 + 正负判断。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双问题 / 混合问法",
+    "subtype": "reasons + positive / negative / 原因 + 正负判断",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双问题 / 混合问法",
+      "subtype": "reasons + positive / negative / 原因 + 正负判断",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b19-t4-task2",
@@ -921,16 +2182,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 双方观点类",
-    "purpose": "discussion + opinion / 双方观点+个人观点",
+    "purpose": "discussion + opinion / 双方观点 + 个人观点",
     "title": "Photographing Famous People",
     "prompt": "Nowadays famous people are photographed by professional photographers everywhere they go. Some people say this is a good thing because the public are interested in their lives. Other people think that photographers are wrong to follow famous people.\nDiscuss both these views and give your own opinion.",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 双方观点类；本题目的：discussion + opinion / 双方观点+个人观点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 双方观点类；小题型：discussion + opinion / 双方观点 + 个人观点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 双方观点类",
+    "subtype": "discussion + opinion / 双方观点 + 个人观点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 双方观点类",
+      "subtype": "discussion + opinion / 双方观点 + 个人观点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b20-t1-task2",
@@ -945,10 +2237,41 @@ const prompts = [
     "difficulty": "Easy",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：opinion / 个人观点。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：opinion / 个人观点。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "opinion / 个人观点",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "opinion / 个人观点",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b20-t2-task2",
@@ -963,10 +2286,41 @@ const prompts = [
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 优缺点 / 权衡类；本题目的：outweigh / 优缺点谁更大。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 优缺点 / 权衡类；小题型：outweigh / 优缺点谁更大。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 优缺点 / 权衡类",
+    "subtype": "outweigh / 优缺点谁更大",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 优缺点 / 权衡类",
+      "subtype": "outweigh / 优缺点谁更大",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b20-t3-task2",
@@ -981,10 +2335,41 @@ const prompts = [
     "difficulty": "Challenging",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 观点 / 判断类；本题目的：good or bad / 好坏判断。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 观点 / 判断类；小题型：good or bad / 好坏判断。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 观点 / 判断类",
+    "subtype": "good or bad / 好坏判断",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 观点 / 判断类",
+      "subtype": "good or bad / 好坏判断",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   },
   {
     "id": "b20-t4-task2",
@@ -993,16 +2378,47 @@ const prompts = [
     "module": "General Training",
     "task": "Task 2",
     "type": "Task 2 原因 / 问题 / 解决类",
-    "purpose": "reasons + solutions / 原因+解决",
+    "purpose": "reasons + solutions / 原因 + 解决",
     "title": "Buying Too Many Clothes",
     "prompt": "In some parts of the world, people buy far too many clothes.\nWhat are the reasons for this?\nHow can people be persuaded to reduce the number of clothes they buy?",
     "difficulty": "Medium",
     "timeLimit": 40,
     "recommendedWords": 250,
-    "sourceStatus": "user-provided · classification reviewed",
-    "usefulPhrases": ["It is often argued that ...", "People have different views about whether ...", "This essay will explain my view.", "This essay will discuss the main points.", "The main reason is that ...", "This means that ...", "For example, ...", "As a result, ...", "On the one hand, ...", "On the other hand, ...", "However, ...", "Although this is true, ...", "In conclusion, ...", "Overall, I believe that ...", "For these reasons, ...", "The best solution would be to ..."],
+    "sourceStatus": "user-provided - classification reviewed",
+    "usefulPhrases": [
+      "It is often argued that ...",
+      "People have different views about whether ...",
+      "This essay will explain my view.",
+      "This essay will discuss the main points.",
+      "The main reason is that ...",
+      "This means that ...",
+      "For example, ...",
+      "As a result, ...",
+      "On the one hand, ...",
+      "On the other hand, ...",
+      "However, ...",
+      "Although this is true, ...",
+      "In conclusion, ...",
+      "Overall, I believe that ...",
+      "For these reasons, ...",
+      "The best solution would be to ..."
+    ],
     "sampleStructure": task2Structure,
-    "notes": {"focus": "题型：Task 2 原因 / 问题 / 解决类；本题目的：reasons + solutions / 原因+解决。", "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.", "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."}
+    "notes": {
+      "focus": "大题型：Task 2 原因 / 问题 / 解决类；小题型：reasons + solutions / 原因 + 解决。",
+      "band5": "Give a clear answer, use two body paragraphs, and support each main idea with a simple example.",
+      "band6": "Answer every part of the question, develop ideas logically, and use linking language without overusing templates."
+    },
+    "bigType": "Task 2 原因 / 问题 / 解决类",
+    "subtype": "reasons + solutions / 原因 + 解决",
+    "classification": {
+      "task": "Task 2",
+      "bigType": "Task 2 原因 / 问题 / 解决类",
+      "subtype": "reasons + solutions / 原因 + 解决",
+      "tone": "",
+      "reviewedAt": "2026-06-29",
+      "basis": "question wording + required response parts"
+    }
   }
 ];
 
@@ -1010,74 +2426,22 @@ window.IELTS_GT_DATA = {
   meta: {
     projectName: "IELTS General Training Writing Practice Hub",
     copyrightNote: "Prompts are from user-provided study materials. Classifications were reviewed on 2026-06-29.",
-    books: ["Cambridge IELTS 15", "Cambridge IELTS 16", "Cambridge IELTS 17", "Cambridge IELTS 18", "Cambridge IELTS 19", "Cambridge IELTS 20"],
+    books: [
+        "Cambridge IELTS 15",
+        "Cambridge IELTS 16",
+        "Cambridge IELTS 17",
+        "Cambridge IELTS 18",
+        "Cambridge IELTS 19",
+        "Cambridge IELTS 20"
+    ],
     testsPerBook: 4,
-    classificationReviewDate: "2026-06-29"
+    classificationReviewDate: "2026-06-29",
+    classificationSchema: {
+      task: "Task 1 or Task 2",
+      bigType: "main question family",
+      subtype: "detailed purpose or response pattern"
+    }
   },
   phraseBanks: { task1: TASK1_PHRASES, task2: TASK2_PHRASES },
   prompts
 };
-
-// Add the detailed "purpose" label to the existing UI without changing its core logic.
-// data.js runs before script.js; this callback runs after the app has rendered.
-(function attachClassificationLabels() {
-  const escapeHtml = (value) => String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
-  let lastSelectedId = "";
-
-  function promptFromPage() {
-    if (lastSelectedId) {
-      const found = prompts.find((item) => item.id === lastSelectedId);
-      if (found) return found;
-    }
-    const heading = document.getElementById("practiceTitle")?.textContent || "";
-    return prompts.find((item) => heading.includes(item.title)) || null;
-  }
-
-  function addPurposeTag(container, prompt) {
-    if (!container || !prompt?.purpose || container.querySelector(".purpose-tag")) return;
-    const tag = document.createElement("span");
-    tag.className = "tag type purpose-tag";
-    tag.textContent = prompt.purpose;
-    container.appendChild(tag);
-  }
-
-  function decorate() {
-    document.querySelectorAll("#promptList button[data-id]").forEach((button) => {
-      const prompt = prompts.find((item) => item.id === button.dataset.id);
-      addPurposeTag(button.querySelector(".tags"), prompt);
-    });
-
-    const prompt = promptFromPage();
-    if (!prompt) return;
-
-    addPurposeTag(document.getElementById("metaTags"), prompt);
-
-    const infoGrid = document.getElementById("infoGrid");
-    if (infoGrid && !infoGrid.querySelector(`[data-purpose-id="${prompt.id}"]`)) {
-      const card = document.createElement("div");
-      card.className = "info";
-      card.dataset.purposeId = prompt.id;
-      card.innerHTML = `<span>${prompt.task === "Task 1" ? "写信目的" : "题目目的"}</span><strong>${escapeHtml(prompt.purpose)}</strong>`;
-      infoGrid.appendChild(card);
-    }
-  }
-
-  document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("button[data-id]");
-    if (!button?.dataset?.id) return;
-    lastSelectedId = button.dataset.id;
-    window.setTimeout(decorate, 0);
-  }, true);
-
-  document.addEventListener("DOMContentLoaded", () => {
-    const schedule = () => window.requestAnimationFrame(decorate);
-    new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
-    schedule();
-  });
-})();
