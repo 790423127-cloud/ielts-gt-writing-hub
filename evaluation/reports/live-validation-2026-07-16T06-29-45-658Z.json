@@ -1,0 +1,1088 @@
+{
+  "generatedAt": "2026-07-16T06:29:45.657Z",
+  "corpusVersion": "four-task-complete-corpus-v1",
+  "rubricVersion": "ielts-writing-rubric-2026-07-v2",
+  "promptVersion": "unified-double-examiner-v2-natural-feedback",
+  "scoreSystemVersion": "unified-writing-core-v2",
+  "runsPerSample": 1,
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 8,
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ]
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.5,
+    "criterionMeanAbsoluteErrorMax": 0.65,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0,
+    "catastrophicErrorDefinition": "absolute overall error greater than 1.0 band",
+    "requiredTaskCoverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ]
+  },
+  "metrics": {
+    "records": 1,
+    "overallMAE": 0.5,
+    "criterionMAE": 0.625,
+    "withinHalfBandRate": 1,
+    "catastrophicErrorRate": 0,
+    "feedbackCompletenessRate": 1,
+    "maxRepeatSpread": 0,
+    "byTask": {
+      "academic:1": {
+        "records": 1,
+        "overallMAE": 0.5,
+        "withinHalfBandRate": 1
+      },
+      "academic:2": {
+        "records": 0,
+        "overallMAE": 0,
+        "withinHalfBandRate": 0
+      },
+      "general_training:1": {
+        "records": 0,
+        "overallMAE": 0,
+        "withinHalfBandRate": 0
+      },
+      "general_training:2": {
+        "records": 0,
+        "overallMAE": 0,
+        "withinHalfBandRate": 0
+      }
+    },
+    "stabilityBySample": {
+      "A1-B5.5-table-complete": {
+        "scores": [
+          6
+        ],
+        "spread": 0
+      }
+    }
+  },
+  "gates": {
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "feedbackCompleteness": true,
+    "repeatStability": true,
+    "taskCoverage": false
+  },
+  "passed": false,
+  "records": [
+    {
+      "sampleId": "A1-B5.5-table-complete",
+      "taskKey": "academic:1",
+      "run": 1,
+      "targetOverall": 5.5,
+      "predictedOverall": 6,
+      "overallError": 0.5,
+      "targetCriteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "predictedCriteria": {
+        "Task Achievement": 6.5,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "criterionErrors": {
+        "Task Achievement": 0.5,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 0
+      },
+      "withinHalfBand": true,
+      "catastrophicError": false,
+      "feedbackAudit": {
+        "complete": true,
+        "criteria": {
+          "Task Achievement": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Coherence and Cohesion": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Lexical Resource": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Grammatical Range and Accuracy": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 3,
+            "actionableRevision": true
+          }
+        }
+      },
+      "adjudicationTriggered": true,
+      "humanReview": false,
+      "humanReviewReasons": [],
+      "confidence": 0.85,
+      "durationMs": 322703,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "academic_visual_report",
+        "overallBand": 6,
+        "rawAverage": 6.125,
+        "likelyRange": [
+          5.5,
+          7
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.85,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 6.5,
+          "Coherence and Cohesion": 6.5,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 5.5
+        },
+        "finalCriteria": {
+          "Task Achievement": 6.5,
+          "Coherence and Cohesion": 6.5,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 5.5
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 6.5,
+            "diagnosis": "The report covers all key features and provides a clear, though somewhat imprecise, overview. It identifies the main trends for each mode, but the development of comparisons is basic and could be more fully extended. For instance, the widening gap is mentioned but not highlighted with comparative language that emphasises the magnitude of change. Overall, the task is fulfilled but the overview lacks precision and the comparisons are underdeveloped.",
+            "diagnosisZh": "报告涵盖了所有关键特征，概述清晰但不够精确。它指出了每种交通方式的主要趋势，但比较的展开较为基础，可以更充分。例如，差距扩大被提及，但未用比较性语言强调变化幅度。整体上，任务得以完成，但概述缺乏精确性，比较未充分展开。",
+            "bandBoundary": {
+              "fit": "The overview is present and the main trends are identified, but the comparisons (e.g., the widened gap) are stated rather than fully exploited, and the overview uses vague language ('popular' without 'most', 'did not have a big change').",
+              "fitZh": "概述存在且主要趋势得到识别，但比较（如差距扩大）仅被陈述而未充分展开，且概述用词模糊（如缺最高级的'popular'、'did not have a big change'）。",
+              "nextBandGap": "To reach band 7, the overview would need to be more precise and detailed, and comparisons would need to be integrated more consistently and explicitly throughout the report, using comparative language to highlight relative changes.",
+              "nextBandGapZh": "要达到7分，概述需更精确、详细，且全文中需更一致、明确地融入比较，使用比较性语言突出相对变化。"
+            },
+            "strengths": [
+              "All three transport modes are covered with accurate data.",
+              "The widening gap between car and bus is highlighted with figures.",
+              "An overview is clearly attempted."
+            ],
+            "strengthsZh": [
+              "准确覆盖了所有三种交通方式及其数据。",
+              "用数字强调了汽车与巴士差距的扩大。",
+              "明确尝试了概述。"
+            ],
+            "constraints": [
+              "Overly vague overview ('popular' without 'most', 'did not have a big change').",
+              "Comparisons are mentioned but not developed with comparative expressions.",
+              "The concluding summary repeats the overview without adding specificity."
+            ],
+            "constraintsZh": [
+              "概述过于模糊（缺少最高级、'没有大变化'）。",
+              "比较虽有提及，但未用比较性表达展开。",
+              "总结句重复概述，未增加具体信息。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Overall, car was the popular transport in both years and its number went up.",
+                "explanation": "The overview is imprecise: 'popular' lacks the superlative 'most', and 'number' is an informal choice for 'percentage'.",
+                "explanationZh": "概述不精确：'popular'缺少最高级'most'，用'number'表示百分比不正式。"
+              },
+              {
+                "quote": "The gap was became much larger, at 38 points.",
+                "explanation": "The comparison is stated mechanically, without emphasising the dramatic widening from 11 to 38 percentage points.",
+                "explanationZh": "比较以机械方式陈述，未强调从11到38个百分点的剧烈扩大。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Sharpen the overview and develop comparisons more effectively.",
+              "priorityZh": "使概述更精确，并更有效地展示比较。",
+              "action": "Rewrite the overview to include superlatives and precise trends, and in the body, integrate comparative language to highlight relative changes and the magnitude of the gap.",
+              "actionZh": "重写概述，加入最高级和精确趋势，并在主体段融入比较性语言，突出相对变化和差距幅度。",
+              "beforeQuote": "Overall, car was the popular transport in both years and its number went up. Bus went down, while bicycle was still the smallest and it did not have a big change.",
+              "revisedExample": "Overall, the car was the most popular mode of transport in both years, with its percentage rising by 14 percentage points, while bus use fell sharply by 13 points. In contrast, cycling remained the least used option, declining only marginally from 15% to 14%.",
+              "whyItWorks": "The revised overview specifies 'most popular', quantifies changes, and replaces vague language with precise comparisons, making the summary more informative and meeting the requirement to highlight major features.",
+              "whyItWorksZh": "修改后的概述明确了'最受欢迎'，量化了变化，并用精确比较替代模糊语言，使总结信息更丰富，满足了突出主要特征的要求。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The report covers all key features and provides a clear, though somewhat imprecise, overview. It identifies the main trends for each mode, but the development of comparisons is basic and could be more fully extended. For instance, the widening gap is mentioned but not highlighted with comparative language that emphasises the magnitude of change. Overall, the task is fulfilled but the overview lacks precision and the comparisons are underdeveloped.",
+            "whyThisBandZh": "报告涵盖了所有关键特征，概述清晰但不够精确。它指出了每种交通方式的主要趋势，但比较的展开较为基础，可以更充分。例如，差距扩大被提及，但未用比较性语言强调变化幅度。整体上，任务得以完成，但概述缺乏精确性，比较未充分展开。",
+            "whyNotLower": "The overview is present and the main trends are identified, but the comparisons (e.g., the widened gap) are stated rather than fully exploited, and the overview uses vague language ('popular' without 'most', 'did not have a big change').",
+            "whyNotLowerZh": "概述存在且主要趋势得到识别，但比较（如差距扩大）仅被陈述而未充分展开，且概述用词模糊（如缺最高级的'popular'、'did not have a big change'）。",
+            "whyNotHigher": "To reach band 7, the overview would need to be more precise and detailed, and comparisons would need to be integrated more consistently and explicitly throughout the report, using comparative language to highlight relative changes.",
+            "whyNotHigherZh": "要达到7分，概述需更精确、详细，且全文中需更一致、明确地融入比较，使用比较性语言突出相对变化。",
+            "positiveEvidence": [
+              "All three transport modes are covered with accurate data.",
+              "The widening gap between car and bus is highlighted with figures.",
+              "An overview is clearly attempted."
+            ],
+            "positiveEvidenceZh": [
+              "准确覆盖了所有三种交通方式及其数据。",
+              "用数字强调了汽车与巴士差距的扩大。",
+              "明确尝试了概述。"
+            ],
+            "limitingEvidence": [
+              "Overly vague overview ('popular' without 'most', 'did not have a big change').",
+              "Comparisons are mentioned but not developed with comparative expressions.",
+              "The concluding summary repeats the overview without adding specificity."
+            ],
+            "limitingEvidenceZh": [
+              "概述过于模糊（缺少最高级、'没有大变化'）。",
+              "比较虽有提及，但未用比较性表达展开。",
+              "总结句重复概述，未增加具体信息。"
+            ],
+            "howToImprove": "Rewrite the overview to include superlatives and precise trends, and in the body, integrate comparative language to highlight relative changes and the magnitude of the gap.",
+            "howToImproveZh": "重写概述，加入最高级和精确趋势，并在主体段融入比较性语言，突出相对变化和差距幅度。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 6.5,
+            "diagnosis": "The response is logically organised with clear paragraphs and a chronological progression that aids understanding. Cohesive devices like 'In 2000', 'In 2025', and 'Therefore' are used, but the repetition of time markers creates a slightly mechanical flow. Referencing is generally clear, though 'this transport' could be more precise. The final summary sentence is somewhat redundant, as it echoes the overview without adding new information. Overall, coherence is effective but could benefit from greater flexibility.",
+            "diagnosisZh": "文章结构逻辑清晰，按时间顺序推进，有助于理解。使用了'In 2000', 'In 2025', 'Therefore'等衔接词，但时间标记的重复使用使行文略显机械。指代基本清晰，但'this transport'可更精确。结尾总结句有些多余，因其重复了概述而未提供新信息。整体连贯有效，但可更具灵活性。",
+            "bandBoundary": {
+              "fit": "The essay is well-paragraphed and logically sequenced, but cohesive devices are somewhat mechanical ('In 2000', 'In 2025') and referencing is occasionally vague; the progression is clear yet not particularly flexible.",
+              "fitZh": "文章分段合理、顺序逻辑，但衔接手段略显机械（重复使用时间状语），指代偶有模糊；推进清晰但不够灵活。",
+              "nextBandGap": "To reach band 7, cohesion would need to be less reliant on explicit sequencing, with more fluent integration of ideas and precise referencing throughout, and the conclusion should avoid simple repetition.",
+              "nextBandGapZh": "要达到7分，衔接需减少对显性顺序词的依赖，更流畅地整合观点，全文指代更精确，结论应避免简单重复。"
+            },
+            "strengths": [
+              "Clear structure with introduction, overview, body paragraphs, and summary.",
+              "Logical ordering: 2000 data first, then 2025, facilitating easy comparison.",
+              "Attempts to use referencing to avoid repetition ('This number', 'the gap')."
+            ],
+            "strengthsZh": [
+              "结构清晰：引言、概述、主体段和总结。",
+              "逻辑顺序合理：先2000年数据，再2025年，便于比较。",
+              "尝试使用指代避免重复（如'This number', 'the gap'）。"
+            ],
+            "constraints": [
+              "Mechanical repetition of time markers at paragraph starts ('In 2000', 'In 2025').",
+              "The final 'In summary' sentence restates the overview without adding value.",
+              "Some transitions are abrupt (e.g., gap introduced without explicit connection)."
+            ],
+            "constraintsZh": [
+              "段落开头机械重复时间标记（'In 2000', 'In 2025'）。",
+              "结尾的'In summary'句重复概述，未增加价值。",
+              "部分过渡生硬（如差距的引入缺乏明确连接）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "In 2025, the car figure grow to 62 percent, but bus reduced to 24 percent. The gap was became much larger, at 38 points.",
+                "explanation": "The link between the two sentences is abrupt; 'the gap' is introduced without clearly referring back to the car-bus difference.",
+                "explanationZh": "两句之间的连接生硬；'the gap'的引入未清晰回指汽车与巴士的差异。"
+              },
+              {
+                "quote": "Therefore, this transport stayed almost same.",
+                "explanation": "'Therefore' logically signals a conclusion, but 'this transport' is vague and the sentence feels disconnected from the preceding data.",
+                "explanationZh": "'Therefore'逻辑上标示结论，但'this transport'指代模糊，句子与前文脱节。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Smooth out transitions and reduce mechanical repetition.",
+              "priorityZh": "使过渡更流畅，减少机械重复。",
+              "action": "Combine sentences to show relationships more clearly, and avoid the separate 'In summary' sentence by integrating the concluding thought into the last body paragraph.",
+              "actionZh": "合并句子以更清晰显示关系，并将总结性思考融入最后一段，避免单独的'In summary'句。",
+              "beforeQuote": "In summary, the table have a clear increase for cars and a decrease for buses, but cycling changed very little.",
+              "revisedExample": "Thus, while car use rose substantially and bus use declined, cycling remained largely unchanged over the period.",
+              "whyItWorks": "The revision removes the redundant summary, uses a more flexible sentence structure, and provides a smoother, more integrated closure.",
+              "whyItWorksZh": "修改删除了冗余总结，使用更灵活的句式，提供了更流畅、更整体的结尾。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response is logically organised with clear paragraphs and a chronological progression that aids understanding. Cohesive devices like 'In 2000', 'In 2025', and 'Therefore' are used, but the repetition of time markers creates a slightly mechanical flow. Referencing is generally clear, though 'this transport' could be more precise. The final summary sentence is somewhat redundant, as it echoes the overview without adding new information. Overall, coherence is effective but could benefit from greater flexibility.",
+            "whyThisBandZh": "文章结构逻辑清晰，按时间顺序推进，有助于理解。使用了'In 2000', 'In 2025', 'Therefore'等衔接词，但时间标记的重复使用使行文略显机械。指代基本清晰，但'this transport'可更精确。结尾总结句有些多余，因其重复了概述而未提供新信息。整体连贯有效，但可更具灵活性。",
+            "whyNotLower": "The essay is well-paragraphed and logically sequenced, but cohesive devices are somewhat mechanical ('In 2000', 'In 2025') and referencing is occasionally vague; the progression is clear yet not particularly flexible.",
+            "whyNotLowerZh": "文章分段合理、顺序逻辑，但衔接手段略显机械（重复使用时间状语），指代偶有模糊；推进清晰但不够灵活。",
+            "whyNotHigher": "To reach band 7, cohesion would need to be less reliant on explicit sequencing, with more fluent integration of ideas and precise referencing throughout, and the conclusion should avoid simple repetition.",
+            "whyNotHigherZh": "要达到7分，衔接需减少对显性顺序词的依赖，更流畅地整合观点，全文指代更精确，结论应避免简单重复。",
+            "positiveEvidence": [
+              "Clear structure with introduction, overview, body paragraphs, and summary.",
+              "Logical ordering: 2000 data first, then 2025, facilitating easy comparison.",
+              "Attempts to use referencing to avoid repetition ('This number', 'the gap')."
+            ],
+            "positiveEvidenceZh": [
+              "结构清晰：引言、概述、主体段和总结。",
+              "逻辑顺序合理：先2000年数据，再2025年，便于比较。",
+              "尝试使用指代避免重复（如'This number', 'the gap'）。"
+            ],
+            "limitingEvidence": [
+              "Mechanical repetition of time markers at paragraph starts ('In 2000', 'In 2025').",
+              "The final 'In summary' sentence restates the overview without adding value.",
+              "Some transitions are abrupt (e.g., gap introduced without explicit connection)."
+            ],
+            "limitingEvidenceZh": [
+              "段落开头机械重复时间标记（'In 2000', 'In 2025'）。",
+              "结尾的'In summary'句重复概述，未增加价值。",
+              "部分过渡生硬（如差距的引入缺乏明确连接）。"
+            ],
+            "howToImprove": "Combine sentences to show relationships more clearly, and avoid the separate 'In summary' sentence by integrating the concluding thought into the last body paragraph.",
+            "howToImproveZh": "合并句子以更清晰显示关系，并将总结性思考融入最后一段，避免单独的'In summary'句。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "The vocabulary is adequate for the task but limited in range and precision. Simple, informal choices like 'went up', 'went down', and 'stayed almost same' reduce the academic tone. There are noticeable word form errors ('commuter' for 'commuters', 'grow' for 'grew', 'fall' for 'fell') and imprecise usage ('popular' without 'most'). Repetition of basic items like 'number' and 'figure' is common. However, meaning is generally clear, and some task-specific terms ('percentage points', 'gap') are attempted.",
+            "diagnosisZh": "词汇量足以完成任务，但范围有限且精确不足。简单、非正式的用词如'went up', 'went down', 'stayed almost same'降低了学术语气。存在明显的词形错误（如'commuter'应为'commuters','grow'应为'grew','fall'应为'fell'）和不精确用法（'popular'缺'most'）。基本词汇如'number','figure'重复使用。但意思大体清晰，并尝试了任务相关术语（'percentage points','gap'）。",
+            "bandBoundary": {
+              "fit": "The lexical range is just sufficient for the task, but errors in word formation and imprecise choices are frequent, though they do not seriously impede communication.",
+              "fitZh": "词汇范围对任务而言刚好足够，但构词错误和用词不精确频繁，不过未严重妨碍交流。",
+              "nextBandGap": "To reach band 7, the writer would need a wider range of more precise vocabulary, with fewer errors, and more formal, academic expressions (e.g., 'rose', 'fell', 'proportion', 'most popular').",
+              "nextBandGapZh": "要达到7分，需使用更广泛、更精确的词汇，减少错误，并使用更正式的学术表达（如'rose','fell','proportion','most popular'）。"
+            },
+            "strengths": [
+              "Basic meaning is conveyed without major breakdowns.",
+              "Some attempt at task-appropriate terms ('percentage points', 'gap').",
+              "Effort to paraphrase ('the car figure', 'this transport')."
+            ],
+            "strengthsZh": [
+              "基本意思可传达，无重大障碍。",
+              "尝试了任务相关术语（如'percentage points','gap'）。",
+              "尝试改写（如'the car figure','this transport'）。"
+            ],
+            "constraints": [
+              "Informal language ('went down', 'stayed almost same') weakens the academic register.",
+              "Frequent word form errors: 'commuter', 'grow', 'fall', 'was became'.",
+              "Imprecise or missing modifiers: 'popular' without 'most', 'less' instead of 'least'."
+            ],
+            "constraintsZh": [
+              "非正式语言（'went down','stayed almost same'）削弱了学术风格。",
+              "频繁的词形错误：'commuter','grow','fall','was became'。",
+              "修饰语不精确或缺失：'popular'缺'most'，'less'误用为'least'。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "car was the popular transport",
+                "explanation": "Missing the superlative 'most' reduces precision and the phrase is informal for a report.",
+                "explanationZh": "缺少最高级'most'降低了精确度，且该表达对报告而言不够正式。"
+              },
+              {
+                "quote": "the car figure grow to 62 percent",
+                "explanation": "The verb form 'grow' is incorrect (should be 'grew'), and 'car figure' is an awkward and imprecise paraphrase.",
+                "explanationZh": "动词形式'grow'错误（应为'grew'），且'car figure'是别扭且不精确的改写。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Improve lexical precision and adopt a more academic tone.",
+              "priorityZh": "提高词汇精确度，采用更学术的语气。",
+              "action": "Replace informal or vague phrases with accurate academic equivalents, and correct word forms; for example, use 'rose'/'fell', 'the percentage of car users', and include superlatives where needed.",
+              "actionZh": "用准确的学术对等词替换非正式或模糊的短语，并纠正词形；例如使用'rose'/'fell'，'the percentage of car users'，并在需要时加入最高级。",
+              "beforeQuote": "car was the popular transport in both years",
+              "revisedExample": "the car was the most popular mode of transport in both years",
+              "whyItWorks": "The revision uses the correct superlative and a more formal, precise noun phrase, enhancing lexical range and accuracy.",
+              "whyItWorksZh": "修改使用了正确的最高级和更正式、精确的名词短语，提升了词汇范围和准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The vocabulary is adequate for the task but limited in range and precision. Simple, informal choices like 'went up', 'went down', and 'stayed almost same' reduce the academic tone. There are noticeable word form errors ('commuter' for 'commuters', 'grow' for 'grew', 'fall' for 'fell') and imprecise usage ('popular' without 'most'). Repetition of basic items like 'number' and 'figure' is common. However, meaning is generally clear, and some task-specific terms ('percentage points', 'gap') are attempted.",
+            "whyThisBandZh": "词汇量足以完成任务，但范围有限且精确不足。简单、非正式的用词如'went up', 'went down', 'stayed almost same'降低了学术语气。存在明显的词形错误（如'commuter'应为'commuters','grow'应为'grew','fall'应为'fell'）和不精确用法（'popular'缺'most'）。基本词汇如'number','figure'重复使用。但意思大体清晰，并尝试了任务相关术语（'percentage points','gap'）。",
+            "whyNotLower": "The lexical range is just sufficient for the task, but errors in word formation and imprecise choices are frequent, though they do not seriously impede communication.",
+            "whyNotLowerZh": "词汇范围对任务而言刚好足够，但构词错误和用词不精确频繁，不过未严重妨碍交流。",
+            "whyNotHigher": "To reach band 7, the writer would need a wider range of more precise vocabulary, with fewer errors, and more formal, academic expressions (e.g., 'rose', 'fell', 'proportion', 'most popular').",
+            "whyNotHigherZh": "要达到7分，需使用更广泛、更精确的词汇，减少错误，并使用更正式的学术表达（如'rose','fell','proportion','most popular'）。",
+            "positiveEvidence": [
+              "Basic meaning is conveyed without major breakdowns.",
+              "Some attempt at task-appropriate terms ('percentage points', 'gap').",
+              "Effort to paraphrase ('the car figure', 'this transport')."
+            ],
+            "positiveEvidenceZh": [
+              "基本意思可传达，无重大障碍。",
+              "尝试了任务相关术语（如'percentage points','gap'）。",
+              "尝试改写（如'the car figure','this transport'）。"
+            ],
+            "limitingEvidence": [
+              "Informal language ('went down', 'stayed almost same') weakens the academic register.",
+              "Frequent word form errors: 'commuter', 'grow', 'fall', 'was became'.",
+              "Imprecise or missing modifiers: 'popular' without 'most', 'less' instead of 'least'."
+            ],
+            "limitingEvidenceZh": [
+              "非正式语言（'went down','stayed almost same'）削弱了学术风格。",
+              "频繁的词形错误：'commuter','grow','fall','was became'。",
+              "修饰语不精确或缺失：'popular'缺'most'，'less'误用为'least'。"
+            ],
+            "howToImprove": "Replace informal or vague phrases with accurate academic equivalents, and correct word forms; for example, use 'rose'/'fell', 'the percentage of car users', and include superlatives where needed.",
+            "howToImproveZh": "用准确的学术对等词替换非正式或模糊的短语，并纠正词形；例如使用'rose'/'fell'，'the percentage of car users'，并在需要时加入最高级。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 5.5,
+            "diagnosis": "The response relies primarily on simple sentence structures, with only one attempt at a complex relative clause. Grammatical errors are frequent and patterned, occurring across multiple sentence types. Subject-verb agreement errors ('table show', 'car users was', 'figures shows'), incorrect verb tense forms ('grow', 'fall'), and double-verb constructions ('was became') are common. These errors sometimes cause strain for the reader, although the overall meaning remains broadly recoverable. Control of grammar is clearly inconsistent and limited.",
+            "diagnosisZh": "文章主要依赖简单句结构，仅尝试了一个复杂的关系从句。语法错误频繁且呈模式化，出现在不同句型中。主谓一致错误（'table show','car users was','figures shows'）、动词时态错误（'grow','fall'）以及双重动词结构（'was became'）常见。这些错误有时给读者造成压力，但整体意思基本可辨。语法控制明显不稳定且有限。",
+            "bandBoundary": {
+              "fit": "The range of structures is limited, and errors are frequent and patterned; the attempted complex sentence is flawed, and control over basic grammar is insecure.",
+              "fitZh": "句型范围有限，错误频繁且呈模式化；尝试的复杂句有缺陷，基础语法控制不稳。",
+              "nextBandGap": "To reach band 6, the candidate would need to produce more error-free simple sentences and show at least some control over complex structures, with errors that rarely affect communication.",
+              "nextBandGapZh": "要达到6分，需产出更多无错误的简单句，并对复杂结构至少表现出一定的控制，错误应很少影响交流。"
+            },
+            "strengths": [
+              "Meaning is not entirely obscured by errors.",
+              "Attempts a relative clause ('which had 37 percent of commuter').",
+              "Some simple sentences are correctly formed aside from isolated errors."
+            ],
+            "strengthsZh": [
+              "错误未完全掩盖意思。",
+              "尝试了关系从句（'which had 37 percent of commuter'）。",
+              "除个别错误外，部分简单句结构正确。"
+            ],
+            "constraints": [
+              "Recurring subject-verb agreement errors ('table show', 'car users was', 'table have').",
+              "Frequent wrong verb forms: 'grow', 'fall', 'was became'.",
+              "Comparative/superlative error: 'less popular' instead of 'least popular'.",
+              "Article omission ('almost same')."
+            ],
+            "constraintsZh": [
+              "反复出现的主谓一致错误（'table show','car users was','table have'）。",
+              "频繁的动词形式错误：'grow','fall','was became'。",
+              "比较级/最高级错误：'less popular'应为'least popular'。",
+              "冠词缺失（'almost same'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The table show information about how people in Harton travelled to their work",
+                "explanation": "Subject-verb agreement error: 'table' is singular, requiring 'shows'.",
+                "explanationZh": "主谓一致错误：主语'table'为单数，应用'shows'。"
+              },
+              {
+                "quote": "car users was 48 percent",
+                "explanation": "Agreement error ('users' with 'was') and an awkward construction; a more standard phrasing would be 'the percentage of car users was 48%'.",
+                "explanationZh": "一致错误（'users'与'was'不匹配）及结构别扭；更标准的表述为'the percentage of car users was 48%'。"
+              },
+              {
+                "quote": "The gap was became much larger",
+                "explanation": "Double-verb construction; either 'was' or 'became' should be used alone.",
+                "explanationZh": "双重动词结构；应单独使用'was'或'became'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct frequent basic grammatical errors systemically.",
+              "priorityZh": "系统性地纠正常见的基础语法错误。",
+              "action": "Concentrate on subject-verb agreement and past tense forms; practise irregular verbs and avoid double-verb constructions before attempting more complex sentences.",
+              "actionZh": "专注主谓一致和过去时形式；练习不规则动词，避免双重动词结构，再尝试更复杂的句子。",
+              "beforeQuote": "The gap was became much larger, at 38 points.",
+              "revisedExample": "The gap became much larger, reaching 38 percentage points.",
+              "whyItWorks": "Corrects the double-verb error and uses a suitable past tense form, improving grammatical accuracy.",
+              "whyItWorksZh": "修正了双重动词错误，使用了合适的过去时，提高了语法准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response relies primarily on simple sentence structures, with only one attempt at a complex relative clause. Grammatical errors are frequent and patterned, occurring across multiple sentence types. Subject-verb agreement errors ('table show', 'car users was', 'figures shows'), incorrect verb tense forms ('grow', 'fall'), and double-verb constructions ('was became') are common. These errors sometimes cause strain for the reader, although the overall meaning remains broadly recoverable. Control of grammar is clearly inconsistent and limited.",
+            "whyThisBandZh": "文章主要依赖简单句结构，仅尝试了一个复杂的关系从句。语法错误频繁且呈模式化，出现在不同句型中。主谓一致错误（'table show','car users was','figures shows'）、动词时态错误（'grow','fall'）以及双重动词结构（'was became'）常见。这些错误有时给读者造成压力，但整体意思基本可辨。语法控制明显不稳定且有限。",
+            "whyNotLower": "The range of structures is limited, and errors are frequent and patterned; the attempted complex sentence is flawed, and control over basic grammar is insecure.",
+            "whyNotLowerZh": "句型范围有限，错误频繁且呈模式化；尝试的复杂句有缺陷，基础语法控制不稳。",
+            "whyNotHigher": "To reach band 6, the candidate would need to produce more error-free simple sentences and show at least some control over complex structures, with errors that rarely affect communication.",
+            "whyNotHigherZh": "要达到6分，需产出更多无错误的简单句，并对复杂结构至少表现出一定的控制，错误应很少影响交流。",
+            "positiveEvidence": [
+              "Meaning is not entirely obscured by errors.",
+              "Attempts a relative clause ('which had 37 percent of commuter').",
+              "Some simple sentences are correctly formed aside from isolated errors."
+            ],
+            "positiveEvidenceZh": [
+              "错误未完全掩盖意思。",
+              "尝试了关系从句（'which had 37 percent of commuter'）。",
+              "除个别错误外，部分简单句结构正确。"
+            ],
+            "limitingEvidence": [
+              "Recurring subject-verb agreement errors ('table show', 'car users was', 'table have').",
+              "Frequent wrong verb forms: 'grow', 'fall', 'was became'.",
+              "Comparative/superlative error: 'less popular' instead of 'least popular'.",
+              "Article omission ('almost same')."
+            ],
+            "limitingEvidenceZh": [
+              "反复出现的主谓一致错误（'table show','car users was','table have'）。",
+              "频繁的动词形式错误：'grow','fall','was became'。",
+              "比较级/最高级错误：'less popular'应为'least popular'。",
+              "冠词缺失（'almost same'）。"
+            ],
+            "howToImprove": "Concentrate on subject-verb agreement and past tense forms; practise irregular verbs and avoid double-verb constructions before attempting more complex sentences.",
+            "howToImproveZh": "专注主谓一致和过去时形式；练习不规则动词，避免双重动词结构，再尝试更复杂的句子。",
+            "confidence": 0.85
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 6.5,
+            "diagnosis": "The report covers all key features and provides a clear, though somewhat imprecise, overview. It identifies the main trends for each mode, but the development of comparisons is basic and could be more fully extended. For instance, the widening gap is mentioned but not highlighted with comparative language that emphasises the magnitude of change. Overall, the task is fulfilled but the overview lacks precision and the comparisons are underdeveloped.",
+            "diagnosisZh": "报告涵盖了所有关键特征，概述清晰但不够精确。它指出了每种交通方式的主要趋势，但比较的展开较为基础，可以更充分。例如，差距扩大被提及，但未用比较性语言强调变化幅度。整体上，任务得以完成，但概述缺乏精确性，比较未充分展开。",
+            "bandBoundary": {
+              "fit": "The overview is present and the main trends are identified, but the comparisons (e.g., the widened gap) are stated rather than fully exploited, and the overview uses vague language ('popular' without 'most', 'did not have a big change').",
+              "fitZh": "概述存在且主要趋势得到识别，但比较（如差距扩大）仅被陈述而未充分展开，且概述用词模糊（如缺最高级的'popular'、'did not have a big change'）。",
+              "nextBandGap": "To reach band 7, the overview would need to be more precise and detailed, and comparisons would need to be integrated more consistently and explicitly throughout the report, using comparative language to highlight relative changes.",
+              "nextBandGapZh": "要达到7分，概述需更精确、详细，且全文中需更一致、明确地融入比较，使用比较性语言突出相对变化。"
+            },
+            "strengths": [
+              "All three transport modes are covered with accurate data.",
+              "The widening gap between car and bus is highlighted with figures.",
+              "An overview is clearly attempted."
+            ],
+            "strengthsZh": [
+              "准确覆盖了所有三种交通方式及其数据。",
+              "用数字强调了汽车与巴士差距的扩大。",
+              "明确尝试了概述。"
+            ],
+            "constraints": [
+              "Overly vague overview ('popular' without 'most', 'did not have a big change').",
+              "Comparisons are mentioned but not developed with comparative expressions.",
+              "The concluding summary repeats the overview without adding specificity."
+            ],
+            "constraintsZh": [
+              "概述过于模糊（缺少最高级、'没有大变化'）。",
+              "比较虽有提及，但未用比较性表达展开。",
+              "总结句重复概述，未增加具体信息。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Overall, car was the popular transport in both years and its number went up.",
+                "explanation": "The overview is imprecise: 'popular' lacks the superlative 'most', and 'number' is an informal choice for 'percentage'.",
+                "explanationZh": "概述不精确：'popular'缺少最高级'most'，用'number'表示百分比不正式。"
+              },
+              {
+                "quote": "The gap was became much larger, at 38 points.",
+                "explanation": "The comparison is stated mechanically, without emphasising the dramatic widening from 11 to 38 percentage points.",
+                "explanationZh": "比较以机械方式陈述，未强调从11到38个百分点的剧烈扩大。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Sharpen the overview and develop comparisons more effectively.",
+              "priorityZh": "使概述更精确，并更有效地展示比较。",
+              "action": "Rewrite the overview to include superlatives and precise trends, and in the body, integrate comparative language to highlight relative changes and the magnitude of the gap.",
+              "actionZh": "重写概述，加入最高级和精确趋势，并在主体段融入比较性语言，突出相对变化和差距幅度。",
+              "beforeQuote": "Overall, car was the popular transport in both years and its number went up. Bus went down, while bicycle was still the smallest and it did not have a big change.",
+              "revisedExample": "Overall, the car was the most popular mode of transport in both years, with its percentage rising by 14 percentage points, while bus use fell sharply by 13 points. In contrast, cycling remained the least used option, declining only marginally from 15% to 14%.",
+              "whyItWorks": "The revised overview specifies 'most popular', quantifies changes, and replaces vague language with precise comparisons, making the summary more informative and meeting the requirement to highlight major features.",
+              "whyItWorksZh": "修改后的概述明确了'最受欢迎'，量化了变化，并用精确比较替代模糊语言，使总结信息更丰富，满足了突出主要特征的要求。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The report covers all key features and provides a clear, though somewhat imprecise, overview. It identifies the main trends for each mode, but the development of comparisons is basic and could be more fully extended. For instance, the widening gap is mentioned but not highlighted with comparative language that emphasises the magnitude of change. Overall, the task is fulfilled but the overview lacks precision and the comparisons are underdeveloped.",
+            "whyThisBandZh": "报告涵盖了所有关键特征，概述清晰但不够精确。它指出了每种交通方式的主要趋势，但比较的展开较为基础，可以更充分。例如，差距扩大被提及，但未用比较性语言强调变化幅度。整体上，任务得以完成，但概述缺乏精确性，比较未充分展开。",
+            "whyNotLower": "The overview is present and the main trends are identified, but the comparisons (e.g., the widened gap) are stated rather than fully exploited, and the overview uses vague language ('popular' without 'most', 'did not have a big change').",
+            "whyNotLowerZh": "概述存在且主要趋势得到识别，但比较（如差距扩大）仅被陈述而未充分展开，且概述用词模糊（如缺最高级的'popular'、'did not have a big change'）。",
+            "whyNotHigher": "To reach band 7, the overview would need to be more precise and detailed, and comparisons would need to be integrated more consistently and explicitly throughout the report, using comparative language to highlight relative changes.",
+            "whyNotHigherZh": "要达到7分，概述需更精确、详细，且全文中需更一致、明确地融入比较，使用比较性语言突出相对变化。",
+            "positiveEvidence": [
+              "All three transport modes are covered with accurate data.",
+              "The widening gap between car and bus is highlighted with figures.",
+              "An overview is clearly attempted."
+            ],
+            "positiveEvidenceZh": [
+              "准确覆盖了所有三种交通方式及其数据。",
+              "用数字强调了汽车与巴士差距的扩大。",
+              "明确尝试了概述。"
+            ],
+            "limitingEvidence": [
+              "Overly vague overview ('popular' without 'most', 'did not have a big change').",
+              "Comparisons are mentioned but not developed with comparative expressions.",
+              "The concluding summary repeats the overview without adding specificity."
+            ],
+            "limitingEvidenceZh": [
+              "概述过于模糊（缺少最高级、'没有大变化'）。",
+              "比较虽有提及，但未用比较性表达展开。",
+              "总结句重复概述，未增加具体信息。"
+            ],
+            "howToImprove": "Rewrite the overview to include superlatives and precise trends, and in the body, integrate comparative language to highlight relative changes and the magnitude of the gap.",
+            "howToImproveZh": "重写概述，加入最高级和精确趋势，并在主体段融入比较性语言，突出相对变化和差距幅度。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 6.5,
+            "diagnosis": "The response is logically organised with clear paragraphs and a chronological progression that aids understanding. Cohesive devices like 'In 2000', 'In 2025', and 'Therefore' are used, but the repetition of time markers creates a slightly mechanical flow. Referencing is generally clear, though 'this transport' could be more precise. The final summary sentence is somewhat redundant, as it echoes the overview without adding new information. Overall, coherence is effective but could benefit from greater flexibility.",
+            "diagnosisZh": "文章结构逻辑清晰，按时间顺序推进，有助于理解。使用了'In 2000', 'In 2025', 'Therefore'等衔接词，但时间标记的重复使用使行文略显机械。指代基本清晰，但'this transport'可更精确。结尾总结句有些多余，因其重复了概述而未提供新信息。整体连贯有效，但可更具灵活性。",
+            "bandBoundary": {
+              "fit": "The essay is well-paragraphed and logically sequenced, but cohesive devices are somewhat mechanical ('In 2000', 'In 2025') and referencing is occasionally vague; the progression is clear yet not particularly flexible.",
+              "fitZh": "文章分段合理、顺序逻辑，但衔接手段略显机械（重复使用时间状语），指代偶有模糊；推进清晰但不够灵活。",
+              "nextBandGap": "To reach band 7, cohesion would need to be less reliant on explicit sequencing, with more fluent integration of ideas and precise referencing throughout, and the conclusion should avoid simple repetition.",
+              "nextBandGapZh": "要达到7分，衔接需减少对显性顺序词的依赖，更流畅地整合观点，全文指代更精确，结论应避免简单重复。"
+            },
+            "strengths": [
+              "Clear structure with introduction, overview, body paragraphs, and summary.",
+              "Logical ordering: 2000 data first, then 2025, facilitating easy comparison.",
+              "Attempts to use referencing to avoid repetition ('This number', 'the gap')."
+            ],
+            "strengthsZh": [
+              "结构清晰：引言、概述、主体段和总结。",
+              "逻辑顺序合理：先2000年数据，再2025年，便于比较。",
+              "尝试使用指代避免重复（如'This number', 'the gap'）。"
+            ],
+            "constraints": [
+              "Mechanical repetition of time markers at paragraph starts ('In 2000', 'In 2025').",
+              "The final 'In summary' sentence restates the overview without adding value.",
+              "Some transitions are abrupt (e.g., gap introduced without explicit connection)."
+            ],
+            "constraintsZh": [
+              "段落开头机械重复时间标记（'In 2000', 'In 2025'）。",
+              "结尾的'In summary'句重复概述，未增加价值。",
+              "部分过渡生硬（如差距的引入缺乏明确连接）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "In 2025, the car figure grow to 62 percent, but bus reduced to 24 percent. The gap was became much larger, at 38 points.",
+                "explanation": "The link between the two sentences is abrupt; 'the gap' is introduced without clearly referring back to the car-bus difference.",
+                "explanationZh": "两句之间的连接生硬；'the gap'的引入未清晰回指汽车与巴士的差异。"
+              },
+              {
+                "quote": "Therefore, this transport stayed almost same.",
+                "explanation": "'Therefore' logically signals a conclusion, but 'this transport' is vague and the sentence feels disconnected from the preceding data.",
+                "explanationZh": "'Therefore'逻辑上标示结论，但'this transport'指代模糊，句子与前文脱节。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Smooth out transitions and reduce mechanical repetition.",
+              "priorityZh": "使过渡更流畅，减少机械重复。",
+              "action": "Combine sentences to show relationships more clearly, and avoid the separate 'In summary' sentence by integrating the concluding thought into the last body paragraph.",
+              "actionZh": "合并句子以更清晰显示关系，并将总结性思考融入最后一段，避免单独的'In summary'句。",
+              "beforeQuote": "In summary, the table have a clear increase for cars and a decrease for buses, but cycling changed very little.",
+              "revisedExample": "Thus, while car use rose substantially and bus use declined, cycling remained largely unchanged over the period.",
+              "whyItWorks": "The revision removes the redundant summary, uses a more flexible sentence structure, and provides a smoother, more integrated closure.",
+              "whyItWorksZh": "修改删除了冗余总结，使用更灵活的句式，提供了更流畅、更整体的结尾。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response is logically organised with clear paragraphs and a chronological progression that aids understanding. Cohesive devices like 'In 2000', 'In 2025', and 'Therefore' are used, but the repetition of time markers creates a slightly mechanical flow. Referencing is generally clear, though 'this transport' could be more precise. The final summary sentence is somewhat redundant, as it echoes the overview without adding new information. Overall, coherence is effective but could benefit from greater flexibility.",
+            "whyThisBandZh": "文章结构逻辑清晰，按时间顺序推进，有助于理解。使用了'In 2000', 'In 2025', 'Therefore'等衔接词，但时间标记的重复使用使行文略显机械。指代基本清晰，但'this transport'可更精确。结尾总结句有些多余，因其重复了概述而未提供新信息。整体连贯有效，但可更具灵活性。",
+            "whyNotLower": "The essay is well-paragraphed and logically sequenced, but cohesive devices are somewhat mechanical ('In 2000', 'In 2025') and referencing is occasionally vague; the progression is clear yet not particularly flexible.",
+            "whyNotLowerZh": "文章分段合理、顺序逻辑，但衔接手段略显机械（重复使用时间状语），指代偶有模糊；推进清晰但不够灵活。",
+            "whyNotHigher": "To reach band 7, cohesion would need to be less reliant on explicit sequencing, with more fluent integration of ideas and precise referencing throughout, and the conclusion should avoid simple repetition.",
+            "whyNotHigherZh": "要达到7分，衔接需减少对显性顺序词的依赖，更流畅地整合观点，全文指代更精确，结论应避免简单重复。",
+            "positiveEvidence": [
+              "Clear structure with introduction, overview, body paragraphs, and summary.",
+              "Logical ordering: 2000 data first, then 2025, facilitating easy comparison.",
+              "Attempts to use referencing to avoid repetition ('This number', 'the gap')."
+            ],
+            "positiveEvidenceZh": [
+              "结构清晰：引言、概述、主体段和总结。",
+              "逻辑顺序合理：先2000年数据，再2025年，便于比较。",
+              "尝试使用指代避免重复（如'This number', 'the gap'）。"
+            ],
+            "limitingEvidence": [
+              "Mechanical repetition of time markers at paragraph starts ('In 2000', 'In 2025').",
+              "The final 'In summary' sentence restates the overview without adding value.",
+              "Some transitions are abrupt (e.g., gap introduced without explicit connection)."
+            ],
+            "limitingEvidenceZh": [
+              "段落开头机械重复时间标记（'In 2000', 'In 2025'）。",
+              "结尾的'In summary'句重复概述，未增加价值。",
+              "部分过渡生硬（如差距的引入缺乏明确连接）。"
+            ],
+            "howToImprove": "Combine sentences to show relationships more clearly, and avoid the separate 'In summary' sentence by integrating the concluding thought into the last body paragraph.",
+            "howToImproveZh": "合并句子以更清晰显示关系，并将总结性思考融入最后一段，避免单独的'In summary'句。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "The vocabulary is adequate for the task but limited in range and precision. Simple, informal choices like 'went up', 'went down', and 'stayed almost same' reduce the academic tone. There are noticeable word form errors ('commuter' for 'commuters', 'grow' for 'grew', 'fall' for 'fell') and imprecise usage ('popular' without 'most'). Repetition of basic items like 'number' and 'figure' is common. However, meaning is generally clear, and some task-specific terms ('percentage points', 'gap') are attempted.",
+            "diagnosisZh": "词汇量足以完成任务，但范围有限且精确不足。简单、非正式的用词如'went up', 'went down', 'stayed almost same'降低了学术语气。存在明显的词形错误（如'commuter'应为'commuters','grow'应为'grew','fall'应为'fell'）和不精确用法（'popular'缺'most'）。基本词汇如'number','figure'重复使用。但意思大体清晰，并尝试了任务相关术语（'percentage points','gap'）。",
+            "bandBoundary": {
+              "fit": "The lexical range is just sufficient for the task, but errors in word formation and imprecise choices are frequent, though they do not seriously impede communication.",
+              "fitZh": "词汇范围对任务而言刚好足够，但构词错误和用词不精确频繁，不过未严重妨碍交流。",
+              "nextBandGap": "To reach band 7, the writer would need a wider range of more precise vocabulary, with fewer errors, and more formal, academic expressions (e.g., 'rose', 'fell', 'proportion', 'most popular').",
+              "nextBandGapZh": "要达到7分，需使用更广泛、更精确的词汇，减少错误，并使用更正式的学术表达（如'rose','fell','proportion','most popular'）。"
+            },
+            "strengths": [
+              "Basic meaning is conveyed without major breakdowns.",
+              "Some attempt at task-appropriate terms ('percentage points', 'gap').",
+              "Effort to paraphrase ('the car figure', 'this transport')."
+            ],
+            "strengthsZh": [
+              "基本意思可传达，无重大障碍。",
+              "尝试了任务相关术语（如'percentage points','gap'）。",
+              "尝试改写（如'the car figure','this transport'）。"
+            ],
+            "constraints": [
+              "Informal language ('went down', 'stayed almost same') weakens the academic register.",
+              "Frequent word form errors: 'commuter', 'grow', 'fall', 'was became'.",
+              "Imprecise or missing modifiers: 'popular' without 'most', 'less' instead of 'least'."
+            ],
+            "constraintsZh": [
+              "非正式语言（'went down','stayed almost same'）削弱了学术风格。",
+              "频繁的词形错误：'commuter','grow','fall','was became'。",
+              "修饰语不精确或缺失：'popular'缺'most'，'less'误用为'least'。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "car was the popular transport",
+                "explanation": "Missing the superlative 'most' reduces precision and the phrase is informal for a report.",
+                "explanationZh": "缺少最高级'most'降低了精确度，且该表达对报告而言不够正式。"
+              },
+              {
+                "quote": "the car figure grow to 62 percent",
+                "explanation": "The verb form 'grow' is incorrect (should be 'grew'), and 'car figure' is an awkward and imprecise paraphrase.",
+                "explanationZh": "动词形式'grow'错误（应为'grew'），且'car figure'是别扭且不精确的改写。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Improve lexical precision and adopt a more academic tone.",
+              "priorityZh": "提高词汇精确度，采用更学术的语气。",
+              "action": "Replace informal or vague phrases with accurate academic equivalents, and correct word forms; for example, use 'rose'/'fell', 'the percentage of car users', and include superlatives where needed.",
+              "actionZh": "用准确的学术对等词替换非正式或模糊的短语，并纠正词形；例如使用'rose'/'fell'，'the percentage of car users'，并在需要时加入最高级。",
+              "beforeQuote": "car was the popular transport in both years",
+              "revisedExample": "the car was the most popular mode of transport in both years",
+              "whyItWorks": "The revision uses the correct superlative and a more formal, precise noun phrase, enhancing lexical range and accuracy.",
+              "whyItWorksZh": "修改使用了正确的最高级和更正式、精确的名词短语，提升了词汇范围和准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The vocabulary is adequate for the task but limited in range and precision. Simple, informal choices like 'went up', 'went down', and 'stayed almost same' reduce the academic tone. There are noticeable word form errors ('commuter' for 'commuters', 'grow' for 'grew', 'fall' for 'fell') and imprecise usage ('popular' without 'most'). Repetition of basic items like 'number' and 'figure' is common. However, meaning is generally clear, and some task-specific terms ('percentage points', 'gap') are attempted.",
+            "whyThisBandZh": "词汇量足以完成任务，但范围有限且精确不足。简单、非正式的用词如'went up', 'went down', 'stayed almost same'降低了学术语气。存在明显的词形错误（如'commuter'应为'commuters','grow'应为'grew','fall'应为'fell'）和不精确用法（'popular'缺'most'）。基本词汇如'number','figure'重复使用。但意思大体清晰，并尝试了任务相关术语（'percentage points','gap'）。",
+            "whyNotLower": "The lexical range is just sufficient for the task, but errors in word formation and imprecise choices are frequent, though they do not seriously impede communication.",
+            "whyNotLowerZh": "词汇范围对任务而言刚好足够，但构词错误和用词不精确频繁，不过未严重妨碍交流。",
+            "whyNotHigher": "To reach band 7, the writer would need a wider range of more precise vocabulary, with fewer errors, and more formal, academic expressions (e.g., 'rose', 'fell', 'proportion', 'most popular').",
+            "whyNotHigherZh": "要达到7分，需使用更广泛、更精确的词汇，减少错误，并使用更正式的学术表达（如'rose','fell','proportion','most popular'）。",
+            "positiveEvidence": [
+              "Basic meaning is conveyed without major breakdowns.",
+              "Some attempt at task-appropriate terms ('percentage points', 'gap').",
+              "Effort to paraphrase ('the car figure', 'this transport')."
+            ],
+            "positiveEvidenceZh": [
+              "基本意思可传达，无重大障碍。",
+              "尝试了任务相关术语（如'percentage points','gap'）。",
+              "尝试改写（如'the car figure','this transport'）。"
+            ],
+            "limitingEvidence": [
+              "Informal language ('went down', 'stayed almost same') weakens the academic register.",
+              "Frequent word form errors: 'commuter', 'grow', 'fall', 'was became'.",
+              "Imprecise or missing modifiers: 'popular' without 'most', 'less' instead of 'least'."
+            ],
+            "limitingEvidenceZh": [
+              "非正式语言（'went down','stayed almost same'）削弱了学术风格。",
+              "频繁的词形错误：'commuter','grow','fall','was became'。",
+              "修饰语不精确或缺失：'popular'缺'most'，'less'误用为'least'。"
+            ],
+            "howToImprove": "Replace informal or vague phrases with accurate academic equivalents, and correct word forms; for example, use 'rose'/'fell', 'the percentage of car users', and include superlatives where needed.",
+            "howToImproveZh": "用准确的学术对等词替换非正式或模糊的短语，并纠正词形；例如使用'rose'/'fell'，'the percentage of car users'，并在需要时加入最高级。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 5.5,
+            "diagnosis": "The response relies primarily on simple sentence structures, with only one attempt at a complex relative clause. Grammatical errors are frequent and patterned, occurring across multiple sentence types. Subject-verb agreement errors ('table show', 'car users was', 'figures shows'), incorrect verb tense forms ('grow', 'fall'), and double-verb constructions ('was became') are common. These errors sometimes cause strain for the reader, although the overall meaning remains broadly recoverable. Control of grammar is clearly inconsistent and limited.",
+            "diagnosisZh": "文章主要依赖简单句结构，仅尝试了一个复杂的关系从句。语法错误频繁且呈模式化，出现在不同句型中。主谓一致错误（'table show','car users was','figures shows'）、动词时态错误（'grow','fall'）以及双重动词结构（'was became'）常见。这些错误有时给读者造成压力，但整体意思基本可辨。语法控制明显不稳定且有限。",
+            "bandBoundary": {
+              "fit": "The range of structures is limited, and errors are frequent and patterned; the attempted complex sentence is flawed, and control over basic grammar is insecure.",
+              "fitZh": "句型范围有限，错误频繁且呈模式化；尝试的复杂句有缺陷，基础语法控制不稳。",
+              "nextBandGap": "To reach band 6, the candidate would need to produce more error-free simple sentences and show at least some control over complex structures, with errors that rarely affect communication.",
+              "nextBandGapZh": "要达到6分，需产出更多无错误的简单句，并对复杂结构至少表现出一定的控制，错误应很少影响交流。"
+            },
+            "strengths": [
+              "Meaning is not entirely obscured by errors.",
+              "Attempts a relative clause ('which had 37 percent of commuter').",
+              "Some simple sentences are correctly formed aside from isolated errors."
+            ],
+            "strengthsZh": [
+              "错误未完全掩盖意思。",
+              "尝试了关系从句（'which had 37 percent of commuter'）。",
+              "除个别错误外，部分简单句结构正确。"
+            ],
+            "constraints": [
+              "Recurring subject-verb agreement errors ('table show', 'car users was', 'table have').",
+              "Frequent wrong verb forms: 'grow', 'fall', 'was became'.",
+              "Comparative/superlative error: 'less popular' instead of 'least popular'.",
+              "Article omission ('almost same')."
+            ],
+            "constraintsZh": [
+              "反复出现的主谓一致错误（'table show','car users was','table have'）。",
+              "频繁的动词形式错误：'grow','fall','was became'。",
+              "比较级/最高级错误：'less popular'应为'least popular'。",
+              "冠词缺失（'almost same'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The table show information about how people in Harton travelled to their work",
+                "explanation": "Subject-verb agreement error: 'table' is singular, requiring 'shows'.",
+                "explanationZh": "主谓一致错误：主语'table'为单数，应用'shows'。"
+              },
+              {
+                "quote": "car users was 48 percent",
+                "explanation": "Agreement error ('users' with 'was') and an awkward construction; a more standard phrasing would be 'the percentage of car users was 48%'.",
+                "explanationZh": "一致错误（'users'与'was'不匹配）及结构别扭；更标准的表述为'the percentage of car users was 48%'。"
+              },
+              {
+                "quote": "The gap was became much larger",
+                "explanation": "Double-verb construction; either 'was' or 'became' should be used alone.",
+                "explanationZh": "双重动词结构；应单独使用'was'或'became'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct frequent basic grammatical errors systemically.",
+              "priorityZh": "系统性地纠正常见的基础语法错误。",
+              "action": "Concentrate on subject-verb agreement and past tense forms; practise irregular verbs and avoid double-verb constructions before attempting more complex sentences.",
+              "actionZh": "专注主谓一致和过去时形式；练习不规则动词，避免双重动词结构，再尝试更复杂的句子。",
+              "beforeQuote": "The gap was became much larger, at 38 points.",
+              "revisedExample": "The gap became much larger, reaching 38 percentage points.",
+              "whyItWorks": "Corrects the double-verb error and uses a suitable past tense form, improving grammatical accuracy.",
+              "whyItWorksZh": "修正了双重动词错误，使用了合适的过去时，提高了语法准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response relies primarily on simple sentence structures, with only one attempt at a complex relative clause. Grammatical errors are frequent and patterned, occurring across multiple sentence types. Subject-verb agreement errors ('table show', 'car users was', 'figures shows'), incorrect verb tense forms ('grow', 'fall'), and double-verb constructions ('was became') are common. These errors sometimes cause strain for the reader, although the overall meaning remains broadly recoverable. Control of grammar is clearly inconsistent and limited.",
+            "whyThisBandZh": "文章主要依赖简单句结构，仅尝试了一个复杂的关系从句。语法错误频繁且呈模式化，出现在不同句型中。主谓一致错误（'table show','car users was','figures shows'）、动词时态错误（'grow','fall'）以及双重动词结构（'was became'）常见。这些错误有时给读者造成压力，但整体意思基本可辨。语法控制明显不稳定且有限。",
+            "whyNotLower": "The range of structures is limited, and errors are frequent and patterned; the attempted complex sentence is flawed, and control over basic grammar is insecure.",
+            "whyNotLowerZh": "句型范围有限，错误频繁且呈模式化；尝试的复杂句有缺陷，基础语法控制不稳。",
+            "whyNotHigher": "To reach band 6, the candidate would need to produce more error-free simple sentences and show at least some control over complex structures, with errors that rarely affect communication.",
+            "whyNotHigherZh": "要达到6分，需产出更多无错误的简单句，并对复杂结构至少表现出一定的控制，错误应很少影响交流。",
+            "positiveEvidence": [
+              "Meaning is not entirely obscured by errors.",
+              "Attempts a relative clause ('which had 37 percent of commuter').",
+              "Some simple sentences are correctly formed aside from isolated errors."
+            ],
+            "positiveEvidenceZh": [
+              "错误未完全掩盖意思。",
+              "尝试了关系从句（'which had 37 percent of commuter'）。",
+              "除个别错误外，部分简单句结构正确。"
+            ],
+            "limitingEvidence": [
+              "Recurring subject-verb agreement errors ('table show', 'car users was', 'table have').",
+              "Frequent wrong verb forms: 'grow', 'fall', 'was became'.",
+              "Comparative/superlative error: 'less popular' instead of 'least popular'.",
+              "Article omission ('almost same')."
+            ],
+            "limitingEvidenceZh": [
+              "反复出现的主谓一致错误（'table show','car users was','table have'）。",
+              "频繁的动词形式错误：'grow','fall','was became'。",
+              "比较级/最高级错误：'less popular'应为'least popular'。",
+              "冠词缺失（'almost same'）。"
+            ],
+            "howToImprove": "Concentrate on subject-verb agreement and past tense forms; practise irregular verbs and avoid double-verb constructions before attempting more complex sentences.",
+            "howToImproveZh": "专注主谓一致和过去时形式；练习不规则动词，避免双重动词结构，再尝试更复杂的句子。",
+            "confidence": 0.85
+          }
+        },
+        "overallAssessment": "The report covers the main features of the table and presents a clear overview, but its impact is weakened by frequent grammatical errors that sometimes cause strain, and by a limited lexical range. Organisation is logical and coherent overall, though the reiteration of time markers and the final summary feel somewhat mechanical. The most pressing need is to stabilise basic grammar—especially subject-verb agreement and verb forms—which are the foundation for clearer expression. Once accuracy improves, developing more precise vocabulary and sharper comparisons will lift the response to a higher band.",
+        "overallAssessmentZh": "报告涵盖了表格的主要特征，概述清晰，但频繁的语法错误有时造成阅读障碍，加之词汇范围有限，削弱了整体效果。结构逻辑清晰、连贯，但时间标记的重复和结尾总结显得稍许机械。当前最迫切的需求是稳定基础语法，尤其是主谓一致和动词形式，这是清晰表达的基础。待准确性提高后，再拓展更精确的词汇和更鲜明的比较，可将文章提升至更高分数段。",
+        "revisionSequence": [
+          "First, correct all basic grammatical errors, especially subject-verb agreement and irregular past tense forms, to establish a more reliable foundation for communication.",
+          "Second, replace informal or imprecise vocabulary with more academic equivalents and use correct superlatives and modifiers ('most popular', 'least popular').",
+          "Third, develop comparisons more fully by integrating comparative language (e.g., 'whereas', 'in contrast', 'more than tripled') and remove the redundant closing summary."
+        ],
+        "revisionSequenceZh": [
+          "首先，纠正所有基本语法错误，尤其是主谓一致和不规则动词过去式，为表达打下更可靠的基础。",
+          "其次，用更学术的对等词替换非正式或不精确的词汇，并使用正确的最高级和修饰语（如'most popular'、'least popular'）。",
+          "最后，通过融入比较性语言（如'whereas'、'in contrast'、'more than tripled'）更充分地展开比较，并删除多余的结尾总结。"
+        ],
+        "examinerAgreement": {
+          "overallDelta": 0.5,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 1,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0.5
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 2,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE",
+            "INCOMPLETE_NATURAL_FEEDBACK"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 6.5,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6.5,
+            "confidence": 0.8,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 6.5,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 5.5
+            },
+            "overallBand": 6,
+            "confidence": 0.8,
+            "evidenceCount": 5,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE",
+            "INCOMPLETE_NATURAL_FEEDBACK"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Achievement": 6.5,
+            "Coherence and Cohesion": 6.5,
+            "Lexical Resource": 6,
+            "Grammatical Range and Accuracy": 5.5
+          },
+          "finalOverallBand": 6
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "academic_visual_report",
+          "examModule": "academic",
+          "wordCount": 162,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 4,
+          "sentenceCount": 12,
+          "averageSentenceWords": 13.5,
+          "lexicalDiversity": 0.605,
+          "paragraphWordCounts": [
+            22,
+            31,
+            48,
+            61
+          ],
+          "englishLetterRatio": 0.918,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.281,
+          "visualFactsAvailable": true,
+          "visualFactsSourceVerified": true
+        },
+        "visualFactsAudit": {
+          "available": true,
+          "sourceVerified": true,
+          "visualType": "table",
+          "humanReviewRequiredForDataAccuracy": false
+        },
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 6.125,
+          "finalBand": 6,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE",
+            "INCOMPLETE_NATURAL_FEEDBACK"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "embedded_complete",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Text-specific criterion evidence and revision moves are embedded in the frozen scoring result."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": false,
+          "feedbackGenerated": true,
+          "feedbackStatus": "embedded_complete"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v2",
+        "promptVersion": "unified-double-examiner-v2-natural-feedback",
+        "scoreSystemVersion": "unified-writing-core-v2",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3423,
+              "completion_tokens": 9132,
+              "total_tokens": 12555,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 5287
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3423
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3424,
+              "completion_tokens": 7860,
+              "total_tokens": 11284,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3669
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3424
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "max",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 14801,
+              "completion_tokens": 9220,
+              "total_tokens": 24021,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4403
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 14801
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": null,
+          "elapsedMs": 322701
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

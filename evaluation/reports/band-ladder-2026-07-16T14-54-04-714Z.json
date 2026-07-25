@@ -1,0 +1,982 @@
+{
+  "generatedAt": "2026-07-16T14:54:04.713Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b0-1-a1-table"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 1,
+  "byBand": {
+    "0.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    }
+  },
+  "byDesignBand": {
+    "0.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    }
+  },
+  "byTask": {
+    "academic:1": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    }
+  },
+  "byZone": {
+    "low_0_3_5": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 7262,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": true,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": true,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b0-1-a1-table",
+      "split": "calibration",
+      "taskKey": "academic:1",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 0,
+      "designTargetOverall": 0,
+      "predictedOverall": 0,
+      "overallError": 0,
+      "designOverallError": 0,
+      "targetCriteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "designTargetCriteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "predictedCriteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "criterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "designCriterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "low_0_3_5",
+      "wordCount": 0,
+      "confidence": 0.9,
+      "adjudicationTriggered": false,
+      "adjudicationReasons": [],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": true,
+      "durationMs": 7262,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "academic_visual_report",
+        "overallBand": 0,
+        "rawAverage": 0,
+        "likelyRange": [
+          0,
+          0.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.9,
+        "needsHumanReview": true,
+        "humanReviewReasons": [
+          "POSSIBLE_NON_ENGLISH_RESPONSE"
+        ],
+        "criteria": {
+          "Task Achievement": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "finalCriteria": {
+          "Task Achievement": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; the response is empty.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response contains no English text whatsoever, meeting the band 0 condition for no assessable attempt.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required to score higher.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Completely empty response; no content to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; the response is empty.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response contains no English text whatsoever, meeting the band 0 condition for no assessable attempt.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required to score higher.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Completely empty response; no content to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No connected message exists; the response is empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; no textual organisation present.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No connected message exists; the response is empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; no textual organisation present.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No recognisable vocabulary is present; the response is entirely empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No recognisable vocabulary is present; the response is entirely empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No sentence-level language is present; the response is empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no grammatical structures to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No sentence-level language is present; the response is empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no grammatical structures to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; the response is empty.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response contains no English text whatsoever, meeting the band 0 condition for no assessable attempt.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required to score higher.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Completely empty response; no content to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; the response is empty.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response contains no English text whatsoever, meeting the band 0 condition for no assessable attempt.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required to score higher.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Completely empty response; no content to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No connected message exists; the response is empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; no textual organisation present.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No connected message exists; the response is empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; no textual organisation present.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No recognisable vocabulary is present; the response is entirely empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No recognisable vocabulary is present; the response is entirely empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No sentence-level language is present; the response is empty.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; a non-empty response is required.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no grammatical structures to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No sentence-level language is present; the response is empty.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; a non-empty response is required.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no grammatical structures to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "overallAssessment": "The candidate submitted a completely empty response. No English text is present, so no rateable language exists. All criteria are assessed at band 0.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "observations": [
+            "BOTH_UNIFORM_CRITERIA"
+          ],
+          "reasons": [],
+          "adjudicationRequired": false,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": false,
+            "criteria": {
+              "Task Achievement": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 0,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "none",
+              "weakest": "none",
+              "comparison": "No response text exists to assess any criterion.",
+              "uniformProfileJustification": "All criteria are band 0 because the response is empty and contains no assessable language."
+            },
+            "contrastComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": false,
+            "criteria": {
+              "Task Achievement": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 0,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "none",
+              "weakest": "none",
+              "comparison": "No text present to compare across criteria.",
+              "uniformProfileJustification": "All criteria are at Band 0 due to the absence of any rateable content."
+            },
+            "contrastComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": false,
+          "routing": null,
+          "specialist": null,
+          "finalDecisionSource": "ai-examiner-A",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": false,
+          "reasons": [],
+          "decision": "stable_ai_examiner_selected",
+          "selectionReason": "Examiner A supplied an equal or stronger confidence-and-evidence record.",
+          "avoidedRoles": [
+            "zone_specialist",
+            "meta_adjudicator"
+          ]
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "academic_visual_report",
+          "examModule": "academic",
+          "emptyResponse": true,
+          "wordCount": 0,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": true,
+          "severeLengthRisk": true,
+          "paragraphCount": 0,
+          "sentenceCount": 0,
+          "averageSentenceWords": 0,
+          "lexicalDiversity": 0,
+          "paragraphWordCounts": [],
+          "englishLetterRatio": 0,
+          "possibleNonEnglishResponse": true,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0,
+          "visualFactsAvailable": true,
+          "visualFactsSourceVerified": true
+        },
+        "visualFactsAudit": {
+          "available": true,
+          "sourceVerified": true,
+          "visualType": "table",
+          "humanReviewRequiredForDataAccuracy": false
+        },
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "stable_double_ai_examiner_selection",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 0,
+          "finalBand": 0,
+          "source": "independent-examiner-A"
+        },
+        "boundaryAudit": {
+          "reviewRequired": false,
+          "reviewReasons": [],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": false,
+            "decision": "stable_ai_examiner_selected"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-three-zone-ai-panel-v6-1-criterion-contrast",
+        "scoreSystemVersion": "unified-writing-core-v6.2-conditional-three-zone",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4061,
+              "completion_tokens": 822,
+              "total_tokens": 4883,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 477
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4062,
+              "completion_tokens": 816,
+              "total_tokens": 4878,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 478
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": null,
+          "adjudicator": null,
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 7261,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "specialistTriggered": false,
+            "metaAdjudicatorTriggered": false,
+            "coreModelCalls": 2,
+            "avoidedModelCalls": 2,
+            "coreTotalTokens": 9761
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

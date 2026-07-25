@@ -4,6 +4,9 @@
     "api/grade-ielts.js": {
       "maxDuration": 300
     },
+    "api/grade-writing.js": {
+      "maxDuration": 300
+    },
     "api/template-reference.js": {
       "maxDuration": 300
     }

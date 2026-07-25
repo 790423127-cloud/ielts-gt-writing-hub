@@ -1,0 +1,1195 @@
+{
+  "generatedAt": "2026-07-16T14:56:58.187Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b6-2-a2-discussion"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "6.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 6,
+      "predictedMean": 6,
+      "predictions": [
+        6
+      ]
+    }
+  },
+  "byDesignBand": {
+    "6.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 6,
+      "predictedMean": 6,
+      "predictions": [
+        6
+      ]
+    }
+  },
+  "byTask": {
+    "academic:2": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 6,
+      "predictedMean": 6,
+      "predictions": [
+        6
+      ]
+    }
+  },
+  "byZone": {
+    "mid_4_6_5": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 88551,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 6,
+      "predictedMean": 6,
+      "predictions": [
+        6
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b6-2-a2-discussion",
+      "split": "calibration",
+      "taskKey": "academic:2",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 6,
+      "designTargetOverall": 6,
+      "predictedOverall": 6,
+      "overallError": 0,
+      "designOverallError": 0,
+      "targetCriteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "designTargetCriteria": {
+        "Task Response": 6.5,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5.5,
+        "Grammatical Range and Accuracy": 6
+      },
+      "predictedCriteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "criterionErrors": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "designCriterionErrors": {
+        "Task Response": 0.5,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0.5,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "mid_4_6_5",
+      "wordCount": 290,
+      "confidence": 0.85,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "UNJUSTIFIED_UNIFORM_PROFILE",
+        "THREE_ZONE_AI_PANEL"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": false,
+      "durationMs": 88551,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 6,
+        "rawAverage": 6,
+        "likelyRange": [
+          5.5,
+          6.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.85,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Response": 6,
+          "Coherence and Cohesion": 6,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "finalCriteria": {
+          "Task Response": 6,
+          "Coherence and Cohesion": 6,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 6,
+            "diagnosis": "Both views are discussed and an opinion is given, but development is limited with brief examples and generic support.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Addresses all task requirements but each view is only superficially extended; consistent with Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, ideas need more detailed elaboration and specific real-world examples to fully develop the argument.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear presentation of both views and a personal opinion."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited depth; each paragraph offers only simple claims without detailed explanation or concrete evidence."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "For example, courses like engineering, nursing or IT give skills that employers want.",
+                "explanation": "Provides an example but does not explain how these skills are taught or why they are sufficient.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Subjects like history, philosophy or pure science may not lead directly to a job, but they help students to think critically and understand the world.",
+                "explanation": "States a benefit of academic knowledge but does not develop the idea of critical thinking or personal development in depth.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Both views are discussed and an opinion is given, but development is limited with brief examples and generic support.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Addresses all task requirements but each view is only superficially extended; consistent with Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, ideas need more detailed elaboration and specific real-world examples to fully develop the argument.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear presentation of both views and a personal opinion."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited depth; each paragraph offers only simple claims without detailed explanation or concrete evidence."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 6,
+            "diagnosis": "Clear overall progression with logical paragraph structure, but cohesive devices are repetitive and mechanical.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Response is logically sequenced with clear paragraphing; cohesion is present but formulaic, fitting Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, more flexible and varied use of cohesive devices and smoother transitions are needed.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical ordering of ideas: introduction, each view, opinion, conclusion."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Cohesive devices are limited to simple contrastive and additive markers; same structures repeated (On one hand... On the other hand...)."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "On one hand, many people say that universities should teach practical skills.",
+                "explanation": "Clear topic sentence opening, but same structure is repeated for the opposing view.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This essay will discuss both views and give my opinion.",
+                "explanation": "Mechanical signposting typical of a formulaic essay.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Clear overall progression with logical paragraph structure, but cohesive devices are repetitive and mechanical.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Response is logically sequenced with clear paragraphing; cohesion is present but formulaic, fitting Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, more flexible and varied use of cohesive devices and smoother transitions are needed.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical ordering of ideas: introduction, each view, opinion, conclusion."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Cohesive devices are limited to simple contrastive and additive markers; same structures repeated (On one hand... On the other hand...)."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Adequate but limited range; noticeable repetition of key terms and some imprecise word choices.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Vocabulary conveys meaning but is repetitive and lacks variety, consistent with Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, less common vocabulary and more precise choices are needed, with effective paraphrase to avoid repetition.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Uses topic-appropriate words like 'engineering', 'nursing', 'IT', 'internships', 'critical thinking'."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Heavy repetition of 'practical skills', 'academic knowledge', 'university', 'job' without effective synonyms."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "courses like engineering, nursing or IT give skills that employers want",
+                "explanation": "Collocation 'give skills' is slightly unnatural; more precise would be 'provide skills' or 'develop skills'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This kind of education is important for personal development and for advancing knowledge.",
+                "explanation": "Generic phrasing; lacks sophistication or precise vocabulary.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Adequate but limited range; noticeable repetition of key terms and some imprecise word choices.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Vocabulary conveys meaning but is repetitive and lacks variety, consistent with Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, less common vocabulary and more precise choices are needed, with effective paraphrase to avoid repetition.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Uses topic-appropriate words like 'engineering', 'nursing', 'IT', 'internships', 'critical thinking'."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Heavy repetition of 'practical skills', 'academic knowledge', 'university', 'job' without effective synonyms."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "Mix of simple and complex sentences with generally good control; errors are rare and do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Uses a mix of sentence structures with few errors, but range is somewhat limited, fitting Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, a wider variety of complex structures and more frequent error-free sentences are needed.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Most sentences are grammatically correct, and meaning is clear throughout."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited use of subordinate clauses; sentences often short and formulaic."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "If universities do not teach these skills, graduates may struggle to get work.",
+                "explanation": "Demonstrates ability to use a conditional structure correctly.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "But sometimes, too much focus on practical skills can make education too narrow.",
+                "explanation": "Simple sentence with correct grammar, but shows limited structural variety.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Mix of simple and complex sentences with generally good control; errors are rare and do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Uses a mix of sentence structures with few errors, but range is somewhat limited, fitting Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, a wider variety of complex structures and more frequent error-free sentences are needed.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Most sentences are grammatically correct, and meaning is clear throughout."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited use of subordinate clauses; sentences often short and formulaic."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 6,
+            "diagnosis": "Both views are discussed and an opinion is given, but development is limited with brief examples and generic support.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Addresses all task requirements but each view is only superficially extended; consistent with Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, ideas need more detailed elaboration and specific real-world examples to fully develop the argument.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear presentation of both views and a personal opinion."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited depth; each paragraph offers only simple claims without detailed explanation or concrete evidence."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "For example, courses like engineering, nursing or IT give skills that employers want.",
+                "explanation": "Provides an example but does not explain how these skills are taught or why they are sufficient.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Subjects like history, philosophy or pure science may not lead directly to a job, but they help students to think critically and understand the world.",
+                "explanation": "States a benefit of academic knowledge but does not develop the idea of critical thinking or personal development in depth.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Both views are discussed and an opinion is given, but development is limited with brief examples and generic support.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Addresses all task requirements but each view is only superficially extended; consistent with Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, ideas need more detailed elaboration and specific real-world examples to fully develop the argument.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear presentation of both views and a personal opinion."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited depth; each paragraph offers only simple claims without detailed explanation or concrete evidence."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 6,
+            "diagnosis": "Clear overall progression with logical paragraph structure, but cohesive devices are repetitive and mechanical.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Response is logically sequenced with clear paragraphing; cohesion is present but formulaic, fitting Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, more flexible and varied use of cohesive devices and smoother transitions are needed.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical ordering of ideas: introduction, each view, opinion, conclusion."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Cohesive devices are limited to simple contrastive and additive markers; same structures repeated (On one hand... On the other hand...)."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "On one hand, many people say that universities should teach practical skills.",
+                "explanation": "Clear topic sentence opening, but same structure is repeated for the opposing view.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This essay will discuss both views and give my opinion.",
+                "explanation": "Mechanical signposting typical of a formulaic essay.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Clear overall progression with logical paragraph structure, but cohesive devices are repetitive and mechanical.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Response is logically sequenced with clear paragraphing; cohesion is present but formulaic, fitting Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, more flexible and varied use of cohesive devices and smoother transitions are needed.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical ordering of ideas: introduction, each view, opinion, conclusion."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Cohesive devices are limited to simple contrastive and additive markers; same structures repeated (On one hand... On the other hand...)."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Adequate but limited range; noticeable repetition of key terms and some imprecise word choices.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Vocabulary conveys meaning but is repetitive and lacks variety, consistent with Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, less common vocabulary and more precise choices are needed, with effective paraphrase to avoid repetition.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Uses topic-appropriate words like 'engineering', 'nursing', 'IT', 'internships', 'critical thinking'."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Heavy repetition of 'practical skills', 'academic knowledge', 'university', 'job' without effective synonyms."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "courses like engineering, nursing or IT give skills that employers want",
+                "explanation": "Collocation 'give skills' is slightly unnatural; more precise would be 'provide skills' or 'develop skills'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This kind of education is important for personal development and for advancing knowledge.",
+                "explanation": "Generic phrasing; lacks sophistication or precise vocabulary.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Adequate but limited range; noticeable repetition of key terms and some imprecise word choices.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Vocabulary conveys meaning but is repetitive and lacks variety, consistent with Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, less common vocabulary and more precise choices are needed, with effective paraphrase to avoid repetition.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Uses topic-appropriate words like 'engineering', 'nursing', 'IT', 'internships', 'critical thinking'."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Heavy repetition of 'practical skills', 'academic knowledge', 'university', 'job' without effective synonyms."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "Mix of simple and complex sentences with generally good control; errors are rare and do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Uses a mix of sentence structures with few errors, but range is somewhat limited, fitting Band 6.",
+              "fitZh": "",
+              "nextBandGap": "For Band 7, a wider variety of complex structures and more frequent error-free sentences are needed.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Most sentences are grammatically correct, and meaning is clear throughout."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited use of subordinate clauses; sentences often short and formulaic."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "If universities do not teach these skills, graduates may struggle to get work.",
+                "explanation": "Demonstrates ability to use a conditional structure correctly.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "But sometimes, too much focus on practical skills can make education too narrow.",
+                "explanation": "Simple sentence with correct grammar, but shows limited structural variety.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Mix of simple and complex sentences with generally good control; errors are rare and do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Uses a mix of sentence structures with few errors, but range is somewhat limited, fitting Band 6.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "For Band 7, a wider variety of complex structures and more frequent error-free sentences are needed.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Most sentences are grammatically correct, and meaning is clear throughout."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited use of subordinate clauses; sentences often short and formulaic."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "overallAssessment": "The essay addresses both views and gives an opinion with clear structure, but development is superficial, vocabulary is repetitive, and sentence structures lack variety. All criteria are at Band 6 level based on the dominant evidence.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "observations": [
+            "BOTH_UNIFORM_CRITERIA"
+          ],
+          "reasons": [
+            "UNJUSTIFIED_UNIFORM_PROFILE"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6,
+            "confidence": 0.85,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Grammatical Range and Accuracy",
+              "weakest": "Lexical Resource",
+              "comparison": "Grammar shows consistent control of simple and some complex structures with few errors (strongest), while vocabulary is adequate but noticeably repetitive and lacks precision (weakest). Other criteria fall between these extremes.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6,
+            "confidence": 0.8,
+            "evidenceCount": 5,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Grammatical Range and Accuracy",
+              "weakest": "Lexical Resource",
+              "comparison": "Grammar shows adequate control with some complex forms, while vocabulary is noticeably repetitive and imprecise with a narrow range.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": [
+              "Lexical repetition may be considered more or less severe by different examiners; the borderline between Band 6 and 7 for LR is close."
+            ]
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "mid",
+            "reason": "AI_PANEL_IN_MIDDLE_BAND_RANGE",
+            "lower": 6,
+            "upper": 6
+          },
+          "specialist": {
+            "examinerId": "mid-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6,
+            "confidence": 0.8,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Coherence and Cohesion",
+              "weakest": "Lexical Resource",
+              "comparison": "CC shows clear overall progression and adequate cohesion, while LR is repetitive with limited range and some imprecision.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-meta-adjudicator",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "UNJUSTIFIED_UNIFORM_PROFILE",
+            "THREE_ZONE_AI_PANEL"
+          ],
+          "decision": "three_zone_independent_meta_reassessment",
+          "specialistZone": "mid",
+          "specialistCriteria": {
+            "Task Response": 6,
+            "Coherence and Cohesion": 6,
+            "Lexical Resource": 6,
+            "Grammatical Range and Accuracy": 6
+          },
+          "specialistOverallBand": 6,
+          "finalCriteria": {
+            "Task Response": 6,
+            "Coherence and Cohesion": 6,
+            "Lexical Resource": 6,
+            "Grammatical Range and Accuracy": 6
+          },
+          "finalOverallBand": 6
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "academic",
+          "emptyResponse": false,
+          "wordCount": 290,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 5,
+          "sentenceCount": 22,
+          "averageSentenceWords": 13.2,
+          "lexicalDiversity": 0.497,
+          "paragraphWordCounts": [
+            39,
+            75,
+            82,
+            65,
+            29
+          ],
+          "englishLetterRatio": 0.974,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.381,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "conditional_three_zone_ai_specialist_with_meta_adjudication",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 6,
+          "finalBand": 6,
+          "source": "three-zone-ai-meta-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "UNJUSTIFIED_UNIFORM_PROFILE"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "three_zone_independent_meta_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-three-zone-ai-panel-v6-1-criterion-contrast",
+        "scoreSystemVersion": "unified-writing-core-v6.2-conditional-three-zone",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4178,
+              "completion_tokens": 1690,
+              "total_tokens": 5868,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 594
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4179,
+              "completion_tokens": 1939,
+              "total_tokens": 6118,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 595
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "mid_specialist",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 6000,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4207,
+              "completion_tokens": 1568,
+              "total_tokens": 5775,
+              "prompt_tokens_details": {
+                "cached_tokens": 4096
+              },
+              "prompt_cache_hit_tokens": 4096,
+              "prompt_cache_miss_tokens": 111
+            },
+            "attempt": 2,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": {
+            "role": "meta_adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 8106,
+              "completion_tokens": 4124,
+              "total_tokens": 12230,
+              "prompt_tokens_details": {
+                "cached_tokens": 3712
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 2620
+              },
+              "prompt_cache_hit_tokens": 3712,
+              "prompt_cache_miss_tokens": 4394
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 88550,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": true,
+            "coreModelCalls": 4,
+            "avoidedModelCalls": 0,
+            "coreTotalTokens": 29991
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

@@ -6,3 +6,6 @@
 smoke-test-output*.json
 regression-output*.json
 test-output/
+output/
+.playwright-cli/
+_academic_import/

@@ -3,241 +3,172 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IELTS GT Writing Hub | Multi-view Writing Studio</title>
-  <link rel="stylesheet" href="style.css?v=20260629-classification-v1">
-  <link rel="stylesheet" href="phrase-compact.css?v=20260603-6">
+  <meta name="theme-color" content="#111936">
+  <title>IELTS Writing Lab | A 类与 G 类写作训练</title>
+  <link rel="stylesheet" href="style.css?v=20260716-core-v2">
+  <link rel="stylesheet" href="phrase-compact.css?v=20260716-core-v2">
+  <link rel="stylesheet" href="product-ui.css?v=20260717-product-v5">
 </head>
 <body class="hybrid-spa-app">
   <div class="app-shell">
-    <aside class="app-sidebar" aria-label="IELTS GT Writing Hub navigation">
+    <aside class="app-sidebar" aria-label="主导航">
       <div class="brand-block">
-        <div class="brand-mark" aria-hidden="true">IH</div>
+        <div class="brand-mark" aria-hidden="true">W</div>
         <div class="brand-copy">
-          <strong>IELTS GT Writing Hub</strong>
-          <span>Hybrid Studio · 1 + 3 + 4</span>
+          <strong>Writing Lab</strong>
+          <span>IELTS Academic · General</span>
         </div>
       </div>
 
-      <nav class="side-nav" aria-label="Primary navigation">
-        <a class="active" href="#/dashboard" data-view-target="dashboard">Dashboard</a>
-        <a href="#/practice" data-view-target="practice">Practice Library</a>
-        <a href="#/writing" data-view-target="writing">Writing Studio</a>
-        <a href="#/score-report" data-view-target="score-report">Score Report</a>
-        <a href="#/model-revision" data-view-target="model-revision">Model & Revision</a>
-        <a href="#/feedback" data-view-target="feedback">Learning Feedback</a>
-        <a href="#/collection" data-view-target="collection">Collection</a>
+      <div class="sidebar-section-label">工作区</div>
+      <nav class="side-nav" aria-label="产品导航">
+        <a class="active" href="#/dashboard" data-view-target="dashboard"><span class="nav-icon" aria-hidden="true">◫</span><span>学习总览</span></a>
+        <a href="#/practice" data-view-target="practice"><span class="nav-icon" aria-hidden="true">⌕</span><span>题库练习</span></a>
+        <a href="#/writing" data-view-target="writing"><span class="nav-icon" aria-hidden="true">✎</span><span>写作工作台</span></a>
+        <a href="#/score-report" data-view-target="score-report"><span class="nav-icon" aria-hidden="true">◎</span><span>评分报告</span></a>
+        <a href="#/model-revision" data-view-target="model-revision"><span class="nav-icon" aria-hidden="true">↗</span><span>范文与改写</span></a>
+        <a href="#/feedback" data-view-target="feedback"><span class="nav-icon" aria-hidden="true">◇</span><span>教师反馈</span></a>
+        <a href="#/collection" data-view-target="collection"><span class="nav-icon" aria-hidden="true">☆</span><span>表达收藏</span></a>
       </nav>
 
       <section class="sidebar-panel">
-        <p class="eyebrow">Session</p>
-        <h3>Current Goal</h3>
-        <p>Band 5.0 → 5.5</p>
+        <div class="sidebar-panel-head"><span>本周目标</span><strong>4 / 6</strong></div>
+        <div class="goal-progress" aria-label="本周训练进度 67%"><i style="width:67%"></i></div>
+        <p>完成四类任务各一次，并复盘最弱评分项。</p>
       </section>
 
-      <button id="themeBtn" class="sidebar-theme-btn" type="button">深色模式</button>
+      <p class="sidebar-footnote">AI 估分仅用于学习，不代表官方 IELTS 成绩</p>
     </aside>
 
     <main class="main-content">
       <header class="topbar">
         <div>
-          <p class="eyebrow">WRITING COMMAND CENTER</p>
-          <h1>Grammarly-style writing flow + official report + SaaS shell</h1>
+          <p class="eyebrow">IELTS WRITING COMMAND CENTER</p>
+          <h1>A 类与 G 类写作训练系统</h1>
         </div>
         <div class="top-actions">
-          <a class="top-action" href="#/practice" data-view-target="practice">Start Practice</a>
-          <a class="top-action" href="#/score-report" data-view-target="score-report">View Report</a>
-          <button class="primary" type="button" data-view-target="writing">Open Studio</button>
+          <span class="system-status"><i></i>评分核心 v6.5 · 0–9 半分边界校准</span>
+          <a class="top-action" href="#/practice" data-view-target="practice">浏览题库</a>
+          <button class="primary" type="button" data-view-target="writing">继续写作</button>
         </div>
       </header>
 
       <section id="app-view-dashboard" class="app-view is-active" data-app-view="dashboard">
-        <div class="view-title">
+        <div class="dashboard-hero">
           <div>
-            <p class="eyebrow">DASHBOARD</p>
-            <h2>今天的写作训练工作台</h2>
-            <p>从这里进入题库、写作、评分报告、范文修改和详细反馈。这个页面不堆全部功能，只提供入口和概览。</p>
+            <span class="hero-kicker">今日训练</span>
+            <h2>从一篇完整作文开始，<br>把每次评分变成下一步行动。</h2>
+            <p>统一练习 Academic 与 General Training。评分报告会拆开四项能力，用原文证据说明当前边界，并给出可直接修改的优先动作。</p>
+            <div class="hero-actions">
+              <a class="primary nav-button-link" href="#/practice" data-view-target="practice">选择一道题</a>
+              <a class="ghost-action" href="#/score-report" data-view-target="score-report">查看最近报告</a>
+            </div>
+          </div>
+          <div class="hero-score-card" aria-label="目标分数">
+            <span>目标分数</span>
+            <strong>6.5</strong>
+            <div><em>当前基线 6.0</em><b>+0.5</b></div>
+            <p>优先提升：论证展开与句间衔接</p>
           </div>
         </div>
 
-        <section class="hero-strip" aria-label="统计信息">
-          <article><span>Books</span><strong id="booksStat">6</strong></article>
-          <article><span>Tests</span><strong id="testsStat">24</strong></article>
-          <article><span>Task 1</span><strong id="task1Stat">24</strong></article>
-          <article><span>Task 2</span><strong id="task2Stat">24</strong></article>
+        <section class="hero-strip" aria-label="题库统计">
+          <article><span>Cambridge Books</span><strong id="booksStat">12</strong><small>全册索引</small></article>
+          <article><span>Tests</span><strong id="testsStat">72</strong><small>可筛选套题</small></article>
+          <article><span>Academic</span><strong id="academicStat">96</strong><small>A 类题目</small></article>
+          <article><span>General Training</span><strong id="generalStat">48</strong><small>G 类题目</small></article>
+          <article class="sr-only-stat"><span>Task 1</span><strong id="task1Stat">72</strong></article>
+          <article class="sr-only-stat"><span>Task 2</span><strong id="task2Stat">72</strong></article>
         </section>
 
         <section class="dashboard-grid">
           <article class="dashboard-card dashboard-card-primary">
-            <p class="eyebrow">Mock Test Mode</p>
-            <h3>Task 1 + Task 2 timed writing</h3>
-            <p>60 分钟完成两篇作文。考试模式面板会在 Practice Library 中加载，保持与现有逻辑兼容。</p>
-            <a href="#/practice" data-view-target="practice">进入题库与考试模式</a>
+            <div class="card-topline"><span class="module-chip academic">A</span><span>推荐训练 · 20 分钟</span></div>
+            <h3>Academic Task 1：抓住主趋势</h3>
+            <p>先写清 overview，再选择有信息价值的比较。评分会对照题图事实层检查数据方向与关键特征。</p>
+            <a href="#/practice" data-view-target="practice">进入 A 类题库 <span>→</span></a>
           </article>
-
           <article class="dashboard-card">
-            <p class="eyebrow">Recent Practice</p>
-            <h3>继续上一次写作</h3>
-            <p>选择一道题后，系统会自动进入 Writing Studio，并保留你的草稿、计划和收藏表达。</p>
-            <a href="#/writing" data-view-target="writing">打开 Writing Studio</a>
+            <div class="card-topline"><span class="module-chip general">G</span><span>沟通任务 · 20 分钟</span></div>
+            <h3>General Task 1：目的、语气与细节</h3>
+            <p>覆盖每个 bullet，并让整封信维持合适关系和语气，而不只是套用开头结尾。</p>
+            <a href="#/practice" data-view-target="practice">进入 G 类题库 <span>→</span></a>
           </article>
-
-          <article class="dashboard-card">
-            <p class="eyebrow">Learning Flow</p>
-            <h3>Score → Revision → Feedback</h3>
-            <p>评分报告、作文生成验证和详细反馈被分到不同页面，避免所有内容堆在一个长页面里。</p>
-            <a href="#/score-report" data-view-target="score-report">查看报告页</a>
+          <article class="dashboard-card workflow-card">
+            <p class="eyebrow">SCORING WORKFLOW</p>
+            <h3>双 AI 基础评分，争议时升级复核</h3>
+            <ol class="mini-flow">
+              <li><i>1</i><span><strong>双评分官独立判断</strong><small>A 与 B 并行阅读全文并给出四项分</small></span></li>
+              <li><i>2</i><span><strong>AI 一致性检查</strong><small>边界样本与四项同分报告会交给 AI 复核</small></span></li>
+              <li><i>3</i><span><strong>争议样本区间复核</strong><small>低分、中间分或高分专家重新阅读全文</small></span></li>
+              <li><i>4</i><span><strong>条件 AI 总裁决</strong><small>只处理实质分歧；四项反馈改为一次批量生成</small></span></li>
+            </ol>
           </article>
         </section>
       </section>
 
       <section id="app-view-practice" class="app-view" data-app-view="practice">
         <div class="view-title">
-          <div>
-            <p class="eyebrow">PRACTICE LIBRARY</p>
-            <h2>题目选择区</h2>
-            <p>筛选 Cambridge IELTS GT 题目。先选大题型，再选小题型；点击题目后会自动进入 Writing Studio。</p>
-          </div>
+          <div><p class="eyebrow">PRACTICE LIBRARY</p><h2>选择下一篇练习</h2><p>先筛选 A / G 模块和 Task，再按题型、书目或关键词定位题目。</p></div>
           <span id="countLabel" class="report-badge"></span>
         </div>
-
-        <section class="filters command-bar" aria-label="筛选区">
-          <label class="wide">
-            <span>搜索关键词</span>
-            <input id="searchInput" type="search" placeholder="搜索 book、test、题型、小题型、标题或题目关键词">
-          </label>
+        <section class="filters command-bar" aria-label="题库筛选">
+          <label class="wide"><span>搜索</span><input id="searchInput" type="search" placeholder="搜索题目、题型、Book 或 Test"></label>
+          <label><span>模块</span><select id="moduleFilter"></select></label>
           <label><span>Book</span><select id="bookFilter"></select></label>
           <label><span>Test</span><select id="testFilter"></select></label>
           <label><span>Task</span><select id="taskFilter"></select></label>
           <label><span>大题型</span><select id="typeFilter"></select></label>
           <label><span>小题型</span><select id="subtypeFilter"></select></label>
         </section>
-
-        <section class="prompt-board-full">
-          <div id="promptList" class="prompt-list"></div>
-        </section>
+        <section class="prompt-board-full"><div id="promptList" class="prompt-list"></div></section>
       </section>
 
       <section id="app-view-writing" class="app-view" data-app-view="writing">
         <div class="view-title">
-          <div>
-            <p class="eyebrow">WRITING STUDIO</p>
-            <h2>写作编辑器</h2>
-            <p>这里是正式写作工作台：题目、计划、作文输入、计时器、写作辅助和评分入口。</p>
-          </div>
+          <div><p class="eyebrow">WRITING STUDIO</p><h2>写作工作台</h2><p>题目、计划、计时与评分入口保持在同一条任务流中。</p></div>
           <a class="top-action" href="#/practice" data-view-target="practice">返回题库</a>
         </div>
-
         <div id="emptyState" class="empty studio-empty">
-          <p class="eyebrow">Ready to start</p>
-          <h2>请先在 Practice Library 选择一道题。</h2>
-          <p>选题后，这里会显示题目详情、写作计划、作文编辑器、计时器、写作辅助和 AI IELTS Report 入口。</p>
+          <span class="empty-icon">✎</span><p class="eyebrow">READY TO START</p><h2>请先从题库选择一道题</h2>
+          <p>选题后会自动加载题目、图表、计划区、计时器与写作草稿。</p>
           <a class="primary nav-button-link" href="#/practice" data-view-target="practice">去选择题目</a>
         </div>
-
         <article id="practiceView" class="hidden studio-workspace">
           <section class="workspace-grid">
             <section class="editor-column">
               <div class="prompt-brief">
-                <div>
-                  <p id="sourceStatus" class="eyebrow"></p>
-                  <h2 id="practiceTitle"></h2>
-                  <p id="practicePrompt" class="prompt-text"></p>
-                </div>
-                <div class="timer-card">
-                  <span>Writing Timer</span>
-                  <strong id="timerDisplay" class="timer">20:00</strong>
-                  <div class="timer-actions">
-                    <button id="timerBtn" class="primary" type="button">开始</button>
-                    <button id="resetTimerBtn" type="button">重置</button>
-                  </div>
+                <div class="prompt-copy"><p id="sourceStatus" class="eyebrow"></p><h2 id="practiceTitle"></h2><p id="practicePrompt" class="prompt-text"></p>
+                  <figure id="taskVisualWrap" class="task-visual-wrap hidden"><img id="taskVisual" alt="Academic Task 1 题图"><figcaption>Academic Task 1 题图 · 评分会校验关键特征与数据方向</figcaption></figure>
                 </div>
               </div>
-
-              <div class="meta-row">
-                <div id="metaTags" class="tags"></div>
-                <button id="backBtn" class="secondary" type="button">返回列表</button>
-              </div>
-
+              <div class="meta-row"><div id="metaTags" class="tags"></div><button id="backBtn" class="secondary" type="button">更换题目</button></div>
               <section id="infoGrid" class="info-grid studio-info-grid"></section>
-
-              <section class="panel-card plan-card">
-                <div class="card-head">
-                  <div>
-                    <p class="eyebrow">Plan</p>
-                    <h3>写作前思路整理区</h3>
-                  </div>
-                  <span class="muted">先想清楚，再开始写</span>
-                </div>
-                <div id="planArea" class="plan-grid"></div>
-              </section>
-
+              <details class="panel-card plan-card"><summary class="plan-summary"><div><p class="eyebrow">PLAN</p><h3>写前计划</h3></div><span class="muted">展开任务回应与段落计划</span></summary><div id="planArea" class="plan-grid"></div></details>
               <section class="editor-shell">
                 <div class="editor-toolbar">
-                  <div>
-                    <strong>Essay Draft</strong>
-                    <small>Current exam essay</small>
-                  </div>
-                  <div class="toolbar-actions">
-                    <button id="copyBtn" type="button">Copy</button>
-                    <button id="clearBtn" type="button">Clear</button>
+                  <div class="editor-heading"><strong>Essay Draft</strong><small>草稿自动保存在本机</small></div>
+                  <div class="editor-toolbar-controls">
+                    <div id="editorTimerControl" class="editor-timer-control" aria-label="写作计时器"><span>剩余时间</span><strong id="timerDisplay" class="timer">20:00</strong><button id="timerBtn" class="primary" type="button">开始</button><button id="resetTimerBtn" class="secondary" type="button">重置</button></div>
+                    <div class="toolbar-actions"><button id="focusModeBtn" type="button" aria-pressed="false">专注模式</button><button id="copyBtn" type="button">复制</button><button id="clearBtn" type="button">清空</button></div>
                   </div>
                 </div>
-
-                <textarea id="essayInput" class="essay" placeholder="在这里输入你的作文……" spellcheck="true"></textarea>
-
-                <div class="editor-footer">
-                  <span><strong id="wordCount">0</strong><span id="wordTarget">/ 150 words</span></span>
-                  <div class="footer-actions">
-                    <span id="statusText" class="muted"></span>
-                  </div>
-                </div>
+                <textarea id="essayInput" class="essay" placeholder="在这里输入你的完整作文……" spellcheck="true"></textarea>
+                <div class="editor-footer"><span><strong id="wordCount">0</strong><span id="wordTarget"> / 150 words</span></span><span id="statusText" class="muted"></span></div>
               </section>
             </section>
-
             <aside class="assistant-column">
-              <section id="quickReference" class="assistant-card">
-                <p class="eyebrow">QUICK REFERENCE</p>
-                <h3>Writing Coach</h3>
-                <div class="accordion-stack">
-                  <details class="accordion">
-                    <summary>写作结构提示</summary>
-                    <div class="accordion-body"><ol id="structureList"></ol></div>
-                  </details>
-                  <details class="accordion">
-                    <summary>Band 5 / Band 6+ 提示</summary>
-                    <div id="bandTips" class="accordion-body"></div>
-                  </details>
-                  <details class="accordion">
-                    <summary id="phraseTitle">常用句型提示</summary>
-                    <div class="accordion-body">
-                      <p id="phraseKicker" class="mini-kicker">Useful Phrases</p>
-                      <div id="phraseGroups" class="phrase-grid"></div>
-                    </div>
-                  </details>
-                </div>
-              </section>
-
-              <section id="aiGradingSection" class="assistant-card score-entry-card">
-                <p class="eyebrow">AI IELTS REPORT</p>
-                <h3>考试评分与学习反馈</h3>
-                <p class="muted score-explain">考试评分 = 当前输入框原文的分数；生成验证 = AI 生成版本的验证分，不改变原文分数。</p>
-                <label class="endpoint-field">
-                  <span class="muted">Grading API Endpoint</span>
-                  <input id="gradingEndpointInput" type="url" placeholder="https://your-domain.com/api/grade-ielts-production-router">
-                </label>
-                <label class="endpoint-field grading-mode-field">
-                  <span class="muted">批改模式</span>
-                  <select id="gradingModeSelect">
-                    <option value="quick">Quick Check 快速检查</option>
-                    <option value="full">Full IELTS Grading 完整评分</option>
-                    <option value="revision">Grade + Revision 评分 + 修改版</option>
-                  </select>
-                </label>
-                <div class="actions score-actions">
-                  <button id="gradeBtn" class="primary" type="button">开始批改</button>
-                  <button id="restoreOriginalBtn" class="secondary" type="button">撤回到原文</button>
-                </div>
-                <p id="gradingStatus" class="muted">等待批改</p>
+              <section id="quickReference" class="assistant-card"><p class="eyebrow">QUICK REFERENCE</p><h3>写作提示</h3><div class="accordion-stack">
+                <details class="accordion"><summary>结构提示</summary><div class="accordion-body"><ol id="structureList"></ol></div></details>
+                <details class="accordion"><summary>评分边界提示</summary><div id="bandTips" class="accordion-body"></div></details>
+                <details class="accordion"><summary id="phraseTitle">可用表达</summary><div class="accordion-body"><p id="phraseKicker" class="mini-kicker">USEFUL PHRASES</p><div id="phraseGroups" class="phrase-grid"></div></div></details>
+              </div></section>
+              <section id="aiGradingSection" class="assistant-card score-entry-card"><div class="score-entry-head"><span class="score-entry-icon">◎</span><div><p class="eyebrow">AI IELTS REPORT</p><h3>提交完整评分</h3></div></div>
+                <p class="muted score-explain">双考官独立判断四项分；出现分歧时重新裁决。反馈补全不会改变已经冻结的分数。</p>
+                <label class="endpoint-field"><span>评分接口</span><input id="gradingEndpointInput" type="url" placeholder="/api/grade-writing"></label>
+                <label class="endpoint-field grading-mode-field"><span>批改模式</span><select id="gradingModeSelect"><option value="quick">快速检查</option><option value="full">完整评分</option><option value="revision">评分与改写</option></select></label>
+                <div class="actions score-actions"><button id="gradeBtn" class="primary" type="button">开始评分</button><button id="restoreOriginalBtn" class="secondary" type="button">恢复原文</button></div>
+                <p id="gradingStatus" class="grading-status"><i></i>等待提交</p>
               </section>
             </aside>
           </section>
@@ -245,97 +176,35 @@
       </section>
 
       <section id="app-view-score-report" class="app-view" data-app-view="score-report">
-        <div class="view-title">
-          <div>
-            <p class="eyebrow">OFFICIAL-STYLE SCORE REPORT</p>
-            <h2>IELTS Writing Report</h2>
-            <p>这里集中显示 Overall Band、四项评分卡、评分流程、关键证据和下一步建议。</p>
-          </div>
-          <a class="top-action" href="#/writing" data-view-target="writing">回到 Writing Studio</a>
-        </div>
-
-        <div class="report-empty-state" id="scoreReportEmpty">
-          <h3>请先在 Writing Studio 中提交作文评分。</h3>
-          <p>评分完成后，Score Report 会显示完整报告。作文生成结果会自动移到 Model & Revision 页面，学习反馈会自动移到 Learning Feedback 页面。</p>
-          <a class="primary nav-button-link" href="#/writing" data-view-target="writing">去提交评分</a>
-        </div>
-
+        <div class="view-title"><div><p class="eyebrow">SCORE REPORT</p><h2>四项评分与证据</h2><p>先看总体表现，再展开每一项的原文证据、分数边界和优先改写。</p></div><a class="top-action" href="#/writing" data-view-target="writing">回到写作台</a></div>
+        <div class="report-empty-state" id="scoreReportEmpty"><span class="empty-icon">◎</span><h3>还没有评分报告</h3><p>完成一篇作文并提交后，这里会显示双考官一致性、四项分数与改写顺序。</p><a class="primary nav-button-link" href="#/writing" data-view-target="writing">去提交作文</a></div>
         <div id="gradingResults" class="grading-results report-results" aria-live="polite"></div>
       </section>
 
       <section id="app-view-model-revision" class="app-view" data-app-view="model-revision">
-        <div class="view-title">
-          <div>
-            <p class="eyebrow">MODEL & REVISION</p>
-            <h2>作文生成与修改版</h2>
-            <p>这里显示 Model Answer、source-based revision、candidate history 和生产评分验证状态。</p>
-          </div>
-          <a class="top-action" href="#/writing" data-view-target="writing">回到 Writing Studio</a>
-        </div>
-
-        <div class="report-empty-state" id="modelRevisionEmpty">
-          <h3>请先在 Writing Studio 中点击 Generate essay。</h3>
-          <p>生成后，这里会显示题目范文、+0.5 修改版、+1.0 修改版，以及每个版本的验证分和候选历史。</p>
-        </div>
-
+        <div class="view-title"><div><p class="eyebrow">MODEL & REVISION</p><h2>范文与改写对照</h2><p>把原文、忠实改写和目标版本放在同一条学习链中。</p></div><a class="top-action" href="#/writing" data-view-target="writing">回到写作台</a></div>
+        <div class="report-empty-state" id="modelRevisionEmpty"><span class="empty-icon">↗</span><h3>尚未生成改写</h3><p>在写作工作台生成作文或修订版后，这里会保留对照记录。</p></div>
         <div id="modelRevisionResults" class="model-revision-results"></div>
-
-        <div id="revisionCompareArea" class="revision-compare hidden">
-          <div>
-            <h4>Original Essay</h4>
-            <pre id="compareOriginalText"></pre>
-          </div>
-          <div>
-            <h4>Revised Essay</h4>
-            <pre id="compareRevisedText"></pre>
-          </div>
-        </div>
+        <div id="revisionCompareArea" class="revision-compare hidden"><div><h4>Original Essay</h4><pre id="compareOriginalText"></pre></div><div><h4>Revised Essay</h4><pre id="compareRevisedText"></pre></div></div>
       </section>
 
       <section id="app-view-feedback" class="app-view" data-app-view="feedback">
-        <div class="view-title">
-          <div>
-            <p class="eyebrow">LEARNING FEEDBACK</p>
-            <h2>老师式详细反馈</h2>
-            <p>这里显示 Overview、Sentence Upgrade、Grammar、Structure & Task、Expression Bank 等模块。</p>
-          </div>
-          <a class="top-action" href="#/score-report" data-view-target="score-report">查看评分报告</a>
-        </div>
-
-        <div class="report-empty-state" id="feedbackEmpty">
-          <h3>请先完成一次评分。</h3>
-          <p>评分完成后，Learning Feedback 模块会在这里显示。每个模块可以单独生成，不会改变冻结分数。</p>
-        </div>
-
+        <div class="view-title"><div><p class="eyebrow">LEARNING FEEDBACK</p><h2>教师式学习反馈</h2><p>从句子、语法、任务结构和表达复用四个方向继续练习。</p></div><a class="top-action" href="#/score-report" data-view-target="score-report">查看评分报告</a></div>
+        <div class="report-empty-state" id="feedbackEmpty"><span class="empty-icon">◇</span><h3>尚未生成学习反馈</h3><p>完成评分后可以按模块生成反馈，且不会改变已经冻结的分数。</p></div>
         <div id="learningFeedbackMount" class="learning-feedback-mount"></div>
       </section>
 
       <section id="app-view-collection" class="app-view" data-app-view="collection">
-        <div class="view-title">
-          <div>
-            <p class="eyebrow">EXPRESSION COLLECTION</p>
-            <h2>表达收藏区</h2>
-            <p>收藏可复用句型、短语和你下次写作想继续使用的表达。</p>
-          </div>
-          <a class="top-action" href="#/writing" data-view-target="writing">回到 Writing Studio</a>
-        </div>
-
-        <section class="collection-page-card">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">My Phrases</p>
-              <h3>我的常用表达收藏区</h3>
-            </div>
-          </div>
-          <textarea id="favoriteInput" class="notes" placeholder="把你常用的高频表达、好句型或可复用词组记在这里。"></textarea>
-        </section>
+        <div class="view-title"><div><p class="eyebrow">EXPRESSION COLLECTION</p><h2>我的表达收藏</h2><p>保存你真正理解、下次愿意再使用的短语和句型。</p></div><a class="top-action" href="#/writing" data-view-target="writing">回到写作台</a></div>
+        <section class="collection-page-card"><div class="card-head"><div><p class="eyebrow">MY PHRASES</p><h3>可复用表达</h3></div></div><textarea id="favoriteInput" class="notes" placeholder="记录短语、搭配、改写句或下一次要练习的表达……"></textarea></section>
       </section>
     </main>
   </div>
 
-  <script src="data.js?v=20260629-classification-v1"></script>
-  <script src="script.js?v=20260629-classification-v1"></script>
-  <script src="phrase-compact.js?v=20260603-5"></script>
-  <script src="subtype-ui.js?v=20260629-classification-v1"></script>
+  <script src="data.js?v=20260716-unified-v2"></script>
+  <script src="academic-data.js?v=20260716-unified-v2"></script>
+  <script src="script.js?v=20260717-unified-v65"></script>
+  <script src="phrase-compact.js?v=20260716-unified-v2"></script>
+  <script src="subtype-ui.js?v=20260716-unified-v2"></script>
 </body>
 </html>

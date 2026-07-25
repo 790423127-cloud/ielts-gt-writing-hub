@@ -2,7 +2,22 @@
   "name": "ielts-gt-writing-hub",
   "version": "1.0.0",
   "private": true,
-  "description": "Static IELTS General Training Writing practice hub with a Vercel grading API.",
+  "description": "IELTS Academic and General Training writing practice hub with a calibrated four-criterion scoring API.",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js",
+    "test": "node --test tests/unified-scoring-core.test.cjs && node tests/template-reference-static-test.cjs && node tests/learning-feedback-rendering-test.cjs && node tests/router-wiring-smoke-test.cjs",
+    "test:legacy": "node tests/router-wiring-smoke-test.cjs",
+    "test:deployed-legacy": "node system-smoke-test.cjs",
+    "test:calibration:static": "node evaluation/run-live-validation.cjs --static-only",
+    "test:calibration:live": "node evaluation/run-live-validation.cjs --runs=1 --concurrency=2",
+    "test:ladder:static": "node evaluation/run-band-ladder-validation.cjs --static-only",
+    "test:ladder:calibration": "node evaluation/run-band-ladder-validation.cjs --split=calibration --concurrency=4",
+    "test:ladder:holdout": "node evaluation/run-band-ladder-validation.cjs --split=holdout --concurrency=4",
+    "test:cost:core": "node scripts/smoke-three-zone-stream.cjs",
+    "test:cost:feedback": "node scripts/smoke-batch-feedback.cjs",
+    "test:github-reference": "node scripts/compare-github-cloud-reference.cjs"
+  },
   "engines": {
     "node": ">=20"
   }

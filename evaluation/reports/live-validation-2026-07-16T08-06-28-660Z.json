@@ -1,0 +1,3635 @@
+{
+  "generatedAt": "2026-07-16T08:06:28.660Z",
+  "corpusVersion": "four-task-complete-corpus-v2-audited-boundaries",
+  "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+  "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+  "scoreSystemVersion": "unified-writing-core-v5",
+  "runsPerSample": 1,
+  "concurrency": 4,
+  "expectedRecords": 4,
+  "completedRecords": 4,
+  "incomplete": false,
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 8,
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ]
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.5,
+    "criterionMeanAbsoluteErrorMax": 0.65,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0,
+    "catastrophicErrorDefinition": "absolute overall error greater than 1.0 band",
+    "requiredTaskCoverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ]
+  },
+  "metrics": {
+    "records": 4,
+    "overallMAE": 0.375,
+    "criterionMAE": 0.563,
+    "withinHalfBandRate": 0.75,
+    "catastrophicErrorRate": 0,
+    "feedbackCompletenessRate": 1,
+    "maxRepeatSpread": 0,
+    "byTask": {
+      "academic:1": {
+        "records": 1,
+        "overallMAE": 0,
+        "withinHalfBandRate": 1
+      },
+      "academic:2": {
+        "records": 1,
+        "overallMAE": 1,
+        "withinHalfBandRate": 0
+      },
+      "general_training:1": {
+        "records": 1,
+        "overallMAE": 0.5,
+        "withinHalfBandRate": 1
+      },
+      "general_training:2": {
+        "records": 1,
+        "overallMAE": 0,
+        "withinHalfBandRate": 1
+      }
+    },
+    "stabilityBySample": {
+      "A1-B7-table-complete": {
+        "scores": [
+          7
+        ],
+        "spread": 0
+      },
+      "A2-B5.5-discussion-complete": {
+        "scores": [
+          6.5
+        ],
+        "spread": 0
+      },
+      "G1-B7-complaint-complete": {
+        "scores": [
+          7.5
+        ],
+        "spread": 0
+      },
+      "G2-B6-problem-solution-complete": {
+        "scores": [
+          6
+        ],
+        "spread": 0
+      }
+    }
+  },
+  "gates": {
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "feedbackCompleteness": true,
+    "repeatStability": true,
+    "taskCoverage": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true
+  },
+  "passed": true,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "A1-B7-table-complete",
+      "taskKey": "academic:1",
+      "run": 1,
+      "targetOverall": 7,
+      "predictedOverall": 7,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 6.5
+      },
+      "predictedCriteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "criterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "withinHalfBand": true,
+      "catastrophicError": false,
+      "feedbackAudit": {
+        "complete": true,
+        "criteria": {
+          "Task Achievement": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Coherence and Cohesion": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Lexical Resource": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Grammatical Range and Accuracy": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          }
+        }
+      },
+      "adjudicationTriggered": true,
+      "humanReview": false,
+      "humanReviewReasons": [],
+      "confidence": 0.85,
+      "durationMs": 249170,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "academic_visual_report",
+        "overallBand": 7,
+        "rawAverage": 7,
+        "likelyRange": [
+          6.5,
+          7.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.85,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "finalCriteria": {
+          "Task Achievement": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 7,
+            "diagnosis": "All main requirements are addressed; the overview is clear and developed, and main features are extended with relevant comparisons, though development is straightforward rather than skilful.",
+            "diagnosisZh": "所有主要要求均已满足；概述清晰且展开充分，主要特征以相关比较进行了延伸，但展开方式较为直接，而非巧妙。",
+            "bandBoundary": {
+              "fit": "The overview accurately identifies trends, and the body presents specific figures and comparisons, covering all key features.",
+              "fitZh": "概述准确识别了趋势，主体提供了具体数据与比较，覆盖所有关键特征。",
+              "nextBandGap": "To reach Band 8, selection and extension would need to be more skilful, perhaps by synthesizing data across years more elegantly or highlighting more subtle comparisons.",
+              "nextBandGapZh": "要达到8分，需要更巧妙地选择和展开信息，例如更优雅地综合多年数据或突出更细微的比较。"
+            },
+            "strengths": [
+              "Clear overview covering main trends; accurate data selection with relevant comparisons."
+            ],
+            "strengthsZh": [
+              "清晰的概述覆盖主要趋势；准确的数据选择和相关的比较。"
+            ],
+            "constraints": [
+              "Development follows a predictable year-by-year pattern; lacks the skilful synthesis expected at Band 8."
+            ],
+            "constraintsZh": [
+              "展开遵循可预测的逐年报告模式；缺乏8分要求的巧妙综合。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Overall, the car was the most popular method in both years and its figure increased. In contrast, the percentage for buses fell, while bicycle use stayed almost the same and was the smallest category.",
+                "explanation": "Clear overview that accurately captures all main trends.",
+                "explanationZh": "清晰的概述，准确捕捉所有主要趋势。"
+              },
+              {
+                "quote": "Therefore, most of the change in the table came from the opposite movements in cars and buses.",
+                "explanation": "Effective synthesis of the key dynamic, though the overall development remains straightforward.",
+                "explanationZh": "对关键动态的有效综合，但整体展开仍然直接。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Synthesise data more skilfully to avoid mere year-by-year reporting.",
+              "priorityZh": "提升数据综合能力，避免单纯的逐年报告。",
+              "action": "Replace straightforward sequencing with a comparative overview that highlights the widening gap.",
+              "actionZh": "用比较性的总结取代顺序叙述，突出差距的变化。",
+              "beforeQuote": "Therefore, most of the change in the table came from the opposite movements in cars and buses.",
+              "revisedExample": "These opposing trends dramatically reshaped the commuting landscape, with the car-bus gap widening from 11 to 38 percentage points.",
+              "whyItWorks": "This revision synthesises the two key movements into a single, impactful statement, showing a more skilful selection and connection of data.",
+              "whyItWorksZh": "此修改将两个关键变动综合为一个有力的句子，更巧妙地选择并关联了数据。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "All main requirements are addressed; the overview is clear and developed, and main features are extended with relevant comparisons, though development is straightforward rather than skilful.",
+            "whyThisBandZh": "所有主要要求均已满足；概述清晰且展开充分，主要特征以相关比较进行了延伸，但展开方式较为直接，而非巧妙。",
+            "whyNotLower": "The overview accurately identifies trends, and the body presents specific figures and comparisons, covering all key features.",
+            "whyNotLowerZh": "概述准确识别了趋势，主体提供了具体数据与比较，覆盖所有关键特征。",
+            "whyNotHigher": "To reach Band 8, selection and extension would need to be more skilful, perhaps by synthesizing data across years more elegantly or highlighting more subtle comparisons.",
+            "whyNotHigherZh": "要达到8分，需要更巧妙地选择和展开信息，例如更优雅地综合多年数据或突出更细微的比较。",
+            "positiveEvidence": [
+              "Clear overview covering main trends; accurate data selection with relevant comparisons."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的概述覆盖主要趋势；准确的数据选择和相关的比较。"
+            ],
+            "limitingEvidence": [
+              "Development follows a predictable year-by-year pattern; lacks the skilful synthesis expected at Band 8."
+            ],
+            "limitingEvidenceZh": [
+              "展开遵循可预测的逐年报告模式；缺乏8分要求的巧妙综合。"
+            ],
+            "howToImprove": "Replace straightforward sequencing with a comparative overview that highlights the widening gap.",
+            "howToImproveZh": "用比较性的总结取代顺序叙述，突出差距的变化。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Ideas are logically organised with clear progression; cohesive devices and referencing show reasonable control, though reliance on straightforward sequencing prevents a higher band.",
+            "diagnosisZh": "信息组织逻辑清晰，推进有序；衔接手段与指代显示出合理的控制，但对直接顺序标记的依赖阻碍了更高分数。",
+            "bandBoundary": {
+              "fit": "The response follows a logical intro-overview-body pattern, with appropriate use of connectors like 'Overall', 'In contrast', and 'At the same time'.",
+              "fitZh": "回应遵循逻辑的导入-概述-主体模式，恰当使用了如‘Overall’、‘In contrast’、‘At the same time’等连接词。",
+              "nextBandGap": "For Band 8, cohesion would need to be less reliant on explicit sequential markers and demonstrate more varied and skilful referencing.",
+              "nextBandGapZh": "要达到8分，衔接需要减少对显性顺序标记的依赖，展示更多样化和巧妙的指代。"
+            },
+            "strengths": [
+              "Clear overall progression; effective paragraphing."
+            ],
+            "strengthsZh": [
+              "清晰的整体推进；有效的分段。"
+            ],
+            "constraints": [
+              "Cohesion relies on basic sequencing and some mechanical devices (e.g., 'This means')."
+            ],
+            "constraintsZh": [
+              "衔接依赖基本的顺序和某些机械手段（如‘This means’）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "This means the difference between the two main methods was 11 percentage points.",
+                "explanation": "Shows logical flow but 'This means' is a slightly mechanical cohesive device.",
+                "explanationZh": "展示逻辑流，但‘This means’是略显机械的衔接手段。"
+              },
+              {
+                "quote": "In 2025, the car figure reached 62%, which was a rise of 14 points. At the same time, bus use dropped to 24%, so cars were now much more common than buses.",
+                "explanation": "Demonstrates effective sequencing with appropriate cohesive devices, though the overall approach remains conventional.",
+                "explanationZh": "通过恰当的衔接手段有效排序，但整体方法传统。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Reduce reliance on mechanical cohesive devices.",
+              "priorityZh": "减少机械衔接手段的使用。",
+              "action": "Replace 'This means' with a varied referencing technique, such as 'Thus' or by restructuring the sentence.",
+              "actionZh": "用更多样的指代或省略替换‘This means’。",
+              "beforeQuote": "This means the difference between the two main methods was 11 percentage points.",
+              "revisedExample": "Thus, the car held an 11-point lead over the bus.",
+              "whyItWorks": "The revision uses 'Thus' and a more concise expression, avoiding the mechanical 'This means' and improving flow.",
+              "whyItWorksZh": "修改使用‘Thus’和更简洁的表达，避免了机械的‘This means’，改进了流畅度。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Ideas are logically organised with clear progression; cohesive devices and referencing show reasonable control, though reliance on straightforward sequencing prevents a higher band.",
+            "whyThisBandZh": "信息组织逻辑清晰，推进有序；衔接手段与指代显示出合理的控制，但对直接顺序标记的依赖阻碍了更高分数。",
+            "whyNotLower": "The response follows a logical intro-overview-body pattern, with appropriate use of connectors like 'Overall', 'In contrast', and 'At the same time'.",
+            "whyNotLowerZh": "回应遵循逻辑的导入-概述-主体模式，恰当使用了如‘Overall’、‘In contrast’、‘At the same time’等连接词。",
+            "whyNotHigher": "For Band 8, cohesion would need to be less reliant on explicit sequential markers and demonstrate more varied and skilful referencing.",
+            "whyNotHigherZh": "要达到8分，衔接需要减少对显性顺序标记的依赖，展示更多样化和巧妙的指代。",
+            "positiveEvidence": [
+              "Clear overall progression; effective paragraphing."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的整体推进；有效的分段。"
+            ],
+            "limitingEvidence": [
+              "Cohesion relies on basic sequencing and some mechanical devices (e.g., 'This means')."
+            ],
+            "limitingEvidenceZh": [
+              "衔接依赖基本的顺序和某些机械手段（如‘This means’）。"
+            ],
+            "howToImprove": "Replace 'This means' with a varied referencing technique, such as 'Thus' or by restructuring the sentence.",
+            "howToImproveZh": "用更多样的指代或省略替换‘This means’。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Adequate range and precision allow some flexibility; less common items like 'figure' and 'commuters' appear, but repetition and limited variety constrain the score.",
+            "diagnosisZh": "词汇量足以完成任务，具有一定的准确性和灵活性；出现了不太常见的词如‘figure’和‘commuters’，但重复和有限的变化限制了分数。",
+            "bandBoundary": {
+              "fit": "Vocabulary is sufficient for the task, with clear meaning and some appropriate collocations ('most popular method', 'opposite movements').",
+              "fitZh": "词汇足以应对任务，意思清晰，有一些适当的搭配（‘most popular method’, ‘opposite movements’）。",
+              "nextBandGap": "To achieve Band 8, a wider and more precise lexical resource is needed, with more skilful and less common choices and less repetition of basic terms.",
+              "nextBandGapZh": "要达到8分，需要更广泛、更精确的词汇资源，包括更巧妙和不常见的选词，并减少基本术语的重复。"
+            },
+            "strengths": [
+              "Accurate topic-specific vocabulary; appropriate collocations."
+            ],
+            "strengthsZh": [
+              "准确的主题词汇；适当的搭配。"
+            ],
+            "constraints": [
+              "Repetition of 'figure' and basic comparison terms; limited lexical range."
+            ],
+            "constraintsZh": [
+              "‘figure’和基本比较词的重复；词汇范围有限。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "the car figure reached 62%, which was a rise of 14 points",
+                "explanation": "Clear but basic vocabulary; the word 'figure' is repeated throughout.",
+                "explanationZh": "清晰但基础；‘figure’一词贯穿全文反复使用。"
+              },
+              {
+                "quote": "opposite movements",
+                "explanation": "Acceptable collocation that shows some awareness, but not highly idiomatic or sophisticated.",
+                "explanationZh": "可接受的搭配，显示出一定意识，但不够地道或精妙。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Vary vocabulary to avoid repetition of 'figure'.",
+              "priorityZh": "变化词汇，减少重复。",
+              "action": "Substitute synonyms such as 'share', 'proportion', or 'percentage'.",
+              "actionZh": "使用‘share’、‘proportion’、‘percentage’等同义词替换‘figure’。",
+              "beforeQuote": "the car figure reached 62%",
+              "revisedExample": "the car's share climbed to 62%",
+              "whyItWorks": "Using 'share' instead of 'figure' adds variety and is a more natural collocation in this context.",
+              "whyItWorksZh": "使用‘share’代替‘figure’增加了词汇多样性，也是更自然的搭配。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Adequate range and precision allow some flexibility; less common items like 'figure' and 'commuters' appear, but repetition and limited variety constrain the score.",
+            "whyThisBandZh": "词汇量足以完成任务，具有一定的准确性和灵活性；出现了不太常见的词如‘figure’和‘commuters’，但重复和有限的变化限制了分数。",
+            "whyNotLower": "Vocabulary is sufficient for the task, with clear meaning and some appropriate collocations ('most popular method', 'opposite movements').",
+            "whyNotLowerZh": "词汇足以应对任务，意思清晰，有一些适当的搭配（‘most popular method’, ‘opposite movements’）。",
+            "whyNotHigher": "To achieve Band 8, a wider and more precise lexical resource is needed, with more skilful and less common choices and less repetition of basic terms.",
+            "whyNotHigherZh": "要达到8分，需要更广泛、更精确的词汇资源，包括更巧妙和不常见的选词，并减少基本术语的重复。",
+            "positiveEvidence": [
+              "Accurate topic-specific vocabulary; appropriate collocations."
+            ],
+            "positiveEvidenceZh": [
+              "准确的主题词汇；适当的搭配。"
+            ],
+            "limitingEvidence": [
+              "Repetition of 'figure' and basic comparison terms; limited lexical range."
+            ],
+            "limitingEvidenceZh": [
+              "‘figure’和基本比较词的重复；词汇范围有限。"
+            ],
+            "howToImprove": "Substitute synonyms such as 'share', 'proportion', or 'percentage'.",
+            "howToImproveZh": "使用‘share’、‘proportion’、‘percentage’等同义词替换‘figure’。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A mix of simple and complex structures is generally well controlled; error-free sentences are frequent, with one minor subject-verb agreement error that does not impede communication.",
+            "diagnosisZh": "简单和复杂结构混合使用，基本得到良好控制；大多数句子准确，有一个轻微的主谓一致错误，但不影响交流。",
+            "bandBoundary": {
+              "fit": "The response uses a variety of sentence types, including relative clauses and compound sentences, with good accuracy.",
+              "fitZh": "回应使用了多种句式，包括关系从句和复合句，准确度良好。",
+              "nextBandGap": "For Band 8, a wider and more flexible range of structures is needed, with a higher proportion of error-free sentences.",
+              "nextBandGapZh": "要达到8分，需要更广泛、更灵活的结构范围，且无误的句子比例要更高。"
+            },
+            "strengths": [
+              "Effective use of complex structures (e.g., relative clause); most sentences are accurate."
+            ],
+            "strengthsZh": [
+              "有效使用复杂结构（如非限定性关系从句）；多数句子准确。"
+            ],
+            "constraints": [
+              "Subject-verb agreement error ('figures shows'); limited structural variety beyond standard patterns."
+            ],
+            "constraintsZh": [
+              "主谓一致错误（‘figures shows’）；结构变化有限，基本为标准句型。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The figures shows a gap of 38 percentage points between them.",
+                "explanation": "Subject-verb agreement error, though meaning remains clear.",
+                "explanationZh": "主谓一致错误，但意思仍然清晰。"
+              },
+              {
+                "quote": "In 2025, the car figure reached 62%, which was a rise of 14 points.",
+                "explanation": "Accurate and effective use of a non-defining relative clause.",
+                "explanationZh": "准确有效地使用了非限定性关系从句。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct the grammar error and increase structural variety.",
+              "priorityZh": "纠正语法错误并增加句式变化。",
+              "action": "Fix the subject-verb agreement and rephrase with a more sophisticated verb.",
+              "actionZh": "改正主谓一致，并使用更生动的动词。",
+              "beforeQuote": "The figures shows a gap of 38 percentage points between them.",
+              "revisedExample": "These figures reveal a widening gap of 38 percentage points.",
+              "whyItWorks": "Corrects the subject-verb agreement and introduces a more dynamic verb ('reveal'), enhancing precision.",
+              "whyItWorksZh": "纠正了主谓一致，并引入了更生动的动词‘reveal’，提高了准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A mix of simple and complex structures is generally well controlled; error-free sentences are frequent, with one minor subject-verb agreement error that does not impede communication.",
+            "whyThisBandZh": "简单和复杂结构混合使用，基本得到良好控制；大多数句子准确，有一个轻微的主谓一致错误，但不影响交流。",
+            "whyNotLower": "The response uses a variety of sentence types, including relative clauses and compound sentences, with good accuracy.",
+            "whyNotLowerZh": "回应使用了多种句式，包括关系从句和复合句，准确度良好。",
+            "whyNotHigher": "For Band 8, a wider and more flexible range of structures is needed, with a higher proportion of error-free sentences.",
+            "whyNotHigherZh": "要达到8分，需要更广泛、更灵活的结构范围，且无误的句子比例要更高。",
+            "positiveEvidence": [
+              "Effective use of complex structures (e.g., relative clause); most sentences are accurate."
+            ],
+            "positiveEvidenceZh": [
+              "有效使用复杂结构（如非限定性关系从句）；多数句子准确。"
+            ],
+            "limitingEvidence": [
+              "Subject-verb agreement error ('figures shows'); limited structural variety beyond standard patterns."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致错误（‘figures shows’）；结构变化有限，基本为标准句型。"
+            ],
+            "howToImprove": "Fix the subject-verb agreement and rephrase with a more sophisticated verb.",
+            "howToImproveZh": "改正主谓一致，并使用更生动的动词。",
+            "confidence": 0.85
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 7,
+            "diagnosis": "All main requirements are addressed; the overview is clear and developed, and main features are extended with relevant comparisons, though development is straightforward rather than skilful.",
+            "diagnosisZh": "所有主要要求均已满足；概述清晰且展开充分，主要特征以相关比较进行了延伸，但展开方式较为直接，而非巧妙。",
+            "bandBoundary": {
+              "fit": "The overview accurately identifies trends, and the body presents specific figures and comparisons, covering all key features.",
+              "fitZh": "概述准确识别了趋势，主体提供了具体数据与比较，覆盖所有关键特征。",
+              "nextBandGap": "To reach Band 8, selection and extension would need to be more skilful, perhaps by synthesizing data across years more elegantly or highlighting more subtle comparisons.",
+              "nextBandGapZh": "要达到8分，需要更巧妙地选择和展开信息，例如更优雅地综合多年数据或突出更细微的比较。"
+            },
+            "strengths": [
+              "Clear overview covering main trends; accurate data selection with relevant comparisons."
+            ],
+            "strengthsZh": [
+              "清晰的概述覆盖主要趋势；准确的数据选择和相关的比较。"
+            ],
+            "constraints": [
+              "Development follows a predictable year-by-year pattern; lacks the skilful synthesis expected at Band 8."
+            ],
+            "constraintsZh": [
+              "展开遵循可预测的逐年报告模式；缺乏8分要求的巧妙综合。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Overall, the car was the most popular method in both years and its figure increased. In contrast, the percentage for buses fell, while bicycle use stayed almost the same and was the smallest category.",
+                "explanation": "Clear overview that accurately captures all main trends.",
+                "explanationZh": "清晰的概述，准确捕捉所有主要趋势。"
+              },
+              {
+                "quote": "Therefore, most of the change in the table came from the opposite movements in cars and buses.",
+                "explanation": "Effective synthesis of the key dynamic, though the overall development remains straightforward.",
+                "explanationZh": "对关键动态的有效综合，但整体展开仍然直接。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Synthesise data more skilfully to avoid mere year-by-year reporting.",
+              "priorityZh": "提升数据综合能力，避免单纯的逐年报告。",
+              "action": "Replace straightforward sequencing with a comparative overview that highlights the widening gap.",
+              "actionZh": "用比较性的总结取代顺序叙述，突出差距的变化。",
+              "beforeQuote": "Therefore, most of the change in the table came from the opposite movements in cars and buses.",
+              "revisedExample": "These opposing trends dramatically reshaped the commuting landscape, with the car-bus gap widening from 11 to 38 percentage points.",
+              "whyItWorks": "This revision synthesises the two key movements into a single, impactful statement, showing a more skilful selection and connection of data.",
+              "whyItWorksZh": "此修改将两个关键变动综合为一个有力的句子，更巧妙地选择并关联了数据。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "All main requirements are addressed; the overview is clear and developed, and main features are extended with relevant comparisons, though development is straightforward rather than skilful.",
+            "whyThisBandZh": "所有主要要求均已满足；概述清晰且展开充分，主要特征以相关比较进行了延伸，但展开方式较为直接，而非巧妙。",
+            "whyNotLower": "The overview accurately identifies trends, and the body presents specific figures and comparisons, covering all key features.",
+            "whyNotLowerZh": "概述准确识别了趋势，主体提供了具体数据与比较，覆盖所有关键特征。",
+            "whyNotHigher": "To reach Band 8, selection and extension would need to be more skilful, perhaps by synthesizing data across years more elegantly or highlighting more subtle comparisons.",
+            "whyNotHigherZh": "要达到8分，需要更巧妙地选择和展开信息，例如更优雅地综合多年数据或突出更细微的比较。",
+            "positiveEvidence": [
+              "Clear overview covering main trends; accurate data selection with relevant comparisons."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的概述覆盖主要趋势；准确的数据选择和相关的比较。"
+            ],
+            "limitingEvidence": [
+              "Development follows a predictable year-by-year pattern; lacks the skilful synthesis expected at Band 8."
+            ],
+            "limitingEvidenceZh": [
+              "展开遵循可预测的逐年报告模式；缺乏8分要求的巧妙综合。"
+            ],
+            "howToImprove": "Replace straightforward sequencing with a comparative overview that highlights the widening gap.",
+            "howToImproveZh": "用比较性的总结取代顺序叙述，突出差距的变化。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Ideas are logically organised with clear progression; cohesive devices and referencing show reasonable control, though reliance on straightforward sequencing prevents a higher band.",
+            "diagnosisZh": "信息组织逻辑清晰，推进有序；衔接手段与指代显示出合理的控制，但对直接顺序标记的依赖阻碍了更高分数。",
+            "bandBoundary": {
+              "fit": "The response follows a logical intro-overview-body pattern, with appropriate use of connectors like 'Overall', 'In contrast', and 'At the same time'.",
+              "fitZh": "回应遵循逻辑的导入-概述-主体模式，恰当使用了如‘Overall’、‘In contrast’、‘At the same time’等连接词。",
+              "nextBandGap": "For Band 8, cohesion would need to be less reliant on explicit sequential markers and demonstrate more varied and skilful referencing.",
+              "nextBandGapZh": "要达到8分，衔接需要减少对显性顺序标记的依赖，展示更多样化和巧妙的指代。"
+            },
+            "strengths": [
+              "Clear overall progression; effective paragraphing."
+            ],
+            "strengthsZh": [
+              "清晰的整体推进；有效的分段。"
+            ],
+            "constraints": [
+              "Cohesion relies on basic sequencing and some mechanical devices (e.g., 'This means')."
+            ],
+            "constraintsZh": [
+              "衔接依赖基本的顺序和某些机械手段（如‘This means’）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "This means the difference between the two main methods was 11 percentage points.",
+                "explanation": "Shows logical flow but 'This means' is a slightly mechanical cohesive device.",
+                "explanationZh": "展示逻辑流，但‘This means’是略显机械的衔接手段。"
+              },
+              {
+                "quote": "In 2025, the car figure reached 62%, which was a rise of 14 points. At the same time, bus use dropped to 24%, so cars were now much more common than buses.",
+                "explanation": "Demonstrates effective sequencing with appropriate cohesive devices, though the overall approach remains conventional.",
+                "explanationZh": "通过恰当的衔接手段有效排序，但整体方法传统。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Reduce reliance on mechanical cohesive devices.",
+              "priorityZh": "减少机械衔接手段的使用。",
+              "action": "Replace 'This means' with a varied referencing technique, such as 'Thus' or by restructuring the sentence.",
+              "actionZh": "用更多样的指代或省略替换‘This means’。",
+              "beforeQuote": "This means the difference between the two main methods was 11 percentage points.",
+              "revisedExample": "Thus, the car held an 11-point lead over the bus.",
+              "whyItWorks": "The revision uses 'Thus' and a more concise expression, avoiding the mechanical 'This means' and improving flow.",
+              "whyItWorksZh": "修改使用‘Thus’和更简洁的表达，避免了机械的‘This means’，改进了流畅度。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Ideas are logically organised with clear progression; cohesive devices and referencing show reasonable control, though reliance on straightforward sequencing prevents a higher band.",
+            "whyThisBandZh": "信息组织逻辑清晰，推进有序；衔接手段与指代显示出合理的控制，但对直接顺序标记的依赖阻碍了更高分数。",
+            "whyNotLower": "The response follows a logical intro-overview-body pattern, with appropriate use of connectors like 'Overall', 'In contrast', and 'At the same time'.",
+            "whyNotLowerZh": "回应遵循逻辑的导入-概述-主体模式，恰当使用了如‘Overall’、‘In contrast’、‘At the same time’等连接词。",
+            "whyNotHigher": "For Band 8, cohesion would need to be less reliant on explicit sequential markers and demonstrate more varied and skilful referencing.",
+            "whyNotHigherZh": "要达到8分，衔接需要减少对显性顺序标记的依赖，展示更多样化和巧妙的指代。",
+            "positiveEvidence": [
+              "Clear overall progression; effective paragraphing."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的整体推进；有效的分段。"
+            ],
+            "limitingEvidence": [
+              "Cohesion relies on basic sequencing and some mechanical devices (e.g., 'This means')."
+            ],
+            "limitingEvidenceZh": [
+              "衔接依赖基本的顺序和某些机械手段（如‘This means’）。"
+            ],
+            "howToImprove": "Replace 'This means' with a varied referencing technique, such as 'Thus' or by restructuring the sentence.",
+            "howToImproveZh": "用更多样的指代或省略替换‘This means’。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Adequate range and precision allow some flexibility; less common items like 'figure' and 'commuters' appear, but repetition and limited variety constrain the score.",
+            "diagnosisZh": "词汇量足以完成任务，具有一定的准确性和灵活性；出现了不太常见的词如‘figure’和‘commuters’，但重复和有限的变化限制了分数。",
+            "bandBoundary": {
+              "fit": "Vocabulary is sufficient for the task, with clear meaning and some appropriate collocations ('most popular method', 'opposite movements').",
+              "fitZh": "词汇足以应对任务，意思清晰，有一些适当的搭配（‘most popular method’, ‘opposite movements’）。",
+              "nextBandGap": "To achieve Band 8, a wider and more precise lexical resource is needed, with more skilful and less common choices and less repetition of basic terms.",
+              "nextBandGapZh": "要达到8分，需要更广泛、更精确的词汇资源，包括更巧妙和不常见的选词，并减少基本术语的重复。"
+            },
+            "strengths": [
+              "Accurate topic-specific vocabulary; appropriate collocations."
+            ],
+            "strengthsZh": [
+              "准确的主题词汇；适当的搭配。"
+            ],
+            "constraints": [
+              "Repetition of 'figure' and basic comparison terms; limited lexical range."
+            ],
+            "constraintsZh": [
+              "‘figure’和基本比较词的重复；词汇范围有限。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "the car figure reached 62%, which was a rise of 14 points",
+                "explanation": "Clear but basic vocabulary; the word 'figure' is repeated throughout.",
+                "explanationZh": "清晰但基础；‘figure’一词贯穿全文反复使用。"
+              },
+              {
+                "quote": "opposite movements",
+                "explanation": "Acceptable collocation that shows some awareness, but not highly idiomatic or sophisticated.",
+                "explanationZh": "可接受的搭配，显示出一定意识，但不够地道或精妙。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Vary vocabulary to avoid repetition of 'figure'.",
+              "priorityZh": "变化词汇，减少重复。",
+              "action": "Substitute synonyms such as 'share', 'proportion', or 'percentage'.",
+              "actionZh": "使用‘share’、‘proportion’、‘percentage’等同义词替换‘figure’。",
+              "beforeQuote": "the car figure reached 62%",
+              "revisedExample": "the car's share climbed to 62%",
+              "whyItWorks": "Using 'share' instead of 'figure' adds variety and is a more natural collocation in this context.",
+              "whyItWorksZh": "使用‘share’代替‘figure’增加了词汇多样性，也是更自然的搭配。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Adequate range and precision allow some flexibility; less common items like 'figure' and 'commuters' appear, but repetition and limited variety constrain the score.",
+            "whyThisBandZh": "词汇量足以完成任务，具有一定的准确性和灵活性；出现了不太常见的词如‘figure’和‘commuters’，但重复和有限的变化限制了分数。",
+            "whyNotLower": "Vocabulary is sufficient for the task, with clear meaning and some appropriate collocations ('most popular method', 'opposite movements').",
+            "whyNotLowerZh": "词汇足以应对任务，意思清晰，有一些适当的搭配（‘most popular method’, ‘opposite movements’）。",
+            "whyNotHigher": "To achieve Band 8, a wider and more precise lexical resource is needed, with more skilful and less common choices and less repetition of basic terms.",
+            "whyNotHigherZh": "要达到8分，需要更广泛、更精确的词汇资源，包括更巧妙和不常见的选词，并减少基本术语的重复。",
+            "positiveEvidence": [
+              "Accurate topic-specific vocabulary; appropriate collocations."
+            ],
+            "positiveEvidenceZh": [
+              "准确的主题词汇；适当的搭配。"
+            ],
+            "limitingEvidence": [
+              "Repetition of 'figure' and basic comparison terms; limited lexical range."
+            ],
+            "limitingEvidenceZh": [
+              "‘figure’和基本比较词的重复；词汇范围有限。"
+            ],
+            "howToImprove": "Substitute synonyms such as 'share', 'proportion', or 'percentage'.",
+            "howToImproveZh": "使用‘share’、‘proportion’、‘percentage’等同义词替换‘figure’。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A mix of simple and complex structures is generally well controlled; error-free sentences are frequent, with one minor subject-verb agreement error that does not impede communication.",
+            "diagnosisZh": "简单和复杂结构混合使用，基本得到良好控制；大多数句子准确，有一个轻微的主谓一致错误，但不影响交流。",
+            "bandBoundary": {
+              "fit": "The response uses a variety of sentence types, including relative clauses and compound sentences, with good accuracy.",
+              "fitZh": "回应使用了多种句式，包括关系从句和复合句，准确度良好。",
+              "nextBandGap": "For Band 8, a wider and more flexible range of structures is needed, with a higher proportion of error-free sentences.",
+              "nextBandGapZh": "要达到8分，需要更广泛、更灵活的结构范围，且无误的句子比例要更高。"
+            },
+            "strengths": [
+              "Effective use of complex structures (e.g., relative clause); most sentences are accurate."
+            ],
+            "strengthsZh": [
+              "有效使用复杂结构（如非限定性关系从句）；多数句子准确。"
+            ],
+            "constraints": [
+              "Subject-verb agreement error ('figures shows'); limited structural variety beyond standard patterns."
+            ],
+            "constraintsZh": [
+              "主谓一致错误（‘figures shows’）；结构变化有限，基本为标准句型。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The figures shows a gap of 38 percentage points between them.",
+                "explanation": "Subject-verb agreement error, though meaning remains clear.",
+                "explanationZh": "主谓一致错误，但意思仍然清晰。"
+              },
+              {
+                "quote": "In 2025, the car figure reached 62%, which was a rise of 14 points.",
+                "explanation": "Accurate and effective use of a non-defining relative clause.",
+                "explanationZh": "准确有效地使用了非限定性关系从句。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct the grammar error and increase structural variety.",
+              "priorityZh": "纠正语法错误并增加句式变化。",
+              "action": "Fix the subject-verb agreement and rephrase with a more sophisticated verb.",
+              "actionZh": "改正主谓一致，并使用更生动的动词。",
+              "beforeQuote": "The figures shows a gap of 38 percentage points between them.",
+              "revisedExample": "These figures reveal a widening gap of 38 percentage points.",
+              "whyItWorks": "Corrects the subject-verb agreement and introduces a more dynamic verb ('reveal'), enhancing precision.",
+              "whyItWorksZh": "纠正了主谓一致，并引入了更生动的动词‘reveal’，提高了准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A mix of simple and complex structures is generally well controlled; error-free sentences are frequent, with one minor subject-verb agreement error that does not impede communication.",
+            "whyThisBandZh": "简单和复杂结构混合使用，基本得到良好控制；大多数句子准确，有一个轻微的主谓一致错误，但不影响交流。",
+            "whyNotLower": "The response uses a variety of sentence types, including relative clauses and compound sentences, with good accuracy.",
+            "whyNotLowerZh": "回应使用了多种句式，包括关系从句和复合句，准确度良好。",
+            "whyNotHigher": "For Band 8, a wider and more flexible range of structures is needed, with a higher proportion of error-free sentences.",
+            "whyNotHigherZh": "要达到8分，需要更广泛、更灵活的结构范围，且无误的句子比例要更高。",
+            "positiveEvidence": [
+              "Effective use of complex structures (e.g., relative clause); most sentences are accurate."
+            ],
+            "positiveEvidenceZh": [
+              "有效使用复杂结构（如非限定性关系从句）；多数句子准确。"
+            ],
+            "limitingEvidence": [
+              "Subject-verb agreement error ('figures shows'); limited structural variety beyond standard patterns."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致错误（‘figures shows’）；结构变化有限，基本为标准句型。"
+            ],
+            "howToImprove": "Fix the subject-verb agreement and rephrase with a more sophisticated verb.",
+            "howToImproveZh": "改正主谓一致，并使用更生动的动词。",
+            "confidence": 0.85
+          }
+        },
+        "overallAssessment": "This report competently summarises the table, presenting a clear overview and relevant comparisons. The writing is logically organised and mostly accurate, but to progress to a higher band, the writer needs to synthesise data more skilfully, vary vocabulary, and reduce reliance on mechanical linking. Currently, the performance sits at a consistent Band 7 level.",
+        "overallAssessmentZh": "这篇报告有效地总结了表格信息，概述清晰，比较恰当。写作组织逻辑，基本准确，但要提高到更高分数，作者需要更巧妙地综合数据、丰富词汇并减少机械的衔接。目前表现稳定在7分水平。",
+        "revisionSequence": [
+          "Vary vocabulary: replace repeated 'figure' with synonyms like 'share' or 'proportion'.",
+          "Fix the subject-verb agreement error and introduce more dynamic verbs.",
+          "Synthesise the main trends into a condensed comparison rather than describing each year separately."
+        ],
+        "revisionSequenceZh": [
+          "变换词汇：用‘share’、‘proportion’等替换重复的‘figure’。",
+          "修改主谓一致错误，并引入更生动的动词。",
+          "将主要趋势综合成凝练的比较，而非分别描述每年数据。"
+        ],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "reasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7,
+            "confidence": 0.8,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7,
+            "confidence": 0.8,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Achievement": 7,
+            "Coherence and Cohesion": 7,
+            "Lexical Resource": 7,
+            "Grammatical Range and Accuracy": 7
+          },
+          "finalOverallBand": 7
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "academic_visual_report",
+          "examModule": "academic",
+          "wordCount": 165,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 4,
+          "sentenceCount": 11,
+          "averageSentenceWords": 15,
+          "lexicalDiversity": 0.57,
+          "paragraphWordCounts": [
+            25,
+            34,
+            35,
+            71
+          ],
+          "englishLetterRatio": 0.91,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.328,
+          "visualFactsAvailable": true,
+          "visualFactsSourceVerified": true
+        },
+        "visualFactsAudit": {
+          "available": true,
+          "sourceVerified": true,
+          "visualType": "table",
+          "humanReviewRequiredForDataAccuracy": false
+        },
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 7,
+          "finalBand": 7,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "embedded_complete",
+          "scoreChanged": false,
+          "repairAttempted": true,
+          "repairSucceeded": true,
+          "note": "Text-specific criterion evidence and revision moves are embedded in the frozen scoring result."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": false,
+          "feedbackGenerated": true,
+          "feedbackStatus": "embedded_complete"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3806,
+              "completion_tokens": 6038,
+              "total_tokens": 9844,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4496
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3806
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3807,
+              "completion_tokens": 4330,
+              "total_tokens": 8137,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3028
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3807
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "max",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 8005,
+              "completion_tokens": 5365,
+              "total_tokens": 13370,
+              "prompt_tokens_details": {
+                "cached_tokens": 384
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3795
+              },
+              "prompt_cache_hit_tokens": 384,
+              "prompt_cache_miss_tokens": 7621
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": {
+            "role": "feedback_repair",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "medium",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5525,
+              "completion_tokens": 6931,
+              "total_tokens": 12456,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3921
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5525
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "elapsedMs": 249169
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "A2-B5.5-discussion-complete",
+      "taskKey": "academic:2",
+      "run": 1,
+      "targetOverall": 5.5,
+      "predictedOverall": 6.5,
+      "overallError": 1,
+      "targetCriteria": {
+        "Task Response": 5.5,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "predictedCriteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "criterionErrors": {
+        "Task Response": 1.5,
+        "Coherence and Cohesion": 1.5,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "withinHalfBand": false,
+      "catastrophicError": false,
+      "feedbackAudit": {
+        "complete": true,
+        "criteria": {
+          "Task Response": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Coherence and Cohesion": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Lexical Resource": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Grammatical Range and Accuracy": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          }
+        }
+      },
+      "adjudicationTriggered": true,
+      "humanReview": false,
+      "humanReviewReasons": [],
+      "confidence": 0.86,
+      "durationMs": 260185,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 6.5,
+        "rawAverage": 6.5,
+        "likelyRange": [
+          6,
+          7
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Response": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "finalCriteria": {
+          "Task Response": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 7,
+            "diagnosis": "The essay addresses both sides of the argument and presents a clear personal opinion. Ideas are developed with relevant examples, though some supporting points remain somewhat generic and could be further illustrated to reach a higher band.",
+            "diagnosisZh": "文章讨论了两方观点并给出了明确的个人立场。观点通过相关例子展开，但部分论据仍略显泛泛，若能更具体地阐述则可达到更高分数。",
+            "bandBoundary": {
+              "fit": "All parts of the task are addressed; the writer's position is clear and consistently maintained. Main ideas are extended with examples and reasoning.",
+              "fitZh": "回应了所有任务要求；立场清晰且贯穿始终。主要观点通过例子和推理得到扩展。",
+              "nextBandGap": "To reach Band 8, ideas need more skilful selection and deeper development; some points are too general.",
+              "nextBandGapZh": "要达到 8 分，需更巧妙地选材并深入展开；部分观点过于笼统。"
+            },
+            "strengths": [
+              "Addresses both views fully.",
+              "Clear and consistent opinion throughout.",
+              "Ideas supported with specific examples."
+            ],
+            "strengthsZh": [
+              "全面回应了双方观点。",
+              "立场清晰且贯穿始终。",
+              "观点有具体例子支撑。"
+            ],
+            "constraints": [
+              "Some supporting points are generic and lack precise illustration."
+            ],
+            "constraintsZh": [
+              "部分支撑点笼统，缺乏精准阐述。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "For example, a business student can learn how to use office software, speak with a customer and work in a team.",
+                "explanation": "Shows a specific example that effectively supports the practical-skills view.",
+                "explanationZh": "展示了一个具体例子，有效支持了实践技能观点。"
+              },
+              {
+                "quote": "Subjects such as maths, science and history teach people to think and understand difficult ideas.",
+                "explanation": "Presents a valid point but remains vague; more development would strengthen it.",
+                "explanationZh": "提出了合理观点但表述模糊；深入展开将更有力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Develop generic claims with concrete examples.",
+              "priorityZh": "用具体例子支撑笼统的论断。",
+              "action": "Replace the sentence 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' with a detailed illustration of one subject's critical thinking benefit.",
+              "actionZh": "将 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' 替换为具体阐述某一学科如何培养批判性思维。",
+              "beforeQuote": "Subjects such as maths, science and history teach people to think and understand difficult ideas.",
+              "revisedExample": "For instance, studying history trains students to analyze sources and evaluate conflicting evidence, skills highly valued in law and journalism.",
+              "whyItWorks": "Adds a specific, developed example that lifts the paragraph from general statement to precise illustration.",
+              "whyItWorksZh": "增加了具体的展开例子，使段落从泛泛而谈升级为精准阐述。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The essay addresses both sides of the argument and presents a clear personal opinion. Ideas are developed with relevant examples, though some supporting points remain somewhat generic and could be further illustrated to reach a higher band.",
+            "whyThisBandZh": "文章讨论了两方观点并给出了明确的个人立场。观点通过相关例子展开，但部分论据仍略显泛泛，若能更具体地阐述则可达到更高分数。",
+            "whyNotLower": "All parts of the task are addressed; the writer's position is clear and consistently maintained. Main ideas are extended with examples and reasoning.",
+            "whyNotLowerZh": "回应了所有任务要求；立场清晰且贯穿始终。主要观点通过例子和推理得到扩展。",
+            "whyNotHigher": "To reach Band 8, ideas need more skilful selection and deeper development; some points are too general.",
+            "whyNotHigherZh": "要达到 8 分，需更巧妙地选材并深入展开；部分观点过于笼统。",
+            "positiveEvidence": [
+              "Addresses both views fully.",
+              "Clear and consistent opinion throughout.",
+              "Ideas supported with specific examples."
+            ],
+            "positiveEvidenceZh": [
+              "全面回应了双方观点。",
+              "立场清晰且贯穿始终。",
+              "观点有具体例子支撑。"
+            ],
+            "limitingEvidence": [
+              "Some supporting points are generic and lack precise illustration."
+            ],
+            "limitingEvidenceZh": [
+              "部分支撑点笼统，缺乏精准阐述。"
+            ],
+            "howToImprove": "Replace the sentence 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' with a detailed illustration of one subject's critical thinking benefit.",
+            "howToImproveZh": "将 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' 替换为具体阐述某一学科如何培养批判性思维。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Information is organised logically with clear paragraphing. Progression is easy to follow, but the use of cohesive devices like 'On the one hand/On the other hand' is predictable and limits flexibility.",
+            "diagnosisZh": "信息组织有逻辑，段落划分清晰。行文流畅易懂，但 'On the one hand/On the other hand' 等衔接手段显得套话，缺乏灵活性。",
+            "bandBoundary": {
+              "fit": "Clear progression throughout; paragraphs each have a clear central topic. Cohesive devices are used effectively despite being somewhat mechanical.",
+              "fitZh": "全文推进清晰；每个段落中心明确。衔接手段虽有些机械，但运用有效。",
+              "nextBandGap": "To reach Band 8, cohesion would need to be managed more subtly with less reliance on formulaic phrases.",
+              "nextBandGapZh": "要达到 8 分，衔接需更自然，减少对套话的依赖。"
+            },
+            "strengths": [
+              "Logical paragraph structure.",
+              "Clear central topics in each paragraph."
+            ],
+            "strengthsZh": [
+              "段落结构逻辑清晰。",
+              "每个段落中心明确。"
+            ],
+            "constraints": [
+              "Over-reliance on predictable cohesive devices ('On the one hand/On the other hand')."
+            ],
+            "constraintsZh": [
+              "过度依赖公式化衔接词（'On the one hand/On the other hand'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "On the one hand, practical teaching can make graduates ready for work.",
+                "explanation": "Clear but formulaic paragraph opener.",
+                "explanationZh": "清晰的段落开头，但公式化。"
+              },
+              {
+                "quote": "These things are asked by many company.",
+                "explanation": "Uses referencing 'These things' to link back, though the sentence contains an error.",
+                "explanationZh": "用 'These things' 回指上文，但句子有误。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Vary cohesive devices to avoid formulaic expressions.",
+              "priorityZh": "变换衔接手段，避免套话。",
+              "action": "Replace 'On the one hand' with a more natural transition that introduces the practical view.",
+              "actionZh": "用更自然的过渡替换 'On the one hand'，引出实践观点。",
+              "beforeQuote": "On the one hand, practical teaching can make graduates ready for work.",
+              "revisedExample": "Focusing on practical skills ensures graduates are immediately employable.",
+              "whyItWorks": "Reduces mechanical signalling and demonstrates more flexible cohesion.",
+              "whyItWorksZh": "减少了机械的信号词，展示了更灵活的衔接能力。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Information is organised logically with clear paragraphing. Progression is easy to follow, but the use of cohesive devices like 'On the one hand/On the other hand' is predictable and limits flexibility.",
+            "whyThisBandZh": "信息组织有逻辑，段落划分清晰。行文流畅易懂，但 'On the one hand/On the other hand' 等衔接手段显得套话，缺乏灵活性。",
+            "whyNotLower": "Clear progression throughout; paragraphs each have a clear central topic. Cohesive devices are used effectively despite being somewhat mechanical.",
+            "whyNotLowerZh": "全文推进清晰；每个段落中心明确。衔接手段虽有些机械，但运用有效。",
+            "whyNotHigher": "To reach Band 8, cohesion would need to be managed more subtly with less reliance on formulaic phrases.",
+            "whyNotHigherZh": "要达到 8 分，衔接需更自然，减少对套话的依赖。",
+            "positiveEvidence": [
+              "Logical paragraph structure.",
+              "Clear central topics in each paragraph."
+            ],
+            "positiveEvidenceZh": [
+              "段落结构逻辑清晰。",
+              "每个段落中心明确。"
+            ],
+            "limitingEvidence": [
+              "Over-reliance on predictable cohesive devices ('On the one hand/On the other hand')."
+            ],
+            "limitingEvidenceZh": [
+              "过度依赖公式化衔接词（'On the one hand/On the other hand'）。"
+            ],
+            "howToImprove": "Replace 'On the one hand' with a more natural transition that introduces the practical view.",
+            "howToImproveZh": "用更自然的过渡替换 'On the one hand'，引出实践观点。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Vocabulary is adequate for the topic, but the range is quite narrow. There are noticeable errors in word formation, such as using 'confident' instead of 'confidence', which prevent a higher score.",
+            "diagnosisZh": "词汇量足以应对话题，但范围较窄。词形变化错误明显，如用 'confident' 代替 'confidence'，阻碍了得分提升。",
+            "bandBoundary": {
+              "fit": "Meaning is generally clear, but word form errors are frequent and lexical range is limited.",
+              "fitZh": "意思基本清晰，但词形错误频繁，词汇范围有限。",
+              "nextBandGap": "To reach Band 7, a wider range with fewer word formation errors and more precise collocations would be necessary.",
+              "nextBandGapZh": "要达到 7 分，需扩大词汇量，减少词形错误，使用更准确的搭配。"
+            },
+            "strengths": [
+              "Some relevant topic vocabulary is attempted ('office software', 'workplace')."
+            ],
+            "strengthsZh": [
+              "尝试使用相关话题词汇（如 'office software'、'workplace'）。"
+            ],
+            "constraints": [
+              "Frequent word form errors (e.g., 'confident' for 'confidence', 'more easy' for 'more easily')."
+            ],
+            "constraintsZh": [
+              "词形错误频发（如 'confident' 代替 'confidence'，'more easy' 代替 'more easily'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "work experience give them confident",
+                "explanation": "Incorrect word form: 'confident' should be 'confidence'.",
+                "explanationZh": "词形错误：应使用 'confidence'。"
+              },
+              {
+                "quote": "learn a new skill more easy",
+                "explanation": "Incorrect adverb form: 'more easy' should be 'more easily'.",
+                "explanationZh": "副词形式错误：应为 'more easily'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct word formation errors to improve lexical precision.",
+              "priorityZh": "修正词形错误以提高词汇精确度。",
+              "action": "Change 'give them confident' to 'gives them confidence'.",
+              "actionZh": "将 'give them confident' 改为 'gives them confidence'。",
+              "beforeQuote": "work experience give them confident",
+              "revisedExample": "work experience gives them confidence",
+              "whyItWorks": "Eliminates the word form error and uses the correct noun 'confidence', matching the intended meaning.",
+              "whyItWorksZh": "纠正了词形错误，使用了正确的名词 'confidence'，准确传达原意。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Vocabulary is adequate for the topic, but the range is quite narrow. There are noticeable errors in word formation, such as using 'confident' instead of 'confidence', which prevent a higher score.",
+            "whyThisBandZh": "词汇量足以应对话题，但范围较窄。词形变化错误明显，如用 'confident' 代替 'confidence'，阻碍了得分提升。",
+            "whyNotLower": "Meaning is generally clear, but word form errors are frequent and lexical range is limited.",
+            "whyNotLowerZh": "意思基本清晰，但词形错误频繁，词汇范围有限。",
+            "whyNotHigher": "To reach Band 7, a wider range with fewer word formation errors and more precise collocations would be necessary.",
+            "whyNotHigherZh": "要达到 7 分，需扩大词汇量，减少词形错误，使用更准确的搭配。",
+            "positiveEvidence": [
+              "Some relevant topic vocabulary is attempted ('office software', 'workplace')."
+            ],
+            "positiveEvidenceZh": [
+              "尝试使用相关话题词汇（如 'office software'、'workplace'）。"
+            ],
+            "limitingEvidence": [
+              "Frequent word form errors (e.g., 'confident' for 'confidence', 'more easy' for 'more easily')."
+            ],
+            "limitingEvidenceZh": [
+              "词形错误频发（如 'confident' 代替 'confidence'，'more easy' 代替 'more easily'）。"
+            ],
+            "howToImprove": "Change 'give them confident' to 'gives them confidence'.",
+            "howToImproveZh": "将 'give them confident' 改为 'gives them confidence'。",
+            "confidence": 0.9
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "The essay attempts complex sentences, but control is inconsistent. Subject-verb agreement and plural errors occur repeatedly, which keeps the score at Band 6.",
+            "diagnosisZh": "文章尝试了复合句，但控制不稳。主谓一致和名词复数错误反复出现，使得分数停留在 6 分。",
+            "bandBoundary": {
+              "fit": "A mix of simple and complex sentences is used, but errors in agreement and word forms occur frequently.",
+              "fitZh": "使用了简单句和复杂句的混合结构，但主谓一致和词形错误频频出现。",
+              "nextBandGap": "To reach Band 7, error-free sentences must be more frequent and complex structures better controlled.",
+              "nextBandGapZh": "要达到 7 分，必须更频繁地写出无误句子，并更好地控制复杂结构。"
+            },
+            "strengths": [
+              "Attempts complex sentences with subordinate clauses."
+            ],
+            "strengthsZh": [
+              "尝试使用带从句的复杂句。"
+            ],
+            "constraints": [
+              "Recurring subject-verb agreement and plural errors."
+            ],
+            "constraintsZh": [
+              "主谓一致和名词复数错误反复出现。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "academic knowledge also have an important place",
+                "explanation": "Subject-verb agreement error: 'have' should be 'has'.",
+                "explanationZh": "主谓不一致：应为 'has'。"
+              },
+              {
+                "quote": "many company",
+                "explanation": "Plural error: 'company' should be 'companies'.",
+                "explanationZh": "名词复数错误：应为 'companies'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Fix subject-verb agreement errors.",
+              "priorityZh": "修正主谓一致错误。",
+              "action": "Correct 'have' to 'has' in 'academic knowledge also have an important place'.",
+              "actionZh": "将 'academic knowledge also have an important place' 中的 'have' 改为 'has'。",
+              "beforeQuote": "academic knowledge also have an important place",
+              "revisedExample": "academic knowledge also has an important place",
+              "whyItWorks": "Removes a recurring agreement error, improving overall grammatical accuracy.",
+              "whyItWorksZh": "消除了反复出现的一致错误，提升了整体语法准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The essay attempts complex sentences, but control is inconsistent. Subject-verb agreement and plural errors occur repeatedly, which keeps the score at Band 6.",
+            "whyThisBandZh": "文章尝试了复合句，但控制不稳。主谓一致和名词复数错误反复出现，使得分数停留在 6 分。",
+            "whyNotLower": "A mix of simple and complex sentences is used, but errors in agreement and word forms occur frequently.",
+            "whyNotLowerZh": "使用了简单句和复杂句的混合结构，但主谓一致和词形错误频频出现。",
+            "whyNotHigher": "To reach Band 7, error-free sentences must be more frequent and complex structures better controlled.",
+            "whyNotHigherZh": "要达到 7 分，必须更频繁地写出无误句子，并更好地控制复杂结构。",
+            "positiveEvidence": [
+              "Attempts complex sentences with subordinate clauses."
+            ],
+            "positiveEvidenceZh": [
+              "尝试使用带从句的复杂句。"
+            ],
+            "limitingEvidence": [
+              "Recurring subject-verb agreement and plural errors."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致和名词复数错误反复出现。"
+            ],
+            "howToImprove": "Correct 'have' to 'has' in 'academic knowledge also have an important place'.",
+            "howToImproveZh": "将 'academic knowledge also have an important place' 中的 'have' 改为 'has'。",
+            "confidence": 0.9
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 7,
+            "diagnosis": "The essay addresses both sides of the argument and presents a clear personal opinion. Ideas are developed with relevant examples, though some supporting points remain somewhat generic and could be further illustrated to reach a higher band.",
+            "diagnosisZh": "文章讨论了两方观点并给出了明确的个人立场。观点通过相关例子展开，但部分论据仍略显泛泛，若能更具体地阐述则可达到更高分数。",
+            "bandBoundary": {
+              "fit": "All parts of the task are addressed; the writer's position is clear and consistently maintained. Main ideas are extended with examples and reasoning.",
+              "fitZh": "回应了所有任务要求；立场清晰且贯穿始终。主要观点通过例子和推理得到扩展。",
+              "nextBandGap": "To reach Band 8, ideas need more skilful selection and deeper development; some points are too general.",
+              "nextBandGapZh": "要达到 8 分，需更巧妙地选材并深入展开；部分观点过于笼统。"
+            },
+            "strengths": [
+              "Addresses both views fully.",
+              "Clear and consistent opinion throughout.",
+              "Ideas supported with specific examples."
+            ],
+            "strengthsZh": [
+              "全面回应了双方观点。",
+              "立场清晰且贯穿始终。",
+              "观点有具体例子支撑。"
+            ],
+            "constraints": [
+              "Some supporting points are generic and lack precise illustration."
+            ],
+            "constraintsZh": [
+              "部分支撑点笼统，缺乏精准阐述。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "For example, a business student can learn how to use office software, speak with a customer and work in a team.",
+                "explanation": "Shows a specific example that effectively supports the practical-skills view.",
+                "explanationZh": "展示了一个具体例子，有效支持了实践技能观点。"
+              },
+              {
+                "quote": "Subjects such as maths, science and history teach people to think and understand difficult ideas.",
+                "explanation": "Presents a valid point but remains vague; more development would strengthen it.",
+                "explanationZh": "提出了合理观点但表述模糊；深入展开将更有力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Develop generic claims with concrete examples.",
+              "priorityZh": "用具体例子支撑笼统的论断。",
+              "action": "Replace the sentence 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' with a detailed illustration of one subject's critical thinking benefit.",
+              "actionZh": "将 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' 替换为具体阐述某一学科如何培养批判性思维。",
+              "beforeQuote": "Subjects such as maths, science and history teach people to think and understand difficult ideas.",
+              "revisedExample": "For instance, studying history trains students to analyze sources and evaluate conflicting evidence, skills highly valued in law and journalism.",
+              "whyItWorks": "Adds a specific, developed example that lifts the paragraph from general statement to precise illustration.",
+              "whyItWorksZh": "增加了具体的展开例子，使段落从泛泛而谈升级为精准阐述。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The essay addresses both sides of the argument and presents a clear personal opinion. Ideas are developed with relevant examples, though some supporting points remain somewhat generic and could be further illustrated to reach a higher band.",
+            "whyThisBandZh": "文章讨论了两方观点并给出了明确的个人立场。观点通过相关例子展开，但部分论据仍略显泛泛，若能更具体地阐述则可达到更高分数。",
+            "whyNotLower": "All parts of the task are addressed; the writer's position is clear and consistently maintained. Main ideas are extended with examples and reasoning.",
+            "whyNotLowerZh": "回应了所有任务要求；立场清晰且贯穿始终。主要观点通过例子和推理得到扩展。",
+            "whyNotHigher": "To reach Band 8, ideas need more skilful selection and deeper development; some points are too general.",
+            "whyNotHigherZh": "要达到 8 分，需更巧妙地选材并深入展开；部分观点过于笼统。",
+            "positiveEvidence": [
+              "Addresses both views fully.",
+              "Clear and consistent opinion throughout.",
+              "Ideas supported with specific examples."
+            ],
+            "positiveEvidenceZh": [
+              "全面回应了双方观点。",
+              "立场清晰且贯穿始终。",
+              "观点有具体例子支撑。"
+            ],
+            "limitingEvidence": [
+              "Some supporting points are generic and lack precise illustration."
+            ],
+            "limitingEvidenceZh": [
+              "部分支撑点笼统，缺乏精准阐述。"
+            ],
+            "howToImprove": "Replace the sentence 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' with a detailed illustration of one subject's critical thinking benefit.",
+            "howToImproveZh": "将 'Subjects such as maths, science and history teach people to think and understand difficult ideas.' 替换为具体阐述某一学科如何培养批判性思维。",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Information is organised logically with clear paragraphing. Progression is easy to follow, but the use of cohesive devices like 'On the one hand/On the other hand' is predictable and limits flexibility.",
+            "diagnosisZh": "信息组织有逻辑，段落划分清晰。行文流畅易懂，但 'On the one hand/On the other hand' 等衔接手段显得套话，缺乏灵活性。",
+            "bandBoundary": {
+              "fit": "Clear progression throughout; paragraphs each have a clear central topic. Cohesive devices are used effectively despite being somewhat mechanical.",
+              "fitZh": "全文推进清晰；每个段落中心明确。衔接手段虽有些机械，但运用有效。",
+              "nextBandGap": "To reach Band 8, cohesion would need to be managed more subtly with less reliance on formulaic phrases.",
+              "nextBandGapZh": "要达到 8 分，衔接需更自然，减少对套话的依赖。"
+            },
+            "strengths": [
+              "Logical paragraph structure.",
+              "Clear central topics in each paragraph."
+            ],
+            "strengthsZh": [
+              "段落结构逻辑清晰。",
+              "每个段落中心明确。"
+            ],
+            "constraints": [
+              "Over-reliance on predictable cohesive devices ('On the one hand/On the other hand')."
+            ],
+            "constraintsZh": [
+              "过度依赖公式化衔接词（'On the one hand/On the other hand'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "On the one hand, practical teaching can make graduates ready for work.",
+                "explanation": "Clear but formulaic paragraph opener.",
+                "explanationZh": "清晰的段落开头，但公式化。"
+              },
+              {
+                "quote": "These things are asked by many company.",
+                "explanation": "Uses referencing 'These things' to link back, though the sentence contains an error.",
+                "explanationZh": "用 'These things' 回指上文，但句子有误。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Vary cohesive devices to avoid formulaic expressions.",
+              "priorityZh": "变换衔接手段，避免套话。",
+              "action": "Replace 'On the one hand' with a more natural transition that introduces the practical view.",
+              "actionZh": "用更自然的过渡替换 'On the one hand'，引出实践观点。",
+              "beforeQuote": "On the one hand, practical teaching can make graduates ready for work.",
+              "revisedExample": "Focusing on practical skills ensures graduates are immediately employable.",
+              "whyItWorks": "Reduces mechanical signalling and demonstrates more flexible cohesion.",
+              "whyItWorksZh": "减少了机械的信号词，展示了更灵活的衔接能力。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Information is organised logically with clear paragraphing. Progression is easy to follow, but the use of cohesive devices like 'On the one hand/On the other hand' is predictable and limits flexibility.",
+            "whyThisBandZh": "信息组织有逻辑，段落划分清晰。行文流畅易懂，但 'On the one hand/On the other hand' 等衔接手段显得套话，缺乏灵活性。",
+            "whyNotLower": "Clear progression throughout; paragraphs each have a clear central topic. Cohesive devices are used effectively despite being somewhat mechanical.",
+            "whyNotLowerZh": "全文推进清晰；每个段落中心明确。衔接手段虽有些机械，但运用有效。",
+            "whyNotHigher": "To reach Band 8, cohesion would need to be managed more subtly with less reliance on formulaic phrases.",
+            "whyNotHigherZh": "要达到 8 分，衔接需更自然，减少对套话的依赖。",
+            "positiveEvidence": [
+              "Logical paragraph structure.",
+              "Clear central topics in each paragraph."
+            ],
+            "positiveEvidenceZh": [
+              "段落结构逻辑清晰。",
+              "每个段落中心明确。"
+            ],
+            "limitingEvidence": [
+              "Over-reliance on predictable cohesive devices ('On the one hand/On the other hand')."
+            ],
+            "limitingEvidenceZh": [
+              "过度依赖公式化衔接词（'On the one hand/On the other hand'）。"
+            ],
+            "howToImprove": "Replace 'On the one hand' with a more natural transition that introduces the practical view.",
+            "howToImproveZh": "用更自然的过渡替换 'On the one hand'，引出实践观点。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Vocabulary is adequate for the topic, but the range is quite narrow. There are noticeable errors in word formation, such as using 'confident' instead of 'confidence', which prevent a higher score.",
+            "diagnosisZh": "词汇量足以应对话题，但范围较窄。词形变化错误明显，如用 'confident' 代替 'confidence'，阻碍了得分提升。",
+            "bandBoundary": {
+              "fit": "Meaning is generally clear, but word form errors are frequent and lexical range is limited.",
+              "fitZh": "意思基本清晰，但词形错误频繁，词汇范围有限。",
+              "nextBandGap": "To reach Band 7, a wider range with fewer word formation errors and more precise collocations would be necessary.",
+              "nextBandGapZh": "要达到 7 分，需扩大词汇量，减少词形错误，使用更准确的搭配。"
+            },
+            "strengths": [
+              "Some relevant topic vocabulary is attempted ('office software', 'workplace')."
+            ],
+            "strengthsZh": [
+              "尝试使用相关话题词汇（如 'office software'、'workplace'）。"
+            ],
+            "constraints": [
+              "Frequent word form errors (e.g., 'confident' for 'confidence', 'more easy' for 'more easily')."
+            ],
+            "constraintsZh": [
+              "词形错误频发（如 'confident' 代替 'confidence'，'more easy' 代替 'more easily'）。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "work experience give them confident",
+                "explanation": "Incorrect word form: 'confident' should be 'confidence'.",
+                "explanationZh": "词形错误：应使用 'confidence'。"
+              },
+              {
+                "quote": "learn a new skill more easy",
+                "explanation": "Incorrect adverb form: 'more easy' should be 'more easily'.",
+                "explanationZh": "副词形式错误：应为 'more easily'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct word formation errors to improve lexical precision.",
+              "priorityZh": "修正词形错误以提高词汇精确度。",
+              "action": "Change 'give them confident' to 'gives them confidence'.",
+              "actionZh": "将 'give them confident' 改为 'gives them confidence'。",
+              "beforeQuote": "work experience give them confident",
+              "revisedExample": "work experience gives them confidence",
+              "whyItWorks": "Eliminates the word form error and uses the correct noun 'confidence', matching the intended meaning.",
+              "whyItWorksZh": "纠正了词形错误，使用了正确的名词 'confidence'，准确传达原意。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Vocabulary is adequate for the topic, but the range is quite narrow. There are noticeable errors in word formation, such as using 'confident' instead of 'confidence', which prevent a higher score.",
+            "whyThisBandZh": "词汇量足以应对话题，但范围较窄。词形变化错误明显，如用 'confident' 代替 'confidence'，阻碍了得分提升。",
+            "whyNotLower": "Meaning is generally clear, but word form errors are frequent and lexical range is limited.",
+            "whyNotLowerZh": "意思基本清晰，但词形错误频繁，词汇范围有限。",
+            "whyNotHigher": "To reach Band 7, a wider range with fewer word formation errors and more precise collocations would be necessary.",
+            "whyNotHigherZh": "要达到 7 分，需扩大词汇量，减少词形错误，使用更准确的搭配。",
+            "positiveEvidence": [
+              "Some relevant topic vocabulary is attempted ('office software', 'workplace')."
+            ],
+            "positiveEvidenceZh": [
+              "尝试使用相关话题词汇（如 'office software'、'workplace'）。"
+            ],
+            "limitingEvidence": [
+              "Frequent word form errors (e.g., 'confident' for 'confidence', 'more easy' for 'more easily')."
+            ],
+            "limitingEvidenceZh": [
+              "词形错误频发（如 'confident' 代替 'confidence'，'more easy' 代替 'more easily'）。"
+            ],
+            "howToImprove": "Change 'give them confident' to 'gives them confidence'.",
+            "howToImproveZh": "将 'give them confident' 改为 'gives them confidence'。",
+            "confidence": 0.9
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "The essay attempts complex sentences, but control is inconsistent. Subject-verb agreement and plural errors occur repeatedly, which keeps the score at Band 6.",
+            "diagnosisZh": "文章尝试了复合句，但控制不稳。主谓一致和名词复数错误反复出现，使得分数停留在 6 分。",
+            "bandBoundary": {
+              "fit": "A mix of simple and complex sentences is used, but errors in agreement and word forms occur frequently.",
+              "fitZh": "使用了简单句和复杂句的混合结构，但主谓一致和词形错误频频出现。",
+              "nextBandGap": "To reach Band 7, error-free sentences must be more frequent and complex structures better controlled.",
+              "nextBandGapZh": "要达到 7 分，必须更频繁地写出无误句子，并更好地控制复杂结构。"
+            },
+            "strengths": [
+              "Attempts complex sentences with subordinate clauses."
+            ],
+            "strengthsZh": [
+              "尝试使用带从句的复杂句。"
+            ],
+            "constraints": [
+              "Recurring subject-verb agreement and plural errors."
+            ],
+            "constraintsZh": [
+              "主谓一致和名词复数错误反复出现。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "academic knowledge also have an important place",
+                "explanation": "Subject-verb agreement error: 'have' should be 'has'.",
+                "explanationZh": "主谓不一致：应为 'has'。"
+              },
+              {
+                "quote": "many company",
+                "explanation": "Plural error: 'company' should be 'companies'.",
+                "explanationZh": "名词复数错误：应为 'companies'。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Fix subject-verb agreement errors.",
+              "priorityZh": "修正主谓一致错误。",
+              "action": "Correct 'have' to 'has' in 'academic knowledge also have an important place'.",
+              "actionZh": "将 'academic knowledge also have an important place' 中的 'have' 改为 'has'。",
+              "beforeQuote": "academic knowledge also have an important place",
+              "revisedExample": "academic knowledge also has an important place",
+              "whyItWorks": "Removes a recurring agreement error, improving overall grammatical accuracy.",
+              "whyItWorksZh": "消除了反复出现的一致错误，提升了整体语法准确性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The essay attempts complex sentences, but control is inconsistent. Subject-verb agreement and plural errors occur repeatedly, which keeps the score at Band 6.",
+            "whyThisBandZh": "文章尝试了复合句，但控制不稳。主谓一致和名词复数错误反复出现，使得分数停留在 6 分。",
+            "whyNotLower": "A mix of simple and complex sentences is used, but errors in agreement and word forms occur frequently.",
+            "whyNotLowerZh": "使用了简单句和复杂句的混合结构，但主谓一致和词形错误频频出现。",
+            "whyNotHigher": "To reach Band 7, error-free sentences must be more frequent and complex structures better controlled.",
+            "whyNotHigherZh": "要达到 7 分，必须更频繁地写出无误句子，并更好地控制复杂结构。",
+            "positiveEvidence": [
+              "Attempts complex sentences with subordinate clauses."
+            ],
+            "positiveEvidenceZh": [
+              "尝试使用带从句的复杂句。"
+            ],
+            "limitingEvidence": [
+              "Recurring subject-verb agreement and plural errors."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致和名词复数错误反复出现。"
+            ],
+            "howToImprove": "Correct 'have' to 'has' in 'academic knowledge also have an important place'.",
+            "howToImproveZh": "将 'academic knowledge also have an important place' 中的 'have' 改为 'has'。",
+            "confidence": 0.9
+          }
+        },
+        "overallAssessment": "The essay competently addresses both views and presents a clear, balanced opinion. Ideas are logically organized with clear paragraphs, though cohesion relies on a few formulaic phrases. Vocabulary and grammar are adequate for the task but are limited by recurring error patterns, particularly with word forms and subject-verb agreement. To improve, focus on precise word choice and error-free sentences.",
+        "overallAssessmentZh": "文章较好地讨论了两方观点并给出了清晰、权衡的个人立场。段落组织有序，但衔接手法有些套话。词汇和语法能满足任务要求，但词形变化和主谓一致等错误反复出现，影响了精确度。下一步应优先修正这些语言错误。",
+        "revisionSequence": [
+          "Correct subject-verb agreement and plural errors, such as 'knowledge have' → 'knowledge has' and 'many company' → 'many companies'.",
+          "Use accurate word forms, e.g., 'confident' → 'confidence', 'more easy' → 'more easily'.",
+          "Replace predictable cohesive devices like 'On the one hand/On the other hand' with more natural transitions."
+        ],
+        "revisionSequenceZh": [
+          "修正主谓一致和名词复数错误，如 'knowledge have' 改为 'knowledge has'，'many company' 改为 'many companies'。",
+          "使用正确的词形，如 'confident' 改为 'confidence'，'more easy' 改为 'more easily'。",
+          "用更自然的过渡替换套话如 'On the one hand/On the other hand'。"
+        ],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Response": 0.5,
+            "Coherence and Cohesion": 0.5,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0.5,
+          "differingCriteria": 2,
+          "reasons": [
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6.5,
+            "confidence": 0.8,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6.5,
+              "Coherence and Cohesion": 6.5,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6.5,
+            "confidence": 0.8,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Response": 7,
+            "Coherence and Cohesion": 7,
+            "Lexical Resource": 6,
+            "Grammatical Range and Accuracy": 6
+          },
+          "finalOverallBand": 6.5
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "academic",
+          "wordCount": 284,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 4,
+          "sentenceCount": 18,
+          "averageSentenceWords": 15.8,
+          "lexicalDiversity": 0.574,
+          "paragraphWordCounts": [
+            51,
+            92,
+            84,
+            57
+          ],
+          "englishLetterRatio": 0.976,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.249,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 6.5,
+          "finalBand": 6.5,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "embedded_complete",
+          "scoreChanged": false,
+          "repairAttempted": true,
+          "repairSucceeded": true,
+          "note": "Text-specific criterion evidence and revision moves are embedded in the frozen scoring result."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": false,
+          "feedbackGenerated": true,
+          "feedbackStatus": "embedded_complete"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3655,
+              "completion_tokens": 4508,
+              "total_tokens": 8163,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3275
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3655
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3656,
+              "completion_tokens": 5595,
+              "total_tokens": 9251,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4277
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3656
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "max",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 7424,
+              "completion_tokens": 5428,
+              "total_tokens": 12852,
+              "prompt_tokens_details": {
+                "cached_tokens": 384
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4061
+              },
+              "prompt_cache_hit_tokens": 384,
+              "prompt_cache_miss_tokens": 7040
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": {
+            "role": "feedback_repair",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "medium",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5216,
+              "completion_tokens": 7629,
+              "total_tokens": 12845,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4666
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5216
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "elapsedMs": 260185
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "G1-B7-complaint-complete",
+      "taskKey": "general_training:1",
+      "run": 1,
+      "targetOverall": 7,
+      "predictedOverall": 7.5,
+      "overallError": 0.5,
+      "targetCriteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6.5,
+        "Grammatical Range and Accuracy": 6.5
+      },
+      "predictedCriteria": {
+        "Task Achievement": 8,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "criterionErrors": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0.5,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "withinHalfBand": true,
+      "catastrophicError": false,
+      "feedbackAudit": {
+        "complete": true,
+        "criteria": {
+          "Task Achievement": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Coherence and Cohesion": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Lexical Resource": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Grammatical Range and Accuracy": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          }
+        }
+      },
+      "adjudicationTriggered": true,
+      "humanReview": false,
+      "humanReviewReasons": [],
+      "confidence": 0.86,
+      "durationMs": 278118,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "gt_letter",
+        "overallBand": 7.5,
+        "rawAverage": 7.25,
+        "likelyRange": [
+          6.5,
+          8
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 8,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "finalCriteria": {
+          "Task Achievement": 8,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 8,
+            "diagnosis": "The response covers all requirements with skilfully selected and well-extended details; the purpose is consistently clear and the register is appropriate.",
+            "diagnosisZh": "回复涵盖了所有要求，细节选取巧妙且充分展开；目的始终清晰，语体得当。",
+            "bandBoundary": {
+              "fit": "Each bullet is addressed with precise, relevant information—order specifics, damage description with a test, personal impact, and a nuanced request with a conditional alternative—fitting the Band 8 descriptor of skilful selection and sufficient extension.",
+              "fitZh": "每个要点都以精确相关的信息回应——订单详情、带有测试的损坏描述、个人影响，以及带有条件选项的细致请求——符合8分描述中的巧妙选择和充分展开。",
+              "nextBandGap": "To reach Band 9, the response would need even fuller development, such as slightly more elaboration on the personal effect or additional contextual richness, though it already satisfies requirements convincingly.",
+              "nextBandGapZh": "要达到9分，回复需要更加充分的展开，比如对个人影响稍加详细说明或增加情境的丰富度，尽管它已经令人信服地满足了要求。"
+            },
+            "strengths": [
+              "All bullet points are developed with specific, concrete information (dates, order number, fault details, personal context).",
+              "The request is precise and includes a time-bound contingency, showing careful consideration of possible outcomes."
+            ],
+            "strengthsZh": [
+              "所有要点都用具体、实在的信息展开（日期、订单号、故障细节、个人情境）。",
+              "请求明确，包含了带时限的备选方案，显示出对可能结果的周密考虑。"
+            ],
+            "constraints": [
+              "The development, while skilful, is not fully exhaustive across every bullet; the personal impact section is relatively concise for a Band 9 performance."
+            ],
+            "constraintsZh": [
+              "展开虽然巧妙，但并非每个要点都完全详尽；个人影响部分对于9分标准而言相对简洁。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The glass jug has a crack near the bottom and the power button is loose. I tested the blender without putting food in it, and the motor stopped twice.",
+                "explanation": "Specific, test-based damage description that goes beyond a simple fault statement.",
+                "explanationZh": "具体、有测试依据的损坏描述，超越了简单陈述故障。"
+              },
+              {
+                "quote": "If you cannot send a replacement within three working days, please refund the full price and the original delivery cost.",
+                "explanation": "Demonstrates a well-considered request with a conditional alternative, showing skilful task management.",
+                "explanationZh": "展现了经过深思熟虑的请求，附带条件选项，显示出巧妙的应对能力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "更充分地展开个人影响",
+              "priorityZh": "更充分地展开个人影响",
+              "action": "Add one more sentence about how the late/damaged blender specifically affected you and your father's needs.",
+              "actionZh": "添加一句具体说明迟到和损坏的搅拌机如何影响您和父亲的需求。",
+              "beforeQuote": "The delay has caused difficulty for me because I am now borrowing a blender from a neighbour.",
+              "revisedExample": "The delay has caused significant inconvenience because I have had to borrow a blender from a neighbour, and I have been unable to prepare my father’s soft meals on time.",
+              "whyItWorks": "This adds a more detailed consequence, strengthening the task band by demonstrating fuller development of the personal impact.",
+              "whyItWorksZh": "这增加了更详细的后果，通过更充分展示个人影响来提升任务项得分。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response covers all requirements with skilfully selected and well-extended details; the purpose is consistently clear and the register is appropriate.",
+            "whyThisBandZh": "回复涵盖了所有要求，细节选取巧妙且充分展开；目的始终清晰，语体得当。",
+            "whyNotLower": "Each bullet is addressed with precise, relevant information—order specifics, damage description with a test, personal impact, and a nuanced request with a conditional alternative—fitting the Band 8 descriptor of skilful selection and sufficient extension.",
+            "whyNotLowerZh": "每个要点都以精确相关的信息回应——订单详情、带有测试的损坏描述、个人影响，以及带有条件选项的细致请求——符合8分描述中的巧妙选择和充分展开。",
+            "whyNotHigher": "To reach Band 9, the response would need even fuller development, such as slightly more elaboration on the personal effect or additional contextual richness, though it already satisfies requirements convincingly.",
+            "whyNotHigherZh": "要达到9分，回复需要更加充分的展开，比如对个人影响稍加详细说明或增加情境的丰富度，尽管它已经令人信服地满足了要求。",
+            "positiveEvidence": [
+              "All bullet points are developed with specific, concrete information (dates, order number, fault details, personal context).",
+              "The request is precise and includes a time-bound contingency, showing careful consideration of possible outcomes."
+            ],
+            "positiveEvidenceZh": [
+              "所有要点都用具体、实在的信息展开（日期、订单号、故障细节、个人情境）。",
+              "请求明确，包含了带时限的备选方案，显示出对可能结果的周密考虑。"
+            ],
+            "limitingEvidence": [
+              "The development, while skilful, is not fully exhaustive across every bullet; the personal impact section is relatively concise for a Band 9 performance."
+            ],
+            "limitingEvidenceZh": [
+              "展开虽然巧妙，但并非每个要点都完全详尽；个人影响部分对于9分标准而言相对简洁。"
+            ],
+            "howToImprove": "Add one more sentence about how the late/damaged blender specifically affected you and your father's needs.",
+            "howToImproveZh": "添加一句具体说明迟到和损坏的搅拌机如何影响您和父亲的需求。",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Ideas are logically organised with clear progression; cohesive devices and paragraphs show flexible control, though cohesion is straightforward rather than skilful.",
+            "diagnosisZh": "观点组织有逻辑，推进清晰；衔接手段和段落显示出灵活的控制，但衔接较为直接，不够巧妙。",
+            "bandBoundary": {
+              "fit": "Paragraphing supports the central topics, and there is a logical flow from problem to impact to request, with effective cause-and-effect linking, consistent with Band 7.",
+              "fitZh": "段落划分支持中心话题，从问题到影响到请求的逻辑流程清晰，因果联系有效，符合7分标准。",
+              "nextBandGap": "To achieve Band 8, cohesion would need to be more sophisticated, with varied referencing and substitution beyond the basic connectors used here.",
+              "nextBandGapZh": "要达到8分，衔接需要更加精巧，采用多样化的指代和替代，超越文中使用的基本连接词。"
+            },
+            "strengths": [
+              "Clear overall organisation and appropriate paragraphing support the progression of ideas.",
+              "Cause-and-effect links like ‘Because of these problems’ create logical connections."
+            ],
+            "strengthsZh": [
+              "清晰的总体组织和恰当的段落划分支持观点的推进。",
+              "‘Because of these problems’等因果链接建立了逻辑联系。"
+            ],
+            "constraints": [
+              "Cohesion relies heavily on simple conjunctions (‘and’, ‘but’, ‘because’) and lacks more advanced cohesive strategies such as paraphrasing or varied referencing."
+            ],
+            "constraintsZh": [
+              "衔接主要依赖简单的连词（‘and’、‘but’、‘because’），缺乏更高级的衔接策略，如改写或多样化的指代。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Because of these problems, the machine are not safe to use.",
+                "explanation": "Shows a straightforward cause-effect link without a more sophisticated transition.",
+                "explanationZh": "展示了直接的因果链接，但没有更复杂的过渡。"
+              },
+              {
+                "quote": "I called customer service and sent photographs on 12 July, but I have not received a useful answer.",
+                "explanation": "Uses ‘but’ for contrast, which is basic but effective; the cohesion is functional rather than skilful.",
+                "explanationZh": "用‘but’表示对比，虽基本但有效；衔接是功能性的，而非巧妙的。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "提升衔接的多样性和灵活性",
+              "priorityZh": "提升衔接的多样性和灵活性",
+              "action": "Vary cohesive devices by using referencing (e.g., ‘this issue’, ‘the matter’) instead of repeating ‘the blender’ or relying on ‘and’/‘but’.",
+              "actionZh": "通过使用指代（如‘this issue’、‘the matter’）来变化衔接手段，而不是重复‘the blender’或依赖‘and’/‘but’。",
+              "beforeQuote": "I called customer service and sent photographs on 12 July, but I have not received a useful answer.",
+              "revisedExample": "Despite calling customer service and sending photographs on 12 July, I have yet to receive a satisfactory response.",
+              "whyItWorks": "This revision uses a prepositional phrase for contrast, reducing reliance on co-ordinating conjunctions and adding referencing (‘response’ paraphrases ‘answer’).",
+              "whyItWorksZh": "此修改使用了介词短语表示对比，减少了对并列连词的依赖，并增加了指代（‘response’同义替换‘answer’）。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Ideas are logically organised with clear progression; cohesive devices and paragraphs show flexible control, though cohesion is straightforward rather than skilful.",
+            "whyThisBandZh": "观点组织有逻辑，推进清晰；衔接手段和段落显示出灵活的控制，但衔接较为直接，不够巧妙。",
+            "whyNotLower": "Paragraphing supports the central topics, and there is a logical flow from problem to impact to request, with effective cause-and-effect linking, consistent with Band 7.",
+            "whyNotLowerZh": "段落划分支持中心话题，从问题到影响到请求的逻辑流程清晰，因果联系有效，符合7分标准。",
+            "whyNotHigher": "To achieve Band 8, cohesion would need to be more sophisticated, with varied referencing and substitution beyond the basic connectors used here.",
+            "whyNotHigherZh": "要达到8分，衔接需要更加精巧，采用多样化的指代和替代，超越文中使用的基本连接词。",
+            "positiveEvidence": [
+              "Clear overall organisation and appropriate paragraphing support the progression of ideas.",
+              "Cause-and-effect links like ‘Because of these problems’ create logical connections."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的总体组织和恰当的段落划分支持观点的推进。",
+              "‘Because of these problems’等因果链接建立了逻辑联系。"
+            ],
+            "limitingEvidence": [
+              "Cohesion relies heavily on simple conjunctions (‘and’, ‘but’, ‘because’) and lacks more advanced cohesive strategies such as paraphrasing or varied referencing."
+            ],
+            "limitingEvidenceZh": [
+              "衔接主要依赖简单的连词（‘and’、‘but’、‘because’），缺乏更高级的衔接策略，如改写或多样化的指代。"
+            ],
+            "howToImprove": "Vary cohesive devices by using referencing (e.g., ‘this issue’, ‘the matter’) instead of repeating ‘the blender’ or relying on ‘and’/‘but’.",
+            "howToImproveZh": "通过使用指代（如‘this issue’、‘the matter’）来变化衔接手段，而不是重复‘the blender’或依赖‘and’/‘but’。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Vocabulary is appropriate and sufficient, with some flexibility and awareness of collocation; the range is not wide but adequate for the task.",
+            "diagnosisZh": "词汇恰当且充足，表现出一定的灵活性和搭配意识；范围不广但足以应对任务。",
+            "bandBoundary": {
+              "fit": "Topic-specific vocabulary such as ‘express delivery’, ‘glass jug’, ‘crack’, and ‘dental operation’ is used with precision, demonstrating the Band 7 level of lexical range.",
+              "fitZh": "‘express delivery’、‘glass jug’、‘crack’和‘dental operation’等话题专用词汇使用精准，展现出7分水平的词汇范围。",
+              "nextBandGap": "To reach Band 8, a wider, more flexible resource with idiomatic or highly precise choices would be needed, along with evidence of skilful paraphrasing.",
+              "nextBandGapZh": "要达到8分，词汇范围需要更广、更灵活，出现习语或高度精准的选择，并有巧妙改写的证据。"
+            },
+            "strengths": [
+              "Accurate use of register-appropriate and task-specific lexis.",
+              "Effective collocations like ‘express delivery’ and ‘full price’ are used naturally."
+            ],
+            "strengthsZh": [
+              "准确使用了符合语体和任务要求的词汇。",
+              "‘express delivery’、‘full price’等有效搭配使用自然。"
+            ],
+            "constraints": [
+              "Vocabulary range is adequate but not broad; there is little evidence of less common or idiomatic expressions, and some choices remain basic."
+            ],
+            "constraintsZh": [
+              "词汇范围够用但不够广泛；较少出现不常见或地道的表达，部分选择仍比较基础。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "express delivery",
+                "explanation": "A precise, topic-specific term used accurately.",
+                "explanationZh": "一个精准的话题专用术语，使用准确。"
+              },
+              {
+                "quote": "soft meals for my father after a dental operation",
+                "explanation": "Clear and relevant, though phrased simply without more sophisticated vocabulary.",
+                "explanationZh": "清晰且相关，但措辞简单，没有使用更高级的词汇。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "扩展词汇范围，增加更精确或地道的表达",
+              "priorityZh": "扩展词汇范围，增加更精确或地道的表达",
+              "action": "Replace common words with more precise alternatives, e.g., 'response' for 'answer', and use collocations like 'safety hazard'.",
+              "actionZh": "用更精确的词汇替换普通词，例如用‘response’替换‘answer’，并使用搭配如‘safety hazard’。",
+              "beforeQuote": "the machine are not safe to use",
+              "revisedExample": "the appliance poses a safety hazard",
+              "whyItWorks": "The revision uses a more formal and precise collocation ('poses a safety hazard'), enhancing lexical range and register.",
+              "whyItWorksZh": "修改使用了更正式、更精确的搭配（‘poses a safety hazard’），提升了词汇范围和语体。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Vocabulary is appropriate and sufficient, with some flexibility and awareness of collocation; the range is not wide but adequate for the task.",
+            "whyThisBandZh": "词汇恰当且充足，表现出一定的灵活性和搭配意识；范围不广但足以应对任务。",
+            "whyNotLower": "Topic-specific vocabulary such as ‘express delivery’, ‘glass jug’, ‘crack’, and ‘dental operation’ is used with precision, demonstrating the Band 7 level of lexical range.",
+            "whyNotLowerZh": "‘express delivery’、‘glass jug’、‘crack’和‘dental operation’等话题专用词汇使用精准，展现出7分水平的词汇范围。",
+            "whyNotHigher": "To reach Band 8, a wider, more flexible resource with idiomatic or highly precise choices would be needed, along with evidence of skilful paraphrasing.",
+            "whyNotHigherZh": "要达到8分，词汇范围需要更广、更灵活，出现习语或高度精准的选择，并有巧妙改写的证据。",
+            "positiveEvidence": [
+              "Accurate use of register-appropriate and task-specific lexis.",
+              "Effective collocations like ‘express delivery’ and ‘full price’ are used naturally."
+            ],
+            "positiveEvidenceZh": [
+              "准确使用了符合语体和任务要求的词汇。",
+              "‘express delivery’、‘full price’等有效搭配使用自然。"
+            ],
+            "limitingEvidence": [
+              "Vocabulary range is adequate but not broad; there is little evidence of less common or idiomatic expressions, and some choices remain basic."
+            ],
+            "limitingEvidenceZh": [
+              "词汇范围够用但不够广泛；较少出现不常见或地道的表达，部分选择仍比较基础。"
+            ],
+            "howToImprove": "Replace common words with more precise alternatives, e.g., 'response' for 'answer', and use collocations like 'safety hazard'.",
+            "howToImproveZh": "用更精确的词汇替换普通词，例如用‘response’替换‘answer’，并使用搭配如‘safety hazard’。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A variety of complex structures is used with general control; error-free sentences are frequent, and the remaining error does not impede communication.",
+            "diagnosisZh": "使用了多种复杂结构，总体控制良好；不出错的句子频繁出现，残余错误不影响交流。",
+            "bandBoundary": {
+              "fit": "The response includes complex sentences with conditionals and subordinate clauses, and most sentences are accurate, consistent with Band 7.",
+              "fitZh": "回复包含了带有条件句和从句的复杂句，多数句子正确，符合7分水平。",
+              "nextBandGap": "For Band 8, the range of structures would need to be wider and more flexibly used, with a higher proportion of error-free sentences and almost no basic slips.",
+              "nextBandGapZh": "要达到8分，句型范围需要更广、使用更灵活，不出错的句子比例更高，且几乎没有基础性错误。"
+            },
+            "strengths": [
+              "Good use of a conditional sentence and a complex clause sequence.",
+              "Error-free sentences are frequent, supporting clear communication."
+            ],
+            "strengthsZh": [
+              "条件句和复杂从句序列使用得当。",
+              "频繁出现无错句子，支持清晰交流。"
+            ],
+            "constraints": [
+              "A subject-verb agreement error (‘the machine are’) indicates a lapse in control of a basic structure, and the overall range of complex structures, while present, is not extensive."
+            ],
+            "constraintsZh": [
+              "一个主谓一致错误（‘the machine are’）表明对基础结构的控制出现疏忽，此外复杂结构的总体范围虽存在但不够广泛。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "the machine are not safe to use",
+                "explanation": "A basic subject-verb agreement error that prevents the response from reaching Band 8.",
+                "explanationZh": "一个基础的主谓一致错误，阻碍回复达到8分。"
+              },
+              {
+                "quote": "If you cannot send a replacement within three working days, please refund the full price and the original delivery cost.",
+                "explanation": "A well-formed conditional sentence demonstrating complex structure control.",
+                "explanationZh": "一个结构良好的条件句，展示了复杂结构的控制能力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "纠正基础语法错误，增加句型多样性",
+              "priorityZh": "纠正基础语法错误，增加句型多样性",
+              "action": "Correct the subject-verb agreement error and consider incorporating a participle clause to demonstrate greater range.",
+              "actionZh": "修正主谓一致错误，并考虑加入一个分词短语，以展示更大的句型范围。",
+              "beforeQuote": "the machine are not safe to use",
+              "revisedExample": "Given these problems, the machine is not safe to use.",
+              "whyItWorks": "The revision corrects the agreement error and introduces a participle clause, increasing structural variety.",
+              "whyItWorksZh": "修改纠正了主谓一致错误，并引入了一个分词短语，增加了结构多样性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A variety of complex structures is used with general control; error-free sentences are frequent, and the remaining error does not impede communication.",
+            "whyThisBandZh": "使用了多种复杂结构，总体控制良好；不出错的句子频繁出现，残余错误不影响交流。",
+            "whyNotLower": "The response includes complex sentences with conditionals and subordinate clauses, and most sentences are accurate, consistent with Band 7.",
+            "whyNotLowerZh": "回复包含了带有条件句和从句的复杂句，多数句子正确，符合7分水平。",
+            "whyNotHigher": "For Band 8, the range of structures would need to be wider and more flexibly used, with a higher proportion of error-free sentences and almost no basic slips.",
+            "whyNotHigherZh": "要达到8分，句型范围需要更广、使用更灵活，不出错的句子比例更高，且几乎没有基础性错误。",
+            "positiveEvidence": [
+              "Good use of a conditional sentence and a complex clause sequence.",
+              "Error-free sentences are frequent, supporting clear communication."
+            ],
+            "positiveEvidenceZh": [
+              "条件句和复杂从句序列使用得当。",
+              "频繁出现无错句子，支持清晰交流。"
+            ],
+            "limitingEvidence": [
+              "A subject-verb agreement error (‘the machine are’) indicates a lapse in control of a basic structure, and the overall range of complex structures, while present, is not extensive."
+            ],
+            "limitingEvidenceZh": [
+              "一个主谓一致错误（‘the machine are’）表明对基础结构的控制出现疏忽，此外复杂结构的总体范围虽存在但不够广泛。"
+            ],
+            "howToImprove": "Correct the subject-verb agreement error and consider incorporating a participle clause to demonstrate greater range.",
+            "howToImproveZh": "修正主谓一致错误，并考虑加入一个分词短语，以展示更大的句型范围。",
+            "confidence": 0.9
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 8,
+            "diagnosis": "The response covers all requirements with skilfully selected and well-extended details; the purpose is consistently clear and the register is appropriate.",
+            "diagnosisZh": "回复涵盖了所有要求，细节选取巧妙且充分展开；目的始终清晰，语体得当。",
+            "bandBoundary": {
+              "fit": "Each bullet is addressed with precise, relevant information—order specifics, damage description with a test, personal impact, and a nuanced request with a conditional alternative—fitting the Band 8 descriptor of skilful selection and sufficient extension.",
+              "fitZh": "每个要点都以精确相关的信息回应——订单详情、带有测试的损坏描述、个人影响，以及带有条件选项的细致请求——符合8分描述中的巧妙选择和充分展开。",
+              "nextBandGap": "To reach Band 9, the response would need even fuller development, such as slightly more elaboration on the personal effect or additional contextual richness, though it already satisfies requirements convincingly.",
+              "nextBandGapZh": "要达到9分，回复需要更加充分的展开，比如对个人影响稍加详细说明或增加情境的丰富度，尽管它已经令人信服地满足了要求。"
+            },
+            "strengths": [
+              "All bullet points are developed with specific, concrete information (dates, order number, fault details, personal context).",
+              "The request is precise and includes a time-bound contingency, showing careful consideration of possible outcomes."
+            ],
+            "strengthsZh": [
+              "所有要点都用具体、实在的信息展开（日期、订单号、故障细节、个人情境）。",
+              "请求明确，包含了带时限的备选方案，显示出对可能结果的周密考虑。"
+            ],
+            "constraints": [
+              "The development, while skilful, is not fully exhaustive across every bullet; the personal impact section is relatively concise for a Band 9 performance."
+            ],
+            "constraintsZh": [
+              "展开虽然巧妙，但并非每个要点都完全详尽；个人影响部分对于9分标准而言相对简洁。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The glass jug has a crack near the bottom and the power button is loose. I tested the blender without putting food in it, and the motor stopped twice.",
+                "explanation": "Specific, test-based damage description that goes beyond a simple fault statement.",
+                "explanationZh": "具体、有测试依据的损坏描述，超越了简单陈述故障。"
+              },
+              {
+                "quote": "If you cannot send a replacement within three working days, please refund the full price and the original delivery cost.",
+                "explanation": "Demonstrates a well-considered request with a conditional alternative, showing skilful task management.",
+                "explanationZh": "展现了经过深思熟虑的请求，附带条件选项，显示出巧妙的应对能力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "更充分地展开个人影响",
+              "priorityZh": "更充分地展开个人影响",
+              "action": "Add one more sentence about how the late/damaged blender specifically affected you and your father's needs.",
+              "actionZh": "添加一句具体说明迟到和损坏的搅拌机如何影响您和父亲的需求。",
+              "beforeQuote": "The delay has caused difficulty for me because I am now borrowing a blender from a neighbour.",
+              "revisedExample": "The delay has caused significant inconvenience because I have had to borrow a blender from a neighbour, and I have been unable to prepare my father’s soft meals on time.",
+              "whyItWorks": "This adds a more detailed consequence, strengthening the task band by demonstrating fuller development of the personal impact.",
+              "whyItWorksZh": "这增加了更详细的后果，通过更充分展示个人影响来提升任务项得分。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "The response covers all requirements with skilfully selected and well-extended details; the purpose is consistently clear and the register is appropriate.",
+            "whyThisBandZh": "回复涵盖了所有要求，细节选取巧妙且充分展开；目的始终清晰，语体得当。",
+            "whyNotLower": "Each bullet is addressed with precise, relevant information—order specifics, damage description with a test, personal impact, and a nuanced request with a conditional alternative—fitting the Band 8 descriptor of skilful selection and sufficient extension.",
+            "whyNotLowerZh": "每个要点都以精确相关的信息回应——订单详情、带有测试的损坏描述、个人影响，以及带有条件选项的细致请求——符合8分描述中的巧妙选择和充分展开。",
+            "whyNotHigher": "To reach Band 9, the response would need even fuller development, such as slightly more elaboration on the personal effect or additional contextual richness, though it already satisfies requirements convincingly.",
+            "whyNotHigherZh": "要达到9分，回复需要更加充分的展开，比如对个人影响稍加详细说明或增加情境的丰富度，尽管它已经令人信服地满足了要求。",
+            "positiveEvidence": [
+              "All bullet points are developed with specific, concrete information (dates, order number, fault details, personal context).",
+              "The request is precise and includes a time-bound contingency, showing careful consideration of possible outcomes."
+            ],
+            "positiveEvidenceZh": [
+              "所有要点都用具体、实在的信息展开（日期、订单号、故障细节、个人情境）。",
+              "请求明确，包含了带时限的备选方案，显示出对可能结果的周密考虑。"
+            ],
+            "limitingEvidence": [
+              "The development, while skilful, is not fully exhaustive across every bullet; the personal impact section is relatively concise for a Band 9 performance."
+            ],
+            "limitingEvidenceZh": [
+              "展开虽然巧妙，但并非每个要点都完全详尽；个人影响部分对于9分标准而言相对简洁。"
+            ],
+            "howToImprove": "Add one more sentence about how the late/damaged blender specifically affected you and your father's needs.",
+            "howToImproveZh": "添加一句具体说明迟到和损坏的搅拌机如何影响您和父亲的需求。",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Ideas are logically organised with clear progression; cohesive devices and paragraphs show flexible control, though cohesion is straightforward rather than skilful.",
+            "diagnosisZh": "观点组织有逻辑，推进清晰；衔接手段和段落显示出灵活的控制，但衔接较为直接，不够巧妙。",
+            "bandBoundary": {
+              "fit": "Paragraphing supports the central topics, and there is a logical flow from problem to impact to request, with effective cause-and-effect linking, consistent with Band 7.",
+              "fitZh": "段落划分支持中心话题，从问题到影响到请求的逻辑流程清晰，因果联系有效，符合7分标准。",
+              "nextBandGap": "To achieve Band 8, cohesion would need to be more sophisticated, with varied referencing and substitution beyond the basic connectors used here.",
+              "nextBandGapZh": "要达到8分，衔接需要更加精巧，采用多样化的指代和替代，超越文中使用的基本连接词。"
+            },
+            "strengths": [
+              "Clear overall organisation and appropriate paragraphing support the progression of ideas.",
+              "Cause-and-effect links like ‘Because of these problems’ create logical connections."
+            ],
+            "strengthsZh": [
+              "清晰的总体组织和恰当的段落划分支持观点的推进。",
+              "‘Because of these problems’等因果链接建立了逻辑联系。"
+            ],
+            "constraints": [
+              "Cohesion relies heavily on simple conjunctions (‘and’, ‘but’, ‘because’) and lacks more advanced cohesive strategies such as paraphrasing or varied referencing."
+            ],
+            "constraintsZh": [
+              "衔接主要依赖简单的连词（‘and’、‘but’、‘because’），缺乏更高级的衔接策略，如改写或多样化的指代。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Because of these problems, the machine are not safe to use.",
+                "explanation": "Shows a straightforward cause-effect link without a more sophisticated transition.",
+                "explanationZh": "展示了直接的因果链接，但没有更复杂的过渡。"
+              },
+              {
+                "quote": "I called customer service and sent photographs on 12 July, but I have not received a useful answer.",
+                "explanation": "Uses ‘but’ for contrast, which is basic but effective; the cohesion is functional rather than skilful.",
+                "explanationZh": "用‘but’表示对比，虽基本但有效；衔接是功能性的，而非巧妙的。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "提升衔接的多样性和灵活性",
+              "priorityZh": "提升衔接的多样性和灵活性",
+              "action": "Vary cohesive devices by using referencing (e.g., ‘this issue’, ‘the matter’) instead of repeating ‘the blender’ or relying on ‘and’/‘but’.",
+              "actionZh": "通过使用指代（如‘this issue’、‘the matter’）来变化衔接手段，而不是重复‘the blender’或依赖‘and’/‘but’。",
+              "beforeQuote": "I called customer service and sent photographs on 12 July, but I have not received a useful answer.",
+              "revisedExample": "Despite calling customer service and sending photographs on 12 July, I have yet to receive a satisfactory response.",
+              "whyItWorks": "This revision uses a prepositional phrase for contrast, reducing reliance on co-ordinating conjunctions and adding referencing (‘response’ paraphrases ‘answer’).",
+              "whyItWorksZh": "此修改使用了介词短语表示对比，减少了对并列连词的依赖，并增加了指代（‘response’同义替换‘answer’）。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Ideas are logically organised with clear progression; cohesive devices and paragraphs show flexible control, though cohesion is straightforward rather than skilful.",
+            "whyThisBandZh": "观点组织有逻辑，推进清晰；衔接手段和段落显示出灵活的控制，但衔接较为直接，不够巧妙。",
+            "whyNotLower": "Paragraphing supports the central topics, and there is a logical flow from problem to impact to request, with effective cause-and-effect linking, consistent with Band 7.",
+            "whyNotLowerZh": "段落划分支持中心话题，从问题到影响到请求的逻辑流程清晰，因果联系有效，符合7分标准。",
+            "whyNotHigher": "To achieve Band 8, cohesion would need to be more sophisticated, with varied referencing and substitution beyond the basic connectors used here.",
+            "whyNotHigherZh": "要达到8分，衔接需要更加精巧，采用多样化的指代和替代，超越文中使用的基本连接词。",
+            "positiveEvidence": [
+              "Clear overall organisation and appropriate paragraphing support the progression of ideas.",
+              "Cause-and-effect links like ‘Because of these problems’ create logical connections."
+            ],
+            "positiveEvidenceZh": [
+              "清晰的总体组织和恰当的段落划分支持观点的推进。",
+              "‘Because of these problems’等因果链接建立了逻辑联系。"
+            ],
+            "limitingEvidence": [
+              "Cohesion relies heavily on simple conjunctions (‘and’, ‘but’, ‘because’) and lacks more advanced cohesive strategies such as paraphrasing or varied referencing."
+            ],
+            "limitingEvidenceZh": [
+              "衔接主要依赖简单的连词（‘and’、‘but’、‘because’），缺乏更高级的衔接策略，如改写或多样化的指代。"
+            ],
+            "howToImprove": "Vary cohesive devices by using referencing (e.g., ‘this issue’, ‘the matter’) instead of repeating ‘the blender’ or relying on ‘and’/‘but’.",
+            "howToImproveZh": "通过使用指代（如‘this issue’、‘the matter’）来变化衔接手段，而不是重复‘the blender’或依赖‘and’/‘but’。",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Vocabulary is appropriate and sufficient, with some flexibility and awareness of collocation; the range is not wide but adequate for the task.",
+            "diagnosisZh": "词汇恰当且充足，表现出一定的灵活性和搭配意识；范围不广但足以应对任务。",
+            "bandBoundary": {
+              "fit": "Topic-specific vocabulary such as ‘express delivery’, ‘glass jug’, ‘crack’, and ‘dental operation’ is used with precision, demonstrating the Band 7 level of lexical range.",
+              "fitZh": "‘express delivery’、‘glass jug’、‘crack’和‘dental operation’等话题专用词汇使用精准，展现出7分水平的词汇范围。",
+              "nextBandGap": "To reach Band 8, a wider, more flexible resource with idiomatic or highly precise choices would be needed, along with evidence of skilful paraphrasing.",
+              "nextBandGapZh": "要达到8分，词汇范围需要更广、更灵活，出现习语或高度精准的选择，并有巧妙改写的证据。"
+            },
+            "strengths": [
+              "Accurate use of register-appropriate and task-specific lexis.",
+              "Effective collocations like ‘express delivery’ and ‘full price’ are used naturally."
+            ],
+            "strengthsZh": [
+              "准确使用了符合语体和任务要求的词汇。",
+              "‘express delivery’、‘full price’等有效搭配使用自然。"
+            ],
+            "constraints": [
+              "Vocabulary range is adequate but not broad; there is little evidence of less common or idiomatic expressions, and some choices remain basic."
+            ],
+            "constraintsZh": [
+              "词汇范围够用但不够广泛；较少出现不常见或地道的表达，部分选择仍比较基础。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "express delivery",
+                "explanation": "A precise, topic-specific term used accurately.",
+                "explanationZh": "一个精准的话题专用术语，使用准确。"
+              },
+              {
+                "quote": "soft meals for my father after a dental operation",
+                "explanation": "Clear and relevant, though phrased simply without more sophisticated vocabulary.",
+                "explanationZh": "清晰且相关，但措辞简单，没有使用更高级的词汇。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "扩展词汇范围，增加更精确或地道的表达",
+              "priorityZh": "扩展词汇范围，增加更精确或地道的表达",
+              "action": "Replace common words with more precise alternatives, e.g., 'response' for 'answer', and use collocations like 'safety hazard'.",
+              "actionZh": "用更精确的词汇替换普通词，例如用‘response’替换‘answer’，并使用搭配如‘safety hazard’。",
+              "beforeQuote": "the machine are not safe to use",
+              "revisedExample": "the appliance poses a safety hazard",
+              "whyItWorks": "The revision uses a more formal and precise collocation ('poses a safety hazard'), enhancing lexical range and register.",
+              "whyItWorksZh": "修改使用了更正式、更精确的搭配（‘poses a safety hazard’），提升了词汇范围和语体。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Vocabulary is appropriate and sufficient, with some flexibility and awareness of collocation; the range is not wide but adequate for the task.",
+            "whyThisBandZh": "词汇恰当且充足，表现出一定的灵活性和搭配意识；范围不广但足以应对任务。",
+            "whyNotLower": "Topic-specific vocabulary such as ‘express delivery’, ‘glass jug’, ‘crack’, and ‘dental operation’ is used with precision, demonstrating the Band 7 level of lexical range.",
+            "whyNotLowerZh": "‘express delivery’、‘glass jug’、‘crack’和‘dental operation’等话题专用词汇使用精准，展现出7分水平的词汇范围。",
+            "whyNotHigher": "To reach Band 8, a wider, more flexible resource with idiomatic or highly precise choices would be needed, along with evidence of skilful paraphrasing.",
+            "whyNotHigherZh": "要达到8分，词汇范围需要更广、更灵活，出现习语或高度精准的选择，并有巧妙改写的证据。",
+            "positiveEvidence": [
+              "Accurate use of register-appropriate and task-specific lexis.",
+              "Effective collocations like ‘express delivery’ and ‘full price’ are used naturally."
+            ],
+            "positiveEvidenceZh": [
+              "准确使用了符合语体和任务要求的词汇。",
+              "‘express delivery’、‘full price’等有效搭配使用自然。"
+            ],
+            "limitingEvidence": [
+              "Vocabulary range is adequate but not broad; there is little evidence of less common or idiomatic expressions, and some choices remain basic."
+            ],
+            "limitingEvidenceZh": [
+              "词汇范围够用但不够广泛；较少出现不常见或地道的表达，部分选择仍比较基础。"
+            ],
+            "howToImprove": "Replace common words with more precise alternatives, e.g., 'response' for 'answer', and use collocations like 'safety hazard'.",
+            "howToImproveZh": "用更精确的词汇替换普通词，例如用‘response’替换‘answer’，并使用搭配如‘safety hazard’。",
+            "confidence": 0.85
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A variety of complex structures is used with general control; error-free sentences are frequent, and the remaining error does not impede communication.",
+            "diagnosisZh": "使用了多种复杂结构，总体控制良好；不出错的句子频繁出现，残余错误不影响交流。",
+            "bandBoundary": {
+              "fit": "The response includes complex sentences with conditionals and subordinate clauses, and most sentences are accurate, consistent with Band 7.",
+              "fitZh": "回复包含了带有条件句和从句的复杂句，多数句子正确，符合7分水平。",
+              "nextBandGap": "For Band 8, the range of structures would need to be wider and more flexibly used, with a higher proportion of error-free sentences and almost no basic slips.",
+              "nextBandGapZh": "要达到8分，句型范围需要更广、使用更灵活，不出错的句子比例更高，且几乎没有基础性错误。"
+            },
+            "strengths": [
+              "Good use of a conditional sentence and a complex clause sequence.",
+              "Error-free sentences are frequent, supporting clear communication."
+            ],
+            "strengthsZh": [
+              "条件句和复杂从句序列使用得当。",
+              "频繁出现无错句子，支持清晰交流。"
+            ],
+            "constraints": [
+              "A subject-verb agreement error (‘the machine are’) indicates a lapse in control of a basic structure, and the overall range of complex structures, while present, is not extensive."
+            ],
+            "constraintsZh": [
+              "一个主谓一致错误（‘the machine are’）表明对基础结构的控制出现疏忽，此外复杂结构的总体范围虽存在但不够广泛。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "the machine are not safe to use",
+                "explanation": "A basic subject-verb agreement error that prevents the response from reaching Band 8.",
+                "explanationZh": "一个基础的主谓一致错误，阻碍回复达到8分。"
+              },
+              {
+                "quote": "If you cannot send a replacement within three working days, please refund the full price and the original delivery cost.",
+                "explanation": "A well-formed conditional sentence demonstrating complex structure control.",
+                "explanationZh": "一个结构良好的条件句，展示了复杂结构的控制能力。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "纠正基础语法错误，增加句型多样性",
+              "priorityZh": "纠正基础语法错误，增加句型多样性",
+              "action": "Correct the subject-verb agreement error and consider incorporating a participle clause to demonstrate greater range.",
+              "actionZh": "修正主谓一致错误，并考虑加入一个分词短语，以展示更大的句型范围。",
+              "beforeQuote": "the machine are not safe to use",
+              "revisedExample": "Given these problems, the machine is not safe to use.",
+              "whyItWorks": "The revision corrects the agreement error and introduces a participle clause, increasing structural variety.",
+              "whyItWorksZh": "修改纠正了主谓一致错误，并引入了一个分词短语，增加了结构多样性。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A variety of complex structures is used with general control; error-free sentences are frequent, and the remaining error does not impede communication.",
+            "whyThisBandZh": "使用了多种复杂结构，总体控制良好；不出错的句子频繁出现，残余错误不影响交流。",
+            "whyNotLower": "The response includes complex sentences with conditionals and subordinate clauses, and most sentences are accurate, consistent with Band 7.",
+            "whyNotLowerZh": "回复包含了带有条件句和从句的复杂句，多数句子正确，符合7分水平。",
+            "whyNotHigher": "For Band 8, the range of structures would need to be wider and more flexibly used, with a higher proportion of error-free sentences and almost no basic slips.",
+            "whyNotHigherZh": "要达到8分，句型范围需要更广、使用更灵活，不出错的句子比例更高，且几乎没有基础性错误。",
+            "positiveEvidence": [
+              "Good use of a conditional sentence and a complex clause sequence.",
+              "Error-free sentences are frequent, supporting clear communication."
+            ],
+            "positiveEvidenceZh": [
+              "条件句和复杂从句序列使用得当。",
+              "频繁出现无错句子，支持清晰交流。"
+            ],
+            "limitingEvidence": [
+              "A subject-verb agreement error (‘the machine are’) indicates a lapse in control of a basic structure, and the overall range of complex structures, while present, is not extensive."
+            ],
+            "limitingEvidenceZh": [
+              "一个主谓一致错误（‘the machine are’）表明对基础结构的控制出现疏忽，此外复杂结构的总体范围虽存在但不够广泛。"
+            ],
+            "howToImprove": "Correct the subject-verb agreement error and consider incorporating a participle clause to demonstrate greater range.",
+            "howToImproveZh": "修正主谓一致错误，并考虑加入一个分词短语，以展示更大的句型范围。",
+            "confidence": 0.9
+          }
+        },
+        "overallAssessment": "The letter effectively fulfills all task requirements with clear, well-developed content, logical organisation, appropriate vocabulary, and generally accurate grammar. Task Achievement is particularly strong, reaching Band 8 due to skilful selection and extension of details, while the other criteria reflect a solid Band 7 performance overall.",
+        "overallAssessmentZh": "这封信有效地满足了所有任务要求，内容清晰、展开充分，组织逻辑合理，词汇恰当，语法大体准确。任务完成度尤为突出，因细节选取巧妙、展开充分而达到8分，其他标准体现扎实的7分水平。",
+        "revisionSequence": [
+          "Vary cohesive devices to reduce repetition and create smoother transitions.",
+          "Replace common words with more precise or idiomatic alternatives to expand lexical range.",
+          "Correct the subject-verb agreement error and incorporate one more complex structure, such as a participle clause, to demonstrate greater grammatical range."
+        ],
+        "revisionSequenceZh": [
+          "变化衔接手段，减少重复，使过渡更流畅。",
+          "用更精确或地道的词汇替换普通词，扩展词汇范围。",
+          "修正主谓一致错误，并加入一个如分词短语的复杂结构，以展示更大的语法范围。"
+        ],
+        "examinerAgreement": {
+          "overallDelta": 0.5,
+          "criterionDeltas": {
+            "Task Achievement": 1,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 1,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 8,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7.5,
+            "confidence": 0.85,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7,
+            "confidence": 0.9,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Achievement": 8,
+            "Coherence and Cohesion": 7,
+            "Lexical Resource": 7,
+            "Grammatical Range and Accuracy": 7
+          },
+          "finalOverallBand": 7.5
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "gt_letter",
+          "examModule": "general_training",
+          "wordCount": 193,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 6,
+          "sentenceCount": 14,
+          "averageSentenceWords": 13.8,
+          "lexicalDiversity": 0.648,
+          "paragraphWordCounts": [
+            4,
+            36,
+            71,
+            69,
+            9,
+            4
+          ],
+          "englishLetterRatio": 0.963,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.217,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 7.25,
+          "finalBand": 7.5,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "embedded_complete",
+          "scoreChanged": false,
+          "repairAttempted": true,
+          "repairSucceeded": true,
+          "note": "Text-specific criterion evidence and revision moves are embedded in the frozen scoring result."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": false,
+          "feedbackGenerated": true,
+          "feedbackStatus": "embedded_complete"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3597,
+              "completion_tokens": 5811,
+              "total_tokens": 9408,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4025
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3597
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3598,
+              "completion_tokens": 3701,
+              "total_tokens": 7299,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 2318
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3598
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "max",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 8346,
+              "completion_tokens": 6647,
+              "total_tokens": 14993,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4901
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 8346
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": {
+            "role": "feedback_repair",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "medium",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5644,
+              "completion_tokens": 6943,
+              "total_tokens": 12587,
+              "prompt_tokens_details": {
+                "cached_tokens": 640
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3550
+              },
+              "prompt_cache_hit_tokens": 640,
+              "prompt_cache_miss_tokens": 5004
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "elapsedMs": 278117
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "G2-B6-problem-solution-complete",
+      "taskKey": "general_training:2",
+      "run": 1,
+      "targetOverall": 6,
+      "predictedOverall": 6,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5.5,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "predictedCriteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "criterionErrors": {
+        "Task Response": 1,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0.5,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "withinHalfBand": true,
+      "catastrophicError": false,
+      "feedbackAudit": {
+        "complete": true,
+        "criteria": {
+          "Task Response": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Coherence and Cohesion": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Lexical Resource": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          },
+          "Grammatical Range and Accuracy": {
+            "diagnosis": true,
+            "naturalBoundary": true,
+            "exactEvidenceCount": 2,
+            "actionableRevision": true
+          }
+        }
+      },
+      "adjudicationTriggered": true,
+      "humanReview": false,
+      "humanReviewReasons": [],
+      "confidence": 0.86,
+      "durationMs": 323379,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 6,
+        "rawAverage": 6,
+        "likelyRange": [
+          5.5,
+          6.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Response": 6,
+          "Coherence and Cohesion": 6,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "finalCriteria": {
+          "Task Response": 6,
+          "Coherence and Cohesion": 6,
+          "Lexical Resource": 6,
+          "Grammatical Range and Accuracy": 6
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 6,
+            "diagnosis": "Main requirements are addressed but support is uneven; some points like narrow roads and expensive parking are stated without sufficient elaboration.",
+            "diagnosisZh": "主要要求已回应，但支持内容不均衡；有些观点如狭窄的道路和昂贵的停车费仅被提及而未充分阐述。",
+            "bandBoundary": {
+              "fit": "The essay identifies relevant causes and measures, but development is sometimes brief or list-like, matching Band 6's description of 'less fully covered' support.",
+              "fitZh": "文章指出了相关原因和措施，但展开有时简要或像列举，符合6分‘部分覆盖’的描述。",
+              "nextBandGap": "To reach Band 7, all main ideas would need more consistent extension and explanation; several points remain assertions without follow-up.",
+              "nextBandGapZh": "要达到7分，所有主要观点需要更一致的扩展和解释；几个观点仍只是断言，没有后续跟进。"
+            },
+            "strengths": [
+              "Clear identification of multiple causes (private cars, poor public transport, narrow roads) and measures (improve public transport, staggered times, cycle lanes)."
+            ],
+            "strengthsZh": [
+              "清晰指出了多个原因（私家车、公共交通差、道路窄）和措施（改善公共交通、错峰时间、自行车道）。"
+            ],
+            "constraints": [
+              "Some causes and solutions are underdeveloped or merely stated, e.g., narrow roads and expensive parking lack elaboration."
+            ],
+            "constraintsZh": [
+              "有些原因和解决方案展开不足或仅被陈述，例如，狭窄道路和昂贵停车费缺乏详细说明。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Roads in old city areas are also narrow, so they cannot carry all the new traffic.",
+                "explanation": "This cause is stated without further explanation of how it specifically contributes or what limitations it imposes; the support remains thin.",
+                "explanationZh": "这一原因仅被陈述，没有进一步解释它具体如何造成拥堵或带来何种限制；支持内容单薄。"
+              },
+              {
+                "quote": "The government could make parking in the centre more expensive too. However, this may be difficult for people who do not have another way to travel.",
+                "explanation": "A relevant measure is introduced, but the counter-argument is presented only briefly, showing limited extension overall.",
+                "explanationZh": "引入了相关措施，但对立观点仅简要提及，显示整体扩展有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Extend your ideas with specific examples or consequences.",
+              "priorityZh": "通过增加具体例子或结果来扩展观点。",
+              "action": "Take one cause (e.g., narrow roads) and explain how it specifically leads to congestion, perhaps with a hypothetical scenario.",
+              "actionZh": "选取一个原因（如道路狭窄），解释它具体如何导致拥堵，可加入假设情景。",
+              "beforeQuote": "Roads in old city areas are also narrow, so they cannot carry all the new traffic.",
+              "revisedExample": "Roads in old city areas are also narrow, so they cannot carry all the new traffic. For instance, a single delivery truck can block an entire street, causing delays that ripple across the city.",
+              "whyItWorks": "This addition turns a bare statement into a developed point, showing the examiner that you can fully support your ideas.",
+              "whyItWorksZh": "这一补充将一个简单的陈述变成了一个展开的观点，向考官展示了你能充分支持自己的观点。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Main requirements are addressed but support is uneven; some points like narrow roads and expensive parking are stated without sufficient elaboration.",
+            "whyThisBandZh": "主要要求已回应，但支持内容不均衡；有些观点如狭窄的道路和昂贵的停车费仅被提及而未充分阐述。",
+            "whyNotLower": "The essay identifies relevant causes and measures, but development is sometimes brief or list-like, matching Band 6's description of 'less fully covered' support.",
+            "whyNotLowerZh": "文章指出了相关原因和措施，但展开有时简要或像列举，符合6分‘部分覆盖’的描述。",
+            "whyNotHigher": "To reach Band 7, all main ideas would need more consistent extension and explanation; several points remain assertions without follow-up.",
+            "whyNotHigherZh": "要达到7分，所有主要观点需要更一致的扩展和解释；几个观点仍只是断言，没有后续跟进。",
+            "positiveEvidence": [
+              "Clear identification of multiple causes (private cars, poor public transport, narrow roads) and measures (improve public transport, staggered times, cycle lanes)."
+            ],
+            "positiveEvidenceZh": [
+              "清晰指出了多个原因（私家车、公共交通差、道路窄）和措施（改善公共交通、错峰时间、自行车道）。"
+            ],
+            "limitingEvidence": [
+              "Some causes and solutions are underdeveloped or merely stated, e.g., narrow roads and expensive parking lack elaboration."
+            ],
+            "limitingEvidenceZh": [
+              "有些原因和解决方案展开不足或仅被陈述，例如，狭窄道路和昂贵停车费缺乏详细说明。"
+            ],
+            "howToImprove": "Take one cause (e.g., narrow roads) and explain how it specifically leads to congestion, perhaps with a hypothetical scenario.",
+            "howToImproveZh": "选取一个原因（如道路狭窄），解释它具体如何导致拥堵，可加入假设情景。",
+            "confidence": 0.75
+          },
+          "Coherence and Cohesion": {
+            "band": 6,
+            "diagnosis": "Clear overall progression with logical paragraphing, but cohesive devices are mechanical and repetitive ('first cause', 'another cause', 'secondly').",
+            "diagnosisZh": "整体推进清晰，段落合理，但衔接手段机械重复（‘第一个原因’、‘另一个原因’、‘第二’）。",
+            "bandBoundary": {
+              "fit": "The essay arranges causes and solutions in a logical order, but relies on formulaic sequencing markers, which is a Band 6 indicator of mechanical cohesion.",
+              "fitZh": "文章按逻辑顺序排列原因和解决方案，但依赖公式化的序列标记，这是6分衔接机械的标志。",
+              "nextBandGap": "For Band 7, cohesive devices would need to show more flexible control and less predictable, repetitive linking.",
+              "nextBandGapZh": "要达到7分，衔接手段需要展现更灵活的控制和更少可预测的重复连接。"
+            },
+            "strengths": [
+              "Information is logically sequenced, moving from causes to solutions, and the conclusion summarises both aspects clearly."
+            ],
+            "strengthsZh": [
+              "信息逻辑顺序清晰，从原因到解决方案，结论清晰地概括了两个方面。"
+            ],
+            "constraints": [
+              "Overuse of basic cohesive devices makes the progression predictable rather than skilfully managed; transitions are consistently signposted without variety."
+            ],
+            "constraintsZh": [
+              "过度使用基础衔接手段使得推进方式可预测而非巧妙；转换总是用标志词引出，缺乏变化。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The first cause is more people have a private car now.",
+                "explanation": "This mechanical opening signals a cause but demonstrates no subtlety or variation in linking.",
+                "explanationZh": "这种机械的开头引出了原因，但没能表现出任何衔接上的微妙或变化。"
+              },
+              {
+                "quote": "Another cause is public transport are not good enough.",
+                "explanation": "The repetition of 'cause' with a simple additive linker illustrates the limited range of cohesive devices.",
+                "explanationZh": "重复使用‘原因’一词并加上简单的附加连接词，说明了衔接手段范围有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Reduce reliance on mechanical listing words.",
+              "priorityZh": "减少对机械性罗列词语的依赖。",
+              "action": "In the causes paragraph, instead of 'The first cause is... Another cause is...', try integrating causes through contrast or consequence.",
+              "actionZh": "在原因段，不要用‘第一个原因是……另一个原因是……’，试着用对比或因果关系将原因融合。",
+              "beforeQuote": "The first cause is more people have a private car now.",
+              "revisedExample": "One major factor is the rising number of private cars, as many families now own two vehicles and use them for even short trips.",
+              "whyItWorks": "This version embeds the cause into the sentence without a formulaic marker, improving the essay's flow.",
+              "whyItWorksZh": "这个版本将原因融入句子，没有使用公式化标记，从而改善了文章的流畅度。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Clear overall progression with logical paragraphing, but cohesive devices are mechanical and repetitive ('first cause', 'another cause', 'secondly').",
+            "whyThisBandZh": "整体推进清晰，段落合理，但衔接手段机械重复（‘第一个原因’、‘另一个原因’、‘第二’）。",
+            "whyNotLower": "The essay arranges causes and solutions in a logical order, but relies on formulaic sequencing markers, which is a Band 6 indicator of mechanical cohesion.",
+            "whyNotLowerZh": "文章按逻辑顺序排列原因和解决方案，但依赖公式化的序列标记，这是6分衔接机械的标志。",
+            "whyNotHigher": "For Band 7, cohesive devices would need to show more flexible control and less predictable, repetitive linking.",
+            "whyNotHigherZh": "要达到7分，衔接手段需要展现更灵活的控制和更少可预测的重复连接。",
+            "positiveEvidence": [
+              "Information is logically sequenced, moving from causes to solutions, and the conclusion summarises both aspects clearly."
+            ],
+            "positiveEvidenceZh": [
+              "信息逻辑顺序清晰，从原因到解决方案，结论清晰地概括了两个方面。"
+            ],
+            "limitingEvidence": [
+              "Overuse of basic cohesive devices makes the progression predictable rather than skilfully managed; transitions are consistently signposted without variety."
+            ],
+            "limitingEvidenceZh": [
+              "过度使用基础衔接手段使得推进方式可预测而非巧妙；转换总是用标志词引出，缺乏变化。"
+            ],
+            "howToImprove": "In the causes paragraph, instead of 'The first cause is... Another cause is...', try integrating causes through contrast or consequence.",
+            "howToImproveZh": "在原因段，不要用‘第一个原因是……另一个原因是……’，试着用对比或因果关系将原因融合。",
+            "confidence": 0.75
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Adequate topic vocabulary, but frequent word-choice imprecision and plural/word-form errors limit lexical range and control.",
+            "diagnosisZh": "话题词汇足够，但频繁出现的选词不精确和复数/词形错误限制了词汇范围和掌控力。",
+            "bandBoundary": {
+              "fit": "Vocabulary is sufficient to convey meaning on the topic, but errors like 'weak public transport' and 'these solution' recur, matching the Band 6 descriptor for imprecision and word-formation issues.",
+              "fitZh": "词汇足以传达话题意思，但像‘weak public transport’和‘these solution’这样的错误反复出现，符合6分描述中关于不精确和词形问题的描述。",
+              "nextBandGap": "To reach Band 7, word choice would need to be more precise ('weak' → 'inadequate'), and errors in singular/plural forms would be only occasional.",
+              "nextBandGapZh": "要达到7分，用词需要更精确（‘weak’→‘inadequate’），单复数错误应只是偶尔出现。"
+            },
+            "strengths": [
+              "Some relevant topic-specific terms are used appropriately (traffic jam, public transport, cycle lanes, parking)."
+            ],
+            "strengthsZh": [
+              "一些相关话题词汇使用恰当（traffic jam, public transport, cycle lanes, parking）。"
+            ],
+            "constraints": [
+              "Recurring errors in singular/plural agreement and imprecise collocations ('weak public transport') indicate limited control."
+            ],
+            "constraintsZh": [
+              "反复出现的单复数一致错误和不精确的搭配（‘weak public transport’）表明掌控力有限。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "weak public transport",
+                "explanation": "The adjective 'weak' is imprecise; 'inadequate', 'poor', or 'unreliable' would be more natural in this context.",
+                "explanationZh": "形容词‘weak’不精确；在这个语境下‘inadequate’、‘poor’或‘unreliable’更自然。"
+              },
+              {
+                "quote": "The city should use all these solution together",
+                "explanation": "Plural error ('solution' should be 'solutions') illustrates a recurring word-formation problem.",
+                "explanationZh": "复数错误（‘solution’应为‘solutions’）说明了反复出现的词形问题。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Use more precise vocabulary for common ideas.",
+              "priorityZh": "用更精确的词汇表达常见概念。",
+              "action": "Replace 'weak' with a word like 'inadequate' or 'unreliable', and check singular/plural forms for nouns like 'solution'.",
+              "actionZh": "将‘weak’替换为‘inadequate’或‘unreliable’，并检查名词如‘solution’的单复数形式。",
+              "beforeQuote": "weak public transport and small roads cause congestion",
+              "revisedExample": "Inadequate public transport and narrow roads also cause congestion",
+              "whyItWorks": "‘Inadequate’ is a more precise academic word than ‘weak’ for describing a service, and using the singular ‘cause’ corrects the grammar error.",
+              "whyItWorksZh": "‘Inadequate’ 比 ‘weak’ 更精确，是学术语境下描述服务质量的词汇，同时单数‘cause’纠正了语法错误。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Adequate topic vocabulary, but frequent word-choice imprecision and plural/word-form errors limit lexical range and control.",
+            "whyThisBandZh": "话题词汇足够，但频繁出现的选词不精确和复数/词形错误限制了词汇范围和掌控力。",
+            "whyNotLower": "Vocabulary is sufficient to convey meaning on the topic, but errors like 'weak public transport' and 'these solution' recur, matching the Band 6 descriptor for imprecision and word-formation issues.",
+            "whyNotLowerZh": "词汇足以传达话题意思，但像‘weak public transport’和‘these solution’这样的错误反复出现，符合6分描述中关于不精确和词形问题的描述。",
+            "whyNotHigher": "To reach Band 7, word choice would need to be more precise ('weak' → 'inadequate'), and errors in singular/plural forms would be only occasional.",
+            "whyNotHigherZh": "要达到7分，用词需要更精确（‘weak’→‘inadequate’），单复数错误应只是偶尔出现。",
+            "positiveEvidence": [
+              "Some relevant topic-specific terms are used appropriately (traffic jam, public transport, cycle lanes, parking)."
+            ],
+            "positiveEvidenceZh": [
+              "一些相关话题词汇使用恰当（traffic jam, public transport, cycle lanes, parking）。"
+            ],
+            "limitingEvidence": [
+              "Recurring errors in singular/plural agreement and imprecise collocations ('weak public transport') indicate limited control."
+            ],
+            "limitingEvidenceZh": [
+              "反复出现的单复数一致错误和不精确的搭配（‘weak public transport’）表明掌控力有限。"
+            ],
+            "howToImprove": "Replace 'weak' with a word like 'inadequate' or 'unreliable', and check singular/plural forms for nouns like 'solution'.",
+            "howToImproveZh": "将‘weak’替换为‘inadequate’或‘unreliable’，并检查名词如‘solution’的单复数形式。",
+            "confidence": 0.75
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "A mix of simple and complex sentences, but frequent subject-verb agreement and plural errors prevent consistent control.",
+            "diagnosisZh": "使用了简单句和复杂句的混合，但频繁的主谓一致和复数错误阻碍了持续掌控。",
+            "bandBoundary": {
+              "fit": "While some complex structures (conditionals, relative clauses) are attempted, error-free sentences are not common, matching Band 6's description of limited flexibility and occasional errors that rarely impede communication.",
+              "fitZh": "虽然尝试了某些复杂结构（条件句、定语从句），但无误的句子并不常见，符合6分描述中关于灵活性和偶尔错误但很少影响交流的情况。",
+              "nextBandGap": "For Band 7, error-free sentences would be more frequent, and complex structures would show generally good control with only occasional lapses.",
+              "nextBandGapZh": "要达到7分，无误的句子会更频繁，复杂结构一般能良好掌控，只有偶尔的失误。"
+            },
+            "strengths": [
+              "There are attempts at a variety of sentence patterns, including conditionals ('If public transport become reliable...') and relative clauses."
+            ],
+            "strengthsZh": [
+              "尝试了多种句型，包括条件句（‘If public transport become reliable...’）和定语从句。"
+            ],
+            "constraints": [
+              "Frequent basic errors in subject-verb agreement ('public transport are', 'this put') and plural forms ('too many car') persist throughout the response."
+            ],
+            "constraintsZh": [
+              "主谓一致（‘public transport are’, ‘this put’）和复数形式（‘too many car’）的基本错误贯穿全文。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "public transport are not good enough",
+                "explanation": "Subject-verb agreement error; the pattern recurs with other verbs in the essay.",
+                "explanationZh": "主谓一致错误；这一模式在文中其他动词上重复出现。"
+              },
+              {
+                "quote": "If public transport become reliable, some drivers will not use their car every day.",
+                "explanation": "Attempted conditional structure, but the verb 'become' should be 'becomes', showing limited control in a complex form.",
+                "explanationZh": "尝试了条件结构，但动词‘become’应为‘becomes’，表明对一个复杂形式的掌控有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct subject-verb agreement errors.",
+              "priorityZh": "改正主谓一致错误。",
+              "action": "In sentences like 'public transport are', ensure the verb agrees with the singular subject.",
+              "actionZh": "在类似‘public transport are’的句子中，确保动词与单数主语一致。",
+              "beforeQuote": "public transport are not good enough",
+              "revisedExample": "public transport is not good enough",
+              "whyItWorks": "This correction eliminates a recurring basic error, making your writing more accurate.",
+              "whyItWorksZh": "这一修改消除了一处反复出现的基本错误，使你的写作更准确。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A mix of simple and complex sentences, but frequent subject-verb agreement and plural errors prevent consistent control.",
+            "whyThisBandZh": "使用了简单句和复杂句的混合，但频繁的主谓一致和复数错误阻碍了持续掌控。",
+            "whyNotLower": "While some complex structures (conditionals, relative clauses) are attempted, error-free sentences are not common, matching Band 6's description of limited flexibility and occasional errors that rarely impede communication.",
+            "whyNotLowerZh": "虽然尝试了某些复杂结构（条件句、定语从句），但无误的句子并不常见，符合6分描述中关于灵活性和偶尔错误但很少影响交流的情况。",
+            "whyNotHigher": "For Band 7, error-free sentences would be more frequent, and complex structures would show generally good control with only occasional lapses.",
+            "whyNotHigherZh": "要达到7分，无误的句子会更频繁，复杂结构一般能良好掌控，只有偶尔的失误。",
+            "positiveEvidence": [
+              "There are attempts at a variety of sentence patterns, including conditionals ('If public transport become reliable...') and relative clauses."
+            ],
+            "positiveEvidenceZh": [
+              "尝试了多种句型，包括条件句（‘If public transport become reliable...’）和定语从句。"
+            ],
+            "limitingEvidence": [
+              "Frequent basic errors in subject-verb agreement ('public transport are', 'this put') and plural forms ('too many car') persist throughout the response."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致（‘public transport are’, ‘this put’）和复数形式（‘too many car’）的基本错误贯穿全文。"
+            ],
+            "howToImprove": "In sentences like 'public transport are', ensure the verb agrees with the singular subject.",
+            "howToImproveZh": "在类似‘public transport are’的句子中，确保动词与单数主语一致。",
+            "confidence": 0.75
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 6,
+            "diagnosis": "Main requirements are addressed but support is uneven; some points like narrow roads and expensive parking are stated without sufficient elaboration.",
+            "diagnosisZh": "主要要求已回应，但支持内容不均衡；有些观点如狭窄的道路和昂贵的停车费仅被提及而未充分阐述。",
+            "bandBoundary": {
+              "fit": "The essay identifies relevant causes and measures, but development is sometimes brief or list-like, matching Band 6's description of 'less fully covered' support.",
+              "fitZh": "文章指出了相关原因和措施，但展开有时简要或像列举，符合6分‘部分覆盖’的描述。",
+              "nextBandGap": "To reach Band 7, all main ideas would need more consistent extension and explanation; several points remain assertions without follow-up.",
+              "nextBandGapZh": "要达到7分，所有主要观点需要更一致的扩展和解释；几个观点仍只是断言，没有后续跟进。"
+            },
+            "strengths": [
+              "Clear identification of multiple causes (private cars, poor public transport, narrow roads) and measures (improve public transport, staggered times, cycle lanes)."
+            ],
+            "strengthsZh": [
+              "清晰指出了多个原因（私家车、公共交通差、道路窄）和措施（改善公共交通、错峰时间、自行车道）。"
+            ],
+            "constraints": [
+              "Some causes and solutions are underdeveloped or merely stated, e.g., narrow roads and expensive parking lack elaboration."
+            ],
+            "constraintsZh": [
+              "有些原因和解决方案展开不足或仅被陈述，例如，狭窄道路和昂贵停车费缺乏详细说明。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "Roads in old city areas are also narrow, so they cannot carry all the new traffic.",
+                "explanation": "This cause is stated without further explanation of how it specifically contributes or what limitations it imposes; the support remains thin.",
+                "explanationZh": "这一原因仅被陈述，没有进一步解释它具体如何造成拥堵或带来何种限制；支持内容单薄。"
+              },
+              {
+                "quote": "The government could make parking in the centre more expensive too. However, this may be difficult for people who do not have another way to travel.",
+                "explanation": "A relevant measure is introduced, but the counter-argument is presented only briefly, showing limited extension overall.",
+                "explanationZh": "引入了相关措施，但对立观点仅简要提及，显示整体扩展有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Extend your ideas with specific examples or consequences.",
+              "priorityZh": "通过增加具体例子或结果来扩展观点。",
+              "action": "Take one cause (e.g., narrow roads) and explain how it specifically leads to congestion, perhaps with a hypothetical scenario.",
+              "actionZh": "选取一个原因（如道路狭窄），解释它具体如何导致拥堵，可加入假设情景。",
+              "beforeQuote": "Roads in old city areas are also narrow, so they cannot carry all the new traffic.",
+              "revisedExample": "Roads in old city areas are also narrow, so they cannot carry all the new traffic. For instance, a single delivery truck can block an entire street, causing delays that ripple across the city.",
+              "whyItWorks": "This addition turns a bare statement into a developed point, showing the examiner that you can fully support your ideas.",
+              "whyItWorksZh": "这一补充将一个简单的陈述变成了一个展开的观点，向考官展示了你能充分支持自己的观点。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Main requirements are addressed but support is uneven; some points like narrow roads and expensive parking are stated without sufficient elaboration.",
+            "whyThisBandZh": "主要要求已回应，但支持内容不均衡；有些观点如狭窄的道路和昂贵的停车费仅被提及而未充分阐述。",
+            "whyNotLower": "The essay identifies relevant causes and measures, but development is sometimes brief or list-like, matching Band 6's description of 'less fully covered' support.",
+            "whyNotLowerZh": "文章指出了相关原因和措施，但展开有时简要或像列举，符合6分‘部分覆盖’的描述。",
+            "whyNotHigher": "To reach Band 7, all main ideas would need more consistent extension and explanation; several points remain assertions without follow-up.",
+            "whyNotHigherZh": "要达到7分，所有主要观点需要更一致的扩展和解释；几个观点仍只是断言，没有后续跟进。",
+            "positiveEvidence": [
+              "Clear identification of multiple causes (private cars, poor public transport, narrow roads) and measures (improve public transport, staggered times, cycle lanes)."
+            ],
+            "positiveEvidenceZh": [
+              "清晰指出了多个原因（私家车、公共交通差、道路窄）和措施（改善公共交通、错峰时间、自行车道）。"
+            ],
+            "limitingEvidence": [
+              "Some causes and solutions are underdeveloped or merely stated, e.g., narrow roads and expensive parking lack elaboration."
+            ],
+            "limitingEvidenceZh": [
+              "有些原因和解决方案展开不足或仅被陈述，例如，狭窄道路和昂贵停车费缺乏详细说明。"
+            ],
+            "howToImprove": "Take one cause (e.g., narrow roads) and explain how it specifically leads to congestion, perhaps with a hypothetical scenario.",
+            "howToImproveZh": "选取一个原因（如道路狭窄），解释它具体如何导致拥堵，可加入假设情景。",
+            "confidence": 0.75
+          },
+          "Coherence and Cohesion": {
+            "band": 6,
+            "diagnosis": "Clear overall progression with logical paragraphing, but cohesive devices are mechanical and repetitive ('first cause', 'another cause', 'secondly').",
+            "diagnosisZh": "整体推进清晰，段落合理，但衔接手段机械重复（‘第一个原因’、‘另一个原因’、‘第二’）。",
+            "bandBoundary": {
+              "fit": "The essay arranges causes and solutions in a logical order, but relies on formulaic sequencing markers, which is a Band 6 indicator of mechanical cohesion.",
+              "fitZh": "文章按逻辑顺序排列原因和解决方案，但依赖公式化的序列标记，这是6分衔接机械的标志。",
+              "nextBandGap": "For Band 7, cohesive devices would need to show more flexible control and less predictable, repetitive linking.",
+              "nextBandGapZh": "要达到7分，衔接手段需要展现更灵活的控制和更少可预测的重复连接。"
+            },
+            "strengths": [
+              "Information is logically sequenced, moving from causes to solutions, and the conclusion summarises both aspects clearly."
+            ],
+            "strengthsZh": [
+              "信息逻辑顺序清晰，从原因到解决方案，结论清晰地概括了两个方面。"
+            ],
+            "constraints": [
+              "Overuse of basic cohesive devices makes the progression predictable rather than skilfully managed; transitions are consistently signposted without variety."
+            ],
+            "constraintsZh": [
+              "过度使用基础衔接手段使得推进方式可预测而非巧妙；转换总是用标志词引出，缺乏变化。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "The first cause is more people have a private car now.",
+                "explanation": "This mechanical opening signals a cause but demonstrates no subtlety or variation in linking.",
+                "explanationZh": "这种机械的开头引出了原因，但没能表现出任何衔接上的微妙或变化。"
+              },
+              {
+                "quote": "Another cause is public transport are not good enough.",
+                "explanation": "The repetition of 'cause' with a simple additive linker illustrates the limited range of cohesive devices.",
+                "explanationZh": "重复使用‘原因’一词并加上简单的附加连接词，说明了衔接手段范围有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Reduce reliance on mechanical listing words.",
+              "priorityZh": "减少对机械性罗列词语的依赖。",
+              "action": "In the causes paragraph, instead of 'The first cause is... Another cause is...', try integrating causes through contrast or consequence.",
+              "actionZh": "在原因段，不要用‘第一个原因是……另一个原因是……’，试着用对比或因果关系将原因融合。",
+              "beforeQuote": "The first cause is more people have a private car now.",
+              "revisedExample": "One major factor is the rising number of private cars, as many families now own two vehicles and use them for even short trips.",
+              "whyItWorks": "This version embeds the cause into the sentence without a formulaic marker, improving the essay's flow.",
+              "whyItWorksZh": "这个版本将原因融入句子，没有使用公式化标记，从而改善了文章的流畅度。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Clear overall progression with logical paragraphing, but cohesive devices are mechanical and repetitive ('first cause', 'another cause', 'secondly').",
+            "whyThisBandZh": "整体推进清晰，段落合理，但衔接手段机械重复（‘第一个原因’、‘另一个原因’、‘第二’）。",
+            "whyNotLower": "The essay arranges causes and solutions in a logical order, but relies on formulaic sequencing markers, which is a Band 6 indicator of mechanical cohesion.",
+            "whyNotLowerZh": "文章按逻辑顺序排列原因和解决方案，但依赖公式化的序列标记，这是6分衔接机械的标志。",
+            "whyNotHigher": "For Band 7, cohesive devices would need to show more flexible control and less predictable, repetitive linking.",
+            "whyNotHigherZh": "要达到7分，衔接手段需要展现更灵活的控制和更少可预测的重复连接。",
+            "positiveEvidence": [
+              "Information is logically sequenced, moving from causes to solutions, and the conclusion summarises both aspects clearly."
+            ],
+            "positiveEvidenceZh": [
+              "信息逻辑顺序清晰，从原因到解决方案，结论清晰地概括了两个方面。"
+            ],
+            "limitingEvidence": [
+              "Overuse of basic cohesive devices makes the progression predictable rather than skilfully managed; transitions are consistently signposted without variety."
+            ],
+            "limitingEvidenceZh": [
+              "过度使用基础衔接手段使得推进方式可预测而非巧妙；转换总是用标志词引出，缺乏变化。"
+            ],
+            "howToImprove": "In the causes paragraph, instead of 'The first cause is... Another cause is...', try integrating causes through contrast or consequence.",
+            "howToImproveZh": "在原因段，不要用‘第一个原因是……另一个原因是……’，试着用对比或因果关系将原因融合。",
+            "confidence": 0.75
+          },
+          "Lexical Resource": {
+            "band": 6,
+            "diagnosis": "Adequate topic vocabulary, but frequent word-choice imprecision and plural/word-form errors limit lexical range and control.",
+            "diagnosisZh": "话题词汇足够，但频繁出现的选词不精确和复数/词形错误限制了词汇范围和掌控力。",
+            "bandBoundary": {
+              "fit": "Vocabulary is sufficient to convey meaning on the topic, but errors like 'weak public transport' and 'these solution' recur, matching the Band 6 descriptor for imprecision and word-formation issues.",
+              "fitZh": "词汇足以传达话题意思，但像‘weak public transport’和‘these solution’这样的错误反复出现，符合6分描述中关于不精确和词形问题的描述。",
+              "nextBandGap": "To reach Band 7, word choice would need to be more precise ('weak' → 'inadequate'), and errors in singular/plural forms would be only occasional.",
+              "nextBandGapZh": "要达到7分，用词需要更精确（‘weak’→‘inadequate’），单复数错误应只是偶尔出现。"
+            },
+            "strengths": [
+              "Some relevant topic-specific terms are used appropriately (traffic jam, public transport, cycle lanes, parking)."
+            ],
+            "strengthsZh": [
+              "一些相关话题词汇使用恰当（traffic jam, public transport, cycle lanes, parking）。"
+            ],
+            "constraints": [
+              "Recurring errors in singular/plural agreement and imprecise collocations ('weak public transport') indicate limited control."
+            ],
+            "constraintsZh": [
+              "反复出现的单复数一致错误和不精确的搭配（‘weak public transport’）表明掌控力有限。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "weak public transport",
+                "explanation": "The adjective 'weak' is imprecise; 'inadequate', 'poor', or 'unreliable' would be more natural in this context.",
+                "explanationZh": "形容词‘weak’不精确；在这个语境下‘inadequate’、‘poor’或‘unreliable’更自然。"
+              },
+              {
+                "quote": "The city should use all these solution together",
+                "explanation": "Plural error ('solution' should be 'solutions') illustrates a recurring word-formation problem.",
+                "explanationZh": "复数错误（‘solution’应为‘solutions’）说明了反复出现的词形问题。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Use more precise vocabulary for common ideas.",
+              "priorityZh": "用更精确的词汇表达常见概念。",
+              "action": "Replace 'weak' with a word like 'inadequate' or 'unreliable', and check singular/plural forms for nouns like 'solution'.",
+              "actionZh": "将‘weak’替换为‘inadequate’或‘unreliable’，并检查名词如‘solution’的单复数形式。",
+              "beforeQuote": "weak public transport and small roads cause congestion",
+              "revisedExample": "Inadequate public transport and narrow roads also cause congestion",
+              "whyItWorks": "‘Inadequate’ is a more precise academic word than ‘weak’ for describing a service, and using the singular ‘cause’ corrects the grammar error.",
+              "whyItWorksZh": "‘Inadequate’ 比 ‘weak’ 更精确，是学术语境下描述服务质量的词汇，同时单数‘cause’纠正了语法错误。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "Adequate topic vocabulary, but frequent word-choice imprecision and plural/word-form errors limit lexical range and control.",
+            "whyThisBandZh": "话题词汇足够，但频繁出现的选词不精确和复数/词形错误限制了词汇范围和掌控力。",
+            "whyNotLower": "Vocabulary is sufficient to convey meaning on the topic, but errors like 'weak public transport' and 'these solution' recur, matching the Band 6 descriptor for imprecision and word-formation issues.",
+            "whyNotLowerZh": "词汇足以传达话题意思，但像‘weak public transport’和‘these solution’这样的错误反复出现，符合6分描述中关于不精确和词形问题的描述。",
+            "whyNotHigher": "To reach Band 7, word choice would need to be more precise ('weak' → 'inadequate'), and errors in singular/plural forms would be only occasional.",
+            "whyNotHigherZh": "要达到7分，用词需要更精确（‘weak’→‘inadequate’），单复数错误应只是偶尔出现。",
+            "positiveEvidence": [
+              "Some relevant topic-specific terms are used appropriately (traffic jam, public transport, cycle lanes, parking)."
+            ],
+            "positiveEvidenceZh": [
+              "一些相关话题词汇使用恰当（traffic jam, public transport, cycle lanes, parking）。"
+            ],
+            "limitingEvidence": [
+              "Recurring errors in singular/plural agreement and imprecise collocations ('weak public transport') indicate limited control."
+            ],
+            "limitingEvidenceZh": [
+              "反复出现的单复数一致错误和不精确的搭配（‘weak public transport’）表明掌控力有限。"
+            ],
+            "howToImprove": "Replace 'weak' with a word like 'inadequate' or 'unreliable', and check singular/plural forms for nouns like 'solution'.",
+            "howToImproveZh": "将‘weak’替换为‘inadequate’或‘unreliable’，并检查名词如‘solution’的单复数形式。",
+            "confidence": 0.75
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 6,
+            "diagnosis": "A mix of simple and complex sentences, but frequent subject-verb agreement and plural errors prevent consistent control.",
+            "diagnosisZh": "使用了简单句和复杂句的混合，但频繁的主谓一致和复数错误阻碍了持续掌控。",
+            "bandBoundary": {
+              "fit": "While some complex structures (conditionals, relative clauses) are attempted, error-free sentences are not common, matching Band 6's description of limited flexibility and occasional errors that rarely impede communication.",
+              "fitZh": "虽然尝试了某些复杂结构（条件句、定语从句），但无误的句子并不常见，符合6分描述中关于灵活性和偶尔错误但很少影响交流的情况。",
+              "nextBandGap": "For Band 7, error-free sentences would be more frequent, and complex structures would show generally good control with only occasional lapses.",
+              "nextBandGapZh": "要达到7分，无误的句子会更频繁，复杂结构一般能良好掌控，只有偶尔的失误。"
+            },
+            "strengths": [
+              "There are attempts at a variety of sentence patterns, including conditionals ('If public transport become reliable...') and relative clauses."
+            ],
+            "strengthsZh": [
+              "尝试了多种句型，包括条件句（‘If public transport become reliable...’）和定语从句。"
+            ],
+            "constraints": [
+              "Frequent basic errors in subject-verb agreement ('public transport are', 'this put') and plural forms ('too many car') persist throughout the response."
+            ],
+            "constraintsZh": [
+              "主谓一致（‘public transport are’, ‘this put’）和复数形式（‘too many car’）的基本错误贯穿全文。"
+            ],
+            "essayEvidence": [
+              {
+                "quote": "public transport are not good enough",
+                "explanation": "Subject-verb agreement error; the pattern recurs with other verbs in the essay.",
+                "explanationZh": "主谓一致错误；这一模式在文中其他动词上重复出现。"
+              },
+              {
+                "quote": "If public transport become reliable, some drivers will not use their car every day.",
+                "explanation": "Attempted conditional structure, but the verb 'become' should be 'becomes', showing limited control in a complex form.",
+                "explanationZh": "尝试了条件结构，但动词‘become’应为‘becomes’，表明对一个复杂形式的掌控有限。"
+              }
+            ],
+            "nextRevision": {
+              "priority": "Correct subject-verb agreement errors.",
+              "priorityZh": "改正主谓一致错误。",
+              "action": "In sentences like 'public transport are', ensure the verb agrees with the singular subject.",
+              "actionZh": "在类似‘public transport are’的句子中，确保动词与单数主语一致。",
+              "beforeQuote": "public transport are not good enough",
+              "revisedExample": "public transport is not good enough",
+              "whyItWorks": "This correction eliminates a recurring basic error, making your writing more accurate.",
+              "whyItWorksZh": "这一修改消除了一处反复出现的基本错误，使你的写作更准确。"
+            },
+            "feedbackComplete": true,
+            "whyThisBand": "A mix of simple and complex sentences, but frequent subject-verb agreement and plural errors prevent consistent control.",
+            "whyThisBandZh": "使用了简单句和复杂句的混合，但频繁的主谓一致和复数错误阻碍了持续掌控。",
+            "whyNotLower": "While some complex structures (conditionals, relative clauses) are attempted, error-free sentences are not common, matching Band 6's description of limited flexibility and occasional errors that rarely impede communication.",
+            "whyNotLowerZh": "虽然尝试了某些复杂结构（条件句、定语从句），但无误的句子并不常见，符合6分描述中关于灵活性和偶尔错误但很少影响交流的情况。",
+            "whyNotHigher": "For Band 7, error-free sentences would be more frequent, and complex structures would show generally good control with only occasional lapses.",
+            "whyNotHigherZh": "要达到7分，无误的句子会更频繁，复杂结构一般能良好掌控，只有偶尔的失误。",
+            "positiveEvidence": [
+              "There are attempts at a variety of sentence patterns, including conditionals ('If public transport become reliable...') and relative clauses."
+            ],
+            "positiveEvidenceZh": [
+              "尝试了多种句型，包括条件句（‘If public transport become reliable...’）和定语从句。"
+            ],
+            "limitingEvidence": [
+              "Frequent basic errors in subject-verb agreement ('public transport are', 'this put') and plural forms ('too many car') persist throughout the response."
+            ],
+            "limitingEvidenceZh": [
+              "主谓一致（‘public transport are’, ‘this put’）和复数形式（‘too many car’）的基本错误贯穿全文。"
+            ],
+            "howToImprove": "In sentences like 'public transport are', ensure the verb agrees with the singular subject.",
+            "howToImproveZh": "在类似‘public transport are’的句子中，确保动词与单数主语一致。",
+            "confidence": 0.75
+          }
+        },
+        "overallAssessment": "A clear Band 6 response that addresses the task with relevant ideas, logically organized, but held back by mechanical cohesion, noticeably imprecise vocabulary, and frequent grammatical errors that prevent a higher score.",
+        "overallAssessmentZh": "一篇清晰的6分作文，回应了任务要求，提出了相关观点，组织结构合理，但由于衔接手段机械、词汇不够精确、语法错误频繁，未能达到更高分数。",
+        "revisionSequence": [
+          "Prioritize fixing subject-verb agreement and plural forms to reduce basic errors",
+          "Develop your points by adding a specific example or consequence, not just stating ideas",
+          "Replace mechanical sequencing words with more varied cohesive devices to make your essay flow more naturally"
+        ],
+        "revisionSequenceZh": [
+          "优先纠正主谓一致和复数形式等基本错误",
+          "通过增加具体例子或结果来扩展观点，而不仅仅是罗列想法",
+          "将机械的顺序词替换为更丰富的衔接手段，使文章更流畅"
+        ],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "reasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6,
+            "confidence": 0.9,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 6,
+              "Coherence and Cohesion": 6,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6
+            },
+            "overallBand": 6,
+            "confidence": 0.8,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Response": 6,
+            "Coherence and Cohesion": 6,
+            "Lexical Resource": 6,
+            "Grammatical Range and Accuracy": 6
+          },
+          "finalOverallBand": 6
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "general_training",
+          "wordCount": 293,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 4,
+          "sentenceCount": 21,
+          "averageSentenceWords": 14,
+          "lexicalDiversity": 0.543,
+          "paragraphWordCounts": [
+            33,
+            105,
+            117,
+            38
+          ],
+          "englishLetterRatio": 0.974,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.176,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 6,
+          "finalBand": 6,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "INCOMPLETE_EVIDENCE"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "embedded_complete",
+          "scoreChanged": false,
+          "repairAttempted": true,
+          "repairSucceeded": true,
+          "note": "Text-specific criterion evidence and revision moves are embedded in the frozen scoring result."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": false,
+          "feedbackGenerated": true,
+          "feedbackStatus": "embedded_complete"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3653,
+              "completion_tokens": 4063,
+              "total_tokens": 7716,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 2627
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3653
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3654,
+              "completion_tokens": 4727,
+              "total_tokens": 8381,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 3252
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 70
+            },
+            "attempt": 2,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "max",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 7895,
+              "completion_tokens": 3600,
+              "total_tokens": 11495,
+              "prompt_tokens_details": {
+                "cached_tokens": 1664
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 2012
+              },
+              "prompt_cache_hit_tokens": 1664,
+              "prompt_cache_miss_tokens": 6231
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": {
+            "role": "feedback_repair",
+            "model": "deepseek-v4-pro",
+            "thinking": "enabled",
+            "reasoningEffort": "medium",
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5569,
+              "completion_tokens": 7516,
+              "total_tokens": 13085,
+              "prompt_tokens_details": {
+                "cached_tokens": 640
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 4240
+              },
+              "prompt_cache_hit_tokens": 640,
+              "prompt_cache_miss_tokens": 4929
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "elapsedMs": 323378
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

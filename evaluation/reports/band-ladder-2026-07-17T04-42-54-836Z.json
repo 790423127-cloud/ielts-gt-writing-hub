@@ -1,0 +1,1265 @@
+{
+  "generatedAt": "2026-07-17T04:42:54.835Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b9-3-g1-complaint"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 9,
+      "predictions": [
+        9
+      ]
+    }
+  },
+  "byDesignBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 9,
+      "predictions": [
+        9
+      ]
+    }
+  },
+  "byTask": {
+    "general_training:1": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 9,
+      "predictions": [
+        9
+      ]
+    }
+  },
+  "byZone": {
+    "high_7_9": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.125,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 54812,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 9,
+      "predictions": [
+        9
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b9-3-g1-complaint",
+      "split": "calibration",
+      "taskKey": "general_training:1",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 9,
+      "designTargetOverall": 9,
+      "predictedOverall": 9,
+      "overallError": 0,
+      "designOverallError": 0,
+      "targetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "designTargetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "predictedCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "criterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "designCriterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "high_7_9",
+      "wordCount": 284,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "OVERALL_DELTA_GT_0_5",
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+      ],
+      "uniformFinalCriteria": false,
+      "needsHumanReview": false,
+      "durationMs": 54812,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "gt_letter",
+        "overallBand": 9,
+        "rawAverage": 8.875,
+        "likelyRange": [
+          5.5,
+          9
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 9,
+          "Coherence and Cohesion": 9,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "finalCriteria": {
+          "Task Achievement": 9,
+          "Coherence and Cohesion": 9,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 9,
+            "diagnosis": "Every bullet is fully, relevantly and precisely developed with a sustained, appropriate tone and clear purpose; the reader would know exactly what happened and what to do.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because the letter comprehensively addresses all requirements: the appliance and damage are described in precise detail, the impact is fully explained with personal relevance, and the requested action is clearly stated. The tone is consistently formal and appropriate for the reader relationship.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "All three bullets are developed with specific, relevant detail that goes beyond minimal coverage."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "None; the response fully satisfies Band 9 requirements."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The main body, which is made of white moulded plastic, exhibits a deep, jagged crack running vertically along the left-hand panel for approximately 15 centimetres.",
+                "explanation": "Provides precise description of the appliance and damage, fulfilling the first bullet with concrete, detailed evidence.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Fully develops the impact of the problem, making it personally relevant and showing clear effect on the writer.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The response meets the Band 9 descriptor: every requirement is fully, relevantly and precisely satisfied.",
+              "band9PositiveEvidence": "Complete, well-developed coverage of all bullets with precise, natural detail; consistently appropriate formal tone; clear request for resolution.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Every bullet is fully, relevantly and precisely developed with a sustained, appropriate tone and clear purpose; the reader would know exactly what happened and what to do.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because the letter comprehensively addresses all requirements: the appliance and damage are described in precise detail, the impact is fully explained with personal relevance, and the requested action is clearly stated. The tone is consistently formal and appropriate for the reader relationship.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "All three bullets are developed with specific, relevant detail that goes beyond minimal coverage."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "None; the response fully satisfies Band 9 requirements."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Coherence and Cohesion": {
+            "band": 9,
+            "diagnosis": "The message is effortless to follow with logical sequencing, skilful management of cohesion, and appropriate paragraphing throughout.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because the letter flows naturally from introduction to description, impact, and request, with clear paragraphing and cohesive devices that are used flexibly and unobtrusively.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical progression from problem to impact to requested action, with each paragraph focused on a single central topic."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "None; the response demonstrates highly skilful control with only extremely rare lapses."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Upon opening the box, I was dismayed to find that the appliance had sustained considerable damage.",
+                "explanation": "Smoothly transitions from the purchase details to the description of damage, clearly signalling the next phase of the narrative.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The response demonstrates effortless progression, well-managed cohesion, and appropriate paragraphing, aligning with Band 9.",
+              "band9PositiveEvidence": "Clear overall progression, each paragraph has a distinct purpose, and cohesive devices are used naturally without overuse.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The message is effortless to follow with logical sequencing, skilful management of cohesion, and appropriate paragraphing throughout.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because the letter flows naturally from introduction to description, impact, and request, with clear paragraphing and cohesive devices that are used flexibly and unobtrusively.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical progression from problem to impact to requested action, with each paragraph focused on a single central topic."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "None; the response demonstrates highly skilful control with only extremely rare lapses."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Wide, precise, flexible and natural vocabulary with only extremely rare lapses.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because vocabulary is consistently well-chosen for formal register and precise meaning, with no errors in word choice, collocation, spelling or formation.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Sophisticated lexical choices such as 'profound dissatisfaction', 'sustained considerable damage', 'exacerbated my physical discomfort' enhance precision and tone."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor issues: 'the seriousness it warrants' is slightly formulaic but not inaccurate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "deep, jagged crack",
+                "explanation": "Precise and vivid description of damage, showing flexibility and naturalness.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "mitigate the effects of the current heatwave",
+                "explanation": "Use of less common vocabulary ('mitigate', 'heatwave') accurately and appropriately.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "Vocabulary is wide, precise, flexible and natural with only extremely rare lapses.",
+              "band9PositiveEvidence": "The writer uses a range of precise, formal vocabulary (e.g., 'profound dissatisfaction', 'sustained considerable damage', 'mitigate') consistently and accurately.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Wide, precise, flexible and natural vocabulary with only extremely rare lapses.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because vocabulary is consistently well-chosen for formal register and precise meaning, with no errors in word choice, collocation, spelling or formation.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Sophisticated lexical choices such as 'profound dissatisfaction', 'sustained considerable damage', 'exacerbated my physical discomfort' enhance precision and tone."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor issues: 'the seriousness it warrants' is slightly formulaic but not inaccurate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is used flexibly and accurately; most sentences are error-free, but there are a couple of minor lapses that prevent a Band 9 rating.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response fits Band 8.5 because it shows wide structural range with consistent accuracy, but a few non-systematic errors (e.g., minor punctuation or article issues) prevent the full flexibility and control required for Band 9.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, the extremely rare lapses would need to be eliminated; e.g., the missing comma before 'which' in one instance and the slight awkwardness in 'the seriousness it warrants' prevent a perfect score.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Demonstrates wide range with complex sentences, varied clause structures, and accurate punctuation overall."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Occasional minor lapses: a missing comma before a non-defining relative clause and a slightly formulaic phrase that slightly disrupts naturalness."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Shows flexible use of complex sentence with parallel relative clauses, well controlled.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched from your premises.",
+                "explanation": "Effective use of a non-defining relative clause with appropriate comma, demonstrating range.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "While grammar is highly accurate, a few minor lapses (e.g., missing comma in one non-defining relative clause) prevent the descriptor 'extremely rare lapses' from being fully met.",
+              "band9PositiveEvidence": "Wide range of structures with consistent accuracy; most sentences are error-free.",
+              "band9BlockingPattern": "One missing comma before 'which' in the sentence: 'The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought...' (the comma before 'which' is incorrectly omitted), and a slightly unnatural phrase 'the seriousness it warrants'."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is used flexibly and accurately; most sentences are error-free, but there are a couple of minor lapses that prevent a Band 9 rating.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response fits Band 8.5 because it shows wide structural range with consistent accuracy, but a few non-systematic errors (e.g., minor punctuation or article issues) prevent the full flexibility and control required for Band 9.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, the extremely rare lapses would need to be eliminated; e.g., the missing comma before 'which' in one instance and the slight awkwardness in 'the seriousness it warrants' prevent a perfect score.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Demonstrates wide range with complex sentences, varied clause structures, and accurate punctuation overall."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Occasional minor lapses: a missing comma before a non-defining relative clause and a slightly formulaic phrase that slightly disrupts naturalness."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 9,
+            "diagnosis": "Every bullet is fully, relevantly and precisely developed with a sustained, appropriate tone and clear purpose; the reader would know exactly what happened and what to do.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because the letter comprehensively addresses all requirements: the appliance and damage are described in precise detail, the impact is fully explained with personal relevance, and the requested action is clearly stated. The tone is consistently formal and appropriate for the reader relationship.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "All three bullets are developed with specific, relevant detail that goes beyond minimal coverage."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "None; the response fully satisfies Band 9 requirements."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The main body, which is made of white moulded plastic, exhibits a deep, jagged crack running vertically along the left-hand panel for approximately 15 centimetres.",
+                "explanation": "Provides precise description of the appliance and damage, fulfilling the first bullet with concrete, detailed evidence.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Fully develops the impact of the problem, making it personally relevant and showing clear effect on the writer.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The response meets the Band 9 descriptor: every requirement is fully, relevantly and precisely satisfied.",
+              "band9PositiveEvidence": "Complete, well-developed coverage of all bullets with precise, natural detail; consistently appropriate formal tone; clear request for resolution.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Every bullet is fully, relevantly and precisely developed with a sustained, appropriate tone and clear purpose; the reader would know exactly what happened and what to do.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because the letter comprehensively addresses all requirements: the appliance and damage are described in precise detail, the impact is fully explained with personal relevance, and the requested action is clearly stated. The tone is consistently formal and appropriate for the reader relationship.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "All three bullets are developed with specific, relevant detail that goes beyond minimal coverage."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "None; the response fully satisfies Band 9 requirements."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Coherence and Cohesion": {
+            "band": 9,
+            "diagnosis": "The message is effortless to follow with logical sequencing, skilful management of cohesion, and appropriate paragraphing throughout.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because the letter flows naturally from introduction to description, impact, and request, with clear paragraphing and cohesive devices that are used flexibly and unobtrusively.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical progression from problem to impact to requested action, with each paragraph focused on a single central topic."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "None; the response demonstrates highly skilful control with only extremely rare lapses."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Upon opening the box, I was dismayed to find that the appliance had sustained considerable damage.",
+                "explanation": "Smoothly transitions from the purchase details to the description of damage, clearly signalling the next phase of the narrative.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The response demonstrates effortless progression, well-managed cohesion, and appropriate paragraphing, aligning with Band 9.",
+              "band9PositiveEvidence": "Clear overall progression, each paragraph has a distinct purpose, and cohesive devices are used naturally without overuse.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The message is effortless to follow with logical sequencing, skilful management of cohesion, and appropriate paragraphing throughout.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because the letter flows naturally from introduction to description, impact, and request, with clear paragraphing and cohesive devices that are used flexibly and unobtrusively.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical progression from problem to impact to requested action, with each paragraph focused on a single central topic."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "None; the response demonstrates highly skilful control with only extremely rare lapses."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Wide, precise, flexible and natural vocabulary with only extremely rare lapses.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The dominant pattern fits Band 9 because vocabulary is consistently well-chosen for formal register and precise meaning, with no errors in word choice, collocation, spelling or formation.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; Band 9 is awarded.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Sophisticated lexical choices such as 'profound dissatisfaction', 'sustained considerable damage', 'exacerbated my physical discomfort' enhance precision and tone."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor issues: 'the seriousness it warrants' is slightly formulaic but not inaccurate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "deep, jagged crack",
+                "explanation": "Precise and vivid description of damage, showing flexibility and naturalness.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "mitigate the effects of the current heatwave",
+                "explanation": "Use of less common vocabulary ('mitigate', 'heatwave') accurately and appropriately.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "Vocabulary is wide, precise, flexible and natural with only extremely rare lapses.",
+              "band9PositiveEvidence": "The writer uses a range of precise, formal vocabulary (e.g., 'profound dissatisfaction', 'sustained considerable damage', 'mitigate') consistently and accurately.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Wide, precise, flexible and natural vocabulary with only extremely rare lapses.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The dominant pattern fits Band 9 because vocabulary is consistently well-chosen for formal register and precise meaning, with no errors in word choice, collocation, spelling or formation.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; Band 9 is awarded.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Sophisticated lexical choices such as 'profound dissatisfaction', 'sustained considerable damage', 'exacerbated my physical discomfort' enhance precision and tone."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor issues: 'the seriousness it warrants' is slightly formulaic but not inaccurate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is used flexibly and accurately; most sentences are error-free, but there are a couple of minor lapses that prevent a Band 9 rating.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response fits Band 8.5 because it shows wide structural range with consistent accuracy, but a few non-systematic errors (e.g., minor punctuation or article issues) prevent the full flexibility and control required for Band 9.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, the extremely rare lapses would need to be eliminated; e.g., the missing comma before 'which' in one instance and the slight awkwardness in 'the seriousness it warrants' prevent a perfect score.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Demonstrates wide range with complex sentences, varied clause structures, and accurate punctuation overall."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Occasional minor lapses: a missing comma before a non-defining relative clause and a slightly formulaic phrase that slightly disrupts naturalness."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Shows flexible use of complex sentence with parallel relative clauses, well controlled.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched from your premises.",
+                "explanation": "Effective use of a non-defining relative clause with appropriate comma, demonstrating range.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "While grammar is highly accurate, a few minor lapses (e.g., missing comma in one non-defining relative clause) prevent the descriptor 'extremely rare lapses' from being fully met.",
+              "band9PositiveEvidence": "Wide range of structures with consistent accuracy; most sentences are error-free.",
+              "band9BlockingPattern": "One missing comma before 'which' in the sentence: 'The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought...' (the comma before 'which' is incorrectly omitted), and a slightly unnatural phrase 'the seriousness it warrants'."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is used flexibly and accurately; most sentences are error-free, but there are a couple of minor lapses that prevent a Band 9 rating.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response fits Band 8.5 because it shows wide structural range with consistent accuracy, but a few non-systematic errors (e.g., minor punctuation or article issues) prevent the full flexibility and control required for Band 9.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, the extremely rare lapses would need to be eliminated; e.g., the missing comma before 'which' in one instance and the slight awkwardness in 'the seriousness it warrants' prevent a perfect score.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Demonstrates wide range with complex sentences, varied clause structures, and accurate punctuation overall."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Occasional minor lapses: a missing comma before a non-defining relative clause and a slightly formulaic phrase that slightly disrupts naturalness."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "overallAssessment": "A polished, highly effective letter that fully meets the task with sophisticated language and organization. Only a couple of very minor grammatical lapses prevent a perfect score.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 1.5,
+          "lowerOverall": 6,
+          "upperOverall": 7.5,
+          "panelMidpoint": 6.75,
+          "criterionDeltas": {
+            "Task Achievement": 2,
+            "Coherence and Cohesion": 2.5,
+            "Lexical Resource": 0.5,
+            "Grammatical Range and Accuracy": 0.5
+          },
+          "maxCriterionDelta": 2.5,
+          "differingCriteria": 4,
+          "examinerAUniform": false,
+          "examinerBUniform": false,
+          "unanimousAiBandZero": false,
+          "observations": [
+            "ANY_CRITERION_DISAGREEMENT"
+          ],
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 8,
+              "Coherence and Cohesion": 8,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7.5,
+            "confidence": 0.8,
+            "evidenceCount": 10,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Task Achievement is strong: all bullets are fully covered with relevant, detailed content. Grammatical Range and Accuracy is the weakest because while accurate, the range is narrow with repeated simple and compound structures, and limited complex use.",
+              "uniformProfileJustification": "Bands are not uniform due to differences across criteria."
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Achievement",
+              "Coherence and Cohesion"
+            ],
+            "upperBandAuditComplete": false,
+            "fullRangeCeilingAuditComplete": false,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 6,
+              "Coherence and Cohesion": 5.5,
+              "Lexical Resource": 6.5,
+              "Grammatical Range and Accuracy": 6.5
+            },
+            "overallBand": 6,
+            "confidence": 0.8,
+            "evidenceCount": 3,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Grammatical Range and Accuracy",
+              "weakest": "Coherence and Cohesion",
+              "comparison": "Grammar is consistently controlled with only minor slips, whereas coherence relies on a conventional letter structure with some mechanical paragraph transitions and lack of subtle cohesion.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": false,
+            "nonDescriptorUpperBandClaims": [
+              "Coherence and Cohesion"
+            ],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "high",
+            "reason": "AI_PANEL_AT_OR_ABOVE_UPPER_MID_BOUNDARY",
+            "lower": 6,
+            "upper": 7.5
+          },
+          "specialist": {
+            "examinerId": "high-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 9,
+              "Coherence and Cohesion": 9,
+              "Lexical Resource": 9,
+              "Grammatical Range and Accuracy": 8.5
+            },
+            "overallBand": 9,
+            "confidence": 0.9,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Task Achievement is the strongest criterion because the letter fully addresses all bullets with precise, well-developed detail, sustained appropriate tone, and a clear purpose. Grammatical Range and Accuracy is marginally weaker due to a few minor errors, but still demonstrates wide range and control. Coherence and Cohesion and Lexical Resource are very strong, with only extremely rare lapses.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Achievement",
+              "Coherence and Cohesion",
+              "Lexical Resource",
+              "Grammatical Range and Accuracy"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-pro-upper-boundary-specialist",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+          ],
+          "decision": "independent_pro_upper_boundary_final",
+          "specialistZone": "high",
+          "specialistCriteria": {
+            "Task Achievement": 9,
+            "Coherence and Cohesion": 9,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "specialistOverallBand": 9,
+          "finalCriteria": {
+            "Task Achievement": 9,
+            "Coherence and Cohesion": 9,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "finalOverallBand": 9,
+          "skippedRoles": [
+            "meta_adjudicator",
+            "criterion_profile_adjudicator"
+          ],
+          "localScoreAdjustment": false
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "gt_letter",
+          "examModule": "general_training",
+          "emptyResponse": false,
+          "wordCount": 284,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 7,
+          "sentenceCount": 15,
+          "averageSentenceWords": 18.9,
+          "lexicalDiversity": 0.658,
+          "paragraphWordCounts": [
+            3,
+            48,
+            83,
+            70,
+            76,
+            2,
+            2
+          ],
+          "englishLetterRatio": 0.971,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.263,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_pro_upper_boundary_final",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 8.875,
+          "finalBand": 9,
+          "source": "ai-pro-upper-boundary-specialist"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_pro_upper_boundary_final"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-ai-panel-v6-5-full-range-pro-upper-boundary",
+        "scoreSystemVersion": "unified-writing-core-v6.5-full-range-pro-upper-boundary",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5025,
+              "completion_tokens": 2452,
+              "total_tokens": 7477,
+              "prompt_tokens_details": {
+                "cached_tokens": 4992
+              },
+              "prompt_cache_hit_tokens": 4992,
+              "prompt_cache_miss_tokens": 33
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5026,
+              "completion_tokens": 2456,
+              "total_tokens": 7482,
+              "prompt_tokens_details": {
+                "cached_tokens": 4992
+              },
+              "prompt_cache_hit_tokens": 4992,
+              "prompt_cache_miss_tokens": 34
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "high_specialist",
+            "model": "deepseek-v4-pro",
+            "thinking": "disabled",
+            "reasoningEffort": "high",
+            "maxTokens": 6000,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5159,
+              "completion_tokens": 1993,
+              "total_tokens": 7152,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5159
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": null,
+          "criterionProfileReview": null,
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 54810,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "reviewPolicyVersion": "material-disagreement-plus-full-range-ai-edge-safeguards-v3",
+            "accuracySafeguardTriggered": false,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": false,
+            "criterionProfileReviewTriggered": false,
+            "highBoundaryFinal": true,
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "coreModelCalls": 3,
+            "avoidedModelCalls": 1,
+            "coreTotalTokens": 22111
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

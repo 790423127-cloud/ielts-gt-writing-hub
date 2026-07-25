@@ -82,6 +82,8 @@ window.__LF_TEST__ = {
   renderGrammarWordFormSpellingModule,
   renderStructureCohesionTaskModule,
   renderExpressionBankModule,
+  renderUnifiedScoringAudit,
+  renderCriterionCardsV2,
   renderLearningModuleBody,
   setLatestScoreResult(value) { latestScoreResult = value; },
   setLatestLearningFeedback(value) { latestLearningFeedback = value || {}; },
@@ -327,6 +329,65 @@ assert(countOccurrences(overviewHtml, "正式书信的开头和结尾不完整�
 assert(grammar.grammarErrors.length >= 5, "Grammar module should preserve at least 5 major grammar error categories in the normalized result.");
 assert(!/Dear Admissions Officer,[\s\S]*Yours faithfully,/i.test(structureHtml), "Structure module must not render a full rewritten letter inside a feedback card.");
 assert(/正式信件开头/.test(expressionHtml), "Expression Bank should render grouped category labels.");
+
+const scoringAuditHtml = scriptAudit.renderUnifiedScoringAudit({
+  module: "Academic",
+  task: "Task 1",
+  taskKind: "academic_visual_report",
+  confidence: "medium",
+  likelyRange: [5.5, 6.5],
+  needsHumanReview: true,
+  humanReviewReasons: ["ACADEMIC_VISUAL_FACTS_NOT_SOURCE_VERIFIED"],
+  examinerAgreement: { examinerA: { overallBand: 6 }, examinerB: { overallBand: 6 }, overallDelta: 0 },
+  adjudication: { triggered: false },
+  threeZonePanel: { reviewTriggered: false },
+  modelAudit: { costOptimization: { coreModelCalls: 2, avoidedModelCalls: 2, coreTotalTokens: 11600 } },
+  feedbackCostOptimization: { aiCalls: 1 },
+  feedbackModelAudit: [{ usage: { total_tokens: 4514 } }],
+  visualFactsAudit: { sourceVerified: false, visualType: "pie_chart" }
+});
+assert(scoringAuditHtml.includes("DOUBLE EXAMINER AUDIT"), "Score report should render the double-examiner audit.");
+assert(scoringAuditHtml.includes("ACADEMIC_VISUAL_FACTS_NOT_SOURCE_VERIFIED"), "Score report should render Academic fact-layer review reasons.");
+assert(scoringAuditHtml.includes("核心评分 2 次"), "Score report should render the optimized core call count.");
+assert(scoringAuditHtml.includes("四项反馈 1 次批量调用"), "Score report should render the batch feedback call count.");
+assert(scoringAuditHtml.includes("稳定样本节省 2 次"), "Score report should explain skipped specialist/meta calls.");
+
+const naturalCriterionHtml = scriptAudit.renderCriterionCardsV2({
+  criteria: { "Task Achievement": 6 },
+  criteriaDetails: {
+    "Task Achievement": {
+      diagnosis: "The overview is present, but the comparisons remain selective.",
+      diagnosisZh: "概述已经出现，但对比仍然不够完整。",
+      bandBoundary: {
+        fit: "The response identifies the main direction and supports it with data.",
+        fitZh: "文章识别了主趋势，并用数据提供了支持。",
+        nextBandGap: "Band 7 needs a more complete selection of key comparisons.",
+        nextBandGapZh: "要到 7 分，需要更完整地筛选关键对比。"
+      },
+      strengths: ["A clear overview is included."],
+      strengthsZh: ["已经给出清楚的概述。"],
+      constraints: ["One key contrast is omitted."],
+      constraintsZh: ["遗漏了一组关键对比。"],
+      essayEvidence: [
+        { quote: "The main trend is clear.", explanationZh: "这是概述证据。" },
+        { quote: "Another paragraph develops the comparison", explanationZh: "这里体现了对比。" }
+      ],
+      nextRevision: {
+        priorityZh: "补全关键对比",
+        actionZh: "把最高值与最低值放在同一句中直接比较。",
+        beforeQuote: "The main trend is clear.",
+        revisedExample: "Overall, A remained the highest category, whereas C was consistently the lowest.",
+        whyItWorksZh: "这样把主趋势和关键对比合并为可验证的概述。"
+      }
+    }
+  }
+});
+assert(naturalCriterionHtml.includes("老师判断"), "Natural criterion report should lead with a teacher judgement.");
+assert(naturalCriterionHtml.includes("相邻 0.5 档判定"), "Natural criterion report should explain the exact half-band boundary.");
+assert(naturalCriterionHtml.includes("优先改一处"), "Natural criterion report should end with one revision move.");
+assert(naturalCriterionHtml.includes("查看英文评分依据"), "Natural criterion report should keep English evidence available without duplicating both languages side by side.");
+assert(!naturalCriterionHtml.includes("为什么不是更低分"), "Natural criterion report should not expose mechanical lower-band phrasing.");
+assert(naturalCriterionHtml.includes("The main trend is clear."), "Natural criterion report should render exact essay evidence.");
 assert(/I am writing to ask for information about/.test(expressionHtml), "Expression Bank should render phrase text.");
 assert(/用于正式询问信的开头目的句/.test(expressionHtml), "Expression Bank should render Chinese usage guidance.");
 

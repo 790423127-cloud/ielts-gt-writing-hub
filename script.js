@@ -1,9 +1,25 @@
 (() => {
-  const DATA = window.IELTS_GT_DATA || { prompts: [], meta: {}, phraseBanks: { task1: {}, task2: {} } };
-  const prompts = Array.isArray(DATA.prompts) ? DATA.prompts : [];
+  const GT_DATA = window.IELTS_GT_DATA || { prompts: [], meta: {}, phraseBanks: { task1: {}, task2: {} } };
+  const ACADEMIC_DATA = window.IELTS_ACADEMIC_DATA || { prompts: [], meta: {} };
+  const prompts = [
+    ...(Array.isArray(ACADEMIC_DATA.prompts) ? ACADEMIC_DATA.prompts : []),
+    ...(Array.isArray(GT_DATA.prompts) ? GT_DATA.prompts.map((prompt) => ({
+      ...prompt,
+      examModule: prompt.examModule || "general_training",
+      taskNumber: prompt.task === "Task 1" ? 1 : 2,
+      taskKind: prompt.task === "Task 1" ? "gt_letter" : "essay"
+    })) : [])
+  ];
+  const DATA = {
+    meta: { books: uniqueData(prompts.map((prompt) => prompt.book)) },
+    phraseBanks: GT_DATA.phraseBanks || { task1: {}, task2: {} },
+    prompts
+  };
   let selected = null;
+  let promptDisplayLimit = 30;
   let timerId = null;
   let remaining = 0;
+  let activeGradingController = null;
   let latestScoreResult = null;
   let latestScoringProgress = null;
   let mockTask1Prompt = null;
@@ -11,15 +27,23 @@
   let mockTimerId = null;
   let mockRemaining = 60 * 60;
   const SCORING_STEPS = [
-    { stage: "local-precheck", title: "本地预检与任务分流", description: "检查词数、任务类型、可评分性、语言风险和 Task 1 / Task 2 评分边界。" },
-    { stage: "score-kernel", title: "AI 核心评分", description: "AI 只返回 anchor、四项分和 reason codes；不生成详细反馈。" },
-    { stage: "boundary-audit", title: "本地边界审计", description: "只做一致性检查：低分/高分边界、弱语言高分、四项同分和 anchor 冲突。" },
-    { stage: "boundary-review", title: "AI 边界复核", description: "只有边界审计触发时才二次复核；否则跳过。" },
-    { stage: "freeze-score", title: "冻结最终分数", description: "冻结 Overall 与四项分；从这里开始详细反馈不能改变分数。" },
-    { stage: "criterion-feedback", title: "逐项详细反馈", description: "分数冻结后，独立生成四项详细反馈：证据、原因、差 0.5 的说明和提升建议。" }
+    { stage: "server-validation", title: "服务端校验与任务识别", description: "重新计算词数、识别 A/G 与 Task 1/2，并检查异常输入和事实层。" },
+    { stage: "examiner-a", title: "双评分官并行评分", description: "评分官 A 与 B 同时独立阅读全文，按对应量表给出四项分与原文证据。" },
+    { stage: "agreement-audit", title: "AI 一致性与区间识别", description: "依据两位 AI 评分官的分数、证据和置信度，决定是否需要区间专家；本地不设分数。" },
+    { stage: "zone-specialist", title: "条件区间专家复核", description: "仅在存在实质分歧时，对应区间的 AI 专家才重新阅读全文并核对相邻 0.5 分边界。" },
+    { stage: "meta-adjudication", title: "条件 AI 总裁决与冻结", description: "争议样本由 AI 总裁决重新判断；稳定样本直接采用完整 AI 评分报告，不做数字平均。" },
+    { stage: "criterion-feedback", title: "批量生成四项反馈", description: "分数冻结后，用一次批量 AI 调用生成四项自然双语反馈。" }
   ];
   const GRADING_ENDPOINT_KEY = "ielts-gt-writing-hub:gradingEndpoint";
-  const DEFAULT_GRADING_ENDPOINT = "/api/grade-ielts-production-router";
+  const DEFAULT_GRADING_ENDPOINT = "/api/grade-writing";
+
+  function uniqueData(items) { return [...new Set((items || []).filter(Boolean))]; }
+
+  const ACADEMIC_TASK1_PHRASES = {
+    "Overview": ["Overall, it is clear that ...", "In general, the most noticeable feature is that ...", "Overall, X increased while Y declined."],
+    "Comparison": ["By contrast, ...", "X was approximately twice as high as Y.", "The corresponding figure for X was ..."],
+    "Process / Map": ["The process begins with ... and ends with ...", "The most significant change is the addition of ...", "The area was converted into ..."]
+  };
 
   const TEACHER_ERROR_MEMORY_KEY = "ielts-gt-writing-hub:teacherErrorMemory:v1";
   const TEACHER_ERROR_MEMORY_VERSION = "teacher-error-memory-v1";
@@ -474,8 +498,8 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    themeBtn: $("themeBtn"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), subtypeFilter: $("subtypeFilter"), searchInput: $("searchInput"),
-    promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradingModeSelect: $("gradingModeSelect"), gradeBtn: $("gradeBtn"), generateRevisionBtn: $("generateRevisionBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
+    themeBtn: $("themeBtn"), moduleFilter: $("moduleFilter"), bookFilter: $("bookFilter"), testFilter: $("testFilter"), taskFilter: $("taskFilter"), typeFilter: $("typeFilter"), subtypeFilter: $("subtypeFilter"), searchInput: $("searchInput"),
+    promptList: $("promptList"), countLabel: $("countLabel"), emptyState: $("emptyState"), practiceView: $("practiceView"), metaTags: $("metaTags"), sourceStatus: $("sourceStatus"), practiceTitle: $("practiceTitle"), practicePrompt: $("practicePrompt"), taskVisualWrap: $("taskVisualWrap"), taskVisual: $("taskVisual"), infoGrid: $("infoGrid"), timerDisplay: $("timerDisplay"), timerBtn: $("timerBtn"), resetTimerBtn: $("resetTimerBtn"), planArea: $("planArea"), essayInput: $("essayInput"), wordCount: $("wordCount"), wordTarget: $("wordTarget"), focusModeBtn: $("focusModeBtn"), copyBtn: $("copyBtn"), clearBtn: $("clearBtn"), statusText: $("statusText"), favoriteInput: $("favoriteInput"), structureList: $("structureList"), bandTips: $("bandTips"), phraseKicker: $("phraseKicker"), phraseTitle: $("phraseTitle"), phraseGroups: $("phraseGroups"), backBtn: $("backBtn"), gradingEndpointInput: $("gradingEndpointInput"), gradingModeSelect: $("gradingModeSelect"), gradeBtn: $("gradeBtn"), generateRevisionBtn: $("generateRevisionBtn"), gradingStatus: $("gradingStatus"), gradingResults: $("gradingResults"), restoreOriginalBtn: $("restoreOriginalBtn"), revisionCompareArea: $("revisionCompareArea"), compareOriginalText: $("compareOriginalText"), compareRevisedText: $("compareRevisedText")
   };
 
   function escapeHtml(value) {
@@ -533,8 +557,11 @@
     return resultTask === task ? latestScoreResult : null;
   }
 
-  function lockedTaskFields(task = lockedTaskForSelected()) {
+  function lockedTaskFields(task = lockedTaskForSelected(), prompt = selected) {
     const lockedTask = task === "Task 1" ? "Task 1" : "Task 2";
+    const examModule = prompt?.examModule || (prompt?.module === "Academic" ? "academic" : "general_training");
+    const taskNumber = lockedTask === "Task 1" ? 1 : 2;
+    const taskKind = prompt?.taskKind || (taskNumber === 1 ? (examModule === "academic" ? "academic_visual_report" : "gt_letter") : "essay");
     return {
       task: lockedTask,
       taskType: taskTypeForLockedTask(lockedTask),
@@ -542,7 +569,10 @@
       feedbackTask: lockedTask,
       generationTask: lockedTask,
       requestedTask: lockedTask,
-      selectedTask: lockedTask
+      selectedTask: lockedTask,
+      examModule,
+      taskNumber,
+      taskKind
     };
   }
 
@@ -650,14 +680,19 @@
 
   function typeOptionsForSelectedTask() {
     const taskValue = els.taskFilter?.value || "all";
-    const filtered = taskValue === "all" ? prompts : prompts.filter((p) => p.task === taskValue);
+    const moduleValue = els.moduleFilter?.value || "all";
+    const filtered = prompts
+      .filter((p) => taskValue === "all" || p.task === taskValue)
+      .filter((p) => moduleValue === "all" || p.module === moduleValue);
     return unique(filtered.map(bigTypeOf)).sort((a, b) => a.localeCompare(b, "zh-CN"));
   }
 
   function subtypeOptionsForSelectedFilters() {
     const taskValue = els.taskFilter?.value || "all";
     const typeValue = els.typeFilter?.value || "all";
+    const moduleValue = els.moduleFilter?.value || "all";
     return unique(prompts
+      .filter((p) => moduleValue === "all" || p.module === moduleValue)
       .filter((p) => taskValue === "all" || p.task === taskValue)
       .filter((p) => typeValue === "all" || bigTypeOf(p) === typeValue)
       .map(subtypeOf))
@@ -676,7 +711,14 @@
     if (!els.typeFilter) return;
     const previous = els.typeFilter.value || "all";
     const taskValue = els.taskFilter?.value || "all";
-    const allText = taskValue === "Task 1" ? "\u5168\u90e8\u4e66\u4fe1\u5927\u9898\u578b" : taskValue === "Task 2" ? "\u5168\u90e8\u4f5c\u6587\u5927\u9898\u578b" : "\u5168\u90e8\u5927\u9898\u578b";
+    const moduleValue = els.moduleFilter?.value || "all";
+    const allText = taskValue === "Task 1" && moduleValue === "Academic"
+      ? "全部 Academic Task 1 图表题型"
+      : taskValue === "Task 1" && moduleValue === "General Training"
+        ? "全部 GT 书信大题型"
+        : taskValue === "Task 1"
+          ? "全部 Task 1 题型"
+          : taskValue === "Task 2" ? "\u5168\u90e8\u4f5c\u6587\u5927\u9898\u578b" : "\u5168\u90e8\u5927\u9898\u578b";
     const options = typeOptionsForSelectedTask();
     fillSelect(els.typeFilter, options, allText);
     els.typeFilter.value = previous === "all" || options.includes(previous) ? previous : "all";
@@ -684,12 +726,15 @@
   }
 
   function initFilters() {
-    fillSelect(els.bookFilter, DATA.meta?.books || unique(prompts.map((p) => p.book)), "\u5168\u90e8 Books");
-    fillSelect(els.testFilter, ["Test 1", "Test 2", "Test 3", "Test 4"], "\u5168\u90e8 Test");
+    fillSelect(els.moduleFilter, ["Academic", "General Training"], "A 类 + G 类");
+    fillSelect(els.bookFilter, unique(prompts.map((p) => p.book)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), "\u5168\u90e8 Books");
+    fillSelect(els.testFilter, unique(prompts.map((p) => p.test)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), "\u5168\u90e8 Test");
     fillSelect(els.taskFilter, ["Task 1", "Task 2"], "Task 1 + Task 2");
     updateTypeFilterOptions();
-    if ($("booksStat")) $("booksStat").textContent = (DATA.meta?.books || unique(prompts.map((p) => p.book))).length;
-    if ($("testsStat")) $("testsStat").textContent = ((DATA.meta?.books || unique(prompts.map((p) => p.book))).length || 0) * (DATA.meta?.testsPerBook || 4);
+    if ($("booksStat")) $("booksStat").textContent = unique(prompts.map((p) => p.book)).length;
+    if ($("testsStat")) $("testsStat").textContent = unique(prompts.map((p) => `${p.module}|${p.book}|${p.test}`)).length;
+    if ($("academicStat")) $("academicStat").textContent = prompts.filter((p) => p.module === "Academic").length;
+    if ($("generalStat")) $("generalStat").textContent = prompts.filter((p) => p.module === "General Training").length;
     if ($("task1Stat")) $("task1Stat").textContent = prompts.filter((p) => p.task === "Task 1").length;
     if ($("task2Stat")) $("task2Stat").textContent = prompts.filter((p) => p.task === "Task 2").length;
   }
@@ -701,6 +746,7 @@
       const subtype = subtypeOf(p);
       const text = [p.book, p.test, p.module, p.task, bigType, subtype, p.letterStyle || "", p.title, p.prompt, p.difficulty].join(" ").toLowerCase();
       return text.includes(q)
+        && (!els.moduleFilter || els.moduleFilter.value === "all" || p.module === els.moduleFilter.value)
         && (!els.bookFilter || els.bookFilter.value === "all" || p.book === els.bookFilter.value)
         && (!els.testFilter || els.testFilter.value === "all" || p.test === els.testFilter.value)
         && (!els.taskFilter || els.taskFilter.value === "all" || p.task === els.taskFilter.value)
@@ -712,44 +758,50 @@
   function renderList() {
     if (!els.promptList) return;
     const list = filteredPrompts();
-    if (els.countLabel) els.countLabel.textContent = `${list.length} / ${prompts.length}`;
-    els.promptList.innerHTML = list.length ? list.map((p) => `
+    const visible = list.slice(0, promptDisplayLimit);
+    if (els.countLabel) els.countLabel.textContent = `${visible.length} / ${list.length}（题库 ${prompts.length}）`;
+    els.promptList.innerHTML = list.length ? visible.map((p) => `
       <button class="prompt-btn ${selected && selected.id === p.id ? "active" : ""}" type="button" data-id="${escapeHtml(p.id)}">
-        <div class="tags">${tag(String(p.book || "").replace("Cambridge IELTS ", "C"), "book")}${tag(p.test, "book")}${tag(p.task, p.task === "Task 1" ? "task1" : "task2")}${classificationTags(p)}</div>
+        <div class="tags">${tag(p.module === "Academic" ? "A 类" : "G 类", p.module === "Academic" ? "academic" : "general")}${tag(String(p.book || "").replace("Cambridge IELTS ", "C"), "book")}${tag(p.test, "book")}${tag(p.task, p.task === "Task 1" ? "task1" : "task2")}${classificationTags(p)}</div>
         <h3>${escapeHtml(p.title)}</h3>
         <span class="muted">${escapeHtml(p.sourceStatus || "")}</span>
-      </button>`).join("") : `<p class="muted">\u6ca1\u6709\u5339\u914d\u7684\u7ec3\u4e60\u9898\uff0c\u8bf7\u8c03\u6574\u7b5b\u9009\u6216\u641c\u7d22\u5173\u952e\u8bcd\u3002</p>`;
+      </button>`).join("") + (visible.length < list.length ? `<button class="prompt-load-more" type="button">继续加载 ${Math.min(30, list.length - visible.length)} 道题 <span>${visible.length} / ${list.length}</span></button>` : "") : `<p class="muted">\u6ca1\u6709\u5339\u914d\u7684\u7ec3\u4e60\u9898\uff0c\u8bf7\u8c03\u6574\u7b5b\u9009\u6216\u641c\u7d22\u5173\u952e\u8bcd\u3002</p>`;
     els.promptList.querySelectorAll("button[data-id]").forEach((btn) => btn.addEventListener("click", () => selectPrompt(btn.dataset.id)));
+    els.promptList.querySelector(".prompt-load-more")?.addEventListener("click", () => { promptDisplayLimit += 30; renderList(); });
+  }
+
+  function resetPromptListPage() {
+    promptDisplayLimit = 30;
+    renderList();
   }
 
   function renderInfo(p) {
     if (!els.infoGrid) return;
     const info = [
       ["Module", p.module],
-      ["\u5927\u9898\u578b", bigTypeOf(p)],
-      ["\u5c0f\u9898\u578b", subtypeOf(p)],
-      ...(p.task === "Task 1" ? [["\u8bed\u6c14", p.letterStyle || ""]] : []),
+      ["任务类型", `${bigTypeOf(p)} · ${subtypeOf(p)}`],
       ["\u5efa\u8bae\u5b57\u6570", `\u81f3\u5c11 ${p.recommendedWords} words`],
       ["\u8ba1\u65f6", `${p.timeLimit} \u5206\u949f`],
-      ["\u96be\u5ea6", p.difficulty],
-      ["\u6765\u6e90\u72b6\u6001", p.sourceStatus]
+      [p.taskKind === "gt_letter" ? "写作语气" : "难度", p.taskKind === "gt_letter" ? (p.letterStyle || "") : p.difficulty]
     ];
-    els.infoGrid.innerHTML = info.map(([k, v]) => `<div class="info"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join("");
+    els.infoGrid.innerHTML = info.map(([k, v]) => `<div class="info ${k === "任务类型" ? "info-wide" : ""}"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join("");
   }
 
   function renderPlan(p) {
     if (!els.planArea) return;
-    const fields = p.task === "Task 1"
-      ? [["purpose", "Task 1 letter purpose 分析", p.notes?.focus || ""], ["tone", "语气与读者关系", `Reader: ${p.letterStyle || ""}`], ["bullets", "三个 bullet points 覆盖计划", "Bullet 1:\nBullet 2:\nBullet 3:"], ["details", "可加入的细节", "time / place / reason / result / request"]]
-      : [["position", "Task 2 position 分析", p.notes?.focus || ""], ["reasons", "Reasons", "Reason 1:\nReason 2:"], ["examples", "Examples", "Example 1:\nExample 2:"], ["balance", "让步或反方观点", "Although ..., I believe ..."]];
+    const fields = p.taskKind === "academic_visual_report"
+      ? [["overview", "Overview 主趋势 / 核心变化", "Main trend / highest-lowest / start-end / main change"], ["features", "关键特征", "Feature 1:\nFeature 2:\nFeature 3:"], ["comparisons", "重要对比", "Compare categories, periods or stages"], ["accuracy", "数据与单位检查", "Numbers / units / dates / directions"]]
+      : p.taskKind === "gt_letter"
+        ? [["purpose", "Task 1 letter purpose 分析", p.notes?.focus || ""], ["tone", "语气与读者关系", `Reader: ${p.letterStyle || ""}`], ["bullets", "三个 bullet points 覆盖计划", "Bullet 1:\nBullet 2:\nBullet 3:"], ["details", "可加入的细节", "time / place / reason / result / request"]]
+        : [["position", "Task 2 position 分析", p.notes?.focus || ""], ["reasons", "Reasons", "Reason 1:\nReason 2:"], ["examples", "Examples", "Example 1:\nExample 2:"], ["balance", "让步或反方观点", "Although ..., I believe ..."]];
     els.planArea.innerHTML = fields.map(([key, label, placeholder]) => `<label><span class="muted">${escapeHtml(label)}</span><textarea data-plan="${escapeHtml(key)}" placeholder="${escapeHtml(placeholder)}">${escapeHtml(load(p.id, `plan:${key}`))}</textarea></label>`).join("");
     els.planArea.querySelectorAll("textarea").forEach((box) => box.addEventListener("input", () => save(p.id, `plan:${box.dataset.plan}`, box.value)));
   }
 
   function renderPhrases(p) {
     if (!els.phraseGroups) return;
-    const bank = p.task === "Task 1" ? (DATA.phraseBanks?.task1 || {}) : (DATA.phraseBanks?.task2 || {});
-    if (els.phraseKicker) els.phraseKicker.textContent = p.task === "Task 1" ? "Task 1 Letter Phrases" : "Task 2 Essay Phrases";
+    const bank = p.taskKind === "academic_visual_report" ? ACADEMIC_TASK1_PHRASES : (p.taskKind === "gt_letter" ? (DATA.phraseBanks?.task1 || {}) : (DATA.phraseBanks?.task2 || {}));
+    if (els.phraseKicker) els.phraseKicker.textContent = p.taskKind === "academic_visual_report" ? "Academic Task 1 Report Phrases" : (p.taskKind === "gt_letter" ? "Task 1 Letter Phrases" : "Task 2 Essay Phrases");
     if (els.phraseTitle) els.phraseTitle.textContent = p.task === "Task 1" ? "常用句型提示" : "常用连接词与模板";
     els.phraseGroups.innerHTML = Object.entries(bank).map(([name, phrases]) => `<div class="phrase-group"><h4>${escapeHtml(name)}</h4>${(phrases || []).map((phrase) => `<button class="phrase-btn" type="button" data-phrase="${escapeHtml(phrase)}">${escapeHtml(phrase)}</button>`).join("")}</div>`).join("");
     els.phraseGroups.querySelectorAll("button[data-phrase]").forEach((btn) => btn.addEventListener("click", () => {
@@ -803,6 +855,16 @@
     if (els.sourceStatus) els.sourceStatus.textContent = `Source status: ${selected.sourceStatus || ""}`;
     if (els.practiceTitle) els.practiceTitle.textContent = `${selected.book} · ${selected.test} · ${selected.task}: ${selected.title}`;
     if (els.practicePrompt) els.practicePrompt.textContent = selected.prompt || "";
+    if (els.taskVisual && els.taskVisualWrap) {
+      if (selected.image) {
+        els.taskVisual.src = selected.image;
+        els.taskVisual.alt = selected.imageAlt || `${selected.book} ${selected.test} Academic Task 1 visual`;
+        els.taskVisualWrap.classList.remove("hidden");
+      } else {
+        els.taskVisual.removeAttribute("src");
+        els.taskVisualWrap.classList.add("hidden");
+      }
+    }
     renderInfo(selected);
     renderPlan(selected);
     if (els.essayInput) els.essayInput.value = load(selected.id, "essay");
@@ -831,31 +893,7 @@
 
   function ensureEssayTimerDock() {
     if (!els.essayInput || !els.timerDisplay || !els.timerBtn || !els.resetTimerBtn) return;
-    const essayCard = els.essayInput.closest(".card") || els.essayInput.parentElement;
-    if (!essayCard) return;
-
-    const oldTimerCard = els.timerDisplay.closest(".card");
-    if (oldTimerCard && oldTimerCard !== essayCard) oldTimerCard.classList.add("timer-card-emptied");
-
-    let shell = $("essayWritingShell");
-    if (!shell || !essayCard.contains(shell)) {
-      shell = document.createElement("div");
-      shell.id = "essayWritingShell";
-      shell.className = "essay-writing-shell";
-      els.essayInput.insertAdjacentElement("beforebegin", shell);
-      shell.appendChild(els.essayInput);
-    }
-
-    let dock = $("essayTimerDock");
-    if (!dock) {
-      dock = document.createElement("aside");
-      dock.id = "essayTimerDock";
-      dock.className = "essay-timer-dock";
-      dock.innerHTML = `<div class="essay-timer-title"><span>写作计时</span><small>Writing timer</small></div><div class="essay-timer-controls"></div>`;
-    }
-    if (dock.parentElement !== shell) shell.appendChild(dock);
-
-    const controls = dock.querySelector(".essay-timer-controls");
+    const controls = $("editorTimerControl");
     if (!controls) return;
     [els.timerDisplay, els.timerBtn, els.resetTimerBtn].forEach((node) => {
       if (node && node.parentElement !== controls) controls.appendChild(node);
@@ -917,6 +955,9 @@
       subtype: subtypeOf(selected),
       questionType: bigTypeOf(selected),
       questionSubtype: subtypeOf(selected),
+      visualType: selected?.visualFacts?.visualType || selected?.bigType || "",
+      visualFacts: selected?.visualFacts || null,
+      referenceAnswer: selected?.referenceAnswer || "",
       questionPrompt: selected?.prompt || "",
       promptText: selected?.prompt || "",
       prompt: selected?.prompt || "",
@@ -929,17 +970,113 @@
     };
   }
 
-  async function postStage(endpoint, payload) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const text = await response.text();
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!response.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
-    return data;
+  async function postStage(endpoint, payload, options = {}) {
+    const controller = new AbortController();
+    const timeoutMs = Number(options.timeoutMs || 105000);
+    let timedOut = false;
+    const forwardAbort = () => controller.abort();
+    options.signal?.addEventListener?.("abort", forwardAbort, { once: true });
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson, application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      const contentType = String(response.headers.get("content-type") || "");
+      if (response.ok && /application\/x-ndjson/i.test(contentType) && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalData = null;
+        const consumeLine = (line) => {
+          if (!line.trim()) return;
+          const event = JSON.parse(line);
+          if (event.type === "progress") options.onProgress?.(event);
+          if (event.type === "result") finalData = event.data;
+          if (event.type === "error") {
+            const streamError = new Error([event.error, event.detail].filter(Boolean).join(" | "));
+            streamError.code = event.error || "SCORING_FAILED";
+            throw streamError;
+          }
+        };
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) consumeLine(line);
+          if (done) break;
+        }
+        if (buffer.trim()) consumeLine(buffer);
+        if (!finalData) throw new Error("评分流已结束，但没有返回冻结分数。");
+        return finalData;
+      }
+      const text = await response.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!response.ok) throw new Error([`HTTP ${response.status}`, data.error, data.detail].filter(Boolean).join(" | "));
+      return data;
+    } catch (error) {
+      if (options.signal?.aborted) {
+        const cancelled = new Error("评分已由用户取消；未返回的结果不会被采用。");
+        cancelled.code = "GRADING_CANCELLED";
+        throw cancelled;
+      }
+      if (timedOut || error?.name === "AbortError") {
+        const timeoutError = new Error(`评分请求 timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+        timeoutError.code = "CLIENT_TIMEOUT";
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      options.signal?.removeEventListener?.("abort", forwardAbort);
+    }
+  }
+
+  function applyCoreStreamProgress(event = {}) {
+    const stage = event.stage;
+    const elapsedSeconds = Math.max(0, Math.round(Number(event.elapsedMs || 0) / 1000));
+    if (stage === "examiners_started") {
+      updateScoringProgress(1, "running", "评分官 A 与 B 正在并行阅读全文并独立评分。");
+      setGradingStatus(`第 2 步/6：双评分官并行评分，已等待 ${elapsedSeconds} 秒。`, "loading");
+    } else if (stage === "examiners_completed") {
+      updateScoringProgress(1, "done", `两个独立评分官均已返回（${elapsedSeconds} 秒）。`);
+      updateScoringProgress(2, "running", "正在根据两份 AI 报告识别需要复核的分数区间。");
+      setGradingStatus("第 3 步/6：双评分官已返回，正在识别 AI 专家区间。", "loading");
+    } else if (stage === "agreement_completed") {
+      updateScoringProgress(2, event.detail?.adjudicationRequired ? "running" : "done", event.detail?.adjudicationRequired ? "检测到实质分歧，正在选择 AI 区间专家。" : "两位 AI 评分官结果稳定，无需额外专家调用。" );
+    } else if (stage === "specialist_started") {
+      const zoneLabel = { low: "低分", mid: "中间分", high: "高分" }[event.detail?.zone] || "对应区间";
+      updateScoringProgress(2, "done", `已由 AI 报告路由到${zoneLabel}专家；路由本身不是分数。`);
+      updateScoringProgress(3, "running", `${zoneLabel} AI 专家正在独立阅读全文并核对相邻 0.5 分边界。`);
+      setGradingStatus(`第 4 步/6：${zoneLabel} AI 专家复核中，累计 ${elapsedSeconds} 秒。`, "loading");
+    } else if (stage === "specialist_completed") {
+      updateScoringProgress(3, "done", `区间专家已完成独立复核（累计 ${elapsedSeconds} 秒）。`);
+      updateScoringProgress(4, "running", "AI 总裁决正在重新阅读全文并审查三份报告。" );
+    } else if (stage === "adjudication_started") {
+      const isUpperBoundaryFinal = event.detail?.architecture === "independent_pro_upper_boundary_final";
+      updateScoringProgress(4, "running", isUpperBoundaryFinal ? "独立 Pro 高分复核已完成全文判断，正在冻结四项分。" : "AI 总裁决正在重新阅读全文；不会对三份分数做简单平均或多数投票。");
+      setGradingStatus(`第 5 步/6：${isUpperBoundaryFinal ? "Pro 高分边界冻结中" : "AI 总裁决中"}，累计 ${elapsedSeconds} 秒。`, "loading");
+    } else if (stage === "adjudication_completed") {
+      const isUpperBoundaryFinal = event.detail?.architecture === "independent_pro_upper_boundary_final";
+      updateScoringProgress(4, "done", `${isUpperBoundaryFinal ? "独立 Pro 高分上限复核" : "AI 总裁决"}已完成，正在冻结最终四项分（累计 ${elapsedSeconds} 秒）。`);
+    } else if (stage === "adjudication_skipped") {
+      updateScoringProgress(2, "done", "双评分官一致性检查通过。" );
+      updateScoringProgress(3, "skipped", "稳定样本已跳过区间专家，节省一次 AI 调用。" );
+      updateScoringProgress(4, "running", "已跳过额外总裁决；正在冻结所选完整 AI 报告的四项分。" );
+    } else if (stage === "criterion_profile_review_started") {
+      updateScoringProgress(4, "running", "检测到四项同分候选；AI 小分复核官正在重读原文，分别核对四项证据与相邻 0.5 分边界。");
+      setGradingStatus(`第 5 步/6：AI 小分真实性复核中，累计 ${elapsedSeconds} 秒。`, "loading");
+    } else if (stage === "criterion_profile_review_completed") {
+      updateScoringProgress(4, "done", `AI 小分复核已完成；同分只在四项证据分别成立时保留（累计 ${elapsedSeconds} 秒）。`);
+    } else if (stage === "score_frozen") {
+      updateScoringProgress(4, "done", `核心分数已冻结（累计 ${elapsedSeconds} 秒）。`);
+      setGradingStatus("第 5 步/6：核心分数已冻结，准备生成四项详细反馈。", "loading");
+    }
+    if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
   }
 
   function createScoringProgress() {
@@ -1007,7 +1144,7 @@
     return progress;
   }
 
-  function markScoreFrozenAndStartCriterionFeedback(message = "核心分数已冻结；正在逐项生成详细反馈。") {
+  function markScoreFrozenAndStartCriterionFeedback(message = "核心分数已冻结；正在一次批量生成四项详细反馈。") {
     const progress = ensureScoringProgress();
     progress.status = "running";
     progress.phase = "feedback";
@@ -1812,6 +1949,16 @@
     return `<div class="bilingual-feedback-pair"><p class="bilingual-en">${escapeHtml(english)}</p><p class="bilingual-zh">${escapeHtml(chinese)}</p></div>`;
   }
 
+  function teacherNoteHtml(en, zh, context = {}) {
+    const english = String(en || "").trim();
+    if (!hasMeaningfulContent(english) && !hasMeaningfulContent(zh)) return "";
+    const chinese = hasMeaningfulContent(zh) ? String(zh).trim() : autoZhText(english, context);
+    return `<div class="teacher-feedback-note">
+      ${hasMeaningfulContent(chinese) ? `<p class="teacher-feedback-primary">${escapeHtml(chinese)}</p>` : ""}
+      ${hasMeaningfulContent(english) ? `<details class="teacher-feedback-source"><summary>查看英文评分依据</summary><p>${escapeHtml(english)}</p></details>` : ""}
+    </div>`;
+  }
+
   function zhAt(list, index) {
     return Array.isArray(list) && hasMeaningfulContent(list[index]) ? list[index] : "";
   }
@@ -1863,7 +2010,7 @@
   }
 
   function criterionItem(result, criterion) {
-    const cal = result.criterionCalibration || result.criterionExplanations || {};
+    const cal = result.criterionCalibration || result.criteriaDetails || result.criterionExplanations || {};
     const direct = cal[criterion] || {};
     // v8.4: do not cross-map Task Achievement and Task Response.
     // Task 1 and Task 2 first criteria must remain task-specific.
@@ -2200,10 +2347,10 @@
     const statusValue = typeof status === "string" ? status : status?.status;
     if (!statusValue) return "";
     if (/generated_required_external|generated/i.test(statusValue)) {
-      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后逐项生成，不会改变分数。")}</div>`;
+      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>${escapeHtml(status?.note || "四项详细反馈已在分数冻结后通过一次批量调用生成，不会改变分数。")}</div>`;
     }
     if (/required_external|generating_required/i.test(statusValue)) {
-      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>核心分数已冻结；四项详细反馈将通过独立接口逐项生成，生成完成后才显示完整卡片。</div>`;
+      return `<div class="score-flow-note feedback-status-note"><strong>详细反馈：</strong>核心分数已冻结；四项详细反馈将通过独立接口一次批量生成，生成完成后才显示完整卡片。</div>`;
     }
     if (/failed/i.test(statusValue)) {
       return `<div class="ai-warning feedback-status-warning"><strong>详细反馈生成失败：</strong>核心评分已经冻结，分数不受影响；但本版本不会用模板内容冒充详细反馈。${escapeHtml(status?.note || status?.error || "请重新生成评分，或稍后再试。")}</div>`;
@@ -2433,6 +2580,67 @@
   }
 
 
+  function renderCriterionCardsV2(result = {}) {
+    const criteria = result.finalCriteria || result.criteria || {};
+    const entries = Object.entries(criteria);
+    if (!entries.length) return `<section class="grading-section"><p class="muted">AI 没有返回完整的四项评分。</p></section>`;
+    const feedbackState = String(result.feedbackStatus?.status || result.scoreCoreMeta?.feedbackStatus || "");
+    const feedbackIncomplete = /failed|incomplete/i.test(feedbackState) && !resultHasRequiredCriterionFeedback(result);
+    if (feedbackIncomplete) {
+      return `<section class="criterion-card-grid natural-criterion-grid" aria-label="四项分数">
+        <div class="ai-warning feedback-status-warning" style="grid-column:1/-1"><strong>分数已冻结，但反馈证据尚未补全。</strong>系统不会用模板句冒充完整反馈；请重新提交或交由人工复核。</div>
+        ${entries.map(([criterion, band]) => `<article class="criterion-score-card refined-criterion-card"><div class="criterion-card-header"><div class="criterion-title">${escapeHtml(criterion)}</div><div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div></div></article>`).join("")}
+      </section>`;
+    }
+    const intro = `<div class="criterion-report-intro"><div><p class="kicker">Evidence-led Feedback</p><h4>四项评分与修改路径</h4></div><p>每一项只回答三件事：原文呈现了什么规律、为什么落在这个 0.5 分边界、最值得先改哪一句。</p></div>`;
+    return `<section class="criterion-card-grid criterion-report-grid natural-criterion-grid" aria-label="四项评分说明">
+      ${intro}
+      <div class="criterion-compact-toolbar"><button type="button" data-criterion-expand-all>全部展开</button><button type="button" data-criterion-collapse-all>全部收起</button></div>
+      ${entries.map(([criterion, band], index) => {
+        const item = criterionItem(result, criterion);
+        const boundary = item.bandBoundary || {};
+        const revision = item.nextRevision || {};
+        const cardId = `criterionNatural_${index}_${Math.random().toString(36).slice(2, 8)}`;
+        const higherBand = nearestHalfBand(band, "higher");
+        const upperBoundaryTitle = Number(band) >= 9 ? "Band 9 稳定性检查" : `距离 Band ${formatBand(higherBand)} 的关键差距`;
+        const diagnosisPair = {
+          en: firstText(item.diagnosis, item.whyThisBand, item.summary),
+          zh: firstText(item.diagnosisZh, item.whyThisBandZh, item.summaryZh)
+        };
+        const fitPair = {
+          en: firstText(boundary.fit, item.whyNotLower, item.whyThisBand),
+          zh: firstText(boundary.fitZh, item.whyNotLowerZh, item.whyThisBandZh)
+        };
+        const gapPair = {
+          en: firstText(boundary.nextBandGap, item.whyNotHigher, item.whyNotYetHigherBand),
+          zh: firstText(boundary.nextBandGapZh, item.whyNotHigherZh, item.whyNotYetHigherBandZh)
+        };
+        const priority = firstText(revision.priority, item.howToImprove, item.improvementFocus);
+        const priorityZh = firstText(revision.priorityZh, item.howToImproveZh, item.improvementFocusZh);
+        const action = firstText(revision.action, item.howToImprove, item.improvementFocus);
+        const actionZh = firstText(revision.actionZh, item.howToImproveZh, item.improvementFocusZh);
+        const preview = criterionPreviewHtml(diagnosisPair, { en: priority, zh: priorityZh }, { criterion, band });
+        const strengths = evidenceListHtml(item.strengths || item.positiveEvidence, item.strengthsZh || item.positiveEvidenceZh, { criterion, band, heading: "已经稳定的部分" });
+        const constraints = evidenceListHtml(item.constraints || item.limitingEvidence, item.constraintsZh || item.limitingEvidenceZh, { criterion, band, heading: "反复受限的部分" });
+        const essayEvidence = essayEvidenceHtml(item.essayEvidence || item.textEvidence || item.evidenceQuotes);
+        const rewrite = hasMeaningfulContent(revision.beforeQuote) || hasMeaningfulContent(revision.revisedExample)
+          ? `<div class="criterion-rewrite-example">${hasMeaningfulContent(revision.beforeQuote) ? `<div><span>原句</span><p>${escapeHtml(revision.beforeQuote)}</p></div>` : ""}${hasMeaningfulContent(revision.revisedExample) ? `<div class="is-revised"><span>忠实改写</span><p>${escapeHtml(revision.revisedExample)}</p></div>` : ""}</div>`
+          : "";
+        return `<article class="criterion-score-card refined-criterion-card is-collapsed">
+          <div class="criterion-card-header"><div class="criterion-title">${escapeHtml(criterion)}</div><div class="criterion-band-pill">Band ${escapeHtml(formatBand(band))}</div><button class="criterion-toggle" type="button" data-criterion-toggle="${cardId}" aria-label="展开或收起 ${escapeHtml(criterion)}">+</button></div>
+          ${preview}
+          <div class="criterion-card-body hidden" id="${cardId}"><div class="criterion-natural-stack">
+            <section class="criterion-natural-section"><span class="criterion-section-index">01</span><div><h5>老师判断</h5>${teacherNoteHtml(diagnosisPair.en, diagnosisPair.zh, { criterion, band, heading: "老师判断" })}</div></section>
+            <section class="criterion-natural-section"><span class="criterion-section-index">02</span><div><h5>相邻 0.5 档判定</h5>${teacherNoteHtml(fitPair.en, fitPair.zh, { criterion, band, heading: `Band ${formatBand(band)} 的依据` })}<div class="next-band-gap"><strong>${escapeHtml(upperBoundaryTitle)}</strong>${teacherNoteHtml(gapPair.en, gapPair.zh, { criterion, band, heading: "下一档差距" })}</div></div></section>
+            ${(strengths || constraints) ? `<section class="criterion-natural-section"><span class="criterion-section-index">03</span><div><h5>全文规律</h5><div class="criterion-pattern-grid">${strengths ? `<div><strong>已经稳定</strong>${strengths}</div>` : ""}${constraints ? `<div><strong>反复受限</strong>${constraints}</div>` : ""}</div></div></section>` : ""}
+            ${essayEvidence ? `<section class="criterion-natural-section"><span class="criterion-section-index">04</span><div><h5>原文定位</h5><div class="criterion-evidence-list">${essayEvidence}</div></div></section>` : ""}
+            <section class="criterion-natural-section criterion-next-move"><span class="criterion-section-index">→</span><div><h5>优先改一处</h5>${teacherNoteHtml(priority, priorityZh, { criterion, band, heading: "修改优先级" })}${(action && action !== priority) ? teacherNoteHtml(action, actionZh, { criterion, band, heading: "具体动作" }) : ""}${rewrite}${hasMeaningfulContent(revision.whyItWorks || revision.whyItWorksZh) ? teacherNoteHtml(revision.whyItWorks, revision.whyItWorksZh, { criterion, band, heading: "为什么有效" }) : ""}</div></section>
+          </div></div>
+        </article>`;
+      }).join("")}
+    </section>`;
+  }
+
   function renderOverallSkeleton() {
     const disclaimer = "This is an AI-generated estimated score, not an official IELTS score.";
     return `<section class="overall-card overall-card-hero score-skeleton-section">
@@ -2574,6 +2782,8 @@
     return {
       ...base,
       criterionCalibration: mergedCalibration,
+      feedbackModelAudit: feedback.modelAudit || base.feedbackModelAudit || [],
+      feedbackCostOptimization: feedback.costOptimization || base.feedbackCostOptimization || null,
       feedbackStatus: feedback.feedbackStatus || base.feedbackStatus,
       scoreCoreMeta: {
         ...(base.scoreCoreMeta || {}),
@@ -2584,35 +2794,47 @@
     };
   }
 
-  async function generateRequiredCriterionFeedback(coreResult = {}) {
+  async function generateRequiredCriterionFeedback(coreResult = {}, options = {}) {
+    if (resultHasRequiredCriterionFeedback(coreResult)) {
+      updateScoringProgress(5, "done", "完整四项证据已由统一评分内核返回，无需再次调用反馈接口。");
+      refreshScoringSkeleton();
+      return {
+        ...coreResult,
+        feedbackStatus: { status: "embedded_complete", scoreChanged: false, note: "四项详细证据已随冻结分数一并返回。" },
+        scoreCoreMeta: { ...(coreResult.scoreCoreMeta || {}), feedbackRequiredExternal: false, feedbackGenerated: true, feedbackStatus: "embedded_complete" }
+      };
+    }
     const endpoint = criterionFeedbackEndpointFromGradingEndpoint();
     const criteria = coreResult.finalCriteria || coreResult.criteria || {};
-    const criterionNames = criteriaForScoreResult(coreResult);
+    const requiredCriterionNames = criteriaForScoreResult(coreResult);
+    const criterionNames = ["__batch__"];
     let merged = {
       ...coreResult,
       criterionCalibration: {},
       feedbackStatus: {
         status: "generating_required_external",
         scoreChanged: false,
-        note: "Core score is frozen. Required detailed criterion feedback is being generated criterion by criterion."
+        note: "Core score is frozen. Required detailed feedback is being generated for all four criteria in one batch."
       }
     };
 
-    for (let i = 0; i < criterionNames.length; i += 1) {
-      const criterion = criterionNames[i];
-      const band = Number(criteria[criterion]);
-      setGradingStatus(`详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}...`, "loading");
-      if (els.gradeBtn) els.gradeBtn.textContent = `反馈 ${i + 1}/${criterionNames.length}...`;
-      updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：正在生成 ${criterion}。`);
+    let nextCriterionIndex = 0;
+    let completedCriteria = 0;
+    const generateOneCriterion = async (criterion, i) => {
+      const isBatch = criterion === "__batch__";
+      const band = isBatch ? null : Number(criteria[criterion]);
+      setGradingStatus(`详细反馈 ${completedCriteria}/${requiredCriterionNames.length}：正在一次生成四项反馈...`, "loading");
+      if (els.gradeBtn) els.gradeBtn.textContent = `反馈 ${completedCriteria}/${requiredCriterionNames.length}...`;
+      updateScoringProgress(5, "running", `单次批量反馈：正在生成四项详细反馈（已完成 ${completedCriteria}/${requiredCriterionNames.length}）。`);
       refreshScoringSkeleton();
       let lastError = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
           const data = await postStage(endpoint, gradingPayload({
-            mode: "criterion_feedback",
-            aiStage: "required-criterion-feedback",
-            criterion,
-            criterionName: criterion,
+            mode: "criterion_feedback_batch",
+            aiStage: "required-criterion-feedback-batch",
+            criterion: isBatch ? "" : criterion,
+            criterionName: isBatch ? "" : criterion,
             criterionBand: band,
             currentResult: coreResult,
             frozenScore: {
@@ -2620,24 +2842,37 @@
               criteria: coreResult.finalCriteria || coreResult.criteria || {},
               finalCriteria: coreResult.finalCriteria || coreResult.criteria || {}
             }
-          }));
-          if (!data.ok || !data.criterionCalibration?.[criterion]) throw new Error(data.detail || data.error || `${criterion} detailed feedback missing.`);
+          }), { signal: options.signal, timeoutMs: 105000 });
+          const missingCriteria = requiredCriterionNames.filter((name) => !data.criterionCalibration?.[name]);
+          if (!data.ok || missingCriteria.length) throw new Error(data.detail || data.error || `Detailed feedback missing: ${missingCriteria.join(", ")}`);
           merged = mergeCriterionFeedback(merged, data);
-          updateScoringProgress(5, "running", `详细反馈 ${i + 1}/${criterionNames.length}：${criterion} 已完成。`);
+          completedCriteria = requiredCriterionNames.length;
+          updateScoringProgress(5, "running", `四项批量反馈已完成；详细反馈进度 ${completedCriteria}/${requiredCriterionNames.length}。`);
+          setGradingStatus(`详细反馈 ${completedCriteria}/${requiredCriterionNames.length} 已完成。`, "loading");
+          if (els.gradeBtn) els.gradeBtn.textContent = `反馈 ${completedCriteria}/${requiredCriterionNames.length}...`;
           refreshScoringSkeleton();
           lastError = null;
           break;
         } catch (error) {
+          if (error?.code === "GRADING_CANCELLED" || error?.code === "CLIENT_TIMEOUT") throw error;
           lastError = error;
-          setGradingStatus(`${criterion} 详细反馈第 ${attempt} 次生成失败，正在重试...`, "loading");
-          updateScoringProgress(5, "running", `${criterion} 详细反馈第 ${attempt} 次生成失败，正在重试。`);
+          setGradingStatus(`四项批量反馈第 ${attempt} 次生成失败，正在重试...`, "loading");
+          updateScoringProgress(5, "running", `四项批量反馈第 ${attempt} 次生成失败，正在重试。`);
           refreshScoringSkeleton();
         }
       }
       if (lastError) {
-        throw new Error(`${criterion} 详细反馈生成失败：${lastError.message || lastError}`);
+        throw new Error(`四项批量反馈生成失败：${lastError.message || lastError}`);
       }
-    }
+    };
+    const feedbackWorker = async () => {
+      while (nextCriterionIndex < criterionNames.length) {
+        const index = nextCriterionIndex;
+        nextCriterionIndex += 1;
+        await generateOneCriterion(criterionNames[index], index);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, criterionNames.length) }, () => feedbackWorker()));
 
     updateScoringProgress(5, "done", "四项详细反馈已全部生成完成。");
     refreshScoringSkeleton();
@@ -2647,7 +2882,7 @@
       feedbackStatus: {
         status: "generated_required_external",
         scoreChanged: false,
-        note: "四项详细反馈已逐项生成。核心分数已经先冻结，详细反馈没有改变分数。"
+        note: "四项详细反馈已通过一次批量调用生成。核心分数已经先冻结，详细反馈没有改变分数。"
       },
       scoreCoreMeta: {
         ...(merged.scoreCoreMeta || {}),
@@ -3028,7 +3263,11 @@
     const mustRemember = learningArray(result.mustRememberToday || result.mustLearnPatterns, 8);
     const avoid = learningArray(result.doNotWriteLikeThis || result.avoidForNow || result.avoid, 8);
     const wrapUp = result.teacherWrapUp || {};
-    const hasClinic = hasMeaningfulContent(teacherOpening) || issues.length || hasMeaningfulContent(memoryReview);
+    const hasMemoryReview = hasMeaningfulContent(memoryReview.teacherMemorySummaryZh)
+      || learningArray(memoryReview.repeatedMistakes, 8).length > 0
+      || learningArray(memoryReview.improvedMistakes, 8).length > 0
+      || learningArray(memoryReview.newMistakes, 8).length > 0;
+    const hasClinic = hasMeaningfulContent(teacherOpening) || issues.length > 0 || hasMemoryReview || mustRemember.length > 0;
 
     if (!hasClinic) {
       const groups = learningArray(result.groups, 6);
@@ -3039,7 +3278,7 @@
         ${pairHtml(result.priorityAdvice)}`;
     }
 
-    const memoryBlock = hasMeaningfulContent(memoryReview) ? `<details class="score-accordion learning-subsection">
+    const memoryBlock = hasMemoryReview ? `<details class="score-accordion learning-subsection">
       <summary>常犯错误追踪 / Local Error Memory</summary>
       <div class="score-accordion-body">
         ${simpleValueHtml("老师记忆总结 / Teacher memory summary", "", "", memoryReview.teacherMemorySummaryZh)}
@@ -3260,7 +3499,63 @@
       renderLearningFeedbackPanel();
       setGradingStatus(`学习反馈生成失败：${error.message || error}`, "error");
     }
-  }  function renderScoreResult(result = {}) {
+  }
+
+  function renderUnifiedScoringAudit(result = {}) {
+    if (!result.examinerAgreement) return "";
+    const agreement = result.examinerAgreement || {};
+    const range = Array.isArray(result.likelyRange) ? result.likelyRange.map(formatBand).join(" – ") : "-";
+    const reviewReasons = Array.isArray(result.humanReviewReasons) ? result.humanReviewReasons : [];
+    const visual = result.visualFactsAudit;
+    const coreCost = result.modelAudit?.costOptimization || {};
+    const feedbackCost = result.feedbackCostOptimization || {};
+    const feedbackAudit = Array.isArray(result.feedbackModelAudit) ? result.feedbackModelAudit : [];
+    const coreCalls = Number(coreCost.coreModelCalls);
+    const feedbackCalls = Number(feedbackCost.aiCalls);
+    const avoidedCalls = Number(coreCost.avoidedModelCalls || 0);
+    const coreTokens = Number(coreCost.coreTotalTokens || 0);
+    const feedbackTokens = feedbackAudit.reduce((sum, audit) => sum + Number(audit?.usage?.total_tokens || audit?.usage?.totalTokens || 0), 0);
+    const reviewTriggered = result.threeZonePanel?.reviewTriggered === true;
+    const profileReviewTriggered = coreCost.criterionProfileReviewTriggered === true;
+    const highBoundaryFinal = coreCost.highBoundaryFinal === true;
+    const decisionStatus = highBoundaryFinal
+      ? "已由独立 Pro 完成高分上限复核"
+      : reviewTriggered && profileReviewTriggered
+      ? "已启用专家、终审与 AI 小分复核"
+      : reviewTriggered
+      ? "已启用专家与终审"
+      : profileReviewTriggered
+      ? "双评分官稳定，已做 AI 小分复核"
+      : "双评分官稳定，直接冻结";
+    const callPath = highBoundaryFinal
+      ? "，高分边界由独立 Pro 复核并跳过额外终审"
+      : reviewTriggered && profileReviewTriggered
+      ? "，分歧样本已启用专家、终审及小分复核"
+      : reviewTriggered
+      ? "，分歧/边界样本已启用专家复核"
+      : profileReviewTriggered
+      ? "，四项同分候选已启用 AI 小分复核"
+      : avoidedCalls > 0
+      ? `，稳定样本节省 ${escapeHtml(avoidedCalls)} 次专家/终审调用`
+      : "";
+    const costSummary = Number.isFinite(coreCalls) && coreCalls > 0
+      ? `<p class="unified-score-note"><strong>本次 AI 调用：</strong>核心评分 ${escapeHtml(coreCalls)} 次${callPath}${Number.isFinite(feedbackCalls) && feedbackCalls > 0 ? `；四项反馈 ${escapeHtml(feedbackCalls)} 次批量调用` : ""}${coreTokens > 0 || feedbackTokens > 0 ? `。Token 记录：核心 ${escapeHtml(coreTokens || "-")}${feedbackTokens > 0 ? `，反馈 ${escapeHtml(feedbackTokens)}` : ""}` : ""}。</p>`
+      : "";
+    return `<section class="unified-score-audit ${result.needsHumanReview ? "needs-review" : ""}">
+      <div class="unified-score-audit-head"><div><p class="eyebrow">DOUBLE EXAMINER AUDIT</p><h4>${escapeHtml(result.module || result.examModule)} · ${escapeHtml(result.task)} · ${escapeHtml(result.taskKind)}</h4></div><span class="report-badge">${escapeHtml(String(result.confidence || "").toUpperCase())} confidence</span></div>
+      <div class="unified-score-audit-grid">
+        <div><span>评分官 A</span><strong>Band ${escapeHtml(formatBand(agreement.examinerA?.overallBand))}</strong></div>
+        <div><span>评分官 B</span><strong>Band ${escapeHtml(formatBand(agreement.examinerB?.overallBand))}</strong></div>
+        <div><span>可能区间</span><strong>${escapeHtml(range)}</strong></div>
+        <div><span>裁决状态</span><strong>${decisionStatus}</strong></div>
+      </div>
+      ${costSummary}
+      ${visual ? `<p class="unified-score-note"><strong>题图事实层：</strong>${visual.sourceVerified ? "已核验" : "参考描述已导入；具体数据准确性仍需人工复核"} · ${escapeHtml(visual.visualType || "unknown")}</p>` : ""}
+      ${result.needsHumanReview ? `<p class="unified-score-warning"><strong>建议人工复核：</strong>${escapeHtml(reviewReasons.join(" · ") || "评分置信度或输入事实需要确认")}</p>` : ""}
+    </section>`;
+  }
+
+  function renderScoreResult(result = {}) {
     latestScoreResult = result;
     if (!latestScoringProgress || latestScoringProgress.status === "running") completeScoringProgress();
     injectScoreStyles();
@@ -3272,6 +3567,7 @@
     const html = `
       ${renderScoringProgressPanel(latestScoringProgress, false)}
       ${renderScoreReportHeader(result, finalBand)}
+      ${renderUnifiedScoringAudit(result)}
       <section class="overall-card overall-card-hero">
         <h4>Overall estimated band</h4>
         <div class="overall-card-main">
@@ -3289,7 +3585,7 @@
         </div>
       </section>
       ${renderFeedbackStatusNotice(result)}
-      ${renderCriterionCards(result)}
+      ${renderCriterionCardsV2(result)}
       ${renderCriterionDifferentiationReview(result)}
       <section class="score-feedback-entry" aria-label="Learning Feedback entry">
         <div>
@@ -4408,12 +4704,21 @@
   }
 
   async function startGrading() {
+    if (activeGradingController) {
+      setGradingStatus("正在取消本次评分……", "loading");
+      activeGradingController.abort();
+      return;
+    }
     if (!selected) { setGradingStatus("请先选择一道题。", "error"); return; }
     const endpoint = String(els.gradingEndpointInput?.value || "").trim();
     if (!endpoint) { setGradingStatus("请先填写批改接口地址。不要把 API key 放在前端网页中。", "error"); return; }
     resetLearningFeedbackForNewGradingRun();
+    const gradingController = new AbortController();
+    activeGradingController = gradingController;
+    const gradingStartedAt = Date.now();
+    let elapsedStatusTimer = null;
     const originalText = els.gradeBtn?.textContent || "开始评分";
-    if (els.gradeBtn) { els.gradeBtn.disabled = true; els.gradeBtn.textContent = "Scoring..."; els.gradeBtn.setAttribute("aria-busy", "true"); }
+    if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = "取消评分"; els.gradeBtn.setAttribute("aria-busy", "true"); }
     if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = true;
     if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = true;
     try {
@@ -4421,31 +4726,47 @@
       latestScoringProgress.status = "running";
       let failureStepIndex = 1;
       updateScoringProgress(0, "done", "文本已提交，后端将进行本地预检与任务分流。");
-      updateScoringProgress(1, "running", "AI 正在生成短 JSON 核心评分：anchor、四项分和 reason codes。");
+      updateScoringProgress(1, "running", "双评分官正在并行生成核心评分；90 秒无返回将自动结束，不会进行第二次长等待。");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      setGradingStatus("第 2 步/6：AI 核心评分。", "loading");
-      const result = await postStage(endpoint, gradingPayload({ mode: "score" }));
+      const refreshElapsedStatus = () => {
+        if (Number(latestScoringProgress?.currentStep || 0) > 2) return;
+        const seconds = Math.max(0, Math.floor((Date.now() - gradingStartedAt) / 1000));
+        setGradingStatus(`第 2 步/6：AI 评分进行中，已等待 ${seconds} 秒；如有分歧会自动进入第三方裁决。`, "loading");
+      };
+      refreshElapsedStatus();
+      elapsedStatusTimer = setInterval(refreshElapsedStatus, 5000);
+      const result = await postStage(endpoint, gradingPayload({ mode: "score" }), { signal: gradingController.signal, timeoutMs: 250000, onProgress: applyCoreStreamProgress });
+      clearInterval(elapsedStatusTimer);
+      elapsedStatusTimer = null;
       latestScoreResult = result;
       syncScoringProgressFromResult(result);
-      markScoreFrozenAndStartCriterionFeedback("核心分数已冻结；现在开始逐项生成四项详细反馈。");
+      markScoreFrozenAndStartCriterionFeedback("核心分数已冻结；现在开始一次批量生成四项详细反馈。");
       failureStepIndex = 5;
       if (els.gradeBtn) els.gradeBtn.textContent = "生成反馈中...";
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoreSkeleton(latestScoringProgress);
-      setGradingStatus("第 6 步/6：核心分数已冻结。正在通过独立接口逐项生成四项详细反馈...", "loading");
-      const resultWithRequiredFeedback = await generateRequiredCriterionFeedback(result);
+      setGradingStatus("第 6 步/6：核心分数已冻结。正在通过独立接口一次批量生成四项详细反馈...", "loading");
+      const resultWithRequiredFeedback = await generateRequiredCriterionFeedback(result, { signal: gradingController.signal });
       latestScoreResult = resultWithRequiredFeedback;
       completeScoringProgress();
       renderScoreResult(resultWithRequiredFeedback);
       appendScoreHistoryToTeacherCloud(resultWithRequiredFeedback);
       navigateToView("score-report");
-      setGradingStatus("批改完成：核心分数已冻结，四项详细反馈已逐项生成；作文生成请使用旁边的单独按钮。", "done");
+      setGradingStatus("批改完成：核心分数已冻结，四项详细反馈已通过一次批量调用生成；作文生成请使用旁边的单独按钮。", "done");
     } catch (error) {
+      if (error?.code === "GRADING_CANCELLED") {
+        latestScoringProgress.status = "cancelled";
+        setGradingStatus(error.message, "");
+        if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, false);
+        return;
+      }
       const failedStep = latestScoringProgress?.currentStep ? Math.max(0, latestScoringProgress.currentStep - 1) : 1;
       updateScoringProgress(failedStep, "error", failedStep >= 5 ? "详细反馈生成失败。" : "评分流程执行失败。", error);
       setGradingStatus(friendlyScoringError(error), "error");
       if (els.gradingResults) els.gradingResults.innerHTML = renderScoringProgressPanel(latestScoringProgress, true);
       navigateToView("score-report");
     } finally {
+      if (elapsedStatusTimer) clearInterval(elapsedStatusTimer);
+      if (activeGradingController === gradingController) activeGradingController = null;
       if (els.gradeBtn) { els.gradeBtn.disabled = false; els.gradeBtn.textContent = originalText; els.gradeBtn.removeAttribute("aria-busy"); }
       if (els.generateRevisionBtn) els.generateRevisionBtn.disabled = false;
       if (els.gradingEndpointInput) els.gradingEndpointInput.disabled = false;
@@ -4470,7 +4791,8 @@
   }
 
   function chooseRandomPrompt(task) {
-    const pool = prompts.filter((p) => p.task === task);
+    const moduleValue = els.moduleFilter?.value || selected?.module || "all";
+    const pool = prompts.filter((p) => p.task === task).filter((p) => moduleValue === "all" || p.module === moduleValue);
     return pool[Math.floor(Math.random() * pool.length)] || null;
   }
 
@@ -4478,7 +4800,7 @@
     const wordCount = countWords(essay);
     const targetWordCount = targetWordsForPrompt(prompt);
     return {
-      ...lockedTaskFields(prompt?.task === "Task 1" ? "Task 1" : "Task 2"),
+      ...lockedTaskFields(prompt?.task === "Task 1" ? "Task 1" : "Task 2", prompt),
       promptId: prompt?.id || "",
       book: prompt?.book || "",
       test: prompt?.test || "",
@@ -4494,6 +4816,9 @@
       task1BulletPoints: prompt?.task === "Task 1" ? extractBulletPointsFromPrompt(prompt?.prompt) : [],
       task2QuestionProfile: prompt?.task === "Task 2" ? buildTask2QuestionProfile(prompt?.prompt) : null,
       task2Instruction: prompt?.task === "Task 2" ? prompt?.prompt || "" : "",
+      visualType: prompt?.visualFacts?.visualType || "",
+      visualFacts: prompt?.visualFacts || null,
+      referenceAnswer: prompt?.referenceAnswer || "",
       essay,
       wordCount,
       actualWordCount: wordCount,
@@ -4679,7 +5004,7 @@
     card.innerHTML = `
       <div class="mock-exam-hero">
         <div>
-          <p class="kicker">IELTS GT Writing Mock Test</p>
+          <p class="kicker">IELTS Writing Mock Test</p>
           <h3>考试模式：Task 1 + Task 2</h3>
           <p class="muted">60 分钟完成两篇作文。Task 1 建议 20 分钟，Task 2 建议 40 分钟；提交后按 Task 2 双倍权重计算模拟 Writing 总分。</p>
         </div>
@@ -4696,7 +5021,7 @@
         </div>
         <div class="mock-exam-grid">
           <div class="mock-task-card">
-            <div class="mock-task-card-head"><h4>Task 1 Letter</h4><span class="tag task1">20 min · 150+ words</span></div>
+            <div class="mock-task-card-head"><h4>Task 1 · Letter / Visual Report</h4><span class="tag task1">20 min · 150+ words</span></div>
             <div id="mockTask1Prompt" class="question-card"></div>
             <textarea id="mockTask1Essay" class="essay" placeholder="Write your Task 1 letter here..."></textarea>
             <p class="wordbox"><strong id="mockTask1Words">0</strong><span>/ 150 words</span></p>
@@ -4743,6 +5068,8 @@
 
   function setActiveView(viewName = "dashboard") {
     const view = SPA_VIEWS.includes(viewName) ? viewName : "dashboard";
+    document.documentElement.dataset.currentView = view;
+    if (view !== "writing") setWritingFocusMode(false);
     document.querySelectorAll("[data-app-view]").forEach((node) => {
       const active = node.dataset.appView === view;
       node.classList.toggle("is-active", active);
@@ -4755,6 +5082,14 @@
     });
     localStorage.setItem(SPA_VIEW_KEY, view);
     syncSpaOutputPanels();
+  }
+
+  function setWritingFocusMode(enabled) {
+    const active = Boolean(enabled);
+    document.body?.classList?.toggle?.("writing-focus-mode", active);
+    if (!els.focusModeBtn) return;
+    els.focusModeBtn.setAttribute?.("aria-pressed", active ? "true" : "false");
+    els.focusModeBtn.textContent = active ? "退出专注" : "专注模式";
   }
 
   function navigateToView(viewName = "dashboard", options = {}) {
@@ -4836,26 +5171,22 @@
 
   function bind() {
     bindSpaNavigation();
-    [els.bookFilter, els.testFilter, els.subtypeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", renderList));
-    els.typeFilter?.addEventListener("change", () => { updateSubtypeFilterOptions(); renderList(); });
-    els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); renderList(); });
-    els.searchInput?.addEventListener("input", renderList);
+    [els.bookFilter, els.testFilter, els.subtypeFilter].filter(Boolean).forEach((el) => el.addEventListener("change", resetPromptListPage));
+    els.moduleFilter?.addEventListener("change", () => { updateTypeFilterOptions(); resetPromptListPage(); });
+    els.typeFilter?.addEventListener("change", () => { updateSubtypeFilterOptions(); resetPromptListPage(); });
+    els.taskFilter?.addEventListener("change", () => { updateTypeFilterOptions(); resetPromptListPage(); });
+    els.searchInput?.addEventListener("input", resetPromptListPage);
     els.timerBtn?.addEventListener("click", toggleTimer);
     els.resetTimerBtn?.addEventListener("click", () => selected && resetTimer(selected.timeLimit || 40));
     els.essayInput?.addEventListener("input", () => { if (selected) save(selected.id, "essay", els.essayInput.value); updateWords(); });
     els.favoriteInput?.addEventListener("input", () => selected && save(selected.id, "favorites", els.favoriteInput.value));
+    els.focusModeBtn?.addEventListener("click", () => setWritingFocusMode(!document.body?.classList?.contains?.("writing-focus-mode")));
     els.copyBtn?.addEventListener("click", copyEssay);
     els.clearBtn?.addEventListener("click", () => { if (!selected || !els.essayInput) return; els.essayInput.value = ""; save(selected.id, "essay", ""); updateWords(); els.essayInput.focus(); });
     els.gradingEndpointInput?.addEventListener("input", () => localStorage.setItem(GRADING_ENDPOINT_KEY, els.gradingEndpointInput.value.trim()));
     els.gradeBtn?.addEventListener("click", startGrading);
     els.restoreOriginalBtn?.addEventListener("click", () => { if (!selected || !els.essayInput) return; els.essayInput.value = load(selected.id, "essay:original") || els.essayInput.value; updateWords(); });
     els.backBtn?.addEventListener("click", () => document.querySelector(".list-panel")?.scrollIntoView({ behavior: "smooth" }));
-    els.themeBtn?.addEventListener("click", () => {
-      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      localStorage.setItem("ielts-gt-writing-hub:theme", next);
-      els.themeBtn.textContent = next === "dark" ? "浅色模式" : "深色模式";
-    });
   }
 
   function init() {
@@ -4866,17 +5197,16 @@
     bind();
     if (els.gradingEndpointInput) {
       const savedEndpoint = localStorage.getItem(GRADING_ENDPOINT_KEY) || "";
-      const migratedEndpoint = /\/api\/grade-ielts\/?$/i.test(savedEndpoint)
-        ? savedEndpoint.replace(/\/api\/grade-ielts\/?$/i, "/api/grade-ielts-production-router")
+      const migratedEndpoint = /\/api\/grade-ielts(?:-production-router)?\/?$/i.test(savedEndpoint)
+        ? savedEndpoint.replace(/\/api\/grade-ielts(?:-production-router)?\/?$/i, "/api/grade-writing")
         : savedEndpoint;
       els.gradingEndpointInput.value = migratedEndpoint || DEFAULT_GRADING_ENDPOINT;
       if (migratedEndpoint !== savedEndpoint || !savedEndpoint) {
         localStorage.setItem(GRADING_ENDPOINT_KEY, els.gradingEndpointInput.value.trim());
       }
     }
-    const theme = localStorage.getItem("ielts-gt-writing-hub:theme") || "light";
-    document.documentElement.dataset.theme = theme;
-    if (els.themeBtn) els.themeBtn.textContent = theme === "dark" ? "浅色模式" : "深色模式";
+    document.documentElement.dataset.theme = "light";
+    localStorage.setItem("ielts-gt-writing-hub:theme", "light");
     renderList();
     const fromHash = location.hash.replace("#", "");
     const viewFromHash = normalizeSpaView(location.hash);

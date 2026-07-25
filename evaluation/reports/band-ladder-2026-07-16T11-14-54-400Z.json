@@ -1,0 +1,3031 @@
+{
+  "generatedAt": "2026-07-16T11:14:54.400Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "filters": {
+    "split": "all",
+    "bands": [
+      0
+    ],
+    "ids": [],
+    "runs": 1,
+    "concurrency": 4
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 6,
+        "max": 12,
+        "mean": 9.2
+      },
+      "1.5": {
+        "min": 16,
+        "max": 30,
+        "mean": 21.6
+      },
+      "2.0": {
+        "min": 23,
+        "max": 31,
+        "mean": 26.4
+      },
+      "2.5": {
+        "min": 34,
+        "max": 44,
+        "mean": 38.4
+      },
+      "3.0": {
+        "min": 51,
+        "max": 67,
+        "mean": 60.8
+      },
+      "3.5": {
+        "min": 95,
+        "max": 137,
+        "mean": 117.8
+      },
+      "4.0": {
+        "min": 125,
+        "max": 207,
+        "mean": 162
+      },
+      "4.5": {
+        "min": 92,
+        "max": 167,
+        "mean": 130.8
+      },
+      "5.0": {
+        "min": 121,
+        "max": 200,
+        "mean": 156.8
+      },
+      "5.5": {
+        "min": 120,
+        "max": 273,
+        "mean": 207.8
+      },
+      "6.0": {
+        "min": 170,
+        "max": 303,
+        "mean": 243.2
+      },
+      "6.5": {
+        "min": 182,
+        "max": 301,
+        "mean": 236.8
+      },
+      "7.0": {
+        "min": 187,
+        "max": 256,
+        "mean": 224.2
+      },
+      "7.5": {
+        "min": 164,
+        "max": 328,
+        "mean": 261.6
+      },
+      "8.0": {
+        "min": 200,
+        "max": 373,
+        "mean": 294.8
+      },
+      "8.5": {
+        "min": 189,
+        "max": 292,
+        "mean": 248.6
+      },
+      "9.0": {
+        "min": 178,
+        "max": 347,
+        "mean": 269.8
+      }
+    }
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 4,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 14334.75,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 3,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 14522,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 13773,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    }
+  },
+  "zeroOneAccuracy": 1,
+  "byBand": {
+    "0.0": {
+      "records": 4,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 14334.75,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "byTask": {
+    "academic:2": {
+      "records": 2,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 13405.5,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0,
+        0
+      ]
+    },
+    "general_training:1": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 17934,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    },
+    "general_training:2": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 12594,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0
+      ]
+    }
+  },
+  "byZone": {
+    "low_0_3_5": {
+      "records": 4,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 14334.75,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 0,
+      "predictedMean": 0,
+      "predictions": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "expectedRecordCount": false,
+    "noRuntimeErrors": false,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": true,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [
+    {
+      "sampleId": "ladder-b0-1-a1-table",
+      "split": "calibration",
+      "taskKey": "academic:1",
+      "targetOverall": 0,
+      "run": 1,
+      "code": "Error",
+      "message": "A criterion band is missing or invalid.",
+      "durationMs": 5116
+    }
+  ],
+  "records": [
+    {
+      "sampleId": "ladder-b0-2-a2-discussion",
+      "split": "calibration",
+      "taskKey": "academic:2",
+      "targetOverall": 0,
+      "predictedOverall": 0,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "predictedCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "criterionErrors": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "low_0_3_5",
+      "wordCount": 0,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "BOTH_UNIFORM_CRITERIA_AUDIT"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": true,
+      "durationMs": 13038,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 0,
+        "rawAverage": 0,
+        "likelyRange": [
+          0,
+          0.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": true,
+        "humanReviewReasons": [
+          "POSSIBLE_NON_ENGLISH_RESPONSE"
+        ],
+        "criteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "finalCriteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; response is wholly in another language.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate as there is no English response to evaluate.",
+              "fitZh": "",
+              "nextBandGap": "No English language present; does not meet Band 1 requirements of any attempted English.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Entire response is non-English."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "The entire essay is in Chinese, not English, so no task response can be assessed.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; response is wholly in another language.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate as there is no English response to evaluate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English language present; does not meet Band 1 requirements of any attempted English.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Entire response is non-English."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable due to non-English response.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English text to organise.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English language to assess coherence or cohesion.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable due to non-English response.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English text to organise.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English vocabulary to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English vocabulary present."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English words to assess.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English vocabulary to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English vocabulary present."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English sentences to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English grammar to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English sentence structures present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English sentences to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English grammar to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; response is wholly in another language.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate as there is no English response to evaluate.",
+              "fitZh": "",
+              "nextBandGap": "No English language present; does not meet Band 1 requirements of any attempted English.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Entire response is non-English."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "The entire essay is in Chinese, not English, so no task response can be assessed.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; response is wholly in another language.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate as there is no English response to evaluate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English language present; does not meet Band 1 requirements of any attempted English.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Entire response is non-English."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable due to non-English response.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English text to organise.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English language to assess coherence or cohesion.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable due to non-English response.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English text to organise.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English vocabulary to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English vocabulary present."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English words to assess.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English vocabulary to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English vocabulary present."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate.",
+              "fitZh": "",
+              "nextBandGap": "No English sentences to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English grammar to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "这不是英文回答。",
+                "explanation": "No English sentence structures present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No English sentences to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English grammar to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "overallAssessment": "The response is written entirely in Chinese and contains no assessable English content. Score 0 across all criteria.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "reasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "finalOverallBand": 0
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "academic",
+          "emptyResponse": false,
+          "wordCount": 0,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": true,
+          "severeLengthRisk": true,
+          "paragraphCount": 1,
+          "sentenceCount": 1,
+          "averageSentenceWords": 0,
+          "lexicalDiversity": 0,
+          "paragraphWordCounts": [],
+          "englishLetterRatio": 0,
+          "possibleNonEnglishResponse": true,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 0,
+          "finalBand": 0,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3457,
+              "completion_tokens": 750,
+              "total_tokens": 4207,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3457
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3458,
+              "completion_tokens": 794,
+              "total_tokens": 4252,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3458
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 6059,
+              "completion_tokens": 1097,
+              "total_tokens": 7156,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 307
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 6059
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 13037
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "ladder-b0-3-g1-complaint",
+      "split": "calibration",
+      "taskKey": "general_training:1",
+      "targetOverall": 0,
+      "predictedOverall": 0,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "predictedCriteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "criterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "low_0_3_5",
+      "wordCount": 0,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "BOTH_UNIFORM_CRITERIA_AUDIT"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": true,
+      "durationMs": 17934,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "gt_letter",
+        "overallBand": 0,
+        "rawAverage": 0,
+        "likelyRange": [
+          0,
+          0.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": true,
+        "humanReviewReasons": [
+          "POSSIBLE_NON_ENGLISH_RESPONSE"
+        ],
+        "criteria": {
+          "Task Achievement": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "finalCriteria": {
+          "Task Achievement": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 0,
+            "diagnosis": "No assessable English content; the response is entirely in Arabic and does not attempt the task in English.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate as the response contains no English words and does not attempt the task in English.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires at least isolated English words or a minimal attempt at the task, which is absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Entirely non-English response."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "The sole sentence is Arabic, meaning 'This is not an answer in English.' No English task fulfilment is attempted.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable English content; the response is entirely in Arabic and does not attempt the task in English.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate as the response contains no English words and does not attempt the task in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires at least isolated English words or a minimal attempt at the task, which is absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Entirely non-English response."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English text to evaluate for coherence or cohesion.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 covers responses with no assessable connected message in English.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires some coherent English text, which is absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to evaluate cohesion or progression."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "Only non-English content; no English coherence or cohesion can be assessed.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English text to evaluate for coherence or cohesion.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 covers responses with no assessable connected message in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires some coherent English text, which is absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to evaluate cohesion or progression."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English vocabulary present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is for responses with no rateable English vocabulary.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires isolated English words, which are absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English lexical items to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "The entire text is Arabic; no English words are recognizable.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English vocabulary present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is for responses with no rateable English vocabulary.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires isolated English words, which are absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English lexical items to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English sentences to evaluate.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate when no English sentence-level control is assessable.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires some English sentence structures, which are absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English grammatical structures to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "Only non-English text; no English grammar can be evaluated.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English sentences to evaluate.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate when no English sentence-level control is assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires some English sentence structures, which are absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English grammatical structures to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 0,
+            "diagnosis": "No assessable English content; the response is entirely in Arabic and does not attempt the task in English.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate as the response contains no English words and does not attempt the task in English.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires at least isolated English words or a minimal attempt at the task, which is absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Entirely non-English response."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "The sole sentence is Arabic, meaning 'This is not an answer in English.' No English task fulfilment is attempted.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable English content; the response is entirely in Arabic and does not attempt the task in English.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate as the response contains no English words and does not attempt the task in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires at least isolated English words or a minimal attempt at the task, which is absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Entirely non-English response."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English text to evaluate for coherence or cohesion.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 covers responses with no assessable connected message in English.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires some coherent English text, which is absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to evaluate cohesion or progression."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "Only non-English content; no English coherence or cohesion can be assessed.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English text to evaluate for coherence or cohesion.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 covers responses with no assessable connected message in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires some coherent English text, which is absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to evaluate cohesion or progression."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English vocabulary present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is for responses with no rateable English vocabulary.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires isolated English words, which are absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English lexical items to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "The entire text is Arabic; no English words are recognizable.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English vocabulary present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is for responses with no rateable English vocabulary.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires isolated English words, which are absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English lexical items to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English sentences to evaluate.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0 is appropriate when no English sentence-level control is assessable.",
+              "fitZh": "",
+              "nextBandGap": "Band 1 requires some English sentence structures, which are absent.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English grammatical structures to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "هذه ليست إجابة باللغة الإنجليزية.",
+                "explanation": "Only non-English text; no English grammar can be evaluated.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English sentences to evaluate.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0 is appropriate when no English sentence-level control is assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 1 requires some English sentence structures, which are absent.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English grammatical structures to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "overallAssessment": "The response is written entirely in Arabic and cannot be assessed for English writing proficiency. All criteria receive Band 0.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 0,
+          "differingCriteria": 0,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "reasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": false,
+            "criteria": {
+              "Task Achievement": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": false,
+            "criteria": {
+              "Task Achievement": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "finalOverallBand": 0
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "gt_letter",
+          "examModule": "general_training",
+          "emptyResponse": false,
+          "wordCount": 0,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": true,
+          "severeLengthRisk": true,
+          "paragraphCount": 1,
+          "sentenceCount": 1,
+          "averageSentenceWords": 0,
+          "lexicalDiversity": 0,
+          "paragraphWordCounts": [],
+          "englishLetterRatio": 0,
+          "possibleNonEnglishResponse": true,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 0,
+          "finalBand": 0,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3497,
+              "completion_tokens": 849,
+              "total_tokens": 4346,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3497
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3498,
+              "completion_tokens": 869,
+              "total_tokens": 4367,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3498
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 6390,
+              "completion_tokens": 1578,
+              "total_tokens": 7968,
+              "prompt_tokens_details": {
+                "cached_tokens": 512
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 602
+              },
+              "prompt_cache_hit_tokens": 512,
+              "prompt_cache_miss_tokens": 5878
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 17934
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "ladder-b0-4-g2-problem",
+      "split": "calibration",
+      "taskKey": "general_training:2",
+      "targetOverall": 0,
+      "predictedOverall": 0,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "predictedCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "criterionErrors": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "low_0_3_5",
+      "wordCount": 0,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "OVERALL_DELTA_GT_0_5",
+        "CRITERION_DELTA_GTE_1",
+        "ANY_CRITERION_DISAGREEMENT",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "BOTH_UNIFORM_CRITERIA_AUDIT"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": true,
+      "durationMs": 12594,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 0,
+        "rawAverage": 0,
+        "likelyRange": [
+          0,
+          1.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": true,
+        "humanReviewReasons": [
+          "POSSIBLE_NON_ENGLISH_RESPONSE"
+        ],
+        "criteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "finalCriteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; the task is not addressed.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no task fulfillment."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No English text is present; the response does not attempt the task.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; the task is not addressed.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no task fulfillment."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no connected message present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No sentences or clauses to evaluate.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no connected message present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no vocabulary present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No words or phrases are present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no vocabulary present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no sentence-level control present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no grammar to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No sentences or clauses exist.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no sentence-level control present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no grammar to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable attempt; the task is not addressed.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no task fulfillment."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No English text is present; the response does not attempt the task.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable attempt; the task is not addressed.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no task fulfillment."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no connected message present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No sentences or clauses to evaluate.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no connected message present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no coherence or cohesion can be assessed."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no vocabulary present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No words or phrases are present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no vocabulary present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no lexical items to evaluate."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no sentence-level control present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "No response to assess",
+              "fitZh": "",
+              "nextBandGap": "No attempt made",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "Empty response; no grammar to assess."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "........",
+                "explanation": "No sentences or clauses exist.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no sentence-level control present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "No response to assess",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "No attempt made",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Empty response; no grammar to assess."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "overallAssessment": "The candidate provided no text; the submission is an empty string. All criteria score Band 0 as no assessable attempt is made.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 1,
+          "criterionDeltas": {
+            "Task Response": 1,
+            "Coherence and Cohesion": 1,
+            "Lexical Resource": 1,
+            "Grammatical Range and Accuracy": 1
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 4,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 0,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 1,
+              "Coherence and Cohesion": 1,
+              "Lexical Resource": 1,
+              "Grammatical Range and Accuracy": 1
+            },
+            "overallBand": 1,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "finalOverallBand": 0
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "general_training",
+          "emptyResponse": false,
+          "wordCount": 0,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": true,
+          "severeLengthRisk": true,
+          "paragraphCount": 1,
+          "sentenceCount": 0,
+          "averageSentenceWords": 0,
+          "lexicalDiversity": 0,
+          "paragraphWordCounts": [],
+          "englishLetterRatio": 0,
+          "possibleNonEnglishResponse": true,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 0,
+          "finalBand": 0,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3446,
+              "completion_tokens": 581,
+              "total_tokens": 4027,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3446
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3447,
+              "completion_tokens": 821,
+              "total_tokens": 4268,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 3447
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5994,
+              "completion_tokens": 1027,
+              "total_tokens": 7021,
+              "prompt_tokens_details": {
+                "cached_tokens": 512
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 221
+              },
+              "prompt_cache_hit_tokens": 512,
+              "prompt_cache_miss_tokens": 5482
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 12592
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    },
+    {
+      "sampleId": "ladder-b0-5-a2-opinion",
+      "split": "holdout",
+      "taskKey": "academic:2",
+      "targetOverall": 0,
+      "predictedOverall": 0,
+      "overallError": 0,
+      "targetCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "predictedCriteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "criterionErrors": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "low_0_3_5",
+      "wordCount": 0,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "OVERALL_DELTA_GT_0_5",
+        "CRITERION_DELTA_GTE_1",
+        "ANY_CRITERION_DISAGREEMENT",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "BOTH_UNIFORM_CRITERIA_AUDIT"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": true,
+      "durationMs": 13773,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 0,
+        "rawAverage": 0,
+        "likelyRange": [
+          0,
+          1.5
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": true,
+        "humanReviewReasons": [
+          "POSSIBLE_NON_ENGLISH_RESPONSE"
+        ],
+        "criteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "finalCriteria": {
+          "Task Response": 0,
+          "Coherence and Cohesion": 0,
+          "Lexical Resource": 0,
+          "Grammatical Range and Accuracy": 0
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable English response; the essay is written wholly in another language.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: no assessable attempt to address the task in English.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; there is no English language to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "The entire response is in Japanese, not English."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "The only text is Japanese; no English is present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable English response; the essay is written wholly in another language.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: no assessable attempt to address the task in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; there is no English language to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "The entire response is in Japanese, not English."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no connected English message is present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to assess organisation or progression."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English sentences or linking present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no connected English message is present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to assess organisation or progression."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no usable English vocabulary.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English words used."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English lexical resource present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no usable English vocabulary.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English words used."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English sentence structures.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to analyse."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English grammatical forms used.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English sentence structures.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to analyse."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 0,
+            "diagnosis": "No assessable English response; the essay is written wholly in another language.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: no assessable attempt to address the task in English.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable; there is no English language to evaluate.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "The entire response is in Japanese, not English."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "The only text is Japanese; no English is present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "No assessable English response; the essay is written wholly in another language.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: no assessable attempt to address the task in English.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable; there is no English language to evaluate.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "The entire response is in Japanese, not English."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Coherence and Cohesion": {
+            "band": 0,
+            "diagnosis": "Not assessable; no connected English message is present.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to assess organisation or progression."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English sentences or linking present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no connected English message is present.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to assess organisation or progression."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Lexical Resource": {
+            "band": 0,
+            "diagnosis": "Not assessable; no usable English vocabulary.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English words used."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English lexical resource present.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no usable English vocabulary.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English words used."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 0,
+            "diagnosis": "Not assessable; no English sentence structures.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Band 0: not assessable.",
+              "fitZh": "",
+              "nextBandGap": "Not applicable.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [],
+            "strengthsZh": [],
+            "constraints": [
+              "No English text to analyse."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "回答は日本語だけです。",
+                "explanation": "No English grammatical forms used.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Not assessable; no English sentence structures.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Band 0: not assessable.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Not applicable.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No English text to analyse."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 1
+          }
+        },
+        "overallAssessment": "The response consists entirely of Japanese text with no English content. All four criteria receive Band 0, as no assessable English language is present. Band 1 (as given by one examiner) is too high because not even isolated English words or phrases appear.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 1,
+          "criterionDeltas": {
+            "Task Response": 1,
+            "Coherence and Cohesion": 1,
+            "Lexical Resource": 1,
+            "Grammatical Range and Accuracy": 1
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 4,
+          "examinerAUniform": true,
+          "examinerBUniform": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 1,
+              "Coherence and Cohesion": 1,
+              "Lexical Resource": 1,
+              "Grammatical Range and Accuracy": 1
+            },
+            "overallBand": 1,
+            "confidence": 1,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": false,
+            "criteria": {
+              "Task Response": 0,
+              "Coherence and Cohesion": 0,
+              "Lexical Resource": 0,
+              "Grammatical Range and Accuracy": 0
+            },
+            "overallBand": 0,
+            "confidence": 1,
+            "evidenceCount": 0,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "decision": "independent_reassessment",
+          "finalCriteria": {
+            "Task Response": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "finalOverallBand": 0
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "academic",
+          "emptyResponse": false,
+          "wordCount": 0,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": true,
+          "severeLengthRisk": true,
+          "paragraphCount": 1,
+          "sentenceCount": 1,
+          "averageSentenceWords": 0,
+          "lexicalDiversity": 0,
+          "paragraphWordCounts": [],
+          "englishLetterRatio": 0,
+          "possibleNonEnglishResponse": true,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_double_examiner_with_conditional_adjudication",
+          "formula": "The selected or adjudicated four criterion bands are averaged equally and rounded to the nearest half band. Examiner results are never averaged together.",
+          "rawAverage": 0,
+          "finalBand": 0,
+          "source": "independent-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "ANY_CRITERION_DISAGREEMENT",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "BOTH_UNIFORM_CRITERIA_AUDIT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-double-examiner-v5-compact-score-then-feedback",
+        "scoreSystemVersion": "unified-writing-core-v5",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3459,
+              "completion_tokens": 844,
+              "total_tokens": 4303,
+              "prompt_tokens_details": {
+                "cached_tokens": 512
+              },
+              "prompt_cache_hit_tokens": 512,
+              "prompt_cache_miss_tokens": 2947
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 3460,
+              "completion_tokens": 632,
+              "total_tokens": 4092,
+              "prompt_tokens_details": {
+                "cached_tokens": 512
+              },
+              "prompt_cache_hit_tokens": 512,
+              "prompt_cache_miss_tokens": 2948
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "adjudicator": {
+            "role": "adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 6109,
+              "completion_tokens": 1051,
+              "total_tokens": 7160,
+              "prompt_tokens_details": {
+                "cached_tokens": 1792
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 188
+              },
+              "prompt_cache_hit_tokens": 1792,
+              "prompt_cache_miss_tokens": 4317
+            },
+            "attempt": 1,
+            "requestId": ""
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 13773
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

@@ -1,0 +1,1222 @@
+{
+  "generatedAt": "2026-07-16T14:53:33.866Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b4-1-a1-table"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 1,
+      "criterionMAE": 1,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 1,
+      "criterionMAE": 1,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "5.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 5,
+      "predictedMean": 5,
+      "predictions": [
+        5
+      ]
+    }
+  },
+  "byDesignBand": {
+    "4.0": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 5,
+      "predictedMean": 5,
+      "predictions": [
+        5
+      ]
+    }
+  },
+  "byTask": {
+    "academic:1": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 5,
+      "predictedMean": 5,
+      "predictions": [
+        5
+      ]
+    }
+  },
+  "byZone": {
+    "mid_4_6_5": {
+      "records": 1,
+      "overallMAE": 0,
+      "criterionMAE": 0.25,
+      "withinHalfBandRate": 1,
+      "exactRate": 1,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 80480,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 5,
+      "predictedMean": 5,
+      "predictions": [
+        5
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b4-1-a1-table",
+      "split": "calibration",
+      "taskKey": "academic:1",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 5,
+      "designTargetOverall": 4,
+      "predictedOverall": 5,
+      "overallError": 0,
+      "designOverallError": 1,
+      "targetCriteria": {
+        "Task Achievement": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 4
+      },
+      "designTargetCriteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "predictedCriteria": {
+        "Task Achievement": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "criterionErrors": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 1
+      },
+      "designCriterionErrors": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "zone": "mid_4_6_5",
+      "wordCount": 141,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "THREE_ZONE_AI_PANEL"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": false,
+      "durationMs": 80480,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "academic_visual_report",
+        "overallBand": 5,
+        "rawAverage": 5,
+        "likelyRange": [
+          4,
+          6
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 5,
+          "Coherence and Cohesion": 5,
+          "Lexical Resource": 5,
+          "Grammatical Range and Accuracy": 5
+        },
+        "finalCriteria": {
+          "Task Achievement": 5,
+          "Coherence and Cohesion": 5,
+          "Lexical Resource": 5,
+          "Grammatical Range and Accuracy": 5
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 5,
+            "diagnosis": "The response reports main features (car increase, bus decrease, bicycle stable) and makes a comparison (gap widening), but lacks a clear overview and includes irrelevant personal opinion ('I think car is popular because it is fast. Bus maybe not good now.'), which detracts from task fulfilment.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Main features are present and partially compared, but the overview is vague and embedded, and irrelevant commentary reduces effectiveness. This matches Band 5's 'incomplete or insufficiently developed' and 'overview is present but may be unclear'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the response must present a clear overview statement, avoid any irrelevant opinion, and provide more precise syntheses of the data.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Key data points for both years are reported accurately.",
+              "The widening gap between car and bus is noted."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No explicit overview; the summary is vague and late.",
+              "Irrelevant personal opinions ('I think car is popular because it is fast') are not appropriate for Task 1."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Overall more people use car now and less people use bus. Bicycle not change much.",
+                "explanation": "Attempt at overview but lacks precision and is not clearly separated; 'less people' is imprecise.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "I think car is popular because it is fast. Bus maybe not good now.",
+                "explanation": "Irrelevant speculation not based on data; inappropriate for the task.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response reports main features (car increase, bus decrease, bicycle stable) and makes a comparison (gap widening), but lacks a clear overview and includes irrelevant personal opinion ('I think car is popular because it is fast. Bus maybe not good now.'), which detracts from task fulfilment.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Main features are present and partially compared, but the overview is vague and embedded, and irrelevant commentary reduces effectiveness. This matches Band 5's 'incomplete or insufficiently developed' and 'overview is present but may be unclear'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the response must present a clear overview statement, avoid any irrelevant opinion, and provide more precise syntheses of the data.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Key data points for both years are reported accurately.",
+              "The widening gap between car and bus is noted."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No explicit overview; the summary is vague and late.",
+              "Irrelevant personal opinions ('I think car is popular because it is fast') are not appropriate for Task 1."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 5,
+            "diagnosis": "The response is one paragraph with a simple chronological list (2000 then 2025). There is no logical grouping, no use of referencing or substitution, and the progression is choppy. Cohesive devices are minimal and repetitive.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Organisation is visible (year-by-year order) but not fully logical; sentences are simple and disconnected. This fits Band 5's 'organisation is visible and progression exists, but it is not always logical; overuse, underuse or repetition of cohesive devices'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the response needs clearer overall progression, some paragraphing, and more varied cohesion (e.g., referencing, substitution).",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Basic chronological sequence is maintained.",
+              "Some comparative statements link the two years."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Single paragraph with no logical separation of details and overview.",
+              "Heavy repetition of nouns ('car', 'bus', 'bicycle') without substitution or referencing."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "In 2000 car was 48% and bus 37% and bicycle 15%. In 2025 car is 62% bus is 24% bicycle 14%.",
+                "explanation": "Simple listing with no linking or substitution; shows lack of cohesive variety.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24. Bicycle almost same.",
+                "explanation": "Abrupt sentences with no connectors; ideas are presented as isolated facts.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is one paragraph with a simple chronological list (2000 then 2025). There is no logical grouping, no use of referencing or substitution, and the progression is choppy. Cohesive devices are minimal and repetitive.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Organisation is visible (year-by-year order) but not fully logical; sentences are simple and disconnected. This fits Band 5's 'organisation is visible and progression exists, but it is not always logical; overuse, underuse or repetition of cohesive devices'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the response needs clearer overall progression, some paragraphing, and more varied cohesion (e.g., referencing, substitution).",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Basic chronological sequence is maintained.",
+              "Some comparative statements link the two years."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Single paragraph with no logical separation of details and overview.",
+              "Heavy repetition of nouns ('car', 'bus', 'bicycle') without substitution or referencing."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Lexical Resource": {
+            "band": 5,
+            "diagnosis": "Vocabulary is extremely limited and repetitive. Key nouns are repeated without any paraphrasing. Word formation errors are frequent ('Car increase', 'Bicycle almost same') and there are inappropriate collocations ('less people').",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The range is minimally adequate for basic communication, but errors in word formation and collocation are noticeable and some cause difficulty. This fits Band 5's 'range is minimally adequate and often repetitive; noticeable word-choice, collocation, spelling or formation errors'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, a wider lexical range with some paraphrasing and fewer errors is needed; the repetition of 'car', 'bus', 'bicycle' must be reduced.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Basic vocabulary for describing trends (increase, decrease, highest, lowest) is used."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No attempt at paraphrasing; same nouns repeated throughout.",
+              "Word formation errors: 'Car increase' (verb form), 'Bicycle almost same' (missing verb)."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24.",
+                "explanation": "Incorrect verb form; should be 'increased' and 'decreased'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Overall more people use car now and less people use bus.",
+                "explanation": "'Less people' should be 'fewer people'; shows limited lexical precision.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is extremely limited and repetitive. Key nouns are repeated without any paraphrasing. Word formation errors are frequent ('Car increase', 'Bicycle almost same') and there are inappropriate collocations ('less people').",
+            "whyThisBandZh": "",
+            "whyNotLower": "The range is minimally adequate for basic communication, but errors in word formation and collocation are noticeable and some cause difficulty. This fits Band 5's 'range is minimally adequate and often repetitive; noticeable word-choice, collocation, spelling or formation errors'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, a wider lexical range with some paraphrasing and fewer errors is needed; the repetition of 'car', 'bus', 'bicycle' must be reduced.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Basic vocabulary for describing trends (increase, decrease, highest, lowest) is used."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No attempt at paraphrasing; same nouns repeated throughout.",
+              "Word formation errors: 'Car increase' (verb form), 'Bicycle almost same' (missing verb)."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 5,
+            "diagnosis": "Sentence structures are almost entirely simple. There are frequent errors in subject-verb agreement ('The table show', 'It tell us'), missing verbs and articles ('Bicycle almost same'), and inconsistent tense use. Complex sentences are absent.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Sentence forms are limited to simple sentences; errors in basic grammar are frequent and sometimes cause reading difficulty. This fits Band 5's 'sentence forms are limited; complex attempts are often faulty, simple sentences carry most accuracy, and frequent errors may cause some reading difficulty'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the writer must demonstrate some variety in structure and more consistent control of basic grammar (e.g., subject-verb agreement, tense).",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Simple sentences are generally understandable."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Persistent subject-verb agreement errors ('The table show', 'It tell us').",
+              "Missing auxiliary verbs and articles ('Car increase', 'Bicycle almost same')."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The table show commuting methods in Harton for 2000 and 2025.",
+                "explanation": "Subject-verb agreement error: should be 'shows'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24.",
+                "explanation": "Missing auxiliary verbs; should be 'Car increased' and 'bus decreased'.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Sentence structures are almost entirely simple. There are frequent errors in subject-verb agreement ('The table show', 'It tell us'), missing verbs and articles ('Bicycle almost same'), and inconsistent tense use. Complex sentences are absent.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Sentence forms are limited to simple sentences; errors in basic grammar are frequent and sometimes cause reading difficulty. This fits Band 5's 'sentence forms are limited; complex attempts are often faulty, simple sentences carry most accuracy, and frequent errors may cause some reading difficulty'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the writer must demonstrate some variety in structure and more consistent control of basic grammar (e.g., subject-verb agreement, tense).",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Simple sentences are generally understandable."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Persistent subject-verb agreement errors ('The table show', 'It tell us').",
+              "Missing auxiliary verbs and articles ('Car increase', 'Bicycle almost same')."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 5,
+            "diagnosis": "The response reports main features (car increase, bus decrease, bicycle stable) and makes a comparison (gap widening), but lacks a clear overview and includes irrelevant personal opinion ('I think car is popular because it is fast. Bus maybe not good now.'), which detracts from task fulfilment.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Main features are present and partially compared, but the overview is vague and embedded, and irrelevant commentary reduces effectiveness. This matches Band 5's 'incomplete or insufficiently developed' and 'overview is present but may be unclear'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the response must present a clear overview statement, avoid any irrelevant opinion, and provide more precise syntheses of the data.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Key data points for both years are reported accurately.",
+              "The widening gap between car and bus is noted."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No explicit overview; the summary is vague and late.",
+              "Irrelevant personal opinions ('I think car is popular because it is fast') are not appropriate for Task 1."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Overall more people use car now and less people use bus. Bicycle not change much.",
+                "explanation": "Attempt at overview but lacks precision and is not clearly separated; 'less people' is imprecise.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "I think car is popular because it is fast. Bus maybe not good now.",
+                "explanation": "Irrelevant speculation not based on data; inappropriate for the task.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response reports main features (car increase, bus decrease, bicycle stable) and makes a comparison (gap widening), but lacks a clear overview and includes irrelevant personal opinion ('I think car is popular because it is fast. Bus maybe not good now.'), which detracts from task fulfilment.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Main features are present and partially compared, but the overview is vague and embedded, and irrelevant commentary reduces effectiveness. This matches Band 5's 'incomplete or insufficiently developed' and 'overview is present but may be unclear'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the response must present a clear overview statement, avoid any irrelevant opinion, and provide more precise syntheses of the data.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Key data points for both years are reported accurately.",
+              "The widening gap between car and bus is noted."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No explicit overview; the summary is vague and late.",
+              "Irrelevant personal opinions ('I think car is popular because it is fast') are not appropriate for Task 1."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 5,
+            "diagnosis": "The response is one paragraph with a simple chronological list (2000 then 2025). There is no logical grouping, no use of referencing or substitution, and the progression is choppy. Cohesive devices are minimal and repetitive.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Organisation is visible (year-by-year order) but not fully logical; sentences are simple and disconnected. This fits Band 5's 'organisation is visible and progression exists, but it is not always logical; overuse, underuse or repetition of cohesive devices'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the response needs clearer overall progression, some paragraphing, and more varied cohesion (e.g., referencing, substitution).",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Basic chronological sequence is maintained.",
+              "Some comparative statements link the two years."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Single paragraph with no logical separation of details and overview.",
+              "Heavy repetition of nouns ('car', 'bus', 'bicycle') without substitution or referencing."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "In 2000 car was 48% and bus 37% and bicycle 15%. In 2025 car is 62% bus is 24% bicycle 14%.",
+                "explanation": "Simple listing with no linking or substitution; shows lack of cohesive variety.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24. Bicycle almost same.",
+                "explanation": "Abrupt sentences with no connectors; ideas are presented as isolated facts.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is one paragraph with a simple chronological list (2000 then 2025). There is no logical grouping, no use of referencing or substitution, and the progression is choppy. Cohesive devices are minimal and repetitive.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Organisation is visible (year-by-year order) but not fully logical; sentences are simple and disconnected. This fits Band 5's 'organisation is visible and progression exists, but it is not always logical; overuse, underuse or repetition of cohesive devices'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the response needs clearer overall progression, some paragraphing, and more varied cohesion (e.g., referencing, substitution).",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Basic chronological sequence is maintained.",
+              "Some comparative statements link the two years."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Single paragraph with no logical separation of details and overview.",
+              "Heavy repetition of nouns ('car', 'bus', 'bicycle') without substitution or referencing."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Lexical Resource": {
+            "band": 5,
+            "diagnosis": "Vocabulary is extremely limited and repetitive. Key nouns are repeated without any paraphrasing. Word formation errors are frequent ('Car increase', 'Bicycle almost same') and there are inappropriate collocations ('less people').",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The range is minimally adequate for basic communication, but errors in word formation and collocation are noticeable and some cause difficulty. This fits Band 5's 'range is minimally adequate and often repetitive; noticeable word-choice, collocation, spelling or formation errors'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, a wider lexical range with some paraphrasing and fewer errors is needed; the repetition of 'car', 'bus', 'bicycle' must be reduced.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Basic vocabulary for describing trends (increase, decrease, highest, lowest) is used."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No attempt at paraphrasing; same nouns repeated throughout.",
+              "Word formation errors: 'Car increase' (verb form), 'Bicycle almost same' (missing verb)."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24.",
+                "explanation": "Incorrect verb form; should be 'increased' and 'decreased'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Overall more people use car now and less people use bus.",
+                "explanation": "'Less people' should be 'fewer people'; shows limited lexical precision.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is extremely limited and repetitive. Key nouns are repeated without any paraphrasing. Word formation errors are frequent ('Car increase', 'Bicycle almost same') and there are inappropriate collocations ('less people').",
+            "whyThisBandZh": "",
+            "whyNotLower": "The range is minimally adequate for basic communication, but errors in word formation and collocation are noticeable and some cause difficulty. This fits Band 5's 'range is minimally adequate and often repetitive; noticeable word-choice, collocation, spelling or formation errors'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, a wider lexical range with some paraphrasing and fewer errors is needed; the repetition of 'car', 'bus', 'bicycle' must be reduced.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Basic vocabulary for describing trends (increase, decrease, highest, lowest) is used."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No attempt at paraphrasing; same nouns repeated throughout.",
+              "Word formation errors: 'Car increase' (verb form), 'Bicycle almost same' (missing verb)."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 5,
+            "diagnosis": "Sentence structures are almost entirely simple. There are frequent errors in subject-verb agreement ('The table show', 'It tell us'), missing verbs and articles ('Bicycle almost same'), and inconsistent tense use. Complex sentences are absent.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Sentence forms are limited to simple sentences; errors in basic grammar are frequent and sometimes cause reading difficulty. This fits Band 5's 'sentence forms are limited; complex attempts are often faulty, simple sentences carry most accuracy, and frequent errors may cause some reading difficulty'.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 6, the writer must demonstrate some variety in structure and more consistent control of basic grammar (e.g., subject-verb agreement, tense).",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Simple sentences are generally understandable."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Persistent subject-verb agreement errors ('The table show', 'It tell us').",
+              "Missing auxiliary verbs and articles ('Car increase', 'Bicycle almost same')."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The table show commuting methods in Harton for 2000 and 2025.",
+                "explanation": "Subject-verb agreement error: should be 'shows'.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Car increase from 48 to 62. Bus decrease from 37 to 24.",
+                "explanation": "Missing auxiliary verbs; should be 'Car increased' and 'bus decreased'.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Sentence structures are almost entirely simple. There are frequent errors in subject-verb agreement ('The table show', 'It tell us'), missing verbs and articles ('Bicycle almost same'), and inconsistent tense use. Complex sentences are absent.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Sentence forms are limited to simple sentences; errors in basic grammar are frequent and sometimes cause reading difficulty. This fits Band 5's 'sentence forms are limited; complex attempts are often faulty, simple sentences carry most accuracy, and frequent errors may cause some reading difficulty'.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 6, the writer must demonstrate some variety in structure and more consistent control of basic grammar (e.g., subject-verb agreement, tense).",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Simple sentences are generally understandable."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Persistent subject-verb agreement errors ('The table show', 'It tell us').",
+              "Missing auxiliary verbs and articles ('Car increase', 'Bicycle almost same')."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          }
+        },
+        "overallAssessment": "The response attempts the task but includes irrelevant personal opinion and lacks a clear overview. Organisation is a single paragraph with repetitive listing, vocabulary is very limited with errors, and grammar is simple with frequent mistakes. All criteria fit Band 5, as the response shows the characteristic limitations of that level without any strengths strong enough to push it to Band 6.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0.5,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0,
+            "Lexical Resource": 1,
+            "Grammatical Range and Accuracy": 1
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 2,
+          "examinerAUniform": true,
+          "examinerBUniform": false,
+          "observations": [
+            "ANY_CRITERION_DISAGREEMENT"
+          ],
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 5,
+              "Coherence and Cohesion": 5,
+              "Lexical Resource": 5,
+              "Grammatical Range and Accuracy": 5
+            },
+            "overallBand": 5,
+            "confidence": 0.85,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Grammatical Range and Accuracy",
+              "weakest": "Task Achievement",
+              "comparison": "Task Achievement is weakest because the response adds an irrelevant personal opinion and lacks a clear overview; Grammatical Range and Accuracy is strongest because despite frequent errors, simple structures are produced with some accuracy and meaning is generally clear.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": false,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 5,
+              "Coherence and Cohesion": 5,
+              "Lexical Resource": 4,
+              "Grammatical Range and Accuracy": 4
+            },
+            "overallBand": 4.5,
+            "confidence": 0.8,
+            "evidenceCount": 8,
+            "evidenceComplete": true,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Lexical Resource",
+              "comparison": "Task Achievement covers main features and a comparison, but lacks an explicit overview sentence and includes irrelevant opinion. Coherence and Cohesion is limited by single paragraph and weak progression. Lexical Resource and Grammatical Range and Accuracy show heavy repetition and frequent errors.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "low",
+            "reason": "AI_PANEL_AT_OR_BELOW_LOW_MID_BOUNDARY",
+            "lower": 4.5,
+            "upper": 5
+          },
+          "specialist": {
+            "examinerId": "low-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 6,
+              "Coherence and Cohesion": 5,
+              "Lexical Resource": 5,
+              "Grammatical Range and Accuracy": 5
+            },
+            "overallBand": 5.5,
+            "confidence": 0.8,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Task Achievement shows clear selection of major features and comparisons, while Grammatical Range and Accuracy is limited with frequent basic errors. Coherence and Lexical Resource sit between.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-meta-adjudicator",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "THREE_ZONE_AI_PANEL"
+          ],
+          "decision": "three_zone_independent_meta_reassessment",
+          "specialistZone": "low",
+          "specialistCriteria": {
+            "Task Achievement": 6,
+            "Coherence and Cohesion": 5,
+            "Lexical Resource": 5,
+            "Grammatical Range and Accuracy": 5
+          },
+          "specialistOverallBand": 5.5,
+          "finalCriteria": {
+            "Task Achievement": 5,
+            "Coherence and Cohesion": 5,
+            "Lexical Resource": 5,
+            "Grammatical Range and Accuracy": 5
+          },
+          "finalOverallBand": 5
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "academic_visual_report",
+          "examModule": "academic",
+          "emptyResponse": false,
+          "wordCount": 141,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": true,
+          "severeLengthRisk": false,
+          "paragraphCount": 1,
+          "sentenceCount": 20,
+          "averageSentenceWords": 7,
+          "lexicalDiversity": 0.468,
+          "paragraphWordCounts": [
+            141
+          ],
+          "englishLetterRatio": 0.844,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.441,
+          "visualFactsAvailable": true,
+          "visualFactsSourceVerified": true
+        },
+        "visualFactsAudit": {
+          "available": true,
+          "sourceVerified": true,
+          "visualType": "table",
+          "humanReviewRequiredForDataAccuracy": false
+        },
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "conditional_three_zone_ai_specialist_with_meta_adjudication",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 5,
+          "finalBand": 5,
+          "source": "three-zone-ai-meta-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "three_zone_independent_meta_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-three-zone-ai-panel-v6-1-criterion-contrast",
+        "scoreSystemVersion": "unified-writing-core-v6.2-conditional-three-zone",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4268,
+              "completion_tokens": 2319,
+              "total_tokens": 6587,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 684
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4269,
+              "completion_tokens": 1598,
+              "total_tokens": 5867,
+              "prompt_tokens_details": {
+                "cached_tokens": 3584
+              },
+              "prompt_cache_hit_tokens": 3584,
+              "prompt_cache_miss_tokens": 685
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "low_specialist",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4800,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4330,
+              "completion_tokens": 1697,
+              "total_tokens": 6027,
+              "prompt_tokens_details": {
+                "cached_tokens": 3712
+              },
+              "prompt_cache_hit_tokens": 3712,
+              "prompt_cache_miss_tokens": 618
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": {
+            "role": "meta_adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 8696,
+              "completion_tokens": 3254,
+              "total_tokens": 11950,
+              "prompt_tokens_details": {
+                "cached_tokens": 3840
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 1260
+              },
+              "prompt_cache_hit_tokens": 3840,
+              "prompt_cache_miss_tokens": 4856
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 80478,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": true,
+            "coreModelCalls": 4,
+            "avoidedModelCalls": 0,
+            "coreTotalTokens": 30431
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

@@ -1,0 +1,1342 @@
+{
+  "generatedAt": "2026-07-17T04:31:50.670Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b9-5-a1-process"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 1.875,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    },
+    "calibration": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 1.875,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 9,
+      "predictedMean": 7,
+      "predictions": [
+        7
+      ]
+    }
+  },
+  "byDesignBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 9,
+      "predictedMean": 7,
+      "predictions": [
+        7
+      ]
+    }
+  },
+  "byTask": {
+    "academic:1": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 9,
+      "predictedMean": 7,
+      "predictions": [
+        7
+      ]
+    }
+  },
+  "byZone": {
+    "high_7_9": {
+      "records": 1,
+      "overallMAE": 2,
+      "criterionMAE": 2,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 1,
+      "meanDurationMs": 98945,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 1,
+      "targetMean": 9,
+      "predictedMean": 7,
+      "predictions": [
+        7
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": false,
+    "criterionMAE": false,
+    "withinHalfBandRate": false,
+    "catastrophicErrorRate": false,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": false,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b9-5-a1-process",
+      "split": "holdout",
+      "taskKey": "academic:1",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 9,
+      "designTargetOverall": 9,
+      "predictedOverall": 7,
+      "overallError": 2,
+      "designOverallError": 2,
+      "targetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "designTargetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 8.5,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "predictedCriteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "criterionErrors": {
+        "Task Achievement": 2,
+        "Coherence and Cohesion": 2,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 2
+      },
+      "designCriterionErrors": {
+        "Task Achievement": 2,
+        "Coherence and Cohesion": 1.5,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 2
+      },
+      "zone": "high_7_9",
+      "wordCount": 195,
+      "confidence": 0.8,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+        "THREE_ZONE_AI_PANEL"
+      ],
+      "uniformFinalCriteria": true,
+      "needsHumanReview": false,
+      "durationMs": 98945,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "academic",
+        "module": "Academic",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "academic_visual_report",
+        "overallBand": 7,
+        "rawAverage": 7,
+        "likelyRange": [
+          6,
+          7.5
+        ],
+        "confidence": "medium",
+        "confidenceScore": 0.8,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "finalCriteria": {
+          "Task Achievement": 7,
+          "Coherence and Cohesion": 7,
+          "Lexical Resource": 7,
+          "Grammatical Range and Accuracy": 7
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 7,
+            "diagnosis": "All main stages are described clearly with a strong overview identifying the cyclical nature and seven phases.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response covers all task requirements with a clear overview and logical description of each stage, matching Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Lacks comparisons between stages and more skilful selection/extension of features, which would be needed for Band 8.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear overview stating cyclical closed-loop system with seven phases",
+              "Accurate and logical description of all stages in sequence"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No explicit comparisons, though they are optional for this process diagram",
+              "Description is straightforward without deeper synthesis"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Overall, the procedure is a closed-loop system comprising seven distinct phases, commencing with the gathering of discarded glass and culminating in the distribution of the freshly manufactured products",
+                "explanation": "Provides a clear overview of the cyclical process and number of stages.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The initial stages are concerned with the collection and preparation of the raw material.",
+                "explanation": "Groups collection, sorting, washing as preparation, showing some synthesis.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Task coverage is complete but lacks the skilful selection and extension (e.g., comparisons) required for Band 8 or above.",
+              "band9PositiveEvidence": "Accurate overview and logical stage order.",
+              "band9BlockingPattern": "No comparisons or deeper grouping of stages beyond simple sequential description."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All main stages are described clearly with a strong overview identifying the cyclical nature and seven phases.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response covers all task requirements with a clear overview and logical description of each stage, matching Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Lacks comparisons between stages and more skilful selection/extension of features, which would be needed for Band 8.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear overview stating cyclical closed-loop system with seven phases",
+              "Accurate and logical description of all stages in sequence"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No explicit comparisons, though they are optional for this process diagram",
+              "Description is straightforward without deeper synthesis"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Clear overall progression with logical ordering of stages; cohesive devices are functional but slightly mechanical.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response has a clear macro-structure and logical flow, fitting Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Cohesion could be more subtle and varied; current use of 'First', 'Upon arrival', 'Following this' is somewhat formulaic.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear paragraphing with topic sentences (e.g., 'The initial stages are concerned with...')",
+              "Logical sequencing from collection to distribution"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Cohesive devices are fairly simple and repetitive (e.g., 'then', 'subsequently')",
+              "Limited use of referencing or substitution to vary flow"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "First, used glass bottles are accumulated from designated recycling points and transported to a treatment facility.",
+                "explanation": "Clear sequential marker starting the process.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Following this cleansing phase, the prepared glass is fed into a crushing machine",
+                "explanation": "Effective transition using 'Following this'.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Organisation is clear but lacks the effortless flow and sophisticated cohesion of Band 9; signposting is explicit and mechanical.",
+              "band9PositiveEvidence": "Easy to follow logical progression.",
+              "band9BlockingPattern": "Mechanical use of simple connectors; no varied or subtle cohesion strategies."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Clear overall progression with logical ordering of stages; cohesive devices are functional but slightly mechanical.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response has a clear macro-structure and logical flow, fitting Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Cohesion could be more subtle and varied; current use of 'First', 'Upon arrival', 'Following this' is somewhat formulaic.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear paragraphing with topic sentences (e.g., 'The initial stages are concerned with...')",
+              "Logical sequencing from collection to distribution"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Cohesive devices are fairly simple and repetitive (e.g., 'then', 'subsequently')",
+              "Limited use of referencing or substitution to vary flow"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Adequate range with some less common items (e.g., 'delineates', 'cullet', 'viscous liquid', 'perpetual loop') used accurately. No errors.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Vocabulary is appropriate and shows awareness of less common items, matching Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Resource is not wide enough for Band 8; lacks idiomatic or natural fluency, and some phrasing is formal.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Accurate use of technical terms: 'cullet', 'contaminants'",
+              "Good synonyms for recycling process: 'reclaimed', 'transformed'"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Slight over-formality ('freshly manufactured products', 'perpetual loop')",
+              "Range is solid but not extensive; lacks more varied, natural collocations"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The provided diagram delineates the cyclical process by which used glass containers are reclaimed and transformed into new bottles.",
+                "explanation": "Effective use of 'delineates', 'cyclical process', 'reclaimed' shows lexical range.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This cullet is then transferred to a high-temperature furnace where it is melted into a viscous liquid.",
+                "explanation": "Precise vocabulary: 'cullet' and 'viscous liquid' demonstrate technical accuracy.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Vocabulary is accurate but not wide or flexible enough for Band 8/9; lacks the natural precision and idiomatic control.",
+              "band9PositiveEvidence": "No lexical errors and some good collocations.",
+              "band9BlockingPattern": "Limited range of less common items; response uses standard academic vocabulary without exceptional breadth."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Adequate range with some less common items (e.g., 'delineates', 'cullet', 'viscous liquid', 'perpetual loop') used accurately. No errors.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Vocabulary is appropriate and shows awareness of less common items, matching Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Resource is not wide enough for Band 8; lacks idiomatic or natural fluency, and some phrasing is formal.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Accurate use of technical terms: 'cullet', 'contaminants'",
+              "Good synonyms for recycling process: 'reclaimed', 'transformed'"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Slight over-formality ('freshly manufactured products', 'perpetual loop')",
+              "Range is solid but not extensive; lacks more varied, natural collocations"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A mix of simple and complex structures (passive voice, relative clauses, infinitives) with good control. Errors are rare/nonexistent.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Variety of structures with frequent error-free sentences fits Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Range is not especially wide; no advanced structures like inversion or conditionals, and sentence patterns are somewhat repetitive.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Good control of passive voice appropriate for process description",
+              "Accurate relative clauses ('which reduces it', 'where it is melted')"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited variety in sentence openings (mostly subject-first passive)",
+              "No use of more complex structures (inversion, conditional, non-finite clauses beyond simple ones)"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Upon arrival, they undergo a sorting process, where contaminants such as ceramics, metals, and coloured glass are removed to ensure the purity of the subsequent batch.",
+                "explanation": "Complex sentence with relative clause and infinitive of purpose, well controlled.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The molten glass is subsequently used in moulding machinery to form brand-new bottles, which are finally packaged and distributed to retailers and consumers, thus completing the perpetual loop.",
+                "explanation": "Complex sentence with relative clause and participial ending, demonstrating range.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Grammatical range is adequate but not wide enough for Band 8; lacks full flexibility and variety.",
+              "band9PositiveEvidence": "Error-free sentences and good control of complex forms.",
+              "band9BlockingPattern": "Limited structural variety; heavy reliance on passive and simple relative clauses."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A mix of simple and complex structures (passive voice, relative clauses, infinitives) with good control. Errors are rare/nonexistent.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Variety of structures with frequent error-free sentences fits Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Range is not especially wide; no advanced structures like inversion or conditionals, and sentence patterns are somewhat repetitive.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Good control of passive voice appropriate for process description",
+              "Accurate relative clauses ('which reduces it', 'where it is melted')"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited variety in sentence openings (mostly subject-first passive)",
+              "No use of more complex structures (inversion, conditional, non-finite clauses beyond simple ones)"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 7,
+            "diagnosis": "All main stages are described clearly with a strong overview identifying the cyclical nature and seven phases.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response covers all task requirements with a clear overview and logical description of each stage, matching Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Lacks comparisons between stages and more skilful selection/extension of features, which would be needed for Band 8.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear overview stating cyclical closed-loop system with seven phases",
+              "Accurate and logical description of all stages in sequence"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "No explicit comparisons, though they are optional for this process diagram",
+              "Description is straightforward without deeper synthesis"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Overall, the procedure is a closed-loop system comprising seven distinct phases, commencing with the gathering of discarded glass and culminating in the distribution of the freshly manufactured products",
+                "explanation": "Provides a clear overview of the cyclical process and number of stages.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The initial stages are concerned with the collection and preparation of the raw material.",
+                "explanation": "Groups collection, sorting, washing as preparation, showing some synthesis.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Task coverage is complete but lacks the skilful selection and extension (e.g., comparisons) required for Band 8 or above.",
+              "band9PositiveEvidence": "Accurate overview and logical stage order.",
+              "band9BlockingPattern": "No comparisons or deeper grouping of stages beyond simple sequential description."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All main stages are described clearly with a strong overview identifying the cyclical nature and seven phases.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response covers all task requirements with a clear overview and logical description of each stage, matching Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Lacks comparisons between stages and more skilful selection/extension of features, which would be needed for Band 8.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear overview stating cyclical closed-loop system with seven phases",
+              "Accurate and logical description of all stages in sequence"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "No explicit comparisons, though they are optional for this process diagram",
+              "Description is straightforward without deeper synthesis"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Coherence and Cohesion": {
+            "band": 7,
+            "diagnosis": "Clear overall progression with logical ordering of stages; cohesive devices are functional but slightly mechanical.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response has a clear macro-structure and logical flow, fitting Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Cohesion could be more subtle and varied; current use of 'First', 'Upon arrival', 'Following this' is somewhat formulaic.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear paragraphing with topic sentences (e.g., 'The initial stages are concerned with...')",
+              "Logical sequencing from collection to distribution"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Cohesive devices are fairly simple and repetitive (e.g., 'then', 'subsequently')",
+              "Limited use of referencing or substitution to vary flow"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "First, used glass bottles are accumulated from designated recycling points and transported to a treatment facility.",
+                "explanation": "Clear sequential marker starting the process.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "Following this cleansing phase, the prepared glass is fed into a crushing machine",
+                "explanation": "Effective transition using 'Following this'.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Organisation is clear but lacks the effortless flow and sophisticated cohesion of Band 9; signposting is explicit and mechanical.",
+              "band9PositiveEvidence": "Easy to follow logical progression.",
+              "band9BlockingPattern": "Mechanical use of simple connectors; no varied or subtle cohesion strategies."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Clear overall progression with logical ordering of stages; cohesive devices are functional but slightly mechanical.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response has a clear macro-structure and logical flow, fitting Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Cohesion could be more subtle and varied; current use of 'First', 'Upon arrival', 'Following this' is somewhat formulaic.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear paragraphing with topic sentences (e.g., 'The initial stages are concerned with...')",
+              "Logical sequencing from collection to distribution"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Cohesive devices are fairly simple and repetitive (e.g., 'then', 'subsequently')",
+              "Limited use of referencing or substitution to vary flow"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Lexical Resource": {
+            "band": 7,
+            "diagnosis": "Adequate range with some less common items (e.g., 'delineates', 'cullet', 'viscous liquid', 'perpetual loop') used accurately. No errors.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Vocabulary is appropriate and shows awareness of less common items, matching Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Resource is not wide enough for Band 8; lacks idiomatic or natural fluency, and some phrasing is formal.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Accurate use of technical terms: 'cullet', 'contaminants'",
+              "Good synonyms for recycling process: 'reclaimed', 'transformed'"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Slight over-formality ('freshly manufactured products', 'perpetual loop')",
+              "Range is solid but not extensive; lacks more varied, natural collocations"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The provided diagram delineates the cyclical process by which used glass containers are reclaimed and transformed into new bottles.",
+                "explanation": "Effective use of 'delineates', 'cyclical process', 'reclaimed' shows lexical range.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This cullet is then transferred to a high-temperature furnace where it is melted into a viscous liquid.",
+                "explanation": "Precise vocabulary: 'cullet' and 'viscous liquid' demonstrate technical accuracy.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Vocabulary is accurate but not wide or flexible enough for Band 8/9; lacks the natural precision and idiomatic control.",
+              "band9PositiveEvidence": "No lexical errors and some good collocations.",
+              "band9BlockingPattern": "Limited range of less common items; response uses standard academic vocabulary without exceptional breadth."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Adequate range with some less common items (e.g., 'delineates', 'cullet', 'viscous liquid', 'perpetual loop') used accurately. No errors.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Vocabulary is appropriate and shows awareness of less common items, matching Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Resource is not wide enough for Band 8; lacks idiomatic or natural fluency, and some phrasing is formal.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Accurate use of technical terms: 'cullet', 'contaminants'",
+              "Good synonyms for recycling process: 'reclaimed', 'transformed'"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Slight over-formality ('freshly manufactured products', 'perpetual loop')",
+              "Range is solid but not extensive; lacks more varied, natural collocations"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 7,
+            "diagnosis": "A mix of simple and complex structures (passive voice, relative clauses, infinitives) with good control. Errors are rare/nonexistent.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "Variety of structures with frequent error-free sentences fits Band 7.",
+              "fitZh": "",
+              "nextBandGap": "Range is not especially wide; no advanced structures like inversion or conditionals, and sentence patterns are somewhat repetitive.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Good control of passive voice appropriate for process description",
+              "Accurate relative clauses ('which reduces it', 'where it is melted')"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Limited variety in sentence openings (mostly subject-first passive)",
+              "No use of more complex structures (inversion, conditional, non-finite clauses beyond simple ones)"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "Upon arrival, they undergo a sorting process, where contaminants such as ceramics, metals, and coloured glass are removed to ensure the purity of the subsequent batch.",
+                "explanation": "Complex sentence with relative clause and infinitive of purpose, well controlled.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The molten glass is subsequently used in moulding machinery to form brand-new bottles, which are finally packaged and distributed to retailers and consumers, thus completing the perpetual loop.",
+                "explanation": "Complex sentence with relative clause and participial ending, demonstrating range.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Grammatical range is adequate but not wide enough for Band 8; lacks full flexibility and variety.",
+              "band9PositiveEvidence": "Error-free sentences and good control of complex forms.",
+              "band9BlockingPattern": "Limited structural variety; heavy reliance on passive and simple relative clauses."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A mix of simple and complex structures (passive voice, relative clauses, infinitives) with good control. Errors are rare/nonexistent.",
+            "whyThisBandZh": "",
+            "whyNotLower": "Variety of structures with frequent error-free sentences fits Band 7.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Range is not especially wide; no advanced structures like inversion or conditionals, and sentence patterns are somewhat repetitive.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Good control of passive voice appropriate for process description",
+              "Accurate relative clauses ('which reduces it', 'where it is melted')"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Limited variety in sentence openings (mostly subject-first passive)",
+              "No use of more complex structures (inversion, conditional, non-finite clauses beyond simple ones)"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          }
+        },
+        "overallAssessment": "The response addresses all task requirements with a clear overview and logical stage description. Coherence is good but slightly mechanical, vocabulary is accurate with some less common items, and grammar is well controlled but not highly varied. All criteria are solidly at Band 7.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0.5,
+          "lowerOverall": 6.5,
+          "upperOverall": 7,
+          "panelMidpoint": 6.75,
+          "criterionDeltas": {
+            "Task Achievement": 0,
+            "Coherence and Cohesion": 0.5,
+            "Lexical Resource": 1,
+            "Grammatical Range and Accuracy": 0.5
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 3,
+          "examinerAUniform": true,
+          "examinerBUniform": false,
+          "unanimousAiBandZero": false,
+          "observations": [
+            "ANY_CRITERION_DISAGREEMENT"
+          ],
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7,
+            "confidence": 0.8,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Task Achievement is strongest because the overview is clear, all main stages are described accurately, and the cyclical nature is highlighted. Grammatical Range and Accuracy is weakest because while the essay is generally accurate, the range of structures is somewhat limited, with mostly simple and compound sentences and few complex forms.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": false,
+            "upperBandCriteria": [],
+            "upperBandAuditComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 6.5,
+              "Lexical Resource": 6,
+              "Grammatical Range and Accuracy": 6.5
+            },
+            "overallBand": 6.5,
+            "confidence": 0.75,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Lexical Resource",
+              "comparison": "Task Achievement meets band 7 with a clear overview and logical stage grouping, but Lexical Resource is constrained by repetition and lack of precise variation, landing at band 6. Coherence and Grammar are adequate but not flexible enough for band 7.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [],
+            "upperBandAuditComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "high",
+            "reason": "AI_PANEL_AT_OR_ABOVE_UPPER_MID_BOUNDARY",
+            "lower": 6.5,
+            "upper": 7
+          },
+          "specialist": {
+            "examinerId": "high-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7.5,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7,
+            "confidence": 0.85,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Lexical Resource",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Lexical Resource shows a wide range of precise, less common items and good collocation, while Grammatical Range and Accuracy is slightly weaker with a few grammatical slips and less variety in sentence openings.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [],
+            "upperBandAuditComplete": true,
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-criterion-profile-adjudicator",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+            "THREE_ZONE_AI_PANEL"
+          ],
+          "decision": "three_zone_independent_meta_reassessment",
+          "specialistZone": "high",
+          "specialistCriteria": {
+            "Task Achievement": 7,
+            "Coherence and Cohesion": 7,
+            "Lexical Resource": 7.5,
+            "Grammatical Range and Accuracy": 7
+          },
+          "specialistOverallBand": 7,
+          "finalCriteria": {
+            "Task Achievement": 7,
+            "Coherence and Cohesion": 7,
+            "Lexical Resource": 7,
+            "Grammatical Range and Accuracy": 7
+          },
+          "finalOverallBand": 7,
+          "criterionProfileReview": {
+            "triggered": true,
+            "decision": "uniform_profile_independently_justified",
+            "finalCriteria": {
+              "Task Achievement": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 7,
+              "Grammatical Range and Accuracy": 7
+            },
+            "finalOverallBand": 7,
+            "localScoreAdjustment": false
+          }
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "academic_visual_report",
+          "examModule": "academic",
+          "emptyResponse": false,
+          "wordCount": 195,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 3,
+          "sentenceCount": 9,
+          "averageSentenceWords": 21.7,
+          "lexicalDiversity": 0.636,
+          "paragraphWordCounts": [
+            56,
+            71,
+            68
+          ],
+          "englishLetterRatio": 0.975,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.271,
+          "visualFactsAvailable": true,
+          "visualFactsSourceVerified": true
+        },
+        "visualFactsAudit": {
+          "available": true,
+          "sourceVerified": true,
+          "visualType": "process",
+          "humanReviewRequiredForDataAccuracy": false
+        },
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "ai_criterion_profile_review_after_uniform_candidate",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 7,
+          "finalBand": 7,
+          "source": "ai-criterion-profile-adjudicator"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "three_zone_independent_meta_reassessment"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-ai-panel-v6-4-full-range-half-band-calibration",
+        "scoreSystemVersion": "unified-writing-core-v6.4-full-range-half-band-calibration",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4902,
+              "completion_tokens": 2365,
+              "total_tokens": 7267,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 4902
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4903,
+              "completion_tokens": 2053,
+              "total_tokens": 6956,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 4903
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "high_specialist",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4800,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 4956,
+              "completion_tokens": 1976,
+              "total_tokens": 6932,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 4956
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": {
+            "role": "meta_adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 10320,
+              "completion_tokens": 4891,
+              "total_tokens": 15211,
+              "prompt_tokens_details": {
+                "cached_tokens": 256
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 2795
+              },
+              "prompt_cache_hit_tokens": 256,
+              "prompt_cache_miss_tokens": 10064
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "criterionProfileReview": {
+            "role": "criterion_profile_adjudicator",
+            "model": "deepseek-v4-flash",
+            "thinking": "enabled",
+            "reasoningEffort": "high",
+            "maxTokens": 5500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 11768,
+              "completion_tokens": 2664,
+              "total_tokens": 14432,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 716
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 11768
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 98944,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "reviewPolicyVersion": "material-disagreement-plus-full-range-ai-edge-safeguards-v3",
+            "accuracySafeguardTriggered": true,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": true,
+            "criterionProfileReviewTriggered": true,
+            "upperBandAuditComplete": true,
+            "coreModelCalls": 5,
+            "avoidedModelCalls": 0,
+            "coreTotalTokens": 50798
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

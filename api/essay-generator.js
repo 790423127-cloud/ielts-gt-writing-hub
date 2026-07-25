@@ -9,7 +9,7 @@ const GENERATOR_VERSION = "essay-generator-v3-15-source-based-candidate-selectio
 
 // Controlled Exact-Hit Mode: reuse scorer's band profiles & delta guidance
 const gradeIELTS = require('./grade-ielts');
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_GENERATOR_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_GENERATOR_TIMEOUT_MS) || 150000, 240000));
 const DISCLAIMER = "This is AI-generated practice writing, not an official IELTS answer.";

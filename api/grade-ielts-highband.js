@@ -5,7 +5,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3000"
 ]);
 
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_EXAMINER_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const SCORE_SYSTEM_VERSION = "score-core-v8-5-14-highband-near9-router-anti-inflation";

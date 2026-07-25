@@ -1,0 +1,1531 @@
+{
+  "version": "blind-independent-reference-v1",
+  "createdAt": "2026-07-16T12:43:27.072Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average.",
+  "model": "deepseek-v4-pro",
+  "labels": {
+    "ladder-b6_5-5-g1-request": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.8,
+      "rationale": "All task points addressed with some development, though formality lapses (e.g., 'like local business people') and occasional insufficient detail. Coherence is clear with logical progression and adequate paragraphing. Lexical resource is adequate but repetitive and imprecise at times ('good place', 'lower price'). Grammar shows a mix of structures with good control and few errors."
+    },
+    "ladder-b4-4-g2-problem": {
+      "criteria": {
+        "Task Response": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 4,
+      "confidence": 0.9,
+      "rationale": "Under-length response: some problems and solutions noted but undeveloped, position barely supported. Organisation is basic with some progression, but no paragraphing and limited cohesion. Vocabulary is repetitive and very basic with frequent errors. Grammar is very limited with frequent, meaning-distorting errors."
+    },
+    "ladder-b8_5-5-g1-request": {
+      "criteria": {
+        "Task Achievement": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 8,
+        "Grammatical Range and Accuracy": 8
+      },
+      "overallBand": 8,
+      "confidence": 0.9,
+      "rationale": "All requirements fully and precisely covered with well-extended, relevant ideas. Cohesion is skilfully managed with logical sequencing and appropriate paragraphing. Lexical range is wide and precise ('enquire', 'anticipate', 'ideal venue'). Grammar is flexible and accurate with a wide range of error-free sentences."
+    },
+    "ladder-b7-4-g2-problem": {
+      "criteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.9,
+      "rationale": "Task fully addressed with clear position and developed ideas; some points could be slightly more extended. Coherent with clear progression and paragraphing, though cohesive devices are somewhat mechanical. Lexical resource is adequate with some less common items ('landfills', 'methane'). Grammar shows a good mix of structures, generally well controlled with occasional minor errors."
+    },
+    "ladder-b1-4-g2-problem": {
+      "criteria": {
+        "Task Response": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 1,
+      "rationale": "No rateable message: only isolated words ('rubbish', 'smel', 'put', 'bin') with no sentence-level control."
+    },
+    "ladder-b0-5-a2-opinion": {
+      "criteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 1,
+      "rationale": "Response is entirely in Japanese; no assessable English."
+    },
+    "ladder-b6_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6.5,
+      "confidence": 0.8,
+      "rationale": "Task addressed but support is uneven; clear progression with some cohesive repetition; adequate but simple vocabulary; mixed structures with noticeable errors."
+    },
+    "ladder-b6-4-g2-problem": {
+      "criteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 8,
+        "Grammatical Range and Accuracy": 8
+      },
+      "overallBand": 8,
+      "confidence": 0.85,
+      "rationale": "All requirements covered with clear development; logically sequenced and well-managed cohesion; wide, precise vocabulary; flexible and accurate grammar."
+    },
+    "ladder-b9-4-g2-problem": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully satisfied, precisely developed; effortlessly coherent; extremely wide and natural vocabulary; flawless grammar."
+    },
+    "ladder-b3-5-a1-process": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Only fragments addressed; no clear organisation; very limited, repetitive vocabulary; errors dominate simple sentences."
+    },
+    "ladder-b9-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully addresses all bullet points with well-developed and precise details; seamless organization and highly cohesive; wide, precise vocabulary with natural control; error-free complex grammar."
+    },
+    "ladder-b3-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3.5,
+      "confidence": 0.9,
+      "rationale": "Limited control; addresses the key points in a fragmentary way; vocabulary very basic with spelling errors; grammar errors impede clarity."
+    },
+    "ladder-b2_5-5-g1-request": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.85,
+      "rationale": "Only fragments of the task addressed; no coherent organisation; extremely limited vocabulary; isolated grammatical structures with errors."
+    },
+    "ladder-b7-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.9,
+      "rationale": "All main requirements addressed with clear position and development; logical organisation and effective cohesion; adequate vocabulary with some imprecision; generally well-controlled grammar with few errors."
+    },
+    "ladder-b3_5-5-g2-opinion": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5,
+      "confidence": 0.9,
+      "rationale": "Task addressed but underdeveloped; basic organisation and progression; minimally adequate vocabulary with some errors; limited sentence range with frequent mistakes."
+    },
+    "ladder-b4_5-5-g1-request": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6.5,
+      "confidence": 0.85,
+      "rationale": "All bullet points addressed with clear purpose; minor lapses in development. LR: adequate but errors in word form and spelling. GRA: mixed structures with frequent minor errors."
+    },
+    "ladder-b2-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 2,
+        "Coherence and Cohesion": 2,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 2.5,
+      "confidence": 0.95,
+      "rationale": "Response is barely related; bullet points almost entirely undeveloped. CC: little connected meaning. LR: isolated/memorised vocabulary. GRA: very limited patterns but some meaning survives."
+    },
+    "ladder-b1_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Fragments of task addressed; no clear development. Very limited cohesion and vocabulary. Simple, error-filled sentences."
+    },
+    "ladder-b3_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5,
+      "confidence": 0.9,
+      "rationale": "Both views superficially discussed with clear opinion; underdeveloped. No paragraphing; repetitive basic vocabulary; limited grammar with frequent errors."
+    },
+    "ladder-b2-4-g2-problem": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.95,
+      "rationale": "Only fragments of problems and measures; extremely brief. No logical organisation; very limited lexis and grammar."
+    },
+    "ladder-b6_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.9,
+      "rationale": "All requirements fully addressed with precise, relevant development; effortlessly coherent organization; wide, precise vocabulary; error-free, flexible grammar."
+    },
+    "ladder-b0_5-5-g1-request": {
+      "criteria": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 0.99,
+      "rationale": "Only isolated words; no task fulfilment, no connected message, no rateable vocabulary or grammar."
+    },
+    "ladder-b1-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Fragmented data mention without overview or development; unclear organization; very limited vocabulary; isolated structures with no complete sentences."
+    },
+    "ladder-b3_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 5,
+      "confidence": 0.8,
+      "rationale": "Both parts addressed but insufficiently developed; visible progression but no paragraphs; basic, repetitive vocabulary; only simple sentences with frequent errors."
+    },
+    "ladder-b2_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Only fragments of task addressed with heavy repetition; no logical progression; extremely limited vocabulary; no sentence-level grammar, meaning distorted."
+    },
+    "ladder-b1-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 2.5,
+        "Lexical Resource": 2.5,
+        "Grammatical Range and Accuracy": 2.5
+      },
+      "overallBand": 2.5,
+      "confidence": 0.9,
+      "rationale": "Very short response with only fragments of task addressed, minimal cohesion, extremely limited vocabulary and grammar."
+    },
+    "ladder-b1_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3.5
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Only fragments of task addressed, minimal organisation, very limited resource, basic grammar with some errors but meaning mostly clear."
+    },
+    "ladder-b4_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 6,
+      "confidence": 0.9,
+      "rationale": "Main features covered but overview unclear and development limited; adequate vocabulary and cohesion; limited range of structures with no complex sentences."
+    },
+    "ladder-b8_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully addresses task with well-developed argument, effortless cohesion, wide and precise vocabulary, flexible and accurate grammar."
+    },
+    "ladder-b1_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 2.5,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 2.5
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Only fragments of data reported without overview or development; very limited cohesion, vocabulary and grammar."
+    },
+    "ladder-b7_5-5-g2-opinion": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully addresses the task with a clear, well-developed position and nuanced argument. Organisation is effortless to follow with logical sequencing and appropriate paragraphing. Lexical resource shows a wide, precise, and natural range with no noticeable errors. Grammatical range is flexible and accurate, with error-free sentences throughout."
+    },
+    "ladder-b0-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 1,
+      "rationale": "No assessable attempt; response is empty, which meets the zero-band condition."
+    },
+    "ladder-b5_5-5-g2-opinion": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "Addresses the task with a relevant position, but support is limited and somewhat repetitive, leaving some parts underdeveloped. Organisation is generally coherent with clear progression, though cohesion is mechanical at times. Vocabulary is adequate and meaning is clear, but range is limited with some repetition. Grammar shows a mix of simple and complex structures with minor errors, and flexibility is limited."
+    },
+    "ladder-b8-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "All letter requirements are fully covered with precise detail and a consistently appropriate tone. Information is logically organised, and the message is effortless to follow. Lexical resource is wide, precise, and effectively conveys meaning with no errors. Grammatical structures are varied and accurately controlled throughout."
+    },
+    "ladder-b5_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5,
+      "confidence": 0.85,
+      "rationale": "Both views and an opinion are present but development is insufficient, with limited and repetitive support. Organisation is visible and progression exists, but cohesive devices are overused, creating a mechanical feel. Vocabulary is minimally adequate, often repetitive, and includes noticeable spelling and formation errors. Sentence forms are limited; complex attempts are often faulty, and frequent errors cause some reading difficulty."
+    },
+    "ladder-b5-5-a1-process": {
+      "criteria": {
+        "Task Achievement": 5.5,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5.5,
+      "confidence": 0.9,
+      "rationale": "TA: All stages covered but very basic, slightly under-length; 5.5. C&C: Logical sequence, but repetitive cohesive devices; 6.0. LR: Limited range, repetitive, formation errors; 5.0. GRA: Frequent errors, limited sentence structures; 5.0."
+    },
+    "ladder-b7_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 1,
+      "rationale": "Fully covers all bullet points with precise detail; effortless cohesion; wide, natural vocabulary; error-free complex grammar."
+    },
+    "ladder-b0_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 1,
+      "rationale": "No assessable attempt beyond a few isolated words."
+    },
+    "ladder-b7-5-a1-process": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 1,
+      "rationale": "Complete, well-developed coverage; effortless cohesion; rich, precise vocabulary; flawless grammar."
+    },
+    "ladder-b7_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 1,
+      "rationale": "Full, relevant and well-developed response to both questions; seamless progression; wide, natural vocabulary; error-free complex structures."
+    },
+    "ladder-b0-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 0.95,
+      "rationale": "Response is entirely in Arabic; no assessable English. Band 0 applies."
+    },
+    "ladder-b7-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.8,
+      "rationale": "Task Response: Clear position, both views discussed and adequately supported; development is sufficient but not highly skilful. Coherence and Cohesion: Logical progression, clear paragraphing, cohesive devices slightly mechanical. Lexical Resource: Adequate range with some less common items, occasional imprecision. Grammatical Range and Accuracy: Mix of simple and complex structures, generally well controlled, few errors."
+    },
+    "ladder-b6_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.8,
+      "rationale": "Task Response: Both views and own opinion clearly presented; ideas are relevant but could be more thoroughly extended. Coherence and Cohesion: Well-organised with clear progression and appropriate linking; paragraphing supports central topics. Lexical Resource: Good range with some less common vocabulary; occasional awkwardness. Grammatical Range and Accuracy: Variety of structures with frequent accuracy; minor errors do not impede communication."
+    },
+    "ladder-b1-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Task Response: Only fragments of the task are addressed; no development or clear position. Coherence and Cohesion: No clear organisation; very limited linking. Lexical Resource: Extremely limited vocabulary; repetitive. Grammatical Range and Accuracy: Only isolated simple structures; errors dominate."
+    },
+    "ladder-b5_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5.5,
+      "confidence": 0.8,
+      "rationale": "Task Achievement: Main features are selected and reported, but overview is missing and some details are underdeveloped; irrelevant personal comment. Coherence and Cohesion: Some progression but no paragraphing; cohesion is limited and the structure is not always logical. Lexical Resource: Adequate for basic description but repetitive and with basic word choices; errors in word form. Grammatical Range and Accuracy: Limited sentence forms; frequent errors, though meaning is generally clear."
+    },
+    "ladder-b9-5-a1-process": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Complete, precise report with clear overview, no errors, and fully developed."
+    },
+    "ladder-b8_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "All bullet points addressed with appropriate tone, flawless organisation, and accurate language."
+    },
+    "ladder-b0-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 1,
+      "rationale": "Response is entirely non-English; no assessable attempt."
+    },
+    "ladder-b6-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.9,
+      "rationale": "Adequate task coverage with some repetition and limited depth; mechanical cohesion; vocabulary and grammar sufficient but not advanced."
+    },
+    "ladder-b4-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 4,
+      "confidence": 0.9,
+      "rationale": "Underdeveloped ideas, single paragraph, very basic and repetitive language, frequent errors distorting meaning."
+    },
+    "ladder-b1_5-5-g2-opinion": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Very short, no development; position clear but unsupported; no progression or cohesion; extremely limited vocabulary with errors; fragmentary sentences with frequent errors, but meaning partly understandable."
+    },
+    "ladder-b4_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "Addresses both views and opinion, but development limited and somewhat repetitive. Clear overall progression, but cohesive devices are mechanical. Adequate vocabulary with noticeable errors. Mix of simple and complex structures, frequent errors but meaning usually clear."
+    },
+    "ladder-b4_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "Covers problems and measures with adequate support, though superficial. Logical organisation and paragraphing, but cohesion slightly mechanical. Vocabulary adequate for task with some word-choice errors. Frequent grammar errors but communication maintained."
+    },
+    "ladder-b7-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.9,
+      "rationale": "Fully satisfies task with precise overview and well-selected key features; effortlessly coherent and cohesive; wide, natural vocabulary with no inaccuracies; full range of structures, all error-free."
+    },
+    "ladder-b3-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3.5,
+      "confidence": 0.9,
+      "rationale": "Attempts to report data but lacks clear overview, repetitive, includes irrelevant opinion; no logical organisation, list-like; very limited vocabulary with spelling errors; only simple structures, frequent grammar errors seriously distort meaning."
+    },
+    "ladder-b4-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 5,
+      "confidence": 0.8,
+      "rationale": "TA: The response presents most key data and an overview but includes irrelevant personal opinion and lacks clear development; coverage is incomplete. CC: There is visible progression but cohesion is repetitive and mechanical, with weak referencing and no paragraphing. LR: Vocabulary is minimally adequate with repetition; errors in word choice and formation cause some difficulty. GRA: Only a narrow range of simple structures; frequent errors in subject-verb agreement and verb forms impede clarity."
+    },
+    "ladder-b5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6.5,
+      "confidence": 0.8,
+      "rationale": "TA: All three bullet points are clearly addressed and sufficiently developed with appropriate tone and detail. CC: Clear logical progression with appropriate paragraphing; cohesive devices are adequate but occasionally mechanical. LR: Adequate vocabulary for the task; some spelling and word-formation errors but meaning is clear. GRA: A mix of simple and some complex structures; errors are frequent but rarely impede communication."
+    },
+    "ladder-b7_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "TA: The response fully satisfies the task with precise selection and development of all main features and comparisons. CC: Effortlessly coherent; logical paragraphing and skilful cohesion contribute to a seamlessly progressive report. LR: A wide, precise, and flexible lexical resource used naturally with no errors. GRA: Full flexibility and control; a wide range of structures used accurately throughout."
+    },
+    "ladder-b0_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 0.9,
+      "rationale": "TR: The response consists of a few fragmented words and fails entirely to address the task. CC: No assessable connected message is present. LR: Only a few isolated words are recognisable. GRA: No assessable sentence-level control is present."
+    },
+    "ladder-b2_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.8,
+      "rationale": "TR: The response only fragmentally addresses the task; it lacks a meaningful discussion of both views and development is extremely limited. CC: There is no clear logical organisation; ideas are repetitive and do not cohere into a developed argument. LR: Vocabulary is extremely limited and repetitive, with frequent spelling errors and inappropriate word choices. GRA: Sentence patterns are very limited, and errors distort the clarity of the message."
+    },
+    "ladder-b2-5-a2-opinion": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Response barely addresses the task; position is inconsistent and undeveloped. Organisation is absent, vocabulary very limited and repetitive, grammar dominated by errors."
+    },
+    "ladder-b4_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6.5,
+      "confidence": 0.8,
+      "rationale": "All task points covered with adequate development. Letter is logically organised with clear progression. Vocabulary is adequate but contains some errors. Grammar shows a mix of simple and limited complex forms with frequent minor errors."
+    },
+    "ladder-b6_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 8,
+        "Grammatical Range and Accuracy": 8
+      },
+      "overallBand": 8,
+      "confidence": 0.85,
+      "rationale": "Response fully covers task requirements with skilful selection and well-extended features. Information is logically sequenced and easy to follow. Lexical resource is wide and precise. Grammatical range is wide and accurately used."
+    },
+    "ladder-b3-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 5,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 4.5,
+      "confidence": 0.85,
+      "rationale": "Addresses the task with a clear but underdeveloped position, relying on repetitive support. Organisation is visible but not always logical. Vocabulary is basic and repetitive. Grammar is limited to a narrow range with frequent errors."
+    },
+    "ladder-b2-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Only fragments of the task are addressed with almost no development. Organisation is incoherent, vocabulary extremely limited, and sentence patterns very basic with pervasive errors."
+    },
+    "ladder-b5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.9,
+      "rationale": "All parts addressed but with limited development; clear progression and basic cohesive devices; adequate vocabulary with some errors; mix of simple and complex sentences with frequent but non-impeding errors."
+    },
+    "ladder-b3_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 4,
+      "confidence": 0.9,
+      "rationale": "Attempts task but presents data as a list with no overview; little logical progression; basic, repetitive vocabulary; very limited range of structures with frequent errors."
+    },
+    "ladder-b8-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.9,
+      "rationale": "Fully developed response with skilful selection and balanced discussion; effortless cohesion and logical sequencing; wide, precise lexical range; flexible, error-free complex structures."
+    },
+    "ladder-b1-5-a1-process": {
+      "criteria": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 1,
+      "rationale": "Only isolated words; no assessable task fulfilment, connected message, lexical range, or sentence-level control."
+    },
+    "ladder-b5_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "overallBand": 7,
+      "confidence": 0.95,
+      "rationale": "All bullet points addressed and developed; clear paragraphing with logical progression; adequate range showing some flexibility; good mix of structures with occasional errors that do not impede."
+    },
+    "ladder-b8-5-a2-opinion": {
+      "criteria": {
+        "Task Response": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 8.5,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "overallBand": 8.5,
+      "confidence": 0.8,
+      "rationale": "Fully addresses all requirements with clear position and well-developed ideas; minor inconsistency in example use does not detract significantly; highly coherent and cohesive; wide, precise vocabulary and flexible, accurate grammar with only occasional lapses."
+    },
+    "ladder-b9-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 8.5,
+        "Coherence and Cohesion": 8.5,
+        "Lexical Resource": 8.5,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "overallBand": 8.5,
+      "confidence": 0.8,
+      "rationale": "Skillfully addresses all parts with nuanced discussion and clear opinion; exceptionally coherent and cohesive with logical progression; sophisticated and precise vocabulary; wide range of complex structures used flexibly and accurately."
+    },
+    "ladder-b5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "Addresses both views and gives opinion, but development is limited and somewhat repetitive; organisation is clear but cohesion is mechanical; vocabulary is adequate but lacks range; grammar errors are frequent but do not prevent communication."
+    },
+    "ladder-b1_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 2,
+        "Coherence and Cohesion": 2,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 2
+      },
+      "overallBand": 2,
+      "confidence": 0.8,
+      "rationale": "Barely related fragment; no coherent message; only isolated words and simple phrases; largely incomprehensible."
+    },
+    "ladder-b0_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 0.8,
+      "rationale": "String of isolated words with no connected meaning; no rateable sentence-level language."
+    },
+    "ladder-b4-5-a2-opinion": {
+      "criteria": {
+        "Task Response": 4,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 3.5,
+      "confidence": 0.9,
+      "rationale": "Attempts both views and opinion but with minimal development; no clear logical organisation or paragraphing; very limited and repetitive vocabulary; narrow range of simple structures with frequent basic errors."
+    },
+    "ladder-b3_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "All bullet points covered with adequate clarity; logical progression with basic cohesive devices; vocabulary sufficient for the task despite some imprecision; mix of simple and a few complex sentences with errors that rarely hinder communication."
+    },
+    "ladder-b7_5-2-a2-discussion": {
+      "criteria": {
+        "Task Response": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 8,
+        "Grammatical Range and Accuracy": 8
+      },
+      "overallBand": 8,
+      "confidence": 0.9,
+      "rationale": "Fully addresses both views and opinion with well-developed support; logically sequenced and easy to follow; wide and precise lexical resource; flexible range of complex structures with high accuracy."
+    },
+    "ladder-b4-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 4.5,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "overallBand": 4,
+      "confidence": 0.8,
+      "rationale": "Bullet points attempted but very minimally developed; limited cohesive devices and no paragraphing; basic and repetitive vocabulary; narrow grammatical range with frequent errors impeding clarity."
+    },
+    "ladder-b3-4-g2-problem": {
+      "criteria": {
+        "Task Response": 4,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3.5
+      },
+      "overallBand": 3.5,
+      "confidence": 0.8,
+      "rationale": "Superficial listing of problems and measures without development; no clear organisation or linking; extremely limited words with heavy errors; very restricted sentence patterns dominating with distortions."
+    },
+    "ladder-b0_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 1,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 1,
+      "confidence": 0.9,
+      "rationale": "Only a few isolated words; no assessable sentence-level language or connected message."
+    },
+    "ladder-b8-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully satisfies all requirements with precise data selection; clear progression, wide lexical range, and flawless grammar."
+    },
+    "ladder-b2_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "Fragments of data with repetitive, undeveloped ideas; no clear overview or logical organisation; very limited vocabulary and sentence patterns."
+    },
+    "ladder-b0-4-g2-problem": {
+      "criteria": {
+        "Task Response": 0,
+        "Coherence and Cohesion": 0,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "overallBand": 0,
+      "confidence": 1,
+      "rationale": "No assessable attempt; only punctuation marks."
+    },
+    "ladder-b5_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "Addresses the task but with limited support and some repetition; clear overall progression but mechanical cohesion; adequate vocabulary with noticeable errors; mixed simple and complex sentences with frequent inaccuracies."
+    },
+    "ladder-b6-5-a2-opinion": {
+      "criteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.8,
+      "rationale": "TR: addresses both views and opinion, but development is somewhat general. CC: clear progression and paragraphing, but cohesion is mechanical in places. LR: adequate but basic and repetitive. GRA: simple and complex forms mixed, limited flexibility, occasional errors."
+    },
+    "ladder-b8_5-4-g2-problem": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 8.5,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.9,
+      "rationale": "TR: fully addresses problems and measures with well-extended ideas. CC: logically sequenced, well-managed cohesion, but slight formulaic listing in solutions. LR: wide, precise, natural vocabulary with no errors. GRA: full flexibility and control, error-free."
+    },
+    "ladder-b2-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 2,
+        "Coherence and Cohesion": 2,
+        "Lexical Resource": 2,
+        "Grammatical Range and Accuracy": 1
+      },
+      "overallBand": 2,
+      "confidence": 0.95,
+      "rationale": "TA: barely related to task, no usable development. CC: little organisation or connected meaning. LR: only isolated vocabulary. GRA: no assessable sentence-level control, fragments dominate."
+    },
+    "ladder-b5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5.5,
+        "Grammatical Range and Accuracy": 5
+      },
+      "overallBand": 5.5,
+      "confidence": 0.8,
+      "rationale": "TA: covers main features but overview undeveloped and some inaccuracies. CC: clear progression but mechanical cohesion. LR: limited range with noticeable word-choice and formation errors. GRA: simple sentences, frequent subject-verb and word-order errors."
+    },
+    "ladder-b2_5-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 3,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "overallBand": 3,
+      "confidence": 0.9,
+      "rationale": "TA: only fragments addressed, no description of appliance or damage. CC: no clear organisation, minimal linking. LR: very limited and repetitive. GRA: very limited sentence patterns, frequent basic errors."
+    },
+    "ladder-b9-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.95,
+      "rationale": "Fully satisfies all requirements with precise data, clear overview, and well-extended comparisons; no lapses. Highly skilful cohesion, wide flexible vocabulary, and error-free complex grammar."
+    },
+    "ladder-b8-4-g2-problem": {
+      "criteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 9,
+      "confidence": 0.9,
+      "rationale": "Fully addresses both problems and measures with well-developed ideas; essay is easy to follow but relies on somewhat mechanical signposting, preventing top CC band; lexical range and grammar are precise and error-free."
+    },
+    "ladder-b6-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5.5,
+        "Grammatical Range and Accuracy": 6
+      },
+      "overallBand": 6,
+      "confidence": 0.85,
+      "rationale": "Covers main features but with limited development and some repetition; progression is clear but mechanical and repetitive; vocabulary is very basic with minimal range; grammar shows few complex attempts and high accuracy but limited flexibility."
+    },
+    "ladder-b8_5-1-a1-table": {
+      "criteria": {
+        "Task Achievement": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "overallBand": 8.5,
+      "confidence": 0.9,
+      "rationale": "Covers data skilfully but includes irrelevant speculation, a minor lapse; logical organisation and well-managed cohesion; wide, precise vocabulary and flexible error-free grammar."
+    },
+    "ladder-b6-3-g1-complaint": {
+      "criteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 7,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 6.5
+      },
+      "overallBand": 7,
+      "confidence": 0.85,
+      "rationale": "Addresses all bullet points with appropriate tone but lacks some development and precision; clear organisation with adequate cohesion; sufficient vocabulary but limited range; some complex structures but limited variety and flexibility."
+    }
+  },
+  "audits": [
+    {
+      "refs": [
+        "R011",
+        "R012",
+        "R013",
+        "R014",
+        "R015"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2911,
+        "completion_tokens": 2671,
+        "total_tokens": 5582,
+        "prompt_tokens_details": {
+          "cached_tokens": 2816
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 2105
+        },
+        "prompt_cache_hit_tokens": 2816,
+        "prompt_cache_miss_tokens": 95
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R001",
+        "R002",
+        "R003",
+        "R004",
+        "R005"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3165,
+        "completion_tokens": 4069,
+        "total_tokens": 7234,
+        "prompt_tokens_details": {
+          "cached_tokens": 3072
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3549
+        },
+        "prompt_cache_hit_tokens": 3072,
+        "prompt_cache_miss_tokens": 93
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R006",
+        "R007",
+        "R008",
+        "R009",
+        "R010"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2732,
+        "completion_tokens": 4772,
+        "total_tokens": 7504,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4217
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1452
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R021",
+        "R022",
+        "R023",
+        "R024",
+        "R025"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2320,
+        "completion_tokens": 5682,
+        "total_tokens": 8002,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 5118
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1040
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R016",
+        "R017",
+        "R018",
+        "R019",
+        "R020"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2514,
+        "completion_tokens": 6522,
+        "total_tokens": 9036,
+        "prompt_tokens_details": {
+          "cached_tokens": 1408
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 5982
+        },
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 1106
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R026",
+        "R027",
+        "R028",
+        "R029",
+        "R030"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2755,
+        "completion_tokens": 5422,
+        "total_tokens": 8177,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4895
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1475
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R041",
+        "R042",
+        "R043",
+        "R044",
+        "R045"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3245,
+        "completion_tokens": 3892,
+        "total_tokens": 7137,
+        "prompt_tokens_details": {
+          "cached_tokens": 3200
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3197
+        },
+        "prompt_cache_hit_tokens": 3200,
+        "prompt_cache_miss_tokens": 45
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R036",
+        "R037",
+        "R038",
+        "R039",
+        "R040"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3119,
+        "completion_tokens": 4770,
+        "total_tokens": 7889,
+        "prompt_tokens_details": {
+          "cached_tokens": 1408
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4211
+        },
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 1711
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R031",
+        "R032",
+        "R033",
+        "R034",
+        "R035"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2929,
+        "completion_tokens": 4752,
+        "total_tokens": 7681,
+        "prompt_tokens_details": {
+          "cached_tokens": 1536
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4012
+        },
+        "prompt_cache_hit_tokens": 1536,
+        "prompt_cache_miss_tokens": 1393
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R046",
+        "R047",
+        "R048",
+        "R049",
+        "R050"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2905,
+        "completion_tokens": 1852,
+        "total_tokens": 4757,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1348
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1625
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R051",
+        "R052",
+        "R053",
+        "R054",
+        "R055"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2971,
+        "completion_tokens": 3735,
+        "total_tokens": 6706,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3115
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1691
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R056",
+        "R057",
+        "R058",
+        "R059",
+        "R060"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2940,
+        "completion_tokens": 6375,
+        "total_tokens": 9315,
+        "prompt_tokens_details": {
+          "cached_tokens": 1920
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 5578
+        },
+        "prompt_cache_hit_tokens": 1920,
+        "prompt_cache_miss_tokens": 1020
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R061",
+        "R062",
+        "R063",
+        "R064",
+        "R065"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2680,
+        "completion_tokens": 4790,
+        "total_tokens": 7470,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4187
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1400
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R066",
+        "R067",
+        "R068",
+        "R069",
+        "R070"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3058,
+        "completion_tokens": 3842,
+        "total_tokens": 6900,
+        "prompt_tokens_details": {
+          "cached_tokens": 2944
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3269
+        },
+        "prompt_cache_hit_tokens": 2944,
+        "prompt_cache_miss_tokens": 114
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R071",
+        "R072",
+        "R073",
+        "R074",
+        "R075"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2944,
+        "completion_tokens": 3810,
+        "total_tokens": 6754,
+        "prompt_tokens_details": {
+          "cached_tokens": 2432
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3232
+        },
+        "prompt_cache_hit_tokens": 2432,
+        "prompt_cache_miss_tokens": 512
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R076",
+        "R077",
+        "R078",
+        "R079",
+        "R080"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2685,
+        "completion_tokens": 5540,
+        "total_tokens": 8225,
+        "prompt_tokens_details": {
+          "cached_tokens": 1408
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 4946
+        },
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 1277
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R081",
+        "R082",
+        "R083",
+        "R084",
+        "R085"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 2752,
+        "completion_tokens": 4262,
+        "total_tokens": 7014,
+        "prompt_tokens_details": {
+          "cached_tokens": 1664
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3876
+        },
+        "prompt_cache_hit_tokens": 1664,
+        "prompt_cache_miss_tokens": 1088
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R086",
+        "R087",
+        "R088",
+        "R089",
+        "R090"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3125,
+        "completion_tokens": 4637,
+        "total_tokens": 7762,
+        "prompt_tokens_details": {
+          "cached_tokens": 1280
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 3980
+        },
+        "prompt_cache_hit_tokens": 1280,
+        "prompt_cache_miss_tokens": 1845
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    },
+    {
+      "refs": [
+        "R091",
+        "R092",
+        "R093",
+        "R094",
+        "R095"
+      ],
+      "model": "deepseek-v4-pro",
+      "usage": {
+        "prompt_tokens": 3709,
+        "completion_tokens": 6798,
+        "total_tokens": 10507,
+        "prompt_tokens_details": {
+          "cached_tokens": 1920
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 6189
+        },
+        "prompt_cache_hit_tokens": 1920,
+        "prompt_cache_miss_tokens": 1789
+      },
+      "finishReason": "stop",
+      "attempt": 1
+    }
+  ]
+}

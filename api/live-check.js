@@ -6,7 +6,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_LIVE_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 const LIVE_TIMEOUT_MS = Math.max(5000, Math.min(Number(process.env.LIVE_CHECK_TIMEOUT_MS) || 8500, 12000));
 const MIN_CONFIDENCE = Math.max(0.5, Math.min(Number(process.env.LIVE_CHECK_MIN_CONFIDENCE) || 0.72, 0.95));
 

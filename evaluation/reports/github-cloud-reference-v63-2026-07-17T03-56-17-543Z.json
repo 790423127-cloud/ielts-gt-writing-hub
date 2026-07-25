@@ -1,0 +1,112 @@
+{
+  "generatedAt": "2026-07-17T03:56:17.542Z",
+  "methodology": "Read-only comparison against the unchanged local checkout of origin/main's production router. No GitHub files, commits or branches were changed.",
+  "oldUrl": "http://localhost:4000/api/grade-ielts-production-router",
+  "newUrl": "http://127.0.0.1:4000/api/grade-writing",
+  "records": 3,
+  "oldMAE": 0.3333333333333333,
+  "newMAE": 0.16666666666666666,
+  "newAverageCoreCalls": 4,
+  "newAverageCoreTokens": 29900.333333333332,
+  "rows": [
+    {
+      "id": "T1-B3-5-short-confused",
+      "task": "Task 1",
+      "targetOverall": 3.5,
+      "oldBand": 3,
+      "newBand": 4,
+      "oldError": 0.5,
+      "newError": 0.5,
+      "oldCriteria": {
+        "Task Achievement": 3.5,
+        "Coherence and Cohesion": 3,
+        "Lexical Resource": 3,
+        "Grammatical Range and Accuracy": 3
+      },
+      "newCriteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "oldVersion": "production-router-v3-5-criterion-differentiation-routing-v4-4",
+      "newVersion": "unified-writing-core-v6.3-github-calibrated-boundary-review",
+      "oldSource": "lowband-hard-evidence-guard",
+      "newSource": "three-zone-ai-meta-adjudicator",
+      "newReviewReasons": [
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS"
+      ],
+      "newCoreCalls": 4,
+      "newCoreTokens": 28204,
+      "oldDurationMs": 44670,
+      "newDurationMs": 53617
+    },
+    {
+      "id": "T2-B6-clear-development",
+      "task": "Task 2",
+      "targetOverall": 6,
+      "oldBand": 6,
+      "newBand": 6,
+      "oldError": 0,
+      "newError": 0,
+      "oldCriteria": {
+        "Task Response": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 5.5,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "newCriteria": {
+        "Task Response": 5,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "oldVersion": "production-router-v3-5-criterion-differentiation-routing-v4-4",
+      "newVersion": "unified-writing-core-v6.3-github-calibrated-boundary-review",
+      "oldSource": "midband-primary",
+      "newSource": "three-zone-ai-meta-adjudicator",
+      "newReviewReasons": [
+        "CRITERION_DELTA_GTE_1"
+      ],
+      "newCoreCalls": 4,
+      "newCoreTokens": 32006,
+      "oldDurationMs": 7996,
+      "newDurationMs": 63900
+    },
+    {
+      "id": "T1-B7-natural-letter",
+      "task": "Task 1",
+      "targetOverall": 7,
+      "oldBand": 7.5,
+      "newBand": 7,
+      "oldError": 0.5,
+      "newError": 0,
+      "oldCriteria": {
+        "Task Achievement": 7.5,
+        "Coherence and Cohesion": 7.5,
+        "Lexical Resource": 7.5,
+        "Grammatical Range and Accuracy": 8
+      },
+      "newCriteria": {
+        "Task Achievement": 7,
+        "Coherence and Cohesion": 6.5,
+        "Lexical Resource": 7,
+        "Grammatical Range and Accuracy": 7
+      },
+      "oldVersion": "production-router-v3-5-criterion-differentiation-routing-v4-4",
+      "newVersion": "unified-writing-core-v6.3-github-calibrated-boundary-review",
+      "oldSource": "midband-primary-highband-not-confirmed",
+      "newSource": "three-zone-ai-meta-adjudicator",
+      "newReviewReasons": [
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "AI_PANEL_HIGH_EDGE_SAFEGUARD",
+        "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+      ],
+      "newCoreCalls": 4,
+      "newCoreTokens": 29491,
+      "oldDurationMs": 27902,
+      "newDurationMs": 48428
+    }
+  ]
+}

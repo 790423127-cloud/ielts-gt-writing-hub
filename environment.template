@@ -1,0 +1,42 @@
+# Copy this file to .env.local and replace the key locally.
+DEEPSEEK_API_KEY=replace-with-your-deepseek-key
+
+# Compact score-only examiners
+SCORE_EXAMINER_MODEL=deepseek-v4-flash
+SCORE_EXAMINER_EFFORT=medium
+SCORE_EXAMINER_THINKING=disabled
+SCORE_EXAMINER_MAX_TOKENS=4500
+
+# Three-zone AI specialist calibration (routing only; never a local score adjustment)
+SCORE_THREE_ZONE_ENABLED=true
+SCORE_CONDITIONAL_REVIEW_ENABLED=true
+SCORE_SPECIALIST_MODEL=deepseek-v4-flash
+SCORE_SPECIALIST_EFFORT=medium
+SCORE_SPECIALIST_THINKING=disabled
+SCORE_SPECIALIST_MAX_TOKENS=4800
+
+# Upper boundary uses one independent Pro read instead of Flash specialist + Flash meta calls.
+SCORE_HIGH_SPECIALIST_MODEL=deepseek-v4-pro
+SCORE_HIGH_SPECIALIST_EFFORT=high
+SCORE_HIGH_SPECIALIST_THINKING=disabled
+SCORE_HIGH_SPECIALIST_MAX_TOKENS=6000
+
+# Conditional score-only adjudicator
+SCORE_ADJUDICATOR_MODEL=deepseek-v4-flash
+SCORE_ADJUDICATOR_EFFORT=high
+SCORE_ADJUDICATOR_THINKING=enabled
+SCORE_ADJUDICATOR_MAX_TOKENS=5500
+
+# Frozen-band feedback writer
+SCORE_TEACHER_MODEL=deepseek-v4-pro
+SCORE_TEACHER_EFFORT=low
+SCORE_TEACHER_THINKING=disabled
+SCORE_TEACHER_MAX_TOKENS=8000
+SCORE_FEEDBACK_MODEL=deepseek-v4-flash
+SCORE_FEEDBACK_REPAIR_MODEL=deepseek-v4-pro
+SCORE_FEEDBACK_TIMEOUT_MS=90000
+
+SCORE_GENERATOR_MODEL=deepseek-v4-pro
+SCORE_LIVE_MODEL=deepseek-v4-flash
+SCORE_REQUEST_TIMEOUT_MS=120000
+PORT=4000

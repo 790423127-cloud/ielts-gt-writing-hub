@@ -6,7 +6,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const SCORE_SYSTEM_VERSION = "boundary-adjudicator-v4-5-neutral-diagnostic-only";
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_ADJUDICATOR_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 160000, 240000));
 const VALID_BANDS = [0, ...Array.from({ length: 17 }, (_, i) => 1 + i * 0.5)];

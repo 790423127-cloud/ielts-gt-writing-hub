@@ -6,7 +6,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const FEEDBACK_VERSION = "learning-feedback-v4-teacher-clinic-cloud-memory";
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_TEACHER_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_FEEDBACK_TIMEOUT_MS) || 150000, 240000));
 

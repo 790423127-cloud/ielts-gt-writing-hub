@@ -1,0 +1,1272 @@
+{
+  "generatedAt": "2026-07-17T04:39:56.873Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b9-3-g1-complaint"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.375,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.375,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byDesignBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byTask": {
+    "general_training:1": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byZone": {
+    "high_7_9": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 74259,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b9-3-g1-complaint",
+      "split": "calibration",
+      "taskKey": "general_training:1",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 9,
+      "designTargetOverall": 9,
+      "predictedOverall": 8.5,
+      "overallError": 0.5,
+      "designOverallError": 0.5,
+      "targetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "designTargetCriteria": {
+        "Task Achievement": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "predictedCriteria": {
+        "Task Achievement": 8,
+        "Coherence and Cohesion": 8.5,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "criterionErrors": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 0.5,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "designCriterionErrors": {
+        "Task Achievement": 1,
+        "Coherence and Cohesion": 0.5,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0
+      },
+      "zone": "high_7_9",
+      "wordCount": 284,
+      "confidence": 0.85,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "OVERALL_DELTA_GT_0_5",
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+        "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+      ],
+      "uniformFinalCriteria": false,
+      "needsHumanReview": false,
+      "durationMs": 74259,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 1,
+        "task": "Task 1",
+        "taskKind": "gt_letter",
+        "overallBand": 8.5,
+        "rawAverage": 8.5,
+        "likelyRange": [
+          6,
+          9
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.85,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Achievement": 8,
+          "Coherence and Cohesion": 8.5,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "finalCriteria": {
+          "Task Achievement": 8,
+          "Coherence and Cohesion": 8.5,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "criterionCalibration": {
+          "Task Achievement": {
+            "band": 8,
+            "diagnosis": "All requirements are covered appropriately, relevantly and sufficiently; the purpose is clear, each bullet is well developed, and tone is consistently formal and polite, with only occasional, minor content lapses (e.g., slightly over-extended emotional detail).",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response fully addresses every bullet: appliance and damage are described precisely, the effect is explained with specific consequences, and the requested action is clear. Tone is appropriate and sustained. Development is relevant and sufficient, though the emotional elaboration is slightly heavy for a functional letter, but this is a non-dominant feature.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, development would need to be more tightly focused on functional relevance; the emotional detail ('profound dissatisfaction', 'significant distress') slightly overshadows the purely transactional purpose, and the closing sentence is somewhat formulaic.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear purpose and sustained formal tone throughout the letter",
+              "All three bullets are addressed with relevant, detailed and sufficient information"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Slightly over-elaborated emotional language ('profound dissatisfaction', 'significant distress') reduces the purely functional focus of a complaint letter"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Demonstrates precise description of the appliance, fulfilling the first bullet with specific details.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This defect has caused me significant distress and practical difficulties. I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Explains the effect on the writer with personal and practical consequences, covering the second bullet, though the emotional language is slightly heightened.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires every requirement to be fully, precisely and relevantly satisfied with complete development. While this response is strong, the slightly over-emotional tone ('profound dissatisfaction', 'significant distress') and formulaic closing ('I trust that you will accord this matter the seriousness it warrants') reduce the purely functional relevance expected at Band 9.",
+              "band9PositiveEvidence": "All bullets are covered with relevant and well-extended detail; the purpose is clear and the tone is appropriately formal and consistent.",
+              "band9BlockingPattern": "The letter includes slightly heightened emotional language and a formulaic closing phrase that, while not inappropriate, detract from the sustained precise functional relevance required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All requirements are covered appropriately, relevantly and sufficiently; the purpose is clear, each bullet is well developed, and tone is consistently formal and polite, with only occasional, minor content lapses (e.g., slightly over-extended emotional detail).",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response fully addresses every bullet: appliance and damage are described precisely, the effect is explained with specific consequences, and the requested action is clear. Tone is appropriate and sustained. Development is relevant and sufficient, though the emotional elaboration is slightly heavy for a functional letter, but this is a non-dominant feature.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, development would need to be more tightly focused on functional relevance; the emotional detail ('profound dissatisfaction', 'significant distress') slightly overshadows the purely transactional purpose, and the closing sentence is somewhat formulaic.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear purpose and sustained formal tone throughout the letter",
+              "All three bullets are addressed with relevant, detailed and sufficient information"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Slightly over-elaborated emotional language ('profound dissatisfaction', 'significant distress') reduces the purely functional focus of a complaint letter"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 8.5,
+            "diagnosis": "The response is easy to follow; ideas are logically sequenced, cohesion is well managed, and paragraphing is sufficient and appropriate. There is a slight overuse of explicit linking in one instance, but overall progression is smooth and natural.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The letter flows logically from introduction to description to impact to request. Each paragraph has a clear central topic, and cohesive devices (reference, substitution) are used flexibly and effectively. The very occasional slightly mechanical link ('More critically') does not disrupt the overall ease of reading.",
+              "fitZh": "",
+              "nextBandGap": "To achieve Band 9, the sequencing would need to be truly effortless, with no noticeable reliance on formulaic transitions; 'More critically' feels slightly mechanical, and the information flow could be even more seamless.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear, logical progression from problem to request",
+              "Cohesive devices are well managed and referencing is accurate throughout"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "A single slightly mechanical transition ('More critically') interrupts the otherwise natural flow"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "I have enclosed photographic evidence of the damage along with a copy of the purchase receipt for your records. I would appreciate your confirmation of the collection arrangements within the next three working days.",
+                "explanation": "Shows effective use of referencing ('photographic evidence', 'your confirmation') to link ideas without repetition.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires effortless progression with only extremely rare lapses. While the response is very cohesive, the transition 'More critically' is a minor but noticeable mechanical device that prevents the highest level of naturalness.",
+              "band9PositiveEvidence": "The overall organisation is highly logical, paragraphing is effective, and most cohesive links are unobtrusive and well integrated.",
+              "band9BlockingPattern": "The explicit discourse marker 'More critically' introduces a slight mechanical quality not aligned with the effortless, skilful control expected at Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is easy to follow; ideas are logically sequenced, cohesion is well managed, and paragraphing is sufficient and appropriate. There is a slight overuse of explicit linking in one instance, but overall progression is smooth and natural.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The letter flows logically from introduction to description to impact to request. Each paragraph has a clear central topic, and cohesive devices (reference, substitution) are used flexibly and effectively. The very occasional slightly mechanical link ('More critically') does not disrupt the overall ease of reading.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To achieve Band 9, the sequencing would need to be truly effortless, with no noticeable reliance on formulaic transitions; 'More critically' feels slightly mechanical, and the information flow could be even more seamless.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear, logical progression from problem to request",
+              "Cohesive devices are well managed and referencing is accurate throughout"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "A single slightly mechanical transition ('More critically') interrupts the otherwise natural flow"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Vocabulary is wide, precise, flexible and natural, with highly appropriate collocation and only extremely rare lapses. Topic-specific terms are used accurately, and style is consistently formal.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response uses a rich range of vocabulary precisely and naturally, with strong collocations ('sustained considerable damage', 'jagged crack', 'completely shattered', 'mitigate the effects', 'chronic respiratory condition', 'exacerbated my physical discomfort'), and no discernible errors in word choice, spelling or word formation.",
+              "fitZh": "",
+              "nextBandGap": "",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Wide-ranging, natural and precise vocabulary throughout",
+              "Highly appropriate collocation and register; skilful paraphrasing"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor slip: 'accord this matter the seriousness it warrants' is slightly formulaic but not erroneous"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Formal, topic-specific vocabulary ('mitigate', 'chronic respiratory condition', 'severely aggravated') is used naturally and effectively.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The vocabulary is consistently wide, precise, flexible and natural, with only an extremely rare and minor formulaic phrase that does not constitute an error. The descriptor for Band 9 is dominantly fulfilled.",
+              "band9PositiveEvidence": "The response demonstrates a sustained ability to use precise, less common and idiomatic language with full control and appropriateness; spelling and word formation are error-free.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is wide, precise, flexible and natural, with highly appropriate collocation and only extremely rare lapses. Topic-specific terms are used accurately, and style is consistently formal.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response uses a rich range of vocabulary precisely and naturally, with strong collocations ('sustained considerable damage', 'jagged crack', 'completely shattered', 'mitigate the effects', 'chronic respiratory condition', 'exacerbated my physical discomfort'), and no discernible errors in word choice, spelling or word formation.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Wide-ranging, natural and precise vocabulary throughout",
+              "Highly appropriate collocation and register; skilful paraphrasing"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor slip: 'accord this matter the seriousness it warrants' is slightly formulaic but not erroneous"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is flexibly and accurately used; most sentences are error-free, and the few minor errors are non-systematic and do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response features complex sentences with varied clause structures, accurate punctuation, and only one minor grammatical slip ('the delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched' – the present tense 'suggests' is correct, but the sequence 'was already in this condition when it was dispatched' is fully accurate). No errors recur across the response; overall control is very high.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, the extremely rare minor slip would need to be entirely absent; the single hyphen omission in '3-in-1' (standard as '3-in-1' is correct) is not an error, but absolute perfection is required. The one truly minor punctuation inconsistency is the comma before 'which' in '...model BC-300, which I bought...' – it is grammatically acceptable but could be considered a very minor lapse in precision for Band 9.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Flexible and accurate use of complex structures, including relative clauses and participial phrases",
+              "Error-free sentences dominate; punctuation is largely correct and helpful"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "The comma before 'which' in the first paragraph ('BC-300, which I bought') could be seen as a very minor punctuation imprecision, though it is not an error."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Demonstrates a non-defining relative clause with parallel 'which' structures, accurately constructed.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched from your premises.",
+                "explanation": "Complex sentence with an explanatory relative clause and a well-controlled embedded clause; tense usage is precise.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires full flexibility and control with extremely rare lapses in grammar and punctuation. While the response shows high accuracy, the very minor punctuation imprecision (comma before 'which' in a non-defining clause where no comma is needed because it is restrictive? Actually, 'model BC-300, which I bought...' – the comma is correct for non-defining, but could be argued as slightly redundant with the appositive 'model BC-300'. This is an extremely borderline case, but to strictly award Band 9, no such debatable stylistic points should exist. Therefore, Band 8.5 is more appropriate due to this extremely subtle, arguably less-than-perfect punctuation choice.",
+              "band9PositiveEvidence": "The range of structures is wide and flexibly used; almost all sentences are error-free, and the response demonstrates advanced syntactic control.",
+              "band9BlockingPattern": "A single, extremely subtle punctuation choice (the comma in 'model BC-300, which I bought') could be considered a very minor imprecision against the absolute perfection required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is flexibly and accurately used; most sentences are error-free, and the few minor errors are non-systematic and do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response features complex sentences with varied clause structures, accurate punctuation, and only one minor grammatical slip ('the delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched' – the present tense 'suggests' is correct, but the sequence 'was already in this condition when it was dispatched' is fully accurate). No errors recur across the response; overall control is very high.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, the extremely rare minor slip would need to be entirely absent; the single hyphen omission in '3-in-1' (standard as '3-in-1' is correct) is not an error, but absolute perfection is required. The one truly minor punctuation inconsistency is the comma before 'which' in '...model BC-300, which I bought...' – it is grammatically acceptable but could be considered a very minor lapse in precision for Band 9.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Flexible and accurate use of complex structures, including relative clauses and participial phrases",
+              "Error-free sentences dominate; punctuation is largely correct and helpful"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "The comma before 'which' in the first paragraph ('BC-300, which I bought') could be seen as a very minor punctuation imprecision, though it is not an error."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          }
+        },
+        "criteriaDetails": {
+          "Task Achievement": {
+            "band": 8,
+            "diagnosis": "All requirements are covered appropriately, relevantly and sufficiently; the purpose is clear, each bullet is well developed, and tone is consistently formal and polite, with only occasional, minor content lapses (e.g., slightly over-extended emotional detail).",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response fully addresses every bullet: appliance and damage are described precisely, the effect is explained with specific consequences, and the requested action is clear. Tone is appropriate and sustained. Development is relevant and sufficient, though the emotional elaboration is slightly heavy for a functional letter, but this is a non-dominant feature.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, development would need to be more tightly focused on functional relevance; the emotional detail ('profound dissatisfaction', 'significant distress') slightly overshadows the purely transactional purpose, and the closing sentence is somewhat formulaic.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear purpose and sustained formal tone throughout the letter",
+              "All three bullets are addressed with relevant, detailed and sufficient information"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Slightly over-elaborated emotional language ('profound dissatisfaction', 'significant distress') reduces the purely functional focus of a complaint letter"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Demonstrates precise description of the appliance, fulfilling the first bullet with specific details.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "This defect has caused me significant distress and practical difficulties. I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Explains the effect on the writer with personal and practical consequences, covering the second bullet, though the emotional language is slightly heightened.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires every requirement to be fully, precisely and relevantly satisfied with complete development. While this response is strong, the slightly over-emotional tone ('profound dissatisfaction', 'significant distress') and formulaic closing ('I trust that you will accord this matter the seriousness it warrants') reduce the purely functional relevance expected at Band 9.",
+              "band9PositiveEvidence": "All bullets are covered with relevant and well-extended detail; the purpose is clear and the tone is appropriately formal and consistent.",
+              "band9BlockingPattern": "The letter includes slightly heightened emotional language and a formulaic closing phrase that, while not inappropriate, detract from the sustained precise functional relevance required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All requirements are covered appropriately, relevantly and sufficiently; the purpose is clear, each bullet is well developed, and tone is consistently formal and polite, with only occasional, minor content lapses (e.g., slightly over-extended emotional detail).",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response fully addresses every bullet: appliance and damage are described precisely, the effect is explained with specific consequences, and the requested action is clear. Tone is appropriate and sustained. Development is relevant and sufficient, though the emotional elaboration is slightly heavy for a functional letter, but this is a non-dominant feature.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, development would need to be more tightly focused on functional relevance; the emotional detail ('profound dissatisfaction', 'significant distress') slightly overshadows the purely transactional purpose, and the closing sentence is somewhat formulaic.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear purpose and sustained formal tone throughout the letter",
+              "All three bullets are addressed with relevant, detailed and sufficient information"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Slightly over-elaborated emotional language ('profound dissatisfaction', 'significant distress') reduces the purely functional focus of a complaint letter"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Coherence and Cohesion": {
+            "band": 8.5,
+            "diagnosis": "The response is easy to follow; ideas are logically sequenced, cohesion is well managed, and paragraphing is sufficient and appropriate. There is a slight overuse of explicit linking in one instance, but overall progression is smooth and natural.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The letter flows logically from introduction to description to impact to request. Each paragraph has a clear central topic, and cohesive devices (reference, substitution) are used flexibly and effectively. The very occasional slightly mechanical link ('More critically') does not disrupt the overall ease of reading.",
+              "fitZh": "",
+              "nextBandGap": "To achieve Band 9, the sequencing would need to be truly effortless, with no noticeable reliance on formulaic transitions; 'More critically' feels slightly mechanical, and the information flow could be even more seamless.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Clear, logical progression from problem to request",
+              "Cohesive devices are well managed and referencing is accurate throughout"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "A single slightly mechanical transition ('More critically') interrupts the otherwise natural flow"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "I have enclosed photographic evidence of the damage along with a copy of the purchase receipt for your records. I would appreciate your confirmation of the collection arrangements within the next three working days.",
+                "explanation": "Shows effective use of referencing ('photographic evidence', 'your confirmation') to link ideas without repetition.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires effortless progression with only extremely rare lapses. While the response is very cohesive, the transition 'More critically' is a minor but noticeable mechanical device that prevents the highest level of naturalness.",
+              "band9PositiveEvidence": "The overall organisation is highly logical, paragraphing is effective, and most cohesive links are unobtrusive and well integrated.",
+              "band9BlockingPattern": "The explicit discourse marker 'More critically' introduces a slight mechanical quality not aligned with the effortless, skilful control expected at Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is easy to follow; ideas are logically sequenced, cohesion is well managed, and paragraphing is sufficient and appropriate. There is a slight overuse of explicit linking in one instance, but overall progression is smooth and natural.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The letter flows logically from introduction to description to impact to request. Each paragraph has a clear central topic, and cohesive devices (reference, substitution) are used flexibly and effectively. The very occasional slightly mechanical link ('More critically') does not disrupt the overall ease of reading.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To achieve Band 9, the sequencing would need to be truly effortless, with no noticeable reliance on formulaic transitions; 'More critically' feels slightly mechanical, and the information flow could be even more seamless.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Clear, logical progression from problem to request",
+              "Cohesive devices are well managed and referencing is accurate throughout"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "A single slightly mechanical transition ('More critically') interrupts the otherwise natural flow"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Vocabulary is wide, precise, flexible and natural, with highly appropriate collocation and only extremely rare lapses. Topic-specific terms are used accurately, and style is consistently formal.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response uses a rich range of vocabulary precisely and naturally, with strong collocations ('sustained considerable damage', 'jagged crack', 'completely shattered', 'mitigate the effects', 'chronic respiratory condition', 'exacerbated my physical discomfort'), and no discernible errors in word choice, spelling or word formation.",
+              "fitZh": "",
+              "nextBandGap": "",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Wide-ranging, natural and precise vocabulary throughout",
+              "Highly appropriate collocation and register; skilful paraphrasing"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor slip: 'accord this matter the seriousness it warrants' is slightly formulaic but not erroneous"
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "I purchased the cooler specifically to mitigate the effects of the current heatwave, as I suffer from a chronic respiratory condition that is severely aggravated by high temperatures.",
+                "explanation": "Formal, topic-specific vocabulary ('mitigate', 'chronic respiratory condition', 'severely aggravated') is used naturally and effectively.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The vocabulary is consistently wide, precise, flexible and natural, with only an extremely rare and minor formulaic phrase that does not constitute an error. The descriptor for Band 9 is dominantly fulfilled.",
+              "band9PositiveEvidence": "The response demonstrates a sustained ability to use precise, less common and idiomatic language with full control and appropriateness; spelling and word formation are error-free.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is wide, precise, flexible and natural, with highly appropriate collocation and only extremely rare lapses. Topic-specific terms are used accurately, and style is consistently formal.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response uses a rich range of vocabulary precisely and naturally, with strong collocations ('sustained considerable damage', 'jagged crack', 'completely shattered', 'mitigate the effects', 'chronic respiratory condition', 'exacerbated my physical discomfort'), and no discernible errors in word choice, spelling or word formation.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Wide-ranging, natural and precise vocabulary throughout",
+              "Highly appropriate collocation and register; skilful paraphrasing"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor slip: 'accord this matter the seriousness it warrants' is slightly formulaic but not erroneous"
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is flexibly and accurately used; most sentences are error-free, and the few minor errors are non-systematic and do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The response features complex sentences with varied clause structures, accurate punctuation, and only one minor grammatical slip ('the delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched' – the present tense 'suggests' is correct, but the sequence 'was already in this condition when it was dispatched' is fully accurate). No errors recur across the response; overall control is very high.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, the extremely rare minor slip would need to be entirely absent; the single hyphen omission in '3-in-1' (standard as '3-in-1' is correct) is not an error, but absolute perfection is required. The one truly minor punctuation inconsistency is the comma before 'which' in '...model BC-300, which I bought...' – it is grammatically acceptable but could be considered a very minor lapse in precision for Band 9.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Flexible and accurate use of complex structures, including relative clauses and participial phrases",
+              "Error-free sentences dominate; punctuation is largely correct and helpful"
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "The comma before 'which' in the first paragraph ('BC-300, which I bought') could be seen as a very minor punctuation imprecision, though it is not an error."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "The item is a Branton ‘WhisperCool’ 3-in-1 air cooler, model BC-300, which I bought on 12th July and which was delivered to my home two days later.",
+                "explanation": "Demonstrates a non-defining relative clause with parallel 'which' structures, accurately constructed.",
+                "explanationZh": ""
+              },
+              {
+                "quote": "The delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched from your premises.",
+                "explanation": "Complex sentence with an explanatory relative clause and a well-controlled embedded clause; tense usage is precise.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires full flexibility and control with extremely rare lapses in grammar and punctuation. While the response shows high accuracy, the very minor punctuation imprecision (comma before 'which' in a non-defining clause where no comma is needed because it is restrictive? Actually, 'model BC-300, which I bought...' – the comma is correct for non-defining, but could be argued as slightly redundant with the appositive 'model BC-300'. This is an extremely borderline case, but to strictly award Band 9, no such debatable stylistic points should exist. Therefore, Band 8.5 is more appropriate due to this extremely subtle, arguably less-than-perfect punctuation choice.",
+              "band9PositiveEvidence": "The range of structures is wide and flexibly used; almost all sentences are error-free, and the response demonstrates advanced syntactic control.",
+              "band9BlockingPattern": "A single, extremely subtle punctuation choice (the comma in 'model BC-300, which I bought') could be considered a very minor imprecision against the absolute perfection required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is flexibly and accurately used; most sentences are error-free, and the few minor errors are non-systematic and do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The response features complex sentences with varied clause structures, accurate punctuation, and only one minor grammatical slip ('the delivery carton itself was entirely intact, which strongly suggests that the unit was already in this condition when it was dispatched' – the present tense 'suggests' is correct, but the sequence 'was already in this condition when it was dispatched' is fully accurate). No errors recur across the response; overall control is very high.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, the extremely rare minor slip would need to be entirely absent; the single hyphen omission in '3-in-1' (standard as '3-in-1' is correct) is not an error, but absolute perfection is required. The one truly minor punctuation inconsistency is the comma before 'which' in '...model BC-300, which I bought...' – it is grammatically acceptable but could be considered a very minor lapse in precision for Band 9.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Flexible and accurate use of complex structures, including relative clauses and participial phrases",
+              "Error-free sentences dominate; punctuation is largely correct and helpful"
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "The comma before 'which' in the first paragraph ('BC-300, which I bought') could be seen as a very minor punctuation imprecision, though it is not an error."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.8
+          }
+        },
+        "overallAssessment": "A strong complaint letter demonstrating highly proficient vocabulary and grammatical control. All task requirements are met with relevant detail and appropriate tone, though a slight tendency toward emotional language and a single mechanical transition prevent the highest bands in Task Achievement and Coherence and Cohesion. Lexical Resource reaches Band 9, while Grammar reaches 8.5 due to an extremely subtle punctuation imprecision.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 1,
+          "lowerOverall": 6.5,
+          "upperOverall": 7.5,
+          "panelMidpoint": 7,
+          "criterionDeltas": {
+            "Task Achievement": 1.5,
+            "Coherence and Cohesion": 1,
+            "Lexical Resource": 1,
+            "Grammatical Range and Accuracy": 0.5
+          },
+          "maxCriterionDelta": 1.5,
+          "differingCriteria": 4,
+          "examinerAUniform": false,
+          "examinerBUniform": true,
+          "unanimousAiBandZero": false,
+          "observations": [
+            "ANY_CRITERION_DISAGREEMENT"
+          ],
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 8,
+              "Coherence and Cohesion": 7.5,
+              "Lexical Resource": 7.5,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7.5,
+            "confidence": 0.8,
+            "evidenceCount": 5,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "TA is strongest because all bullets are fully covered with relevant, well-extended detail and appropriate formal register throughout. GRA is weakest because while most sentences are error-free, there are a few minor but noticeable errors (missing comma, non-standard phrase) that prevent full flexibility and control expected at Band 7.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Achievement"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 6.5,
+              "Coherence and Cohesion": 6.5,
+              "Lexical Resource": 6.5,
+              "Grammatical Range and Accuracy": 6.5
+            },
+            "overallBand": 6.5,
+            "confidence": 0.8,
+            "evidenceCount": 4,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": true,
+            "criterionContrastAudit": {
+              "strongest": "Task Achievement",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Task Achievement is strongest because all bullet points are fully addressed with relevant, well-developed detail. Grammatical Range and Accuracy is weakest due to a narrow range of structures and minor but noticeable errors in punctuation and preposition use.",
+              "uniformProfileJustification": "All four criteria are scored at 6.5 because each shows clear strengths appropriate to Band 7 but is held back by recurring limitations that prevent the next band. Task Achievement is fully covered but lacks only the natural, proportionate development of Band 7. Coherence and Cohesion has clear progression but some mechanical transitions. Lexical Resource is adequate with some precise vocabulary but suffers from occasional imprecision and repetition. Grammatical Range and Accuracy shows good control of simple forms but limited flexibility in complex structures. The dominant pattern across all criteria is a secure Band 6 performance with strong elements reaching toward Band 7, hence the half band."
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "high",
+            "reason": "AI_PANEL_AT_OR_ABOVE_UPPER_MID_BOUNDARY",
+            "lower": 6.5,
+            "upper": 7.5
+          },
+          "specialist": {
+            "examinerId": "high-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Achievement": 8,
+              "Coherence and Cohesion": 8.5,
+              "Lexical Resource": 9,
+              "Grammatical Range and Accuracy": 8.5
+            },
+            "overallBand": 8.5,
+            "confidence": 0.85,
+            "evidenceCount": 6,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Lexical Resource",
+              "weakest": "Task Achievement",
+              "comparison": "Lexical Resource shows wide, precise and flexible vocabulary with skilful collocation and only extremely rare minor slips, clearly outperforming the other criteria. Task Achievement is the weakest because while all bullets are addressed with relevant detail, the development is slightly conventional and one point (how the problem has affected you) is over-elaborated with emotional language that slightly reduces the functional focus expected of a complaint letter, though it still meets Band 8 requirements overall.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Achievement",
+              "Coherence and Cohesion",
+              "Lexical Resource",
+              "Grammatical Range and Accuracy"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-pro-upper-boundary-specialist",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+            "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+          ],
+          "decision": "independent_pro_upper_boundary_final",
+          "specialistZone": "high",
+          "specialistCriteria": {
+            "Task Achievement": 8,
+            "Coherence and Cohesion": 8.5,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "specialistOverallBand": 8.5,
+          "finalCriteria": {
+            "Task Achievement": 8,
+            "Coherence and Cohesion": 8.5,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "finalOverallBand": 8.5,
+          "skippedRoles": [
+            "meta_adjudicator",
+            "criterion_profile_adjudicator"
+          ],
+          "localScoreAdjustment": false
+        },
+        "localSignals": {
+          "task": "Task 1",
+          "taskKind": "gt_letter",
+          "examModule": "general_training",
+          "emptyResponse": false,
+          "wordCount": 284,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 150,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 7,
+          "sentenceCount": 15,
+          "averageSentenceWords": 18.9,
+          "lexicalDiversity": 0.658,
+          "paragraphWordCounts": [
+            3,
+            48,
+            83,
+            70,
+            76,
+            2,
+            2
+          ],
+          "englishLetterRatio": 0.971,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.263,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_pro_upper_boundary_final",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 8.5,
+          "finalBand": 8.5,
+          "source": "ai-pro-upper-boundary-specialist"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "OVERALL_DELTA_GT_0_5",
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_pro_upper_boundary_final"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-ai-panel-v6-5-full-range-pro-upper-boundary",
+        "scoreSystemVersion": "unified-writing-core-v6.5-full-range-pro-upper-boundary",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5025,
+              "completion_tokens": 3120,
+              "total_tokens": 8145,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5025
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5026,
+              "completion_tokens": 2744,
+              "total_tokens": 7770,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5026
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "high_specialist",
+            "model": "deepseek-v4-pro",
+            "thinking": "disabled",
+            "reasoningEffort": "high",
+            "maxTokens": 6000,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5076,
+              "completion_tokens": 2766,
+              "total_tokens": 7842,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5076
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": null,
+          "criterionProfileReview": null,
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 74257,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "reviewPolicyVersion": "material-disagreement-plus-full-range-ai-edge-safeguards-v3",
+            "accuracySafeguardTriggered": true,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": false,
+            "criterionProfileReviewTriggered": false,
+            "highBoundaryFinal": true,
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "coreModelCalls": 3,
+            "avoidedModelCalls": 1,
+            "coreTotalTokens": 23757
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

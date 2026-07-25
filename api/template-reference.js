@@ -6,7 +6,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const TEMPLATE_REFERENCE_VERSION = "template-reference-v1-fixed-template-ai-slot-review-final-grammar-polish-simple-gra5-v7";
-const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEFAULT_MODEL = process.env.SCORE_GENERATOR_MODEL || process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const REQUEST_TIMEOUT_MS = Math.max(45000, Math.min(Number(process.env.AI_TEMPLATE_REFERENCE_TIMEOUT_MS) || 120000, 240000));
 const DISCLAIMER = "This is AI-generated practice writing, not an official IELTS answer.";

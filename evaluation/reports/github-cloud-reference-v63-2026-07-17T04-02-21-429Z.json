@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-07-17T04:02:21.429Z",
+  "methodology": "Read-only comparison against the unchanged local checkout of origin/main's production router. No GitHub files, commits or branches were changed.",
+  "oldUrl": "http://localhost:4000/api/grade-ielts-production-router",
+  "newUrl": "http://127.0.0.1:4000/api/grade-writing",
+  "records": 1,
+  "oldMAE": null,
+  "newMAE": 0.5,
+  "newAverageCoreCalls": 5,
+  "newAverageCoreTokens": 36114,
+  "rows": [
+    {
+      "id": "T1-B3-5-short-confused",
+      "task": "Task 1",
+      "targetOverall": 3.5,
+      "oldBand": null,
+      "newBand": 4,
+      "oldError": null,
+      "newError": 0.5,
+      "oldCriteria": null,
+      "newCriteria": {
+        "Task Achievement": 4,
+        "Coherence and Cohesion": 4,
+        "Lexical Resource": 4,
+        "Grammatical Range and Accuracy": 4
+      },
+      "oldVersion": null,
+      "newVersion": "unified-writing-core-v6.3-github-calibrated-boundary-review",
+      "oldSource": null,
+      "newSource": "ai-criterion-profile-adjudicator",
+      "newReviewReasons": [
+        "CRITERION_DELTA_GTE_1"
+      ],
+      "newCoreCalls": 5,
+      "newCoreTokens": 36114,
+      "oldDurationMs": null,
+      "newDurationMs": 68904
+    }
+  ]
+}

@@ -1,0 +1,1214 @@
+{
+  "generatedAt": "2026-07-17T04:38:09.395Z",
+  "corpusVersion": "band-ladder-0-to-9-five-per-half-band-v1",
+  "targetSource": "blind-independent-pro-reference",
+  "referenceMeta": {
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "methodology": "Stable shuffled batches with opaque IDs; author design targets and production scores were hidden. Four criterion bands came from an independent Pro reference examiner and Overall was calculated from their equal average."
+  },
+  "filters": {
+    "split": "all",
+    "bands": [],
+    "ids": [
+      "ladder-b9-4-g2-problem"
+    ],
+    "runs": 1,
+    "concurrency": 1
+  },
+  "staticAudit": {
+    "ok": true,
+    "failures": [],
+    "sampleCount": 95,
+    "split": {
+      "calibration": 76,
+      "holdout": 19
+    },
+    "coverage": [
+      "academic:1",
+      "academic:2",
+      "general_training:1",
+      "general_training:2"
+    ],
+    "countsByBand": {
+      "0.0": 5,
+      "0.5": 5,
+      "1.0": 5,
+      "1.5": 5,
+      "2.0": 5,
+      "2.5": 5,
+      "3.0": 5,
+      "3.5": 5,
+      "4.0": 5,
+      "4.5": 5,
+      "5.0": 5,
+      "5.5": 5,
+      "6.0": 5,
+      "6.5": 5,
+      "7.0": 5,
+      "7.5": 5,
+      "8.0": 5,
+      "8.5": 5,
+      "9.0": 5
+    },
+    "wordCountsByBand": {
+      "0.0": {
+        "min": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "0.5": {
+        "min": 4,
+        "max": 6,
+        "mean": 5
+      },
+      "1.0": {
+        "min": 5,
+        "max": 11,
+        "mean": 8
+      },
+      "1.5": {
+        "min": 16,
+        "max": 23,
+        "mean": 19.6
+      },
+      "2.0": {
+        "min": 17,
+        "max": 59,
+        "mean": 37
+      },
+      "2.5": {
+        "min": 23,
+        "max": 88,
+        "mean": 58.8
+      },
+      "3.0": {
+        "min": 55,
+        "max": 114,
+        "mean": 89.2
+      },
+      "3.5": {
+        "min": 83,
+        "max": 142,
+        "mean": 110.4
+      },
+      "4.0": {
+        "min": 91,
+        "max": 141,
+        "mean": 116.2
+      },
+      "4.5": {
+        "min": 100,
+        "max": 167,
+        "mean": 138
+      },
+      "5.0": {
+        "min": 109,
+        "max": 229,
+        "mean": 170.2
+      },
+      "5.5": {
+        "min": 128,
+        "max": 255,
+        "mean": 204.4
+      },
+      "6.0": {
+        "min": 177,
+        "max": 290,
+        "mean": 236.2
+      },
+      "6.5": {
+        "min": 179,
+        "max": 309,
+        "mean": 242.4
+      },
+      "7.0": {
+        "min": 176,
+        "max": 318,
+        "mean": 226.2
+      },
+      "7.5": {
+        "min": 177,
+        "max": 316,
+        "mean": 262.2
+      },
+      "8.0": {
+        "min": 152,
+        "max": 325,
+        "mean": 255.6
+      },
+      "8.5": {
+        "min": 185,
+        "max": 299,
+        "mean": 240
+      },
+      "9.0": {
+        "min": 189,
+        "max": 428,
+        "mean": 290.6
+      }
+    }
+  },
+  "referenceAudit": {
+    "ok": true,
+    "failures": [],
+    "version": "blind-independent-reference-v1",
+    "model": "deepseek-v4-pro",
+    "labelCount": 95
+  },
+  "acceptance": {
+    "overallMeanAbsoluteErrorMax": 0.55,
+    "criterionMeanAbsoluteErrorMax": 0.7,
+    "withinHalfBandRateMin": 0.75,
+    "catastrophicErrorRateMax": 0.02,
+    "lowBandZeroOneAccuracyMin": 0.8,
+    "holdoutOverallMeanAbsoluteErrorMax": 0.65
+  },
+  "metrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "designMetrics": {
+    "all": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "calibration": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.5,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0
+    },
+    "holdout": {
+      "records": 0,
+      "overallMAE": 0,
+      "criterionMAE": 0,
+      "withinHalfBandRate": 0,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 0,
+      "adjudicationRate": 0,
+      "uniformFinalCriteriaRate": 0
+    }
+  },
+  "zeroOneAccuracy": 0,
+  "byBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byDesignBand": {
+    "9.0": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byTask": {
+    "general_training:2": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "byZone": {
+    "high_7_9": {
+      "records": 1,
+      "overallMAE": 0.5,
+      "criterionMAE": 0.625,
+      "withinHalfBandRate": 1,
+      "exactRate": 0,
+      "catastrophicErrorRate": 0,
+      "meanDurationMs": 68652,
+      "adjudicationRate": 1,
+      "uniformFinalCriteriaRate": 0,
+      "targetMean": 9,
+      "predictedMean": 8.5,
+      "predictions": [
+        8.5
+      ]
+    }
+  },
+  "monotonicity": {
+    "comparisons": 0,
+    "violations": [],
+    "violationRate": 0
+  },
+  "gates": {
+    "corpusStaticAudit": true,
+    "blindReferenceAudit": true,
+    "expectedRecordCount": true,
+    "noRuntimeErrors": true,
+    "overallMAE": true,
+    "criterionMAE": true,
+    "withinHalfBandRate": true,
+    "catastrophicErrorRate": true,
+    "lowBandZeroOneAccuracy": false,
+    "holdoutOverallMAE": true,
+    "adjacentMonotonicity": true
+  },
+  "passed": false,
+  "runtimeErrors": [],
+  "records": [
+    {
+      "sampleId": "ladder-b9-4-g2-problem",
+      "split": "calibration",
+      "taskKey": "general_training:2",
+      "targetSource": "blind-independent-pro-reference",
+      "targetOverall": 9,
+      "designTargetOverall": 9,
+      "predictedOverall": 8.5,
+      "overallError": 0.5,
+      "designOverallError": 0.5,
+      "targetCriteria": {
+        "Task Response": 9,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "designTargetCriteria": {
+        "Task Response": 8.5,
+        "Coherence and Cohesion": 9,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 9
+      },
+      "predictedCriteria": {
+        "Task Response": 8,
+        "Coherence and Cohesion": 8,
+        "Lexical Resource": 9,
+        "Grammatical Range and Accuracy": 8.5
+      },
+      "criterionErrors": {
+        "Task Response": 1,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "designCriterionErrors": {
+        "Task Response": 0.5,
+        "Coherence and Cohesion": 1,
+        "Lexical Resource": 0,
+        "Grammatical Range and Accuracy": 0.5
+      },
+      "zone": "high_7_9",
+      "wordCount": 428,
+      "confidence": 0.86,
+      "adjudicationTriggered": true,
+      "adjudicationReasons": [
+        "CRITERION_DELTA_GTE_1",
+        "MULTIPLE_CRITERION_DISAGREEMENTS",
+        "AI_PANEL_HIGH_EDGE_SAFEGUARD",
+        "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+        "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+      ],
+      "uniformFinalCriteria": false,
+      "needsHumanReview": false,
+      "durationMs": 68652,
+      "run": 1,
+      "result": {
+        "ok": true,
+        "examModule": "general_training",
+        "module": "General Training",
+        "taskNumber": 2,
+        "task": "Task 2",
+        "taskKind": "essay",
+        "overallBand": 8.5,
+        "rawAverage": 8.375,
+        "likelyRange": [
+          7,
+          9
+        ],
+        "confidence": "high",
+        "confidenceScore": 0.86,
+        "needsHumanReview": false,
+        "humanReviewReasons": [],
+        "criteria": {
+          "Task Response": 8,
+          "Coherence and Cohesion": 8,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "finalCriteria": {
+          "Task Response": 8,
+          "Coherence and Cohesion": 8,
+          "Lexical Resource": 9,
+          "Grammatical Range and Accuracy": 8.5
+        },
+        "criterionCalibration": {
+          "Task Response": {
+            "band": 8,
+            "diagnosis": "All requirements are addressed relevantly and sufficiently; the position is clear and each problem and measure is well extended with only occasional lapses in development depth.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay fully addresses both parts of the question (problems and measures) with clear, relevant ideas extended through explanation and example. The conclusion synthesises the argument. One measure (composting) is briefly mentioned but not fully developed, preventing a Band 9 where every requirement is fully and precisely satisfied.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, all key features would need consistently full development; the composting point is mentioned but remains a single sentence, while a Band-9 response would develop every main supporting idea fully.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Complete response: problems (landfill strain, ecosystem contamination) and measures (individual actions, local authority policies) are both fully addressed with clear, supported reasoning."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "One supporting point (composting) is stated but not elaborated, slightly limiting the depth of development on individual measures."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires every requirement be fully, relevantly and precisely satisfied with complete development. The composting point is stated but not extended, leaving one part of the response slightly underdeveloped.",
+              "band9PositiveEvidence": "The response addresses all parts of the question with sophisticated, relevant ideas and developed examples, such as the detailed explanation of landfill problems and the 'pay-as-you-throw' system.",
+              "band9BlockingPattern": "One supporting idea (composting) lacks the full extension seen elsewhere, preventing the 'every requirement fully satisfied' Band-9 descriptor."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All requirements are addressed relevantly and sufficiently; the position is clear and each problem and measure is well extended with only occasional lapses in development depth.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay fully addresses both parts of the question (problems and measures) with clear, relevant ideas extended through explanation and example. The conclusion synthesises the argument. One measure (composting) is briefly mentioned but not fully developed, preventing a Band 9 where every requirement is fully and precisely satisfied.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, all key features would need consistently full development; the composting point is mentioned but remains a single sentence, while a Band-9 response would develop every main supporting idea fully.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Complete response: problems (landfill strain, ecosystem contamination) and measures (individual actions, local authority policies) are both fully addressed with clear, supported reasoning."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "One supporting point (composting) is stated but not elaborated, slightly limiting the depth of development on individual measures."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 8,
+            "diagnosis": "The response is easy to follow; information is logically sequenced and cohesion is well managed with appropriate paragraphing.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The progression is clear: introduction, two problem paragraphs, two measures paragraphs (individuals, authorities), and conclusion. Cohesion is skilfully handled with referencing, substitution, and logical connectors. Occasional slightly mechanical transitions (e.g., 'On a personal level') prevent the effortless, highly skilful control of Band 9.",
+              "fitZh": "",
+              "nextBandGap": "Band 9 requires effortless flow and highly skilful control; some transitions, while clear, are conventionally sequenced rather than exceptionally natural.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical organisation with clear paragraphing: problems and measures are consistently separated and logically sequenced. Cohesive devices (e.g., 'these sites', 'this phenomenon') are used effectively and flexibly."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Transitions like 'On a personal level' and 'However' are effective but not seamlessly integrated; the overall progression is clear but not yet 'effortless' at the Band-9 level."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "On a personal level, individuals can adopt a more conscientious and minimalist lifestyle.",
+                "explanation": "Clear topic transition but slightly explicit, lacking the Band-9 descriptor's 'highly skilful' seamless integration.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires the message to be effortless to follow with highly skilful control. While the essay is logically ordered and cohesive, the transitions are clear but occasionally conventional, not yet the natural, almost invisible flow of Band 9.",
+              "band9PositiveEvidence": "The overall structure is sound, and referencing such as 'this phenomenon' and 'these sites' shows good control.",
+              "band9BlockingPattern": "Some transitional phrases ('On a personal level', 'However') are effective but slightly mechanical, preventing the 'highly skilful control' required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is easy to follow; information is logically sequenced and cohesion is well managed with appropriate paragraphing.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The progression is clear: introduction, two problem paragraphs, two measures paragraphs (individuals, authorities), and conclusion. Cohesion is skilfully handled with referencing, substitution, and logical connectors. Occasional slightly mechanical transitions (e.g., 'On a personal level') prevent the effortless, highly skilful control of Band 9.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 9 requires effortless flow and highly skilful control; some transitions, while clear, are conventionally sequenced rather than exceptionally natural.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical organisation with clear paragraphing: problems and measures are consistently separated and logically sequenced. Cohesive devices (e.g., 'these sites', 'this phenomenon') are used effectively and flexibly."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Transitions like 'On a personal level' and 'However' are effective but not seamlessly integrated; the overall progression is clear but not yet 'effortless' at the Band-9 level."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Vocabulary is wide, precise, flexible, and natural; less common and idiomatic choices are skilful with extremely rare lapses.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay uses a wide range of precise, sophisticated vocabulary (e.g., 'quandary', 'engenders', 'cascade', 'proliferation', 'pernicious', 'conscientious', 'meticulous', 'symbiotic', 'decouple') with natural control. Collocations are precise, and spelling is error-free. The few minor imperfections (e.g., 'a potent greenhouse gas' could be 'a potent greenhouse gas' is fine; no true errors) do not detract from the Band-9 descriptor.",
+              "fitZh": "",
+              "nextBandGap": "Already at Band 9; no gap.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Exceptional range and precision with skilful use of less common vocabulary (e.g., 'engenders a cascade of detrimental consequences', 'proliferation of unsightly and toxic landfills', 'pernicious issue', 'symbiotic relationship'). Natural, idiomatic expressions throughout."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor imperfection: 'disintegrates into microplastics' is slightly informal but still precise; no actual errors."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The vocabulary is consistently wide, precise, and natural, meeting the Band-9 descriptor. Lapses are extremely rare; none detract from precise meaning.",
+              "band9PositiveEvidence": "Sustained precise and flexible vocabulary with less common items used naturally (e.g., 'quandary', 'pernicious', 'meticulous segregation'). No spelling or word-formation errors.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is wide, precise, flexible, and natural; less common and idiomatic choices are skilful with extremely rare lapses.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay uses a wide range of precise, sophisticated vocabulary (e.g., 'quandary', 'engenders', 'cascade', 'proliferation', 'pernicious', 'conscientious', 'meticulous', 'symbiotic', 'decouple') with natural control. Collocations are precise, and spelling is error-free. The few minor imperfections (e.g., 'a potent greenhouse gas' could be 'a potent greenhouse gas' is fine; no true errors) do not detract from the Band-9 descriptor.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Already at Band 9; no gap.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Exceptional range and precision with skilful use of less common vocabulary (e.g., 'engenders a cascade of detrimental consequences', 'proliferation of unsightly and toxic landfills', 'pernicious issue', 'symbiotic relationship'). Natural, idiomatic expressions throughout."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor imperfection: 'disintegrates into microplastics' is slightly informal but still precise; no actual errors."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is used flexibly and accurately; most sentences are error-free, with occasional minor lapses that do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay demonstrates a wide range of complex structures, including relative clauses, passive constructions, and parallel structures, with high accuracy. The few minor lapses (e.g., 'optical sorting facilities that can process' - singular/plural agreement issue; 'a more radical and effective measure is the implementation' is correct but later 'charging households based on the weight' could have a slight article inconsistency with 'a pay-as-you-throw tariff system') are occasional and non-systematic, fitting the top of Band 8.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, these extremely rare lapses would need to be absent, showing fully sustained control. The very occasional slip (e.g., 'facilities that can process' where plural 'facilities' might imply 'process' should be plural? Actually 'facilities that can process' is correct as 'can' does not change; no error there. Re-exam: 'the implementation of a ‘pay-as-you-throw’ tariff system, where households are charged based on the weight of their non-recyclable waste, creating a powerful direct financial incentive' – this is a slightly run-on participial phrase, but still grammatically acceptable. Overall, the few minute issues (perhaps a missing article before 'single panacea') prevent a pure Band-9 assessment.)",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Wide range of sentence structures with complex clauses, passive forms, and varied punctuation used flexibly and accurately. Most sentences are error-free."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Occasional minor lapses: 'the solution lies not in a single panacea' (missing article before 'panacea'? Actually 'a single panacea' would be more conventional, but 'single panacea' is not grammatically wrong; just slightly less idiomatic). Overall, extremely rare minor imprecisions separate this from a sustained Band-9 pattern."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "These sites are not merely an aesthetic blight; they leach hazardous chemicals into the soil and groundwater and emit methane, a potent greenhouse gas, thereby contributing directly to climate change.",
+                "explanation": "Demonstrates a complex, well-punctuated sentence with effective embedding and clear relationships.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires full flexibility and control with extremely rare lapses. While control is very high, the occasional tiny imperfection (e.g., slightly missing article) prevents a pure Band-9 classification; the pattern is a high Band 8.",
+              "band9PositiveEvidence": "Extensive complex structures used accurately, with clear relationships and sophisticated punctuation.",
+              "band9BlockingPattern": "Extremely rare minor lapses (e.g., 'not in a single panacea' slightly deviating from standard article use) persist, preventing the flawless sustained accuracy of Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is used flexibly and accurately; most sentences are error-free, with occasional minor lapses that do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay demonstrates a wide range of complex structures, including relative clauses, passive constructions, and parallel structures, with high accuracy. The few minor lapses (e.g., 'optical sorting facilities that can process' - singular/plural agreement issue; 'a more radical and effective measure is the implementation' is correct but later 'charging households based on the weight' could have a slight article inconsistency with 'a pay-as-you-throw tariff system') are occasional and non-systematic, fitting the top of Band 8.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, these extremely rare lapses would need to be absent, showing fully sustained control. The very occasional slip (e.g., 'facilities that can process' where plural 'facilities' might imply 'process' should be plural? Actually 'facilities that can process' is correct as 'can' does not change; no error there. Re-exam: 'the implementation of a ‘pay-as-you-throw’ tariff system, where households are charged based on the weight of their non-recyclable waste, creating a powerful direct financial incentive' – this is a slightly run-on participial phrase, but still grammatically acceptable. Overall, the few minute issues (perhaps a missing article before 'single panacea') prevent a pure Band-9 assessment.)",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Wide range of sentence structures with complex clauses, passive forms, and varied punctuation used flexibly and accurately. Most sentences are error-free."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Occasional minor lapses: 'the solution lies not in a single panacea' (missing article before 'panacea'? Actually 'a single panacea' would be more conventional, but 'single panacea' is not grammatically wrong; just slightly less idiomatic). Overall, extremely rare minor imprecisions separate this from a sustained Band-9 pattern."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "criteriaDetails": {
+          "Task Response": {
+            "band": 8,
+            "diagnosis": "All requirements are addressed relevantly and sufficiently; the position is clear and each problem and measure is well extended with only occasional lapses in development depth.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay fully addresses both parts of the question (problems and measures) with clear, relevant ideas extended through explanation and example. The conclusion synthesises the argument. One measure (composting) is briefly mentioned but not fully developed, preventing a Band 9 where every requirement is fully and precisely satisfied.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, all key features would need consistently full development; the composting point is mentioned but remains a single sentence, while a Band-9 response would develop every main supporting idea fully.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Complete response: problems (landfill strain, ecosystem contamination) and measures (individual actions, local authority policies) are both fully addressed with clear, supported reasoning."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "One supporting point (composting) is stated but not elaborated, slightly limiting the depth of development on individual measures."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires every requirement be fully, relevantly and precisely satisfied with complete development. The composting point is stated but not extended, leaving one part of the response slightly underdeveloped.",
+              "band9PositiveEvidence": "The response addresses all parts of the question with sophisticated, relevant ideas and developed examples, such as the detailed explanation of landfill problems and the 'pay-as-you-throw' system.",
+              "band9BlockingPattern": "One supporting idea (composting) lacks the full extension seen elsewhere, preventing the 'every requirement fully satisfied' Band-9 descriptor."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "All requirements are addressed relevantly and sufficiently; the position is clear and each problem and measure is well extended with only occasional lapses in development depth.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay fully addresses both parts of the question (problems and measures) with clear, relevant ideas extended through explanation and example. The conclusion synthesises the argument. One measure (composting) is briefly mentioned but not fully developed, preventing a Band 9 where every requirement is fully and precisely satisfied.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, all key features would need consistently full development; the composting point is mentioned but remains a single sentence, while a Band-9 response would develop every main supporting idea fully.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Complete response: problems (landfill strain, ecosystem contamination) and measures (individual actions, local authority policies) are both fully addressed with clear, supported reasoning."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "One supporting point (composting) is stated but not elaborated, slightly limiting the depth of development on individual measures."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Coherence and Cohesion": {
+            "band": 8,
+            "diagnosis": "The response is easy to follow; information is logically sequenced and cohesion is well managed with appropriate paragraphing.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The progression is clear: introduction, two problem paragraphs, two measures paragraphs (individuals, authorities), and conclusion. Cohesion is skilfully handled with referencing, substitution, and logical connectors. Occasional slightly mechanical transitions (e.g., 'On a personal level') prevent the effortless, highly skilful control of Band 9.",
+              "fitZh": "",
+              "nextBandGap": "Band 9 requires effortless flow and highly skilful control; some transitions, while clear, are conventionally sequenced rather than exceptionally natural.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Logical organisation with clear paragraphing: problems and measures are consistently separated and logically sequenced. Cohesive devices (e.g., 'these sites', 'this phenomenon') are used effectively and flexibly."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Transitions like 'On a personal level' and 'However' are effective but not seamlessly integrated; the overall progression is clear but not yet 'effortless' at the Band-9 level."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "On a personal level, individuals can adopt a more conscientious and minimalist lifestyle.",
+                "explanation": "Clear topic transition but slightly explicit, lacking the Band-9 descriptor's 'highly skilful' seamless integration.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires the message to be effortless to follow with highly skilful control. While the essay is logically ordered and cohesive, the transitions are clear but occasionally conventional, not yet the natural, almost invisible flow of Band 9.",
+              "band9PositiveEvidence": "The overall structure is sound, and referencing such as 'this phenomenon' and 'these sites' shows good control.",
+              "band9BlockingPattern": "Some transitional phrases ('On a personal level', 'However') are effective but slightly mechanical, preventing the 'highly skilful control' required for Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "The response is easy to follow; information is logically sequenced and cohesion is well managed with appropriate paragraphing.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The progression is clear: introduction, two problem paragraphs, two measures paragraphs (individuals, authorities), and conclusion. Cohesion is skilfully handled with referencing, substitution, and logical connectors. Occasional slightly mechanical transitions (e.g., 'On a personal level') prevent the effortless, highly skilful control of Band 9.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Band 9 requires effortless flow and highly skilful control; some transitions, while clear, are conventionally sequenced rather than exceptionally natural.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Logical organisation with clear paragraphing: problems and measures are consistently separated and logically sequenced. Cohesive devices (e.g., 'these sites', 'this phenomenon') are used effectively and flexibly."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Transitions like 'On a personal level' and 'However' are effective but not seamlessly integrated; the overall progression is clear but not yet 'effortless' at the Band-9 level."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.9
+          },
+          "Lexical Resource": {
+            "band": 9,
+            "diagnosis": "Vocabulary is wide, precise, flexible, and natural; less common and idiomatic choices are skilful with extremely rare lapses.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay uses a wide range of precise, sophisticated vocabulary (e.g., 'quandary', 'engenders', 'cascade', 'proliferation', 'pernicious', 'conscientious', 'meticulous', 'symbiotic', 'decouple') with natural control. Collocations are precise, and spelling is error-free. The few minor imperfections (e.g., 'a potent greenhouse gas' could be 'a potent greenhouse gas' is fine; no true errors) do not detract from the Band-9 descriptor.",
+              "fitZh": "",
+              "nextBandGap": "Already at Band 9; no gap.",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Exceptional range and precision with skilful use of less common vocabulary (e.g., 'engenders a cascade of detrimental consequences', 'proliferation of unsightly and toxic landfills', 'pernicious issue', 'symbiotic relationship'). Natural, idiomatic expressions throughout."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Extremely rare minor imperfection: 'disintegrates into microplastics' is slightly informal but still precise; no actual errors."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": true,
+              "reason": "The vocabulary is consistently wide, precise, and natural, meeting the Band-9 descriptor. Lapses are extremely rare; none detract from precise meaning.",
+              "band9PositiveEvidence": "Sustained precise and flexible vocabulary with less common items used naturally (e.g., 'quandary', 'pernicious', 'meticulous segregation'). No spelling or word-formation errors.",
+              "band9BlockingPattern": ""
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "Vocabulary is wide, precise, flexible, and natural; less common and idiomatic choices are skilful with extremely rare lapses.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay uses a wide range of precise, sophisticated vocabulary (e.g., 'quandary', 'engenders', 'cascade', 'proliferation', 'pernicious', 'conscientious', 'meticulous', 'symbiotic', 'decouple') with natural control. Collocations are precise, and spelling is error-free. The few minor imperfections (e.g., 'a potent greenhouse gas' could be 'a potent greenhouse gas' is fine; no true errors) do not detract from the Band-9 descriptor.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "Already at Band 9; no gap.",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Exceptional range and precision with skilful use of less common vocabulary (e.g., 'engenders a cascade of detrimental consequences', 'proliferation of unsightly and toxic landfills', 'pernicious issue', 'symbiotic relationship'). Natural, idiomatic expressions throughout."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Extremely rare minor imperfection: 'disintegrates into microplastics' is slightly informal but still precise; no actual errors."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.95
+          },
+          "Grammatical Range and Accuracy": {
+            "band": 8.5,
+            "diagnosis": "A wide range of structures is used flexibly and accurately; most sentences are error-free, with occasional minor lapses that do not impede communication.",
+            "diagnosisZh": "",
+            "bandBoundary": {
+              "fit": "The essay demonstrates a wide range of complex structures, including relative clauses, passive constructions, and parallel structures, with high accuracy. The few minor lapses (e.g., 'optical sorting facilities that can process' - singular/plural agreement issue; 'a more radical and effective measure is the implementation' is correct but later 'charging households based on the weight' could have a slight article inconsistency with 'a pay-as-you-throw tariff system') are occasional and non-systematic, fitting the top of Band 8.",
+              "fitZh": "",
+              "nextBandGap": "To reach Band 9, these extremely rare lapses would need to be absent, showing fully sustained control. The very occasional slip (e.g., 'facilities that can process' where plural 'facilities' might imply 'process' should be plural? Actually 'facilities that can process' is correct as 'can' does not change; no error there. Re-exam: 'the implementation of a ‘pay-as-you-throw’ tariff system, where households are charged based on the weight of their non-recyclable waste, creating a powerful direct financial incentive' – this is a slightly run-on participial phrase, but still grammatically acceptable. Overall, the few minute issues (perhaps a missing article before 'single panacea') prevent a pure Band-9 assessment.)",
+              "nextBandGapZh": ""
+            },
+            "strengths": [
+              "Wide range of sentence structures with complex clauses, passive forms, and varied punctuation used flexibly and accurately. Most sentences are error-free."
+            ],
+            "strengthsZh": [],
+            "constraints": [
+              "Occasional minor lapses: 'the solution lies not in a single panacea' (missing article before 'panacea'? Actually 'a single panacea' would be more conventional, but 'single panacea' is not grammatically wrong; just slightly less idiomatic). Overall, extremely rare minor imprecisions separate this from a sustained Band-9 pattern."
+            ],
+            "constraintsZh": [],
+            "essayEvidence": [
+              {
+                "quote": "These sites are not merely an aesthetic blight; they leach hazardous chemicals into the soil and groundwater and emit methane, a potent greenhouse gas, thereby contributing directly to climate change.",
+                "explanation": "Demonstrates a complex, well-punctuated sentence with effective embedding and clear relationships.",
+                "explanationZh": ""
+              }
+            ],
+            "nextRevision": {
+              "priority": "",
+              "priorityZh": "",
+              "action": "",
+              "actionZh": "",
+              "beforeQuote": "",
+              "revisedExample": "",
+              "whyItWorks": "",
+              "whyItWorksZh": ""
+            },
+            "ceilingAudit": {
+              "highestBandTested": 9,
+              "passed": false,
+              "reason": "Band 9 requires full flexibility and control with extremely rare lapses. While control is very high, the occasional tiny imperfection (e.g., slightly missing article) prevents a pure Band-9 classification; the pattern is a high Band 8.",
+              "band9PositiveEvidence": "Extensive complex structures used accurately, with clear relationships and sophisticated punctuation.",
+              "band9BlockingPattern": "Extremely rare minor lapses (e.g., 'not in a single panacea' slightly deviating from standard article use) persist, preventing the flawless sustained accuracy of Band 9."
+            },
+            "feedbackComplete": false,
+            "whyThisBand": "A wide range of structures is used flexibly and accurately; most sentences are error-free, with occasional minor lapses that do not impede communication.",
+            "whyThisBandZh": "",
+            "whyNotLower": "The essay demonstrates a wide range of complex structures, including relative clauses, passive constructions, and parallel structures, with high accuracy. The few minor lapses (e.g., 'optical sorting facilities that can process' - singular/plural agreement issue; 'a more radical and effective measure is the implementation' is correct but later 'charging households based on the weight' could have a slight article inconsistency with 'a pay-as-you-throw tariff system') are occasional and non-systematic, fitting the top of Band 8.",
+            "whyNotLowerZh": "",
+            "whyNotHigher": "To reach Band 9, these extremely rare lapses would need to be absent, showing fully sustained control. The very occasional slip (e.g., 'facilities that can process' where plural 'facilities' might imply 'process' should be plural? Actually 'facilities that can process' is correct as 'can' does not change; no error there. Re-exam: 'the implementation of a ‘pay-as-you-throw’ tariff system, where households are charged based on the weight of their non-recyclable waste, creating a powerful direct financial incentive' – this is a slightly run-on participial phrase, but still grammatically acceptable. Overall, the few minute issues (perhaps a missing article before 'single panacea') prevent a pure Band-9 assessment.)",
+            "whyNotHigherZh": "",
+            "positiveEvidence": [
+              "Wide range of sentence structures with complex clauses, passive forms, and varied punctuation used flexibly and accurately. Most sentences are error-free."
+            ],
+            "positiveEvidenceZh": [],
+            "limitingEvidence": [
+              "Occasional minor lapses: 'the solution lies not in a single panacea' (missing article before 'panacea'? Actually 'a single panacea' would be more conventional, but 'single panacea' is not grammatically wrong; just slightly less idiomatic). Overall, extremely rare minor imprecisions separate this from a sustained Band-9 pattern."
+            ],
+            "limitingEvidenceZh": [],
+            "howToImprove": "",
+            "howToImproveZh": "",
+            "confidence": 0.85
+          }
+        },
+        "overallAssessment": "A sophisticated essay with exceptional vocabulary (Band 9), very strong coherence and task coverage (Band 8), and highly accurate grammar with extremely rare minor slips (Band 8.5). The response fully addresses the question with well-developed ideas and natural, precise language.",
+        "overallAssessmentZh": "",
+        "revisionSequence": [],
+        "revisionSequenceZh": [],
+        "examinerAgreement": {
+          "overallDelta": 0.5,
+          "lowerOverall": 7.5,
+          "upperOverall": 8,
+          "panelMidpoint": 7.75,
+          "criterionDeltas": {
+            "Task Response": 1,
+            "Coherence and Cohesion": 1,
+            "Lexical Resource": 0,
+            "Grammatical Range and Accuracy": 0
+          },
+          "maxCriterionDelta": 1,
+          "differingCriteria": 2,
+          "examinerAUniform": false,
+          "examinerBUniform": false,
+          "unanimousAiBandZero": false,
+          "observations": [
+            "ANY_CRITERION_DISAGREEMENT"
+          ],
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_HIGH_EDGE_SAFEGUARD",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "adjudicationRequired": true,
+          "examinerA": {
+            "examinerId": "A",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 7,
+              "Coherence and Cohesion": 7,
+              "Lexical Resource": 8,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 7.5,
+            "confidence": 0.85,
+            "evidenceCount": 3,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Lexical Resource",
+              "weakest": "Task Response",
+              "comparison": "LR shows a wide, precise and sophisticated vocabulary with only rare slips, fitting Band 8. TR addresses the prompt fully but lacks depth in developing solutions, with some ideas remaining generic, which aligns with Band 7. CC and GRA sit at Band 7 with clear progression and flexible grammar, but minor mechanical cohesion and a few errors prevent Band 8.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Lexical Resource"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": false,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "examinerB": {
+            "examinerId": "B",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 8,
+              "Coherence and Cohesion": 8,
+              "Lexical Resource": 8,
+              "Grammatical Range and Accuracy": 7
+            },
+            "overallBand": 8,
+            "confidence": 0.85,
+            "evidenceCount": 7,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Lexical Resource",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Lexical Resource shows a wide range of precise vocabulary (e.g., 'quandary', 'leach', 'pernicious', 'circular economy') with only minor slips, placing it comfortably at Band 8. Grammatical Range and Accuracy, however, has a narrower range of sentence structures and subtle but recurring awkwardness or redundancy in complex clauses, holding it at Band 7.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Response",
+              "Coherence and Cohesion",
+              "Lexical Resource"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          }
+        },
+        "threeZonePanel": {
+          "enabled": true,
+          "conditionalReviewEnabled": true,
+          "reviewTriggered": true,
+          "routing": {
+            "zone": "high",
+            "reason": "AI_PANEL_AT_OR_ABOVE_UPPER_MID_BOUNDARY",
+            "lower": 7.5,
+            "upper": 8
+          },
+          "specialist": {
+            "examinerId": "high-specialist",
+            "rateable": true,
+            "criteria": {
+              "Task Response": 8,
+              "Coherence and Cohesion": 8,
+              "Lexical Resource": 9,
+              "Grammatical Range and Accuracy": 8.5
+            },
+            "overallBand": 8.5,
+            "confidence": 0.9,
+            "evidenceCount": 2,
+            "evidenceComplete": false,
+            "feedbackComplete": false,
+            "uniformCriteria": false,
+            "criterionContrastAudit": {
+              "strongest": "Lexical Resource",
+              "weakest": "Grammatical Range and Accuracy",
+              "comparison": "Lexical Resource demonstrates wide precision, skilful less common items, and natural control, fitting Band 9. Grammatical Range and Accuracy shows wide flexible control but has occasional minor lapses (e.g., preposition, plural) that, while rare, place it at the top of Band 8 (8.5) rather than a sustained Band-9-dominant flawless pattern. Task Response and Coherence and Cohesion both securely fit Band 8, but one criterion (GRA) is half a band lower.",
+              "uniformProfileJustification": ""
+            },
+            "contrastComplete": true,
+            "upperBandCriteria": [
+              "Task Response",
+              "Coherence and Cohesion",
+              "Lexical Resource",
+              "Grammatical Range and Accuracy"
+            ],
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "needsHumanReview": false,
+            "uncertaintyReasons": []
+          },
+          "finalDecisionSource": "ai-pro-upper-boundary-specialist",
+          "localScoreAdjustment": false
+        },
+        "adjudication": {
+          "triggered": true,
+          "reasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_HIGH_EDGE_SAFEGUARD",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT",
+            "INDEPENDENT_PRO_UPPER_BOUNDARY_FINAL"
+          ],
+          "decision": "independent_pro_upper_boundary_final",
+          "specialistZone": "high",
+          "specialistCriteria": {
+            "Task Response": 8,
+            "Coherence and Cohesion": 8,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "specialistOverallBand": 8.5,
+          "finalCriteria": {
+            "Task Response": 8,
+            "Coherence and Cohesion": 8,
+            "Lexical Resource": 9,
+            "Grammatical Range and Accuracy": 8.5
+          },
+          "finalOverallBand": 8.5,
+          "skippedRoles": [
+            "meta_adjudicator",
+            "criterion_profile_adjudicator"
+          ],
+          "localScoreAdjustment": false
+        },
+        "localSignals": {
+          "task": "Task 2",
+          "taskKind": "essay",
+          "examModule": "general_training",
+          "emptyResponse": false,
+          "wordCount": 428,
+          "clientWordCount": null,
+          "clientWordCountIgnored": false,
+          "minimumWords": 250,
+          "underMinimum": false,
+          "severeLengthRisk": false,
+          "paragraphCount": 5,
+          "sentenceCount": 19,
+          "averageSentenceWords": 22.5,
+          "lexicalDiversity": 0.668,
+          "paragraphWordCounts": [
+            43,
+            135,
+            87,
+            107,
+            56
+          ],
+          "englishLetterRatio": 0.975,
+          "possibleNonEnglishResponse": false,
+          "possiblePromptInjection": false,
+          "copiedPromptRatio": 0.157,
+          "visualFactsAvailable": false,
+          "visualFactsSourceVerified": false
+        },
+        "visualFactsAudit": null,
+        "scoreFrozen": true,
+        "scoreCalculation": {
+          "mode": "independent_pro_upper_boundary_final",
+          "formula": "The final AI-selected four criterion bands are averaged equally and rounded to the nearest half band. General examiner and specialist results are never averaged together.",
+          "rawAverage": 8.375,
+          "finalBand": 8.5,
+          "source": "ai-pro-upper-boundary-specialist"
+        },
+        "boundaryAudit": {
+          "reviewRequired": true,
+          "reviewReasons": [
+            "CRITERION_DELTA_GTE_1",
+            "MULTIPLE_CRITERION_DISAGREEMENTS",
+            "AI_PANEL_HIGH_EDGE_SAFEGUARD",
+            "AI_PANEL_UPPER_BOUNDARY_PROFILE_DISAGREEMENT"
+          ],
+          "freezeBlocked": false,
+          "unresolvedCriticalReasons": [],
+          "boundaryReview": {
+            "triggered": true,
+            "decision": "independent_pro_upper_boundary_final"
+          }
+        },
+        "feedbackStatus": {
+          "status": "deferred_to_feedback_stage",
+          "scoreChanged": false,
+          "repairAttempted": false,
+          "repairSucceeded": false,
+          "note": "Core criterion bands are frozen. Detailed criterion feedback is generated in the separate feedback stage."
+        },
+        "scoreCoreMeta": {
+          "feedbackRequiredExternal": true,
+          "feedbackGenerated": false,
+          "feedbackStatus": "deferred_to_feedback_stage"
+        },
+        "rubricVersion": "ielts-writing-rubric-2026-07-v5-compact-score-then-feedback",
+        "promptVersion": "unified-ai-panel-v6-5-full-range-pro-upper-boundary",
+        "scoreSystemVersion": "unified-writing-core-v6.5-full-range-pro-upper-boundary",
+        "modelAudit": {
+          "examinerA": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5188,
+              "completion_tokens": 2175,
+              "total_tokens": 7363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5188
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "examinerB": {
+            "role": "examiner",
+            "model": "deepseek-v4-flash",
+            "thinking": "disabled",
+            "reasoningEffort": "medium",
+            "maxTokens": 4500,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5189,
+              "completion_tokens": 2335,
+              "total_tokens": 7524,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5189
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "specialist": {
+            "role": "high_specialist",
+            "model": "deepseek-v4-pro",
+            "thinking": "disabled",
+            "reasoningEffort": "high",
+            "maxTokens": 6000,
+            "finishReason": "stop",
+            "usage": {
+              "prompt_tokens": 5239,
+              "completion_tokens": 2732,
+              "total_tokens": 7971,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "prompt_cache_hit_tokens": 0,
+              "prompt_cache_miss_tokens": 5239
+            },
+            "attempt": 1,
+            "requestId": "",
+            "semanticAttempt": 1
+          },
+          "adjudicator": null,
+          "criterionProfileReview": null,
+          "feedbackRepair": null,
+          "feedbackRepairHistory": [],
+          "elapsedMs": 68649,
+          "costOptimization": {
+            "conditionalReviewEnabled": true,
+            "reviewPolicyVersion": "material-disagreement-plus-full-range-ai-edge-safeguards-v3",
+            "accuracySafeguardTriggered": true,
+            "specialistTriggered": true,
+            "metaAdjudicatorTriggered": false,
+            "criterionProfileReviewTriggered": false,
+            "highBoundaryFinal": true,
+            "upperBandAuditComplete": true,
+            "fullRangeCeilingAuditComplete": true,
+            "nonDescriptorUpperBandClaims": [],
+            "coreModelCalls": 3,
+            "avoidedModelCalls": 1,
+            "coreTotalTokens": 22858
+          }
+        },
+        "disclaimer": "This is an AI-generated estimated score, not an official IELTS score.",
+        "disclaimerZh": "这是 AI 生成的雅思写作估分，不是官方 IELTS 成绩。"
+      }
+    }
+  ]
+}

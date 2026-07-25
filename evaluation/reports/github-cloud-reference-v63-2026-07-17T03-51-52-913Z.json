@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-07-17T03:51:52.913Z",
+  "methodology": "Read-only comparison against the unchanged local checkout of origin/main's production router. No GitHub files, commits or branches were changed.",
+  "oldUrl": "http://localhost:4000/api/grade-ielts-production-router",
+  "newUrl": "http://127.0.0.1:4000/api/grade-writing",
+  "records": 1,
+  "oldMAE": 0.5,
+  "newMAE": 1,
+  "newAverageCoreCalls": 4,
+  "newAverageCoreTokens": 31144,
+  "rows": [
+    {
+      "id": "T1-B5-functional-simple",
+      "task": "Task 1",
+      "targetOverall": 5,
+      "oldBand": 5.5,
+      "newBand": 6,
+      "oldError": 0.5,
+      "newError": 1,
+      "oldCriteria": {
+        "Task Achievement": 5.5,
+        "Coherence and Cohesion": 5.5,
+        "Lexical Resource": 5,
+        "Grammatical Range and Accuracy": 5.5
+      },
+      "newCriteria": {
+        "Task Achievement": 6,
+        "Coherence and Cohesion": 6,
+        "Lexical Resource": 6,
+        "Grammatical Range and Accuracy": 6
+      },
+      "oldVersion": "production-router-v3-5-criterion-differentiation-routing-v4-4",
+      "newVersion": "unified-writing-core-v6.3-github-calibrated-boundary-review",
+      "oldSource": "midband-primary",
+      "newSource": "three-zone-ai-meta-adjudicator",
+      "newReviewReasons": [
+        "MULTIPLE_CRITERION_DISAGREEMENTS"
+      ],
+      "newCoreCalls": 4,
+      "newCoreTokens": 31144,
+      "oldDurationMs": 6866,
+      "newDurationMs": 77432
+    }
+  ]
+}
